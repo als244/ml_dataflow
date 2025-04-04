@@ -96,11 +96,11 @@ int main(int argc, char * argv[]){
 	char * w_out_norm_f = "data/weights/8B/out_norm.dat";
 	char * w_head_f = "data/weights/8B/head.dat";
 
-	uint64_t norm_size = model_dim * el_size;
+	uint64_t w_norm_size = model_dim * el_size;
 	uint64_t w_head_size = (uint64_t) model_dim * (uint64_t)vocab_size * (uint64_t) el_size;
 
 	void * w_out_norm = host_mem;
-	void * w_head = w_out_norm + norm_size;
+	void * w_head = w_out_norm + w_norm_size;
 
 	void * res;
 
@@ -127,9 +127,7 @@ int main(int argc, char * argv[]){
 
     size_t labels_size = (uint64_t) num_tokens * (uint64_t) sizeof(uint32_t);
 
-    size_t head_norm_size = (uint64_t) num_tokens * (uint64_t) model_dim * (uint64_t) el_size;
-
-    size_t head_out_size = (uint64_t) num_tokens * (uint64_t) vocab_size * (uint64_t) el_size;
+    size_t norm_out_size = (uint64_t) num_tokens * (uint64_t) model_dim * (uint64_t) el_size;
 
     size_t x_logits_size = (uint64_t) num_tokens * (uint64_t) vocab_size * (uint64_t) el_size;
 
@@ -155,9 +153,9 @@ int main(int argc, char * argv[]){
 
     void * x_norm_out = labels + labels_size;
 
-    void * x_head_out = x_norm_out + head_norm_size;
+    void * x_head_out = x_norm_out + norm_out_size;
 
-    void * x_logits = x_head_out + head_out_size;
+    void * x_logits = x_head_out + x_logits_size;
 
     void * x_logits_bwd = x_logits + x_logits_size;
 
@@ -176,7 +174,7 @@ int main(int argc, char * argv[]){
 	}
 
     // set all memory to 0
-    ret = dataflow_handle.set_mem(&dataflow_handle, compute_stream_id_a, dev_mem, 0, dev_size_bytes);
+    ret = dataflow_handle.set_mem(&dataflow_handle, inbound_stream_id_a, dev_mem, 0, dev_size_bytes);
     if (ret){
         fprintf(stderr, "Error: failed to set device memory to 0...\n");
         return -1;
@@ -187,7 +185,7 @@ int main(int argc, char * argv[]){
 
 	// weights
 	void * d_w_out_norm = dev_mem;
-	void * d_w_head = d_w_out_norm + norm_size;
+	void * d_w_head = d_w_out_norm + w_norm_size;
 
     // metadata
     void * d_labels = d_w_head + w_head_size;
@@ -195,8 +193,8 @@ int main(int argc, char * argv[]){
     // activations
     void * d_model_out_x = d_labels + labels_size;
 	void * d_x_norm_out = d_model_out_x + x_size;
-	void * d_x_head_out = d_x_norm_out + head_norm_size;
-	void * d_x_logits = d_x_head_out + head_out_size;
+	void * d_x_head_out = d_x_norm_out + norm_out_size;
+	void * d_x_logits = d_x_head_out + x_logits_size;
     void * d_x_logits_bwd = d_x_logits + x_logits_size;
 
 	uint64_t workspaceBytes = 1UL << 24;
@@ -210,7 +208,7 @@ int main(int argc, char * argv[]){
 
 	printf("Transferring weights to device...\n");
 
-	ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id_a, d_w_out_norm, w_out_norm, norm_size);
+	ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id_a, d_w_out_norm, w_out_norm, w_norm_size);
 	if (ret){
 		fprintf(stderr, "Error: host to device transfer failed for out norm weights...\n");
 		return -1;
@@ -270,7 +268,7 @@ int main(int argc, char * argv[]){
 					fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
 					compute_dt,
 					to_trans_a, to_trans_b,
-					model_dim, model_dim, num_tokens,
+					vocab_size, model_dim, num_tokens,
 					1.0, 0.0,
 					d_w_head, d_x_norm_out, NULL, d_x_head_out,
 					workspaceBytes, d_workspace);
@@ -289,8 +287,9 @@ int main(int argc, char * argv[]){
         return -1;
     }
 
-    // make copy of logits to ensure derivs are correct...
-    ret = dataflow_handle.submit_peer_transfer(&dataflow_handle, compute_stream_id_a, d_x_logits, d_x_logits_bwd, x_logits_size);
+    // make copy of logits to we can save logits and then update
+	// the bwd logits in place with cross-entropy loss...
+    ret = dataflow_handle.submit_peer_transfer(&dataflow_handle, compute_stream_id_a, d_x_logits_bwd, d_x_logits, x_logits_size);
     if (ret){
         fprintf(stderr, "Error: failed to submit peer transfer...\n");
         return -1;
@@ -326,14 +325,14 @@ int main(int argc, char * argv[]){
 	// ATTENTION BLOCK!
 
 	// Attn Norm...
-	ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, outbound_stream_id_a, x_norm_out, d_x_norm_out, norm_size);
+	ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, outbound_stream_id_a, x_norm_out, d_x_norm_out, norm_out_size);
 	if (ret){
 		fprintf(stderr, "Error: could not submit outbound transfer for x_norm_out...\n");
 		return -1;
 	}
 
 	// Head proj
-	ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, outbound_stream_id_a, x_head_out, d_x_head_out, head_out_size);
+	ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, outbound_stream_id_a, x_head_out, d_x_head_out, x_logits_size);
 	if (ret){
 		fprintf(stderr, "Error: could not submit outbound transfer for x_head_out...\n");
 		return -1;
