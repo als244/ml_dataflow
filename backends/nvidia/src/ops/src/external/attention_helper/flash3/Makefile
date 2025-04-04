@@ -50,7 +50,7 @@ CU_KERNEL_OBJS_SM80 = ${patsubst src/instantiations/sm80/%.cu, build/instantiati
 CU_KERNEL_OBJS_SM90 = ${patsubst src/instantiations/sm90/%.cu, build/instantiations/sm90/%.o, ${CU_KERNEL_SOURCES_SM90}}
 CU_KERNEL_OBJS_SM100 = ${patsubst src/instantiations/sm100/%.cu, build/instantiations/sm100/%.o, ${CU_KERNEL_SOURCES_SM100}}
 
-CU_KERNEL_OBJS = ${CU_KERNEL_OBJS_SM80} ${CU_KERNEL_OBJS_SM90} ${CU_KERNEL_OBJS_SM100}
+BUILD_CU_KERNEL_OBJS = ${CU_KERNEL_OBJS_SM80} ${CU_KERNEL_OBJS_SM90} ${CU_KERNEL_OBJS_SM100}
 
 CU_COMBINE_SRC = src/flash_fwd_combine.cu
 CU_COMBINE_OBJ = build/flash_fwd_combine.o
