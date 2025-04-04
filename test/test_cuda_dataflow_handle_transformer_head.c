@@ -253,7 +253,7 @@ int main(int argc, char * argv[]){
 	ret = dataflow_submit_rms_norm(&dataflow_handle, compute_stream_id_a, 
 						fwd_dt, 
 						num_tokens, model_dim, eps, 
-						d_x_norm_out, d_model_out_x, d_x_norm_out, 
+						d_w_out_norm, d_model_out_x, d_x_norm_out, 
 						NULL, NULL // not saving weighted sums or rms vals for now...
                         );
 
