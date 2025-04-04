@@ -19,9 +19,12 @@ ALL_INCLUDES = -I${DATAFLOW_LIB_INCLUDE_DIR} -I${CUDA_DATAFLOW_BACKEND_INCLUDE_D
 
 ALL_LIBS = -L${DATAFLOW_LIB_DIR} -L${CUDA_DATAFLOW_BACKEND_LIB_DIR} -L${DATAFLOW_OPS_LIB_DIR} ${DATAFLOW_LIB} ${CUDA_DATAFLOW_BACKEND_LIBS} ${DATAFLOW_OPS_LIB} -Wl,-rpath,${DATAFLOW_LIB_DIR} -Wl,-rpath,${CUDA_DATAFLOW_BACKEND_LIB_DIR} -Wl,-rpath,${DATAFLOW_OPS_LIB_DIR}
 
-EXECS = test_cuda_dataflow_handle_transformer_block
+EXECS = test_cuda_dataflow_handle_transformer_head test_cuda_dataflow_handle_transformer_block
 
 all: ${EXECS}
+
+test_cuda_dataflow_handle_transformer_head: test_cuda_dataflow_handle_transformer_head.c
+	${CC} ${CFLAGS} ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
 
 test_cuda_dataflow_handle_transformer_block: test_cuda_dataflow_handle_transformer_block.c
 	${CC} ${CFLAGS} ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
