@@ -148,5 +148,5 @@ ${REGISTER_OPS_LIB}: src/register_ops/register_ops.c
 ## don't wipe flash3 lib as this takes a while to build...
 ## can go into that directory and run clean if wanted...
 clean:
-	rm -f ${NATIVE_OP_KERNELS_PTX} lib/native/${NATIVE_OP_KERNELS_CUBIN} lib/native/${NATIVE_OP_CONFIG_LIB} lib/external/${EXTERNAL_OP_ATTENTION_LIB} lib/external/${EXTERNAL_OP_MATMUL_LIB} ${EXTERNAL_OP_PATH}/matmul_helper/objs/*.o ${EXTERNAL_OP_PATH}/attention_helper/objs/*.o
+	rm -f ${NATIVE_OP_KERNELS_PTX} lib/native/${NATIVE_OP_KERNELS_CUBIN} lib/native/${NATIVE_OP_CONFIG_LIB} lib/external/${EXTERNAL_OP_ATTENTION_LIB} lib/external/${EXTERNAL_OP_MATMUL_LIB} ${EXTERNAL_OP_PATH}/matmul_helper/objs/*.o ${EXTERNAL_OP_PATH}/attention_helper/objs/*.o ${REGISTER_OPS_LIB}
 
