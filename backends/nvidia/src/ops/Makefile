@@ -126,7 +126,7 @@ lib/external/${EXTERNAL_OP_ATTENTION_LIB}: build_flash3_lib ${EXTERNAL_OP_ATTENT
 	${CC} ${CFLAGS} ${EXTERNAL_OP_ATTENTION_LIB_ALL_INCLUDES} -shared ${EXTERNAL_OP_ATTENTION_LIB_OBJS} -o $@ ${EXTERNAL_OP_ATTENTION_LIB_OTHER_LIB_DEPENDS}
 
 build_flash3_lib:
-	${MAKE} -C ${FLASH3_DIR}
+	make -C ${FLASH3_DIR}
 
 ${EXTERNAL_OP_PATH}/attention_helper/objs/attention_helper.o: ${EXTERNAL_OP_PATH}/attention_helper/src/attention_helper.c
 	${CC} ${CFLAGS} ${EXTERNAL_OP_ATTENTION_LIB_ALL_INCLUDES} -c $< -o $@

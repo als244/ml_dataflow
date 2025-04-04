@@ -209,7 +209,7 @@ int dataflow_submit_softmax(Dataflow_Handle * handle, int stream_id,
 int dataflow_submit_cross_entropy_loss(Dataflow_Handle * handle, int stream_id, 
 								DataflowDatatype bwd_dt,
 								int n_rows, int n_cols,
-								void * pred_logits, uint32_t * labels, float * loss_vec, float * loss_sum);
+								void * pred_logits, uint32_t * labels, float * loss_vec);
 
 
 

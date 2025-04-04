@@ -653,7 +653,7 @@ void dataflow_set_cross_entropy_loss_skeleton(Op_Skeleton * skeleton, DataflowDa
 	// last character must be null no matter what, if nickname is less than null bytes were added prior
 	(skeleton_header -> op_nickname)[MAX_OP_NICKNAME_SIZE] = '\0';
 	
-	int num_args = 4;
+	int num_args = 5;
 
 	skeleton_header -> num_args = num_args;
 
@@ -664,7 +664,6 @@ void dataflow_set_cross_entropy_loss_skeleton(Op_Skeleton * skeleton, DataflowDa
 	arg_dtypes[2] = bwd_datatype;
 	arg_dtypes[3] = DATAFLOW_UINT32;
 	arg_dtypes[4] = DATAFLOW_FP32;
-	arg_dtypes[5] = DATAFLOW_FP32;
 
 	for (int i = num_args; i < MAX_OP_ARGS; i++){
 		arg_dtypes[i] = DATAFLOW_NONE;
