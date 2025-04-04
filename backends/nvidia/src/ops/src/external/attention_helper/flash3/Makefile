@@ -79,7 +79,10 @@ FLASH_API_OBJ = build/flash_api.o
 WRAPPER_SHARED_LIB = lib/libflash3.so
 
 
-all: ${WRAPPER_SHARED_LIB}
+all: create_dirs ${WRAPPER_SHARED_LIB}
+
+create_dirs:
+	mkdir -p lib && mkdir -p build && mkdir -p build/instantiations && mkdir -p build/instantiations/sm80 && mkdir -p build/instantiations/sm90 && mkidr -p build/instantiations/sm100
 
 ${WRAPPER_SHARED_LIB}: ${CU_KERNEL_OBJS} ${CU_COMBINE_OBJ} ${CU_PREP_SCHED_OBJ} ${FLASH_API_OBJ} 
 	${CXX} ${CXX_FLAGS} -shared ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
