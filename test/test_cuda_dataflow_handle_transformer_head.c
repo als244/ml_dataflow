@@ -121,7 +121,7 @@ int main(int argc, char * argv[]){
 
 	// DEAL WITH EXAMPLE TRAINING SEQ BATCH...
 
-	int num_tokens = 4096;
+	int num_tokens = 2048;
 
     size_t x_size = (uint64_t) num_tokens * (uint64_t) model_dim * (uint64_t) el_size;
 
