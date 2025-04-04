@@ -26,6 +26,11 @@ OTHER_LIB_DEPENDS = -pthread -lm -lcrypto
 LIB_NAME = libdataflow.so
 
 
+all: mkdirs lib/${LIB_NAME}
+
+mkdirs:
+	mkdir -p objs && mkdir -p lib
+
 lib/${LIB_NAME}: ${ALL_OBJS}
 	${CC} ${CFLAGS} ${ALL_INCLUDES} -shared -o $@ $^ ${OTHER_LIB_DEPENDS}
 
