@@ -15,6 +15,10 @@ DATAFLOW_OP_OBJS = ${DATAFLOW_SET_OPS_OBJS} ${DATAFLOW_SUBMIT_OPS_OBJS}
 
 DATAFLOW_OP_LIB = libdataflowops.so
 
+all: mkdirs lib/${DATAFLOW_OP_LIB}
+
+mkdirs:
+	mkdir -p objs && mkdir -p lib
 
 lib/${DATAFLOW_OP_LIB}: ${DATAFLOW_OP_OBJS}
 	${CC} ${CFLAGS} -shared ${ALL_INCLUDE_DIRS} $^ -o $@ 
