@@ -102,17 +102,17 @@ REGISTER_OPS_ALL_INCLUDES = -I${DATAFLOW_LIB_INCLUDE_DIR} -I${SET_OP_SKELETONS_I
 REGISTER_OPS_LIB = ../../lib/libcuda_register_default_ops.so
 
 
-all: create_dirs ${NATIVE_OP_KERNELS_PTX} lib/native/${NATIVE_OP_KERNELS_CUBIN} lib/native/${NATIVE_OP_CONFIG_LIB} lib/external/${EXTERNAL_OP_ATTENTION_LIB} lib/external/${EXTERNAL_OP_MATMUL_LIB} ${REGISTER_OPS_LIB}
+all: create_dirs gen_native_ptx gen_native_cubin lib/native/${NATIVE_OP_CONFIG_LIB} lib/external/${EXTERNAL_OP_ATTENTION_LIB} lib/external/${EXTERNAL_OP_MATMUL_LIB} ${REGISTER_OPS_LIB}
 
 create_dirs:
 	mkdir -p lib && mkdir -p lib/native && mkdir -p lib/external && mkdir -p ${NATIVE_OP_PATH}/build && mkdir -p ${EXTERNAL_OP_PATH}/matmul_helper/objs && mkdir -p ${EXTERNAL_OP_PATH}/attention_helper/objs
 
 ## native op kernels
-${NATIVE_OP_KERNELS_PTX}: ${NATIVE_OP_KERNELS_SRC} 
-	nvcc ${NVCC_FLAGS} ${NATIVE_OP_KERNELS_ALL_INCLUDES} $^ -o $@ -ptx -arch=compute_${NATIVE_OP_CUDA_ARCH_NUM} -code=sm_${NATIVE_OP_CUDA_ARCH_NUM}
+gen_native_ptx: ${NATIVE_OP_KERNELS_SRC} 
+	nvcc ${NVCC_FLAGS} ${NATIVE_OP_KERNELS_ALL_INCLUDES} $^ -o ${NATIVE_OP_KERNELS_PTX} -ptx -arch=compute_${NATIVE_OP_CUDA_ARCH_NUM} -code=sm_${NATIVE_OP_CUDA_ARCH_NUM}
 
-lib/native/${NATIVE_OP_KERNELS_CUBIN}: ${NATIVE_OP_KERNELS_SRC} 
-	nvcc ${NVCC_FLAGS} ${NATIVE_OP_KERNELS_ALL_INCLUDES} $^ -o $@ -cubin -arch=compute_${NATIVE_OP_CUDA_ARCH_NUM} -code=sm_${NATIVE_OP_CUDA_ARCH_NUM}
+gen_native_cubin: ${NATIVE_OP_KERNELS_SRC}
+	nvcc ${NVCC_FLAGS} ${NATIVE_OP_KERNELS_ALL_INCLUDES} $^ -o lib/native/${NATIVE_OP_KERNELS_CUBIN} -cubin -arch=compute_${NATIVE_OP_CUDA_ARCH_NUM} -code=sm_${NATIVE_OP_CUDA_ARCH_NUM}
 
 ## native op config lib
 
