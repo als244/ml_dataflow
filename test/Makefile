@@ -21,7 +21,10 @@ ALL_LIBS = -L${DATAFLOW_LIB_DIR} -L${CUDA_DATAFLOW_BACKEND_LIB_DIR} -L${DATAFLOW
 
 EXECS = test_cuda_dataflow_handle_transformer_head test_cuda_dataflow_handle_transformer_block
 
-all: ${EXECS}
+all: create_dirs ${EXECS}
+
+create_dirs:
+	mkdir -p test_layer && mkdir -p test_head/8B/2048
 
 test_cuda_dataflow_handle_transformer_head: test_cuda_dataflow_handle_transformer_head.c
 	${CC} ${CFLAGS} ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
