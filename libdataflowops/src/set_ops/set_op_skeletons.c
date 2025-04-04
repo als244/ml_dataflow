@@ -663,6 +663,8 @@ void dataflow_set_cross_entropy_loss_skeleton(Op_Skeleton * skeleton, DataflowDa
 	arg_dtypes[1] = DATAFLOW_INT_SCALAR;
 	arg_dtypes[2] = bwd_datatype;
 	arg_dtypes[3] = DATAFLOW_UINT32;
+	arg_dtypes[4] = DATAFLOW_FP32;
+	arg_dtypes[5] = DATAFLOW_FP32;
 
 	for (int i = num_args; i < MAX_OP_ARGS; i++){
 		arg_dtypes[i] = DATAFLOW_NONE;

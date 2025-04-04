@@ -154,9 +154,9 @@ extern "C" __global__ void softmax_fp8e5m2_bf16_kernel(int n_rows, int n_cols, _
 
 // Loss Functions Over Logits
 // Inplace
-extern "C" __global__ void cross_entropy_loss_fp32_kernel(int n_rows, int n_cols, float * pred_logits, uint32_t * labels);
-extern "C" __global__ void cross_entropy_loss_fp16_kernel(int n_rows, int n_cols, __half * pred_logits, uint32_t * labels);
-extern "C" __global__ void cross_entropy_loss_bf16_kernel(int n_rows, int n_cols, __nv_bfloat16 * pred_logits, uint32_t * labels);
+extern "C" __global__ void cross_entropy_loss_fp32_kernel(int n_rows, int n_cols, float * pred_logits, uint32_t * labels, float * loss, float * agg_loss);
+extern "C" __global__ void cross_entropy_loss_fp16_kernel(int n_rows, int n_cols, __half * pred_logits, uint32_t * labels, float * loss, float * agg_loss);
+extern "C" __global__ void cross_entropy_loss_bf16_kernel(int n_rows, int n_cols, __nv_bfloat16 * pred_logits, uint32_t * labels, float * loss, float * agg_loss);
 
 
 
