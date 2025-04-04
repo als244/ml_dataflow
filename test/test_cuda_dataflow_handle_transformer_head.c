@@ -77,9 +77,7 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
-	// Llama 70B dimensions, taking example input after embedding stage and weights are loaded 
-	// as first layer
-
+	// Llama 8B dimensions, taking example input after the 31st layer right before the head...
 	int vocab_size = 128256;
     int model_dim = 4096;
 
@@ -137,8 +135,8 @@ int main(int argc, char * argv[]){
 
 	size_t loss_vec_size = ((uint64_t) num_tokens + 1) * sizeof(float);
 
-	char * model_out_x_f = "data/8B/model_out_x.dat";
-    char * labels_f = "data/8B/labels.dat";
+	char * model_out_x_f = "data/8B/2048/model_out_x.dat";
+    char * labels_f = "data/8B/2048/labels_uint32.dat";
 
 	void * model_out_x = w_head + w_head_size;
     void * labels = model_out_x + x_size;
@@ -377,7 +375,7 @@ int main(int argc, char * argv[]){
 	// x_logits_bwd
 	// loss_vec
 
-	char * res_norm_out_f = "test_head/x_norm_out.dat";
+	char * res_norm_out_f = "test_head/8B/2048/x_norm_out.dat";
 
 	ret = save_host_matrix(res_norm_out_f, x_norm_out, num_tokens, model_dim, fwd_dt);
 	if (ret){
@@ -385,7 +383,7 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
-	char * res_head_out_f = "test_head/x_head_out.dat";
+	char * res_head_out_f = "test_head/8B/2048/x_head_out.dat";
 	// Note: already applied rope to these out projections...
 
 	ret = save_host_matrix(res_head_out_f, x_head_out, num_tokens, vocab_size, fwd_dt);
@@ -394,7 +392,7 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
-    char * res_logits_f = "test_head/x_logits.dat";
+    char * res_logits_f = "test_head/8B/2048/x_logits.dat";
 
 	ret = save_host_matrix(res_logits_f, x_logits, num_tokens, vocab_size, fwd_dt);
 	if (ret){
@@ -402,8 +400,8 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
-    char * res_logits_bwd_f = "test_head/x_logits_bwd.dat";
-    char * res_loss_vec_f = "test_head/loss_vec.dat";
+    char * res_logits_bwd_f = "test_head/8B/2048/x_logits_bwd.dat";
+    char * res_loss_vec_f = "test_head/8B/2048/loss_vec.dat";
 
 	ret = save_host_matrix(res_logits_bwd_f, x_logits_bwd, num_tokens, vocab_size, fwd_dt);
 	if (ret){
