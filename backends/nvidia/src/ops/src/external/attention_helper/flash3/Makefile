@@ -58,25 +58,24 @@ CU_COMBINE_OBJ = build/flash_fwd_combine.o
 CU_PREP_SCHED_SRC = src/flash_prepare_scheduler.cu
 CU_PREP_SCHED_OBJ = build/flash_prepare_scheduler.o
 
-## Compiling for sm_80 is safe for these kenrels as the source code
-## does not account for arch within combine or prep sched, and 
-## we want them to available on all archs, they will still run on > 80
-## but comipiling for higher is not bwd compatiblel..
 
-## should problably test perf diff on hopper to see if it is worth changing
-## source to dynamically select (in which case we should build for all...)u
+## TODO: need to change the flash_api.cpp to ingest arch num as part of 
+## of combine/prepare kernels in order to correctly dispatch. Currently
+## needs seperate build otherwise get "no kernel image is available for this device"
 
-CU_COMBINE_ARCH = 80
-CU_COMBINE_FLAGS = 
+## for now, making h100 settings default in repo...
 
-#CU_COMBINE_ARCH = 90a
-#CU_COMBINE_FLAGS = ${NVCC_FLAGS_SM90}
+#CU_COMBINE_ARCH = 80
+#CU_COMBINE_FLAGS = 
 
-CU_PREP_SCHED_ARCH = 80
-CU_PREP_SCHED_FLAGS = 
+CU_COMBINE_ARCH = 90a
+CU_COMBINE_FLAGS = ${NVCC_FLAGS_SM90}
 
-#CU_PREP_SCHED_ARCH = 90a
-#CU_PREP_SCHED_FLAGS = ${NVCC_FLAGS_SM90}
+#CU_PREP_SCHED_ARCH = 80
+#CU_PREP_SCHED_FLAGS = 
+
+CU_PREP_SCHED_ARCH = 90a
+CU_PREP_SCHED_FLAGS = ${NVCC_FLAGS_SM90}
 
 
 FLASH_API_SRC = src/flash_api.cpp
