@@ -27,7 +27,7 @@ NVCC_FLAGS = ${PROF_NVCC_FLAGS}
 
 ## just for now only build for speciic, arch but in reality we can generate
 ## many cubins (or ptx) and then dynamically select...
-NATIVE_OP_CUDA_ARCH_NUM = 90a
+NATIVE_OP_CUDA_ARCH_NUM = 86
 
 NATIVE_OP_KERNELS_PTX = ${NATIVE_OP_PATH}/build/cuda_kernels.ptx
 NATIVE_OP_KERNELS_CUBIN = cuda_kernels.cubin
@@ -126,7 +126,7 @@ lib/external/${EXTERNAL_OP_ATTENTION_LIB}: build_flash3_lib ${EXTERNAL_OP_ATTENT
 	${CC} ${CFLAGS} ${EXTERNAL_OP_ATTENTION_LIB_ALL_INCLUDES} -shared ${EXTERNAL_OP_ATTENTION_LIB_OBJS} -o $@ ${EXTERNAL_OP_ATTENTION_LIB_OTHER_LIB_DEPENDS}
 
 build_flash3_lib:
-	make -C ${FLASH3_DIR}
+	${MAKE} -C ${FLASH3_DIR}
 
 ${EXTERNAL_OP_PATH}/attention_helper/objs/attention_helper.o: ${EXTERNAL_OP_PATH}/attention_helper/src/attention_helper.c
 	${CC} ${CFLAGS} ${EXTERNAL_OP_ATTENTION_LIB_ALL_INCLUDES} -c $< -o $@
