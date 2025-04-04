@@ -11,3 +11,8 @@ create_handle_lib:
 
 create_register_ops_lib:
 	${MAKE} -C src/ops
+
+
+clean:
+	${MAKE} clean -C src/handle && ${MAKE} clean -C src/ops
+
