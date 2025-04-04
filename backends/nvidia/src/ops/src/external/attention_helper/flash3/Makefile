@@ -58,7 +58,13 @@ CU_COMBINE_OBJ = build/flash_fwd_combine.o
 CU_PREP_SCHED_SRC = src/flash_prepare_scheduler.cu
 CU_PREP_SCHED_OBJ = build/flash_prepare_scheduler.o
 
+## Compiling for sm_80 is safe for these kenrels as the source code
+## does not account for arch within combine or prep sched, and 
+## we want them to available on all archs, they will still run on > 80
+## but comipiling for higher is not bwd compatiblel..
 
+## should problably test perf diff on hopper to see if it is worth changing
+## source to dynamically select (in which case we should build for all...)u
 
 CU_COMBINE_ARCH = 80
 CU_COMBINE_FLAGS = 
@@ -84,7 +90,7 @@ all: create_dirs ${WRAPPER_SHARED_LIB}
 create_dirs:
 	mkdir -p lib && mkdir -p build && mkdir -p build/instantiations && mkdir -p build/instantiations/sm80 && mkdir -p build/instantiations/sm90 && mkidr -p build/instantiations/sm100
 
-${WRAPPER_SHARED_LIB}: ${CU_KERNEL_OBJS} ${CU_COMBINE_OBJ} ${CU_PREP_SCHED_OBJ} ${FLASH_API_OBJ} 
+${WRAPPER_SHARED_LIB}: ${BUILD_CU_KERNEL_OBJS} ${CU_COMBINE_OBJ} ${CU_PREP_SCHED_OBJ} ${FLASH_API_OBJ} 
 	${CXX} ${CXX_FLAGS} -shared ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
 
 ${FLASH_API_OBJ}: ${FLASH_API_SRC}
@@ -95,6 +101,19 @@ ${CU_COMBINE_OBJ}: ${CU_COMBINE_SRC}
 
 ${CU_PREP_SCHED_OBJ}: ${CU_PREP_SCHED_SRC}
 	${NVCC} ${NVCC_FLAGS} ${CU_PREP_SCHED_FLAGS} ${ALL_INCLUDES} -arch=compute_${CU_PREP_SCHED_ARCH} -code=sm_${CU_PREP_SCHED_ARCH} $< -c -o $@
+
+${BUILD_CU_KERNEL_OBJS}: ${CU_KERNEL_OBJS}
+	@attempt=0; \
+	max_attempts=3; \
+	until [ $$attempt -ge $$max_attempts ] || ${CU_KERNEL_OBJS}; do \
+	    echo "Attempt $$((attempt+1)) failed, retrying..."; \
+	    attempt=$$((attempt+1)); \
+	    sleep 1; \
+	done; \
+	if [ $$attempt -ge $$max_attempts ]; then \
+	    echo "Command failed after $$max_attempts attempts."; \
+	    exit 1; \
+	fi
 
 build/instantiations/sm80/%.o: src/instantiations/sm80/%.cu
 	${NVCC} ${NVCC_FLAGS} ${ALL_INCLUDES} -arch=compute_80 -code=sm_80 $< -c -o $@
