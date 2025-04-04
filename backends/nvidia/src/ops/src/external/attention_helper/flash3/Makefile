@@ -102,19 +102,6 @@ ${CU_COMBINE_OBJ}: ${CU_COMBINE_SRC}
 ${CU_PREP_SCHED_OBJ}: ${CU_PREP_SCHED_SRC}
 	${NVCC} ${NVCC_FLAGS} ${CU_PREP_SCHED_FLAGS} ${ALL_INCLUDES} -arch=compute_${CU_PREP_SCHED_ARCH} -code=sm_${CU_PREP_SCHED_ARCH} $< -c -o $@
 
-${BUILD_CU_KERNEL_OBJS}: ${CU_KERNEL_OBJS}
-	@attempt=0; \
-	max_attempts=3; \
-	until [ $$attempt -ge $$max_attempts ] || ${CU_KERNEL_OBJS}; do \
-	    echo "Attempt $$((attempt+1)) failed, retrying..."; \
-	    attempt=$$((attempt+1)); \
-	    sleep 1; \
-	done; \
-	if [ $$attempt -ge $$max_attempts ]; then \
-	    echo "Command failed after $$max_attempts attempts."; \
-	    exit 1; \
-	fi
-
 build/instantiations/sm80/%.o: src/instantiations/sm80/%.cu
 	${NVCC} ${NVCC_FLAGS} ${ALL_INCLUDES} -arch=compute_80 -code=sm_80 $< -c -o $@
 
