@@ -27,7 +27,7 @@ NVCC_FLAGS = ${PROF_NVCC_FLAGS}
 
 ## just for now only build for speciic, arch but in reality we can generate
 ## many cubins (or ptx) and then dynamically select...
-NATIVE_OP_CUDA_ARCH_NUM = 86
+NATIVE_OP_CUDA_ARCH_NUM = 90a
 
 NATIVE_OP_KERNELS_PTX = ${NATIVE_OP_PATH}/build/cuda_kernels.ptx
 NATIVE_OP_KERNELS_CUBIN = cuda_kernels.cubin
