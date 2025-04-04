@@ -86,6 +86,8 @@ int main(int argc, char * argv[]){
 	DataflowDatatype fwd_dt = DATAFLOW_FP16;
 	DataflowDatatype bwd_dt = DATAFLOW_FP16;
 	DataflowDatatype compute_dt = DATAFLOW_FP16;
+	DataflowDatatype labels_dt = DATAFLOW_UINT32;
+	DataflowDatatype loss_dt = DATAFLOW_FP32;
 
 
 	uint64_t el_size = dataflow_sizeof_element(fwd_dt);
@@ -145,9 +147,9 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
-    res = load_host_matrix_from_file(labels_f, num_tokens, 1, fwd_dt, fwd_dt, labels);
+    res = load_host_matrix_from_file(labels_f, num_tokens, 1, labels_dt, labels_dt, labels);
     if (!res){
-		fprintf(stderr, "Error: could not load in model out x file...\n");
+		fprintf(stderr, "Error: could not load in labels file...\n");
 		return -1;
 	}
 
