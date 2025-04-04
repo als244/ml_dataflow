@@ -25,10 +25,9 @@ NVCC_FLAGS = ${PROF_NVCC_FLAGS}
 
 ## or do jit compilation durin init...
 
-
-
-
-NATIVE_OP_CUDA_ARCH_NUM = 86
+## just for now only build for speciic, arch but in reality we can generate
+## many cubins (or ptx) and then dynamically select...
+NATIVE_OP_CUDA_ARCH_NUM = 90a
 
 NATIVE_OP_KERNELS_PTX = ${NATIVE_OP_PATH}/build/cuda_kernels.ptx
 NATIVE_OP_KERNELS_CUBIN = cuda_kernels.cubin
@@ -103,14 +102,17 @@ REGISTER_OPS_ALL_INCLUDES = -I${DATAFLOW_LIB_INCLUDE_DIR} -I${SET_OP_SKELETONS_I
 REGISTER_OPS_LIB = ../../lib/libcuda_register_default_ops.so
 
 
-all: ${NATIVE_OP_KERNELS_PTX} lib/native/${NATIVE_OP_KERNELS_CUBIN} lib/native/${NATIVE_OP_CONFIG_LIB} lib/external/${EXTERNAL_OP_ATTENTION_LIB} lib/external/${EXTERNAL_OP_MATMUL_LIB} ${REGISTER_OPS_LIB}
+all: create_dirs ${NATIVE_OP_KERNELS_PTX} lib/native/${NATIVE_OP_KERNELS_CUBIN} lib/native/${NATIVE_OP_CONFIG_LIB} lib/external/${EXTERNAL_OP_ATTENTION_LIB} lib/external/${EXTERNAL_OP_MATMUL_LIB} ${REGISTER_OPS_LIB}
+
+create_dirs:
+	mkdir -p lib && mkdir -p lib/native && mkdir -p lib/external && mkdir -p ${NATIVE_OP_PATH}/build && mkdir -p ${EXTERNAL_OP_PATH}/matmul_helper/objs && mkdir -p ${EXTERNAL_OP_PATH}/attention_helper/objs
 
 ## native op kernels
 ${NATIVE_OP_KERNELS_PTX}: ${NATIVE_OP_KERNELS_SRC} 
-	mkdir -p ${NATIVE_OP_PATH}/build && nvcc ${NVCC_FLAGS} ${NATIVE_OP_KERNELS_ALL_INCLUDES} $^ -o $@ -ptx -arch=compute_${NATIVE_OP_CUDA_ARCH_NUM} -code=sm_${NATIVE_OP_CUDA_ARCH_NUM}
+	nvcc ${NVCC_FLAGS} ${NATIVE_OP_KERNELS_ALL_INCLUDES} $^ -o $@ -ptx -arch=compute_${NATIVE_OP_CUDA_ARCH_NUM} -code=sm_${NATIVE_OP_CUDA_ARCH_NUM}
 
 lib/native/${NATIVE_OP_KERNELS_CUBIN}: ${NATIVE_OP_KERNELS_SRC} 
-	mkdir -p lib && mkdir -p lib/native && nvcc ${NVCC_FLAGS} ${NATIVE_OP_KERNELS_ALL_INCLUDES} $^ -o $@ -cubin -arch=compute_${NATIVE_OP_CUDA_ARCH_NUM} -code=sm_${NATIVE_OP_CUDA_ARCH_NUM}
+	nvcc ${NVCC_FLAGS} ${NATIVE_OP_KERNELS_ALL_INCLUDES} $^ -o $@ -cubin -arch=compute_${NATIVE_OP_CUDA_ARCH_NUM} -code=sm_${NATIVE_OP_CUDA_ARCH_NUM}
 
 ## native op config lib
 
@@ -121,13 +123,13 @@ lib/native/${NATIVE_OP_CONFIG_LIB}: ${NATIVE_OP_CONFIG_LIB_SRC}
 
 ## External Attention Lib
 lib/external/${EXTERNAL_OP_ATTENTION_LIB}: build_flash3_lib ${EXTERNAL_OP_ATTENTION_LIB_OBJS}
-	mkdir -p lib/external && ${CC} ${CFLAGS} ${EXTERNAL_OP_ATTENTION_LIB_ALL_INCLUDES} -shared ${EXTERNAL_OP_ATTENTION_LIB_OBJS} -o $@ ${EXTERNAL_OP_ATTENTION_LIB_OTHER_LIB_DEPENDS}
+	${CC} ${CFLAGS} ${EXTERNAL_OP_ATTENTION_LIB_ALL_INCLUDES} -shared ${EXTERNAL_OP_ATTENTION_LIB_OBJS} -o $@ ${EXTERNAL_OP_ATTENTION_LIB_OTHER_LIB_DEPENDS}
 
 build_flash3_lib:
 	make -C ${FLASH3_DIR}
 
 ${EXTERNAL_OP_PATH}/attention_helper/objs/attention_helper.o: ${EXTERNAL_OP_PATH}/attention_helper/src/attention_helper.c
-	mkdir -p ${EXTERNAL_OP_PATH}/attention_helper/objs && ${CC} ${CFLAGS} ${EXTERNAL_OP_ATTENTION_LIB_ALL_INCLUDES} -c $< -o $@
+	${CC} ${CFLAGS} ${EXTERNAL_OP_ATTENTION_LIB_ALL_INCLUDES} -c $< -o $@
 
 
 ## External Matmul Lib
@@ -135,7 +137,7 @@ lib/external/${EXTERNAL_OP_MATMUL_LIB}: ${EXTERNAL_OP_MATMUL_LIB_OBJS}
 	${CC} ${CFLAGS} ${EXTERNAL_OP_MATMUL_LIB_ALL_INCLUDES} -shared $^ -o $@ ${EXTERNAL_OP_MATMUL_LIB_OTHER_LIB_DEPENDS}
 
 ${EXTERNAL_OP_PATH}/matmul_helper/objs/matmul_helper.o: ${EXTERNAL_OP_PATH}/matmul_helper/src/matmul_helper.c
-	mkdir -p ${EXTERNAL_OP_PATH}/matmul_helper/objs && ${CC} ${CFLAGS} ${EXTERNAL_OP_MATMUL_LIB_ALL_INCLUDES} -c $< -o $@
+	${CC} ${CFLAGS} ${EXTERNAL_OP_MATMUL_LIB_ALL_INCLUDES} -c $< -o $@
 
 
 ## Register Ops Lib
@@ -143,7 +145,8 @@ ${REGISTER_OPS_LIB}: src/register_ops/register_ops.c
 	${CC} ${CFLAGS} -shared -DOPS_ROOT_DIR=\"${CURDIR}\" ${REGISTER_OPS_ALL_INCLUDES} $^ -o $@
 
 
-## don't wipe flash3 lib...
+## don't wipe flash3 lib as this takes a while to build...
+## can go into that directory and run clean if wanted...
 clean:
 	rm -f ${NATIVE_OP_KERNELS_PTX} lib/native/${NATIVE_OP_KERNELS_CUBIN} lib/native/${NATIVE_OP_CONFIG_LIB} lib/external/${EXTERNAL_OP_ATTENTION_LIB} lib/external/${EXTERNAL_OP_MATMUL_LIB} ${EXTERNAL_OP_PATH}/matmul_helper/objs/*.o ${EXTERNAL_OP_PATH}/attention_helper/objs/*.o
 
