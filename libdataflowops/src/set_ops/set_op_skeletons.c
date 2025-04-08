@@ -8,48 +8,48 @@
 // depending on function might either use fwd_dt or bwd_dt or both
 int dataflow_set_op_skeleton(Op_Skeleton * skeleton, char * op_name, DataflowDatatype fwd_dt, DataflowDatatype bwd_dt) {
 
-	if (strcmp(op_name, "default_embedding_table") == 0) {
+	if (strcmp(op_name, "embedding_table") == 0) {
         dataflow_set_embedding_table_skeleton(skeleton, fwd_dt);
     } 
-	else if (strcmp(op_name, "default_rms_norm") == 0) {
+	else if (strcmp(op_name, "rms_norm") == 0) {
         dataflow_set_rms_norm_skeleton(skeleton, fwd_dt);
     }
-	else if (strcmp(op_name, "default_rms_norm_bwd_x") == 0) {
+	else if (strcmp(op_name, "rms_norm_bwd_x") == 0) {
 		dataflow_set_rms_norm_bwd_x_skeleton(skeleton, fwd_dt, bwd_dt);
 	}
-	else if (strcmp(op_name, "default_rms_norm_bwd_w") == 0) {
+	else if (strcmp(op_name, "rms_norm_bwd_w") == 0) {
 		dataflow_set_rms_norm_bwd_w_skeleton(skeleton, fwd_dt, bwd_dt);
 	}
-	else if (strcmp(op_name, "default_rms_norm_noscale") == 0) {
+	else if (strcmp(op_name, "rms_norm_noscale") == 0) {
 		dataflow_set_rms_norm_noscale_skeleton(skeleton, fwd_dt);
 	}
-	else if (strcmp(op_name, "default_rms_norm_noscale_bwd_x") == 0) {
+	else if (strcmp(op_name, "rms_norm_noscale_bwd_x") == 0) {
 		dataflow_set_rms_norm_noscale_bwd_x_skeleton(skeleton, fwd_dt, bwd_dt);
 	}
-	else if (strcmp(op_name, "default_rope") == 0) {
+	else if (strcmp(op_name, "rope") == 0) {
 		dataflow_set_rope_skeleton(skeleton, fwd_dt);
 	}
-	else if (strcmp(op_name, "default_rope_bwd_x") == 0) {
+	else if (strcmp(op_name, "rope_bwd_x") == 0) {
 		dataflow_set_rope_bwd_x_skeleton(skeleton, bwd_dt);
 	}
-	else if (strcmp(op_name, "default_copy_to_seq_context") == 0) {
+	else if (strcmp(op_name, "copy_to_seq_context") == 0) {
 		dataflow_set_copy_to_seq_context_skeleton(skeleton, fwd_dt);
 	}
-	else if (strcmp(op_name, "default_swiglu") == 0) {
+	else if (strcmp(op_name, "swiglu") == 0) {
 		dataflow_set_swiglu_skeleton(skeleton, fwd_dt);
 	}
-	else if (strcmp(op_name, "default_swiglu_bwd_x") == 0) {
+	else if (strcmp(op_name, "swiglu_bwd_x") == 0) {
 		dataflow_set_swiglu_bwd_x_skeleton(skeleton, fwd_dt, bwd_dt);
 	}
-	else if (strcmp(op_name, "default_softmax") == 0) {
+	else if (strcmp(op_name, "softmax") == 0) {
 		dataflow_set_softmax_skeleton(skeleton, fwd_dt, bwd_dt);
 	}
-	else if (strcmp(op_name, "default_cross_entropy_loss") == 0) {
+	else if (strcmp(op_name, "cross_entropy_loss") == 0) {
 		dataflow_set_cross_entropy_loss_skeleton(skeleton, bwd_dt);
 	}
 	else {
 		// External ops (for current cuda ops implementation)
-		if (strcmp(op_name, "default_matmul") == 0) {
+		if (strcmp(op_name, "matmul") == 0) {
 			dataflow_set_matmul_skeleton(skeleton);
 		}
 		else if (strcmp(op_name, "flash3_attention_fwd") == 0) {
