@@ -581,7 +581,7 @@ int main(int argc, char * argv[]){
 
 	printf("Submitting Attention RMS Norm...!\n");
 
-	ret = dataflow_submit_rms_norm(&dataflow_handle, compute_stream_id_a, 
+	ret = dataflow_submit_default_rms_norm(&dataflow_handle, compute_stream_id_a, 
 						fwd_dt, 
 						total_q, model_dim, eps, 
 						d_attn_norm, d_orig_x, d_attn_norm_out, 
@@ -642,7 +642,7 @@ int main(int argc, char * argv[]){
 
 	printf("Submitting RoPE...!\n");
 
-	ret = dataflow_submit_rope(&dataflow_handle, compute_stream_id_a, 
+	ret = dataflow_submit_default_rope(&dataflow_handle, compute_stream_id_a, 
 						fwd_dt, 
 						N, model_dim, head_dim, num_kv_heads, theta,
 						d_seq_positions, d_wq_out, d_wk_out);
@@ -694,7 +694,7 @@ int main(int argc, char * argv[]){
 
 	printf("Submitting FFN RMS Norm...!\n");
 
-	ret = dataflow_submit_rms_norm(&dataflow_handle, compute_stream_id_a, 
+	ret = dataflow_submit_default_rms_norm(&dataflow_handle, compute_stream_id_a, 
 						fwd_dt, 
 						total_q, model_dim, eps, 
 						d_ffn_norm, d_wo_out, d_ffn_norm_out, 
@@ -740,7 +740,7 @@ int main(int argc, char * argv[]){
 	printf("Submitting SwiGLU Activation...!\n");
 
 
-	ret = dataflow_submit_swiglu(&dataflow_handle, compute_stream_id_a, 
+	ret = dataflow_submit_default_swiglu(&dataflow_handle, compute_stream_id_a, 
 						fwd_dt, 
 						total_q, (int) ffn_dim, 
 						d_w1_out, d_w3_out, d_swiglu_out);

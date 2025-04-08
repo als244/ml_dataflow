@@ -250,7 +250,7 @@ int main(int argc, char * argv[]){
 
 	printf("Submitting Output RMS Norm...!\n");
 
-	ret = dataflow_submit_rms_norm(&dataflow_handle, compute_stream_id_a, 
+	ret = dataflow_submit_default_rms_norm(&dataflow_handle, compute_stream_id_a, 
 						fwd_dt, 
 						num_tokens, model_dim, eps, 
 						d_w_out_norm, d_model_out_x, d_x_norm_out, 
@@ -280,7 +280,7 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
-    ret = dataflow_submit_softmax(&dataflow_handle, compute_stream_id_a, 
+    ret = dataflow_submit_default_softmax(&dataflow_handle, compute_stream_id_a, 
                         fwd_dt, bwd_dt,
                         num_tokens, vocab_size,
                         d_x_head_out, d_x_logits);
@@ -297,7 +297,7 @@ int main(int argc, char * argv[]){
         return -1;
     }
 
-    ret = dataflow_submit_cross_entropy_loss(&dataflow_handle, compute_stream_id_a, 
+    ret = dataflow_submit_default_cross_entropy_loss(&dataflow_handle, compute_stream_id_a, 
                         bwd_dt,
                         num_tokens, vocab_size,
                         d_x_logits_bwd, d_labels, d_loss_vec);

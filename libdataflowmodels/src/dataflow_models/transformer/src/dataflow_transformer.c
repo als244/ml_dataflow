@@ -69,7 +69,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 
 	printf("Submitting Attention RMS Norm...!\n");
 
-	ret = dataflow_submit_rms_norm(dataflow_handle, compute_stream_id, 
+	ret = dataflow_submit_default_rms_norm(dataflow_handle, compute_stream_id, 
 						fwd_dt, 
 						total_q, model_dim, (transformer_block -> config).eps, 
 						transformer_block -> w_attn_norm, block_input -> X, activation_workspace -> x_temp, 
@@ -137,7 +137,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 
 	uint64_t N = (uint64_t) total_q * (uint64_t) model_dim;
 
-	ret = dataflow_submit_rope(dataflow_handle, compute_stream_id, 
+	ret = dataflow_submit_default_rope(dataflow_handle, compute_stream_id, 
 						fwd_dt, 
 						N, model_dim, head_dim, num_kv_heads, (transformer_block -> config).theta,
 						batch_config -> seq_positions, saved_activations -> x_q, saved_activations -> x_k_local);
@@ -202,7 +202,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 
 	printf("Submitting FFN RMS Norm...!\n");
 
-	ret = dataflow_submit_rms_norm(dataflow_handle, compute_stream_id, 
+	ret = dataflow_submit_default_rms_norm(dataflow_handle, compute_stream_id, 
 						fwd_dt, 
 						total_q, model_dim, (transformer_block -> config).eps, 
 						transformer_block -> w_ffn_norm, saved_activations -> x_o, activation_workspace -> x_temp, 
@@ -248,7 +248,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	printf("Submitting SwiGLU Activation...!\n");
 
 
-	ret = dataflow_submit_swiglu(dataflow_handle, compute_stream_id, 
+	ret = dataflow_submit_default_swiglu(dataflow_handle, compute_stream_id, 
 						fwd_dt, 
 						total_q, ffn_dim, 
 						(saved_activations -> x_1)[0], (saved_activations -> x_3)[0], activation_workspace -> x_temp_mlp);
@@ -314,7 +314,7 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
     int embedding_size = (transformer_head -> embedding_config).embedding_size;
 
     // RMS Normalization
-    ret = dataflow_submit_rms_norm(dataflow_handle, compute_stream_id,
+    ret = dataflow_submit_default_rms_norm(dataflow_handle, compute_stream_id,
                          transformer_head -> fwd_dt,
                          head_activations -> num_tokens,
                          embedding_size, transformer_head -> eps,
@@ -356,7 +356,7 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
 
     // Apply softmax over vocabulary dimension
     // Each row (corresponding to a token) should sum to 1
-    ret = dataflow_submit_softmax(dataflow_handle, compute_stream_id,
+    ret = dataflow_submit_default_softmax(dataflow_handle, compute_stream_id,
                         transformer_head -> fwd_dt,
                         transformer_head -> bwd_dt,  // Use bwd_dt for backward pass
                         head_activations -> num_tokens,  // Number of rows to process
@@ -380,7 +380,7 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
 
     // First compute cross entropy loss gradients
     // This will subtract 1.0 from the correct class logits in-place
-    ret = dataflow_submit_cross_entropy_loss(dataflow_handle, compute_stream_id,
+    ret = dataflow_submit_default_cross_entropy_loss(dataflow_handle, compute_stream_id,
                                   transformer_head -> bwd_dt,
                                   head_activations -> num_tokens,  // Number of rows (tokens)
                                   vocab_size,                      // Number of columns (vocab size)
@@ -448,7 +448,7 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
     }
 
 	// Finally backpropagate through RMS normalization
-    ret = dataflow_submit_rms_norm_bwd_x(dataflow_handle, compute_stream_id,
+    ret = dataflow_submit_default_rms_norm_bwd_x(dataflow_handle, compute_stream_id,
                                transformer_head -> bwd_dt,
                                transformer_head -> bwd_dt,
                                head_activations -> num_tokens,
@@ -465,7 +465,7 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
         return ret;
     }
 
-	ret = dataflow_submit_rms_norm_bwd_w(dataflow_handle, compute_stream_id,
+	ret = dataflow_submit_default_rms_norm_bwd_w(dataflow_handle, compute_stream_id,
                                grad_transformer_head -> fwd_dt,
                                grad_transformer_head -> bwd_dt,
                                head_activations -> num_tokens,
@@ -573,7 +573,7 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 	}
 
 	// 2. Backprop through SwiGLU
-	ret = dataflow_submit_swiglu_bwd_x(dataflow_handle, compute_stream_id,
+	ret = dataflow_submit_default_swiglu_bwd_x(dataflow_handle, compute_stream_id,
 						bwd_dt, bwd_dt,
 						total_q, ffn_dim,
 						fwd_activations -> x_1[0], fwd_activations -> x_3[0],
@@ -617,7 +617,7 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 	}
 
 	// 4. Backprop through FFN RMS Norm
-	ret = dataflow_submit_rms_norm_bwd_x(dataflow_handle, compute_stream_id,
+	ret = dataflow_submit_default_rms_norm_bwd_x(dataflow_handle, compute_stream_id,
 							bwd_dt, bwd_dt,
 							total_q, model_dim, (transformer_block -> config).eps,
 							fwd_activations -> ffn_norm_weighted_sums,
@@ -632,7 +632,7 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 	}
 
 	// 5. Now that we have the correct upstream gradient also do bwd_w for ffn norm
-	ret = dataflow_submit_rms_norm_bwd_w(dataflow_handle, compute_stream_id,
+	ret = dataflow_submit_default_rms_norm_bwd_w(dataflow_handle, compute_stream_id,
 								bwd_dt, bwd_dt,
 								total_q, model_dim, (transformer_block -> config).eps,
 								fwd_activations -> ffn_norm_rms_vals,
@@ -704,7 +704,7 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 	// with the correct accumulated gradients...
 
 	// 8. Backprop through RoPE
-	ret = dataflow_submit_rope_bwd_x(dataflow_handle, compute_stream_id,
+	ret = dataflow_submit_default_rope_bwd_x(dataflow_handle, compute_stream_id,
 						bwd_dt,
 						(uint64_t)total_q * (uint64_t)model_dim,
 						model_dim,
@@ -772,7 +772,7 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 	}
 
 	// 10. Finally backprop through attention RMS norm
-	ret = dataflow_submit_rms_norm_bwd_x(dataflow_handle, compute_stream_id,
+	ret = dataflow_submit_default_rms_norm_bwd_x(dataflow_handle, compute_stream_id,
 							bwd_dt, bwd_dt,
 							total_q, model_dim, (transformer_block -> config).eps,
 							fwd_activations -> attn_norm_weighted_sums,
@@ -787,7 +787,7 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 	}
 
 	// While we have the correct upstream gradient, also do bwd_w for attn norm
-	ret = dataflow_submit_rms_norm_bwd_w(dataflow_handle, compute_stream_id,
+	ret = dataflow_submit_default_rms_norm_bwd_w(dataflow_handle, compute_stream_id,
 								bwd_dt, bwd_dt,
 								total_q, model_dim, (transformer_block -> config).eps,
 								fwd_activations -> attn_norm_rms_vals,
@@ -803,7 +803,7 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 	// needed to do bwd_w computations...
 
 	// recompute attn norm
-	ret = dataflow_submit_rms_norm(dataflow_handle, compute_stream_id,
+	ret = dataflow_submit_default_rms_norm(dataflow_handle, compute_stream_id,
 							bwd_dt, 
 							total_q, model_dim, (transformer_block -> config).eps,
 							transformer_block -> w_attn_norm,
@@ -816,7 +816,7 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 	}
 
 	// recompute ffn norm
-	ret = dataflow_submit_rms_norm(dataflow_handle, compute_stream_id,
+	ret = dataflow_submit_default_rms_norm(dataflow_handle, compute_stream_id,
 							bwd_dt, 
 							total_q, model_dim, (transformer_block -> config).eps,
 							transformer_block -> w_ffn_norm,
@@ -881,7 +881,7 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
     int to_transb = 0;
 
 	// 1.) Recompute-Swiglu in order to compute w2 grad
-	ret = dataflow_submit_swiglu(dataflow_handle, compute_stream_id,
+	ret = dataflow_submit_default_swiglu(dataflow_handle, compute_stream_id,
 						fwd_dt,
 						total_q, ffn_dim,
 						fwd_activations -> x_1[0], fwd_activations -> x_3[0],
