@@ -140,7 +140,7 @@ int dataflow_submit_attention_bwd(Dataflow_Handle * handle, int stream_id,
 // NATIVE OPS
 
 // From preprocess_ops.c
-int dataflow_submit_embedding(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_embedding_table(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, 
 						int num_tokens, int embed_dim, 
 						uint32_t * token_ids, void * embedding_table, void * output);
@@ -165,6 +165,19 @@ int dataflow_submit_rms_norm_bwd_w(Dataflow_Handle * handle, int stream_id,
 								int n_rows, int n_cols, float eps, 
 								float * fwd_rms_vals, void * X_inp, void * upstream_dX, void * dW);
 
+
+
+int dataflow_submit_rms_norm_noscale(Dataflow_Handle * handle, int stream_id, 
+						DataflowDatatype fwd_dt, 
+						int n_rows, int n_cols, float eps, 
+						void * X, void * out, float * weighted_sums, float * rms_vals);
+
+
+int dataflow_submit_rms_norm_noscale_bwd_x(Dataflow_Handle * handle, int stream_id, 
+								DataflowDatatype fwd_dt, DataflowDatatype bwd_dt, 
+								int n_rows, int n_cols, float eps, 
+								float * fwd_weighted_sums, float * fwd_rms_vals,
+								void * X_inp, void * upstream_dX, void * dX);
 
 // From attn_misc_ops.c
 
