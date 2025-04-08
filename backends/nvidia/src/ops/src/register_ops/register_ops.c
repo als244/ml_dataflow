@@ -73,20 +73,20 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 	DataflowDatatype fwd_datatypes[] = {DATAFLOW_FP32, DATAFLOW_FP16, DATAFLOW_BF16, DATAFLOW_FP8E4M3, DATAFLOW_FP8E5M2};
 	DataflowDatatype bwd_datatypes[] = {DATAFLOW_FP32, DATAFLOW_FP16, DATAFLOW_BF16};
 
-	int num_base_ops = 6;
-	char * op_base_names[6] = {"embedding", "rms_norm", "rope", "swiglu", "softmax", "cross_entropy_loss"};
+	int num_base_ops = 7;
+	char * op_base_names[7] = {"embedding_table", "rms_norm", "rms_norm_noscale", "rope", "swiglu", "softmax", "cross_entropy_loss"};
 
-	char * op_init_symbols[6] = {NULL, "rms_norm_set_attribute_config", NULL, NULL, NULL, NULL};
+	char * op_init_symbols[7] = {NULL, "rms_norm_set_attribute_config", "rms_norm_noscale_set_attribute_config", NULL, NULL, NULL, NULL};
 	
 	
 	// cross entropy loss doesn't have function for fp8 yet...
-	bool num_fwd_ops[6] = {5, 5, 5, 5, 7, 3};
-	bool num_bwd_ops[6] = {0, 14, 3, 7, 0, 0};
+	bool num_fwd_ops[7] = {5, 5, 5, 5, 5, 7, 3};
+	bool num_bwd_ops[7] = {0, 14, 7, 3, 7, 0, 0};
 
-	int num_funcs = 54;
+	int num_funcs = 66;
 
-	bool has_bwd_x[6] = {false, true, true, true, false, false};
-	bool has_bwd_w[6] = {false, true, false, false, false, false};
+	bool has_bwd_x[7] = {false, true, true, true, true, false, false};
+	bool has_bwd_w[7] = {false, true, false, false, false, false, false};
 
 	int bwd_combos = 7;
 

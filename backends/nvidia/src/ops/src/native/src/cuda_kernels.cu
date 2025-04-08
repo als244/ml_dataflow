@@ -1,7 +1,7 @@
 
 // Making all functions available within one cubin file...
 
-#include "preprocess/embedding.cu"
+#include "preprocess/embedding_table.cu"
 
 #include "norm/rms_norm.cu"
 #include "norm/rms_norm_bwd_x.cu"
