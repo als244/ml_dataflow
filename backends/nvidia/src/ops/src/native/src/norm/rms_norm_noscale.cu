@@ -1,13 +1,12 @@
 #include "nvidia_ops.h"
 
 
-extern "C" __global__ void rms_norm_fp32_kernel(int n_rows, int n_cols, float eps, float * rms_weight, float * X, float * out, float * weighted_sums, float * rms_vals) {
+extern "C" __global__ void rms_norm_noscale_fp32_kernel(int n_rows, int n_cols, float eps, float * X, float * out, float * weighted_sums, float * rms_vals) {
 
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
 
 	float * row = (float *) sdata;
-	float * weights = row + n_cols;
 
 	// every warp will have a reduced value
 	__shared__ float reduction_data[32];
@@ -39,10 +38,6 @@ extern "C" __global__ void rms_norm_fp32_kernel(int n_rows, int n_cols, float ep
 	int warp_id = thread_id / 32;
 	int lane_id = thread_id % 32;
 
-	// Load weights which are shared between all rows (when doing output in item 3...)
-	for (uint64_t i = thread_id; i < n_cols; i+=blockDim.x){
-		weights[i] = rms_weight[i];
-	}
 	__syncthreads();
 
 	float cur_row_val;
@@ -67,7 +62,7 @@ extern "C" __global__ void rms_norm_fp32_kernel(int n_rows, int n_cols, float ep
 			// save for re-scaling
 			row[i] = cur_row_val;
 			float_val = cur_row_val;
-			running_sum += float_val * weights[i];
+			running_sum += float_val;
 			float_val = float_val * float_val;
 			running_sq_sum += float_val;
 			
@@ -129,7 +124,7 @@ extern "C" __global__ void rms_norm_fp32_kernel(int n_rows, int n_cols, float ep
 			// copying casting locations as in llama3
 			rms_val =  row[i] * recip_avg;
 
-			out[row_ind_start + i] = rms_val * weights[i];
+			out[row_ind_start + i] = rms_val;
 		}
 
 		// ensure all threads are complete before we start overwriting row in smem
@@ -140,13 +135,12 @@ extern "C" __global__ void rms_norm_fp32_kernel(int n_rows, int n_cols, float ep
 
 
 // num_stages is defined by amount of smem avail, so needs to be passed in as arg
-extern "C" __global__ void rms_norm_fp16_kernel(int n_rows, int n_cols, float eps, __half * rms_weight, __half * X, __half * out, float * weighted_sums, float * rms_vals) {
+extern "C" __global__ void rms_norm_noscale_fp16_kernel(int n_rows, int n_cols, float eps, __half * X, __half * out, float * weighted_sums, float * rms_vals) {
 
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
 
 	__half * row = (__half *) sdata;
-	__half * weights = row + n_cols;
 
 	// every warp will have a reduced value
 	__shared__ float reduction_data[32];
@@ -177,10 +171,6 @@ extern "C" __global__ void rms_norm_fp16_kernel(int n_rows, int n_cols, float ep
 	int warp_id = thread_id / 32;
 	int lane_id = thread_id % 32;
 
-	// Load weights which are shared between all rows (when doing output in item 3...)
-	for (uint64_t i = thread_id; i < n_cols; i+=blockDim.x){
-		weights[i] = rms_weight[i];
-	}
 	__syncthreads();
 
 	__half cur_row_val;
@@ -204,7 +194,7 @@ extern "C" __global__ void rms_norm_fp16_kernel(int n_rows, int n_cols, float ep
 			// save for re-scaling
 			row[i] = cur_row_val;
 			float_val = __half2float(cur_row_val);
-			running_sum += float_val * __half2float(weights[i]);
+			running_sum += float_val;
 			float_val = float_val * float_val;
 			running_sq_sum += float_val;
 			
@@ -268,7 +258,7 @@ extern "C" __global__ void rms_norm_fp16_kernel(int n_rows, int n_cols, float ep
 			// copying casting locations as in llama3
 			rms_val =  __half2float(row[i]) * recip_avg;
 
-			out[row_ind_start + i] = __float2half(rms_val * __half2float(weights[i]));
+			out[row_ind_start + i] = __float2half(rms_val);
 		}
 
 		// ensure all threads are complete before we start overwriting row in smem
@@ -277,13 +267,12 @@ extern "C" __global__ void rms_norm_fp16_kernel(int n_rows, int n_cols, float ep
 }
 
 
-extern "C" __global__ void rms_norm_bf16_kernel(int n_rows, int n_cols, float eps, __nv_bfloat16 * rms_weight, __nv_bfloat16 * X, __nv_bfloat16 * out, float * weighted_sums, float * rms_vals) {
+extern "C" __global__ void rms_norm_noscale_bf16_kernel(int n_rows, int n_cols, float eps, __nv_bfloat16 * X, __nv_bfloat16 * out, float * weighted_sums, float * rms_vals) {
 
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
 
 	__nv_bfloat16 * row = (__nv_bfloat16 *) sdata;
-	__nv_bfloat16 * weights = row + n_cols;
 
 	// every warp will have a reduced value
 	__shared__ float reduction_data[32];
@@ -314,10 +303,6 @@ extern "C" __global__ void rms_norm_bf16_kernel(int n_rows, int n_cols, float ep
 	int warp_id = thread_id / 32;
 	int lane_id = thread_id % 32;
 
-	// Load weights which are shared between all rows (when doing output in item 3...)
-	for (uint64_t i = thread_id; i < n_cols; i+=blockDim.x){
-		weights[i] = rms_weight[i];
-	}
 	__syncthreads();
 
 	__nv_bfloat16 cur_row_val;
@@ -341,7 +326,7 @@ extern "C" __global__ void rms_norm_bf16_kernel(int n_rows, int n_cols, float ep
 			// save for re-scaling
 			row[i] = cur_row_val;
 			float_val = __bfloat162float(cur_row_val);
-			running_sum += __bfloat162float(weights[i]) * float_val;
+			running_sum += float_val;
 			float_val = float_val * float_val;
 			running_sq_sum += float_val;
 			
@@ -403,7 +388,7 @@ extern "C" __global__ void rms_norm_bf16_kernel(int n_rows, int n_cols, float ep
 			// copying casting locations as in llama3
 			rms_val =  __bfloat162float(row[i]) * recip_avg;
 
-			out[row_ind_start + i] = __float2bfloat16(rms_val * __bfloat162float(weights[i]));
+			out[row_ind_start + i] = __float2bfloat16(rms_val);
 		}
 
 		// ensure all threads are complete before we start overwriting row in smem
@@ -412,13 +397,12 @@ extern "C" __global__ void rms_norm_bf16_kernel(int n_rows, int n_cols, float ep
 }
 
 
-extern "C" __global__ void rms_norm_fp8e4m3_kernel(int n_rows, int n_cols, float eps, __nv_fp8_e4m3 * rms_weight, __nv_fp8_e4m3 * X, __nv_fp8_e4m3 * out, float * weighted_sums, float * rms_vals) {
+extern "C" __global__ void rms_norm_noscale_fp8e4m3_kernel(int n_rows, int n_cols, float eps, __nv_fp8_e4m3 * X, __nv_fp8_e4m3 * out, float * weighted_sums, float * rms_vals) {
 
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
 
 	__nv_fp8_e4m3 * row = (__nv_fp8_e4m3 *) sdata;
-	__nv_fp8_e4m3 * weights = row + n_cols;
 
 	// every warp will have a reduced value
 	__shared__ float reduction_data[32];
@@ -449,10 +433,6 @@ extern "C" __global__ void rms_norm_fp8e4m3_kernel(int n_rows, int n_cols, float
 	int warp_id = thread_id / 32;
 	int lane_id = thread_id % 32;
 
-	// Load weights which are shared between all rows (when doing output in item 3...)
-	for (uint64_t i = thread_id; i < n_cols; i+=blockDim.x){
-		weights[i] = rms_weight[i];
-	}
 	__syncthreads();
 
 	__nv_fp8_e4m3 cur_row_val;
@@ -475,7 +455,7 @@ extern "C" __global__ void rms_norm_fp8e4m3_kernel(int n_rows, int n_cols, float
 			// save for re-scaling
 			row[i] = cur_row_val;
 			float_val = float(cur_row_val);
-			running_sum += float_val * float(weights[i]);
+			running_sum += float_val;
 			float_val = float_val * float_val;
 			running_sq_sum += float_val;
 			
@@ -537,7 +517,7 @@ extern "C" __global__ void rms_norm_fp8e4m3_kernel(int n_rows, int n_cols, float
 			// copying casting locations as in llama3
 			rms_val =  float(row[i]) * recip_avg;
 
-			out[row_ind_start + i] = __nv_fp8_e4m3(rms_val * float(weights[i]));
+			out[row_ind_start + i] = __nv_fp8_e4m3(rms_val);
 		}
 
 		// ensure all threads are complete before we start overwriting row in smem
@@ -546,13 +526,12 @@ extern "C" __global__ void rms_norm_fp8e4m3_kernel(int n_rows, int n_cols, float
 }
 
 
-extern "C" __global__ void rms_norm_fp8e5m2_kernel(int n_rows, int n_cols, float eps, __nv_fp8_e5m2 * rms_weight, __nv_fp8_e5m2 * X, __nv_fp8_e5m2 * out, float * weighted_sums, float * rms_vals) {
+extern "C" __global__ void rms_norm_noscale_fp8e5m2_kernel(int n_rows, int n_cols, float eps, __nv_fp8_e5m2 * X, __nv_fp8_e5m2 * out, float * weighted_sums, float * rms_vals) {
 
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
 
 	__nv_fp8_e5m2 * row = (__nv_fp8_e5m2 *) sdata;
-	__nv_fp8_e5m2 * weights = row + n_cols;
 
 	// every warp will have a reduced value
 	__shared__ float reduction_data[32];
@@ -583,10 +562,6 @@ extern "C" __global__ void rms_norm_fp8e5m2_kernel(int n_rows, int n_cols, float
 	int warp_id = thread_id / 32;
 	int lane_id = thread_id % 32;
 
-	// Load weights which are shared between all rows (when doing output in item 3...)
-	for (uint64_t i = thread_id; i < n_cols; i+=blockDim.x){
-		weights[i] = rms_weight[i];
-	}
 	__syncthreads();
 
 	__nv_fp8_e5m2 cur_row_val;
@@ -610,7 +585,7 @@ extern "C" __global__ void rms_norm_fp8e5m2_kernel(int n_rows, int n_cols, float
 			// save for re-scaling
 			row[i] = cur_row_val;
 			float_val = float(cur_row_val);
-			running_sum += float_val * float(weights[i]);
+			running_sum += float_val;
 			float_val = float_val * float_val;
 			running_sum += float_val;
 			
@@ -672,7 +647,7 @@ extern "C" __global__ void rms_norm_fp8e5m2_kernel(int n_rows, int n_cols, float
 			// copying casting locations as in llama3
 			rms_val =  float(row[i]) * recip_avg;
 
-			out[row_ind_start + i] = __nv_fp8_e5m2(rms_val * float(weights[i]));
+			out[row_ind_start + i] = __nv_fp8_e5m2(rms_val);
 		}
 
 		// ensure all threads are complete before we start overwriting row in smem

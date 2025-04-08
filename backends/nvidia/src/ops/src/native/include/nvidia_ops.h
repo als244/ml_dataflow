@@ -76,6 +76,21 @@ extern "C" __global__ void rms_norm_bwd_w_fp8e5m2_bf16_kernel(int n_rows, int n_
 
 
 
+// No Scale RMS Norm (QK Norm...)
+extern "C" __global__ void rms_norm_noscale_fp32_kernel(int n_rows, int n_cols, float eps, float * X, float * out, float * weighted_sums, float * rms_vals);
+extern "C" __global__ void rms_norm_noscale_fp16_kernel(int n_rows, int n_cols, float eps, __half * X, __half * out, float * weighted_sums, float * rms_vals);
+extern "C" __global__ void rms_norm_noscale_bf16_kernel(int n_rows, int n_cols, float eps, __nv_bfloat16 * X, __nv_bfloat16 * out, float * weighted_sums, float * rms_vals);
+extern "C" __global__ void rms_norm_noscale_fp8e4m3_kernel(int n_rows, int n_cols, float eps, __nv_fp8_e4m3 * X, __nv_fp8_e4m3 * out, float * weighted_sums, float * rms_vals);
+extern "C" __global__ void rms_norm_noscale_fp8e5m2_kernel(int n_rows, int n_cols, float eps, __nv_fp8_e5m2 * X, __nv_fp8_e5m2 * out, float * weighted_sums, float * rms_vals);
+
+// Backward Activation
+extern "C" __global__ void rms_norm_noscale_bwd_x_fp32_fp32_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, float * X_inp, float * upstream_dX, float * dX);
+extern "C" __global__ void rms_norm_noscale_bwd_x_fp16_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __half * X_inp, __half * upstream_dX, __half * dX);
+extern "C" __global__ void rms_norm_noscale_bwd_x_bf16_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __nv_bfloat16 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX); 
+extern "C" __global__ void rms_norm_noscale_bwd_x_fp8e4m3_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __nv_fp8_e4m3 * X_inp, __half * upstream_dX, __half * dX);
+extern "C" __global__ void rms_norm_noscale_bwd_x_fp8e4m3_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __nv_fp8_e4m3 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX);
+extern "C" __global__ void rms_norm_noscale_bwd_x_fp8e5m2_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __nv_fp8_e5m2 * X_inp, __half * upstream_dX, __half * dX);
+extern "C" __global__ void rms_norm_noscale_bwd_x_fp8e5m2_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __nv_fp8_e5m2 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX);
 
 
 // Attention Misc
