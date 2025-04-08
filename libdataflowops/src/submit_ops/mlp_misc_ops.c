@@ -1,6 +1,6 @@
 #include "dataflow_ops.h"
 
-int dataflow_submit_swiglu(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_swiglu(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, 
 						int num_rows, int num_cols, 
 						void * x_w1, void * x_w3, void * out) {
@@ -9,7 +9,7 @@ int dataflow_submit_swiglu(Dataflow_Handle * handle, int stream_id,
 
 	Op swiglu_op;
 
-	dataflow_set_swiglu_skeleton(&swiglu_op.op_skeleton, fwd_dt);
+	dataflow_set_default_swiglu_skeleton(&swiglu_op.op_skeleton, fwd_dt);
 
 	void ** op_args = swiglu_op.op_args;
 
@@ -29,7 +29,7 @@ int dataflow_submit_swiglu(Dataflow_Handle * handle, int stream_id,
 	return 0;
 }
 
-int dataflow_submit_swiglu_bwd_x(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_swiglu_bwd_x(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, DataflowDatatype bwd_dt,
 						int num_rows, int num_cols, 
 						void * x_w1, void * x_w3, 
@@ -38,7 +38,7 @@ int dataflow_submit_swiglu_bwd_x(Dataflow_Handle * handle, int stream_id,
 	int ret;
 	Op swiglu_bwd_x_op;
 
-	dataflow_set_swiglu_bwd_x_skeleton(&swiglu_bwd_x_op.op_skeleton, fwd_dt, bwd_dt);
+	dataflow_set_default_swiglu_bwd_x_skeleton(&swiglu_bwd_x_op.op_skeleton, fwd_dt, bwd_dt);
 
 	void ** op_args = swiglu_bwd_x_op.op_args;
 

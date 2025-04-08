@@ -21,23 +21,29 @@ void dataflow_set_matmul_skeleton(Op_Skeleton * skeleton);
 void dataflow_set_flash3_attention_fwd_skeleton(Op_Skeleton * skeleton);
 void dataflow_set_flash3_attention_bwd_skeleton(Op_Skeleton * skeleton);
 
-void dataflow_set_embedding_table_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype);
 
-void dataflow_set_rms_norm_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype);
-void dataflow_set_rms_norm_bwd_x_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype, DataflowDatatype bwd_datatype);
-void dataflow_set_rms_norm_bwd_w_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype, DataflowDatatype bwd_datatype);
 
-void dataflow_set_rms_norm_noscale_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype);
-void dataflow_set_rms_norm_noscale_bwd_x_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype, DataflowDatatype bwd_datatype);
+// Default Ops
 
-void dataflow_set_rope_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype);
-void dataflow_set_rope_bwd_x_skeleton(Op_Skeleton * skeleton, DataflowDatatype bwd_datatype);
-void dataflow_set_copy_to_seq_context_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype);
+void dataflow_set_default_embedding_table_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype);
 
-void dataflow_set_swiglu_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype);
-void dataflow_set_swiglu_bwd_x_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype, DataflowDatatype bwd_datatype);
+void dataflow_set_default_rms_norm_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype);
+void dataflow_set_default_rms_norm_bwd_x_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype, DataflowDatatype bwd_datatype);
+void dataflow_set_default_rms_norm_bwd_w_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype, DataflowDatatype bwd_datatype);
 
-void dataflow_set_softmax_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype, DataflowDatatype bwd_datatype);
-void dataflow_set_cross_entropy_loss_skeleton(Op_Skeleton * skeleton, DataflowDatatype bwd_datatype);
+void dataflow_set_default_rms_norm_noscale_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype);
+void dataflow_set_default_rms_norm_noscale_bwd_x_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype, DataflowDatatype bwd_datatype);
+
+void dataflow_set_default_rope_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype);
+void dataflow_set_default_rope_bwd_x_skeleton(Op_Skeleton * skeleton, DataflowDatatype bwd_datatype);
+void dataflow_set_default_copy_to_seq_context_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype);
+
+void dataflow_set_default_select_experts_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype);
+
+void dataflow_set_default_swiglu_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype);
+void dataflow_set_default_swiglu_bwd_x_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype, DataflowDatatype bwd_datatype);
+
+void dataflow_set_default_softmax_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype, DataflowDatatype bwd_datatype);
+void dataflow_set_default_cross_entropy_loss_skeleton(Op_Skeleton * skeleton, DataflowDatatype bwd_datatype);
 
 #endif

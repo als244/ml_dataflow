@@ -140,40 +140,40 @@ int dataflow_submit_attention_bwd(Dataflow_Handle * handle, int stream_id,
 // NATIVE OPS
 
 // From preprocess_ops.c
-int dataflow_submit_embedding_table(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_embedding_table(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, 
 						int num_tokens, int embed_dim, 
 						uint32_t * token_ids, void * embedding_table, void * output);
 
 // From norm_ops.c
 
-int dataflow_submit_rms_norm(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_rms_norm(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, 
 						int n_rows, int n_cols, float eps, 
 						void * rms_weight, void * X, void * out, float * weighted_sums, float * rms_vals);
 
 
-int dataflow_submit_rms_norm_bwd_x(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_rms_norm_bwd_x(Dataflow_Handle * handle, int stream_id, 
 								DataflowDatatype fwd_dt, DataflowDatatype bwd_dt, 
 								int n_rows, int n_cols, float eps, 
 								float * fwd_weighted_sums, float * fwd_rms_vals,
 								 void * rms_weight, void * X_inp, void * upstream_dX, void * dX);
 
 
-int dataflow_submit_rms_norm_bwd_w(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_rms_norm_bwd_w(Dataflow_Handle * handle, int stream_id, 
 								DataflowDatatype fwd_dt, DataflowDatatype bwd_dt, 
 								int n_rows, int n_cols, float eps, 
 								float * fwd_rms_vals, void * X_inp, void * upstream_dX, void * dW);
 
 
 
-int dataflow_submit_rms_norm_noscale(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_rms_norm_noscale(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, 
 						int n_rows, int n_cols, float eps, 
 						void * X, void * out, float * weighted_sums, float * rms_vals);
 
 
-int dataflow_submit_rms_norm_noscale_bwd_x(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_rms_norm_noscale_bwd_x(Dataflow_Handle * handle, int stream_id, 
 								DataflowDatatype fwd_dt, DataflowDatatype bwd_dt, 
 								int n_rows, int n_cols, float eps, 
 								float * fwd_weighted_sums, float * fwd_rms_vals,
@@ -181,32 +181,42 @@ int dataflow_submit_rms_norm_noscale_bwd_x(Dataflow_Handle * handle, int stream_
 
 // From attn_misc_ops.c
 
-int dataflow_submit_rope(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_rope(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, 
 						uint64_t N, int model_dim, int head_dim, int num_kv_heads, int theta,
 						int * seq_positions, void * X_q, void * X_k);
 
-int dataflow_submit_rope_bwd_x(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_rope_bwd_x(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype bwd_dt, 
 						uint64_t N, int model_dim, int head_dim, int num_kv_heads, int theta,
 						int * seq_positions, void * dX_q, void * dX_k);
 
 
-int dataflow_submit_copy_to_seq_context(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_copy_to_seq_context(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, 
 						uint64_t N, int total_tokens, int kv_dim, 
 						void * X_k, void * X_v, int * seq_positions, uint64_t * seq_context_ptrs, int * seq_context_sizes);
 
 
+// From moe_ops.c
+
+int dataflow_submit_default_select_experts(Dataflow_Handle * handle, int stream_id, 
+                                DataflowDatatype fwd_dt,
+                                int total_tokens, int n_experts, int top_k_experts,  
+                                void * X_routed, void * token_expert_weights, 
+                                uint16_t * chosen_experts, int * expert_counts, 
+                                int * expert_counts_cumsum, int * num_routed_by_expert_workspace);
+						
+
 // From mlp_misc_ops.c
 
-int dataflow_submit_swiglu(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_swiglu(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, 
 						int num_rows, int num_cols, 
 						void * x_w1, void * x_w3, void * out);
 
 
-int dataflow_submit_swiglu_bwd_x(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_swiglu_bwd_x(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, DataflowDatatype bwd_dt,
 						int num_rows, int num_cols, 
 						void * x_w1, void * x_w3, 
@@ -214,12 +224,12 @@ int dataflow_submit_swiglu_bwd_x(Dataflow_Handle * handle, int stream_id,
 
 // From loss_misc_ops.c
 
-int dataflow_submit_softmax(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_softmax(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, DataflowDatatype bwd_dt,
 						int n_rows, int n_cols,
 						void * X, void * out);
 
-int dataflow_submit_cross_entropy_loss(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_cross_entropy_loss(Dataflow_Handle * handle, int stream_id, 
 								DataflowDatatype bwd_dt,
 								int n_rows, int n_cols,
 								void * pred_logits, uint32_t * labels, float * loss_vec);

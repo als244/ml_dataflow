@@ -1,7 +1,7 @@
 #include "dataflow_ops.h"
 
 
-int dataflow_submit_rms_norm(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_rms_norm(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, 
 						int n_rows, int n_cols, float eps, 
 						void * rms_weight, void * X, void * out, float * weighted_sums, float * rms_vals){
@@ -10,7 +10,7 @@ int dataflow_submit_rms_norm(Dataflow_Handle * handle, int stream_id,
 
 	Op rms_norm_op;
 
-	dataflow_set_rms_norm_skeleton(&rms_norm_op.op_skeleton, fwd_dt);
+	dataflow_set_default_rms_norm_skeleton(&rms_norm_op.op_skeleton, fwd_dt);
 
 	void ** op_args = rms_norm_op.op_args;
 
@@ -34,7 +34,7 @@ int dataflow_submit_rms_norm(Dataflow_Handle * handle, int stream_id,
 }
 
 
-int dataflow_submit_rms_norm_bwd_x(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_rms_norm_bwd_x(Dataflow_Handle * handle, int stream_id, 
 								DataflowDatatype fwd_dt, DataflowDatatype bwd_dt, 
 								int n_rows, int n_cols, float eps, 
 								float * fwd_weighted_sums, float * fwd_rms_vals,
@@ -44,7 +44,7 @@ int dataflow_submit_rms_norm_bwd_x(Dataflow_Handle * handle, int stream_id,
 
 	Op rms_norm_bwd_x_op;
 
-	dataflow_set_rms_norm_bwd_x_skeleton(&rms_norm_bwd_x_op.op_skeleton, fwd_dt, bwd_dt);
+	dataflow_set_default_rms_norm_bwd_x_skeleton(&rms_norm_bwd_x_op.op_skeleton, fwd_dt, bwd_dt);
 
 	void ** op_args = rms_norm_bwd_x_op.op_args;
 
@@ -69,14 +69,14 @@ int dataflow_submit_rms_norm_bwd_x(Dataflow_Handle * handle, int stream_id,
 }
 
 
-int dataflow_submit_rms_norm_bwd_w(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_rms_norm_bwd_w(Dataflow_Handle * handle, int stream_id, 
 								DataflowDatatype fwd_dt, DataflowDatatype bwd_dt, 
 								int n_rows, int n_cols, float eps, 
 								float * fwd_rms_vals, void * X_inp, void * upstream_dX, void * dW) {
 	int ret;
 	Op rms_norm_bwd_w_op;
 
-	dataflow_set_rms_norm_bwd_w_skeleton(&rms_norm_bwd_w_op.op_skeleton, fwd_dt, bwd_dt);
+	dataflow_set_default_rms_norm_bwd_w_skeleton(&rms_norm_bwd_w_op.op_skeleton, fwd_dt, bwd_dt);
 
 	void ** op_args = rms_norm_bwd_w_op.op_args;
 
@@ -97,7 +97,7 @@ int dataflow_submit_rms_norm_bwd_w(Dataflow_Handle * handle, int stream_id,
 }
 
 
-int dataflow_submit_rms_norm_noscale(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_rms_norm_noscale(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, 
 						int n_rows, int n_cols, float eps, 
 						void * X, void * out, float * weighted_sums, float * rms_vals){
@@ -106,7 +106,7 @@ int dataflow_submit_rms_norm_noscale(Dataflow_Handle * handle, int stream_id,
 
 	Op rms_norm_noscale_op;
 
-	dataflow_set_rms_norm_noscale_skeleton(&rms_norm_noscale_op.op_skeleton, fwd_dt);
+	dataflow_set_default_rms_norm_noscale_skeleton(&rms_norm_noscale_op.op_skeleton, fwd_dt);
 
 	void ** op_args = rms_norm_noscale_op.op_args;
 
@@ -130,7 +130,7 @@ int dataflow_submit_rms_norm_noscale(Dataflow_Handle * handle, int stream_id,
 
 }
 
-int dataflow_submit_rms_norm_noscale_bwd_x(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_rms_norm_noscale_bwd_x(Dataflow_Handle * handle, int stream_id, 
 								DataflowDatatype fwd_dt, DataflowDatatype bwd_dt, 
 								int n_rows, int n_cols, float eps, 
 								float * fwd_weighted_sums, float * fwd_rms_vals,
@@ -140,7 +140,7 @@ int dataflow_submit_rms_norm_noscale_bwd_x(Dataflow_Handle * handle, int stream_
 
 	Op rms_norm_noscale_bwd_x_op;
 
-	dataflow_set_rms_norm_noscale_bwd_x_skeleton(&rms_norm_noscale_bwd_x_op.op_skeleton, fwd_dt, bwd_dt);
+	dataflow_set_default_rms_norm_noscale_bwd_x_skeleton(&rms_norm_noscale_bwd_x_op.op_skeleton, fwd_dt, bwd_dt);
 
 	void ** op_args = rms_norm_noscale_bwd_x_op.op_args;
 

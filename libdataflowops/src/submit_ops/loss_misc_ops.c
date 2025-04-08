@@ -1,7 +1,7 @@
 #include "dataflow_ops.h"
 
 
-int dataflow_submit_softmax(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_softmax(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, DataflowDatatype bwd_dt,
 						int n_rows, int n_cols,
 						void * X, void * out){
@@ -10,7 +10,7 @@ int dataflow_submit_softmax(Dataflow_Handle * handle, int stream_id,
 
 	Op softmax_op;
 
-	dataflow_set_softmax_skeleton(&softmax_op.op_skeleton, fwd_dt, bwd_dt);
+	dataflow_set_default_softmax_skeleton(&softmax_op.op_skeleton, fwd_dt, bwd_dt);
 
 	void ** op_args = softmax_op.op_args;
 
@@ -29,7 +29,7 @@ int dataflow_submit_softmax(Dataflow_Handle * handle, int stream_id,
 }
 
 
-int dataflow_submit_cross_entropy_loss(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_cross_entropy_loss(Dataflow_Handle * handle, int stream_id, 
 								DataflowDatatype bwd_dt,
 								int n_rows, int n_cols,
 								void * pred_logits, uint32_t * labels, float * loss_vec) {
@@ -38,7 +38,7 @@ int dataflow_submit_cross_entropy_loss(Dataflow_Handle * handle, int stream_id,
 
 	Op cross_entropy_loss_op;
 
-	dataflow_set_cross_entropy_loss_skeleton(&cross_entropy_loss_op.op_skeleton, bwd_dt);
+	dataflow_set_default_cross_entropy_loss_skeleton(&cross_entropy_loss_op.op_skeleton, bwd_dt);
 
 	void ** op_args = cross_entropy_loss_op.op_args;
 

@@ -1,6 +1,6 @@
 #include "dataflow_ops.h"
 
-int dataflow_submit_embedding_table(Dataflow_Handle * handle, int stream_id, 
+int dataflow_submit_default_embedding_table(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, 
 						int num_tokens, int embed_dim, 
 						uint32_t * token_ids, void * embedding_table, void * output){
@@ -10,7 +10,7 @@ int dataflow_submit_embedding_table(Dataflow_Handle * handle, int stream_id,
 
 	Op embedding_table_op;
 
-	dataflow_set_embedding_table_skeleton(&embedding_table_op.op_skeleton, fwd_dt);
+	dataflow_set_default_embedding_table_skeleton(&embedding_table_op.op_skeleton, fwd_dt);
 
 	void ** op_args = embedding_table_op.op_args;
 
