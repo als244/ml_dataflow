@@ -76,7 +76,7 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 	int num_base_ops = 7;
 	char * op_base_names[7] = {"embedding_table", "rms_norm", "rms_norm_noscale", "rope", "swiglu", "softmax", "cross_entropy_loss"};
 
-	char * op_init_symbols[7] = {NULL, "rms_norm_set_attribute_config", "rms_norm_noscale_set_attribute_config", NULL, NULL, NULL, NULL};
+	char * op_init_symbols[7] = {NULL, "rms_norm_set_attribute_config", "rms_norm_set_attribute_config", NULL, NULL, NULL, NULL};
 	
 	
 	// cross entropy loss doesn't have function for fp8 yet...
