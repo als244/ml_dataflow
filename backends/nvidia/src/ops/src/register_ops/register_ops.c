@@ -124,9 +124,7 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 	for (int i = 0; i < num_base_ops; i++){
 		// all ops have fwd
 
-		
-
-		if ((strcmp(op_base_names[i], "softmax") != 0) && (strcmp(op_base_names[i], "cross_entropy_loss") != 0)) {
+		if ((strcmp(op_base_names[i], "default_softmax") != 0) && (strcmp(op_base_names[i], "default_cross_entropy_loss") != 0)) {
 			for (int s = 0; s < num_fwd_datatypes; s++){
 				if (op_init_symbols[i]){
 					native_func_init_symbols[cur_func] = calloc(FUNC_SYMBOL_MAX_LEN, sizeof(char));
@@ -143,7 +141,7 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 		// special cases for softmax and cross entropy loss
 
 		// softmax transitions from fwd dt to bwd and takes both (all combos)
-		if (strcmp(op_base_names[i], "softmax") == 0) {
+		if (strcmp(op_base_names[i], "default_softmax") == 0) {
 			for (int s = 0; s < bwd_combos; s++){
 				if (op_init_symbols[i]){
 					native_func_init_symbols[cur_func] = calloc(FUNC_SYMBOL_MAX_LEN, sizeof(char));
@@ -158,7 +156,7 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 
 		// only do cross entropy loss for fp32, fp16, bf16
 		// only the bwd_dt is used for cross entropy loss
-		if (strcmp(op_base_names[i], "cross_entropy_loss") == 0) {
+		if (strcmp(op_base_names[i], "default_cross_entropy_loss") == 0) {
 			for (int s = 0; s < num_bwd_datatypes; s++){
 				if (op_init_symbols[i]){
 					native_func_init_symbols[cur_func] = calloc(FUNC_SYMBOL_MAX_LEN, sizeof(char));
@@ -176,7 +174,7 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 			sprintf(op_base_bwd_extented, "%s_bwd_x", op_base_names[i]);
 
 			// rope_bwd_x only takes in the bwd_dt...
-			if (strcmp(op_base_bwd_extented, "rope_bwd_x") != 0){
+			if (strcmp(op_base_bwd_extented, "default_rope_bwd_x") != 0){
 
 				for (int s = 0; s < bwd_combos; s++){
 					if (op_init_symbols[i]){
