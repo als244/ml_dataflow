@@ -5,11 +5,12 @@
 #include "dataflow_models.h"
 #include "dataflow_ops.h"
 
-#include "transformer_structs.h"
+#include "transformer/transformer_structs.h"
 
 
 Transformer_Block * init_transformer_block(DataflowDatatype block_dt, DataflowDatatype compute_dt,
 						   DataflowNormalizationType normalization_type, 
+						   DataflowPositionEmbeddingType position_embedding_type,
 						   DataflowAttentionType attention_type,
 						   DataflowMLPType mlp_type,
 						   DataflowActivationType activation_type,

@@ -1,4 +1,4 @@
-#include "prep_transformer.h"
+#include "transformer/prep_transformer.h"
 
 static void set_offset(uint64_t * cur_offset, uint64_t cur_size, uint64_t * raw_size, uint64_t * aligned_size, int pointer_alignment){
 
@@ -68,7 +68,7 @@ static int set_transformer_block_weight_offsets(Transformer_Block_Config * confi
 	}
 
 	// if non MOE, these will have been configured to be set to 1
-	uint64_t num_global_experts = (uint64_t) (config -> moe_config).num_local_experts;
+	uint64_t num_global_routed_experts = (uint64_t) (config -> moe_config).num_global_routed_experts;
 	uint64_t num_local_experts = (uint64_t) (config -> moe_config).num_local_experts;
 	uint64_t w_router_size;
 
@@ -91,7 +91,7 @@ static int set_transformer_block_weight_offsets(Transformer_Block_Config * confi
 			w_3_size = 0;
 			break;
 		case DATAFLOW_MOE_MLP:
-			w_router_size = model_dim * num_global_experts * el_size;
+			w_router_size = model_dim * num_global_routed_experts * el_size;
 			w_1_size = model_dim * ffn_dim * el_size;
 			w_2_size = ffn_dim * model_dim * el_size;
 			w_3_size = model_dim * ffn_dim * el_size;
@@ -151,6 +151,7 @@ static int set_transformer_block_weight_offsets(Transformer_Block_Config * confi
 
 Transformer_Block * init_transformer_block(DataflowDatatype block_dt, DataflowDatatype compute_dt,
 						   DataflowNormalizationType normalization_type, 
+						   DataflowPositionEmbeddingType position_embedding_type,
 						   DataflowAttentionType attention_type,
 						   DataflowMLPType mlp_type,
 						   DataflowActivationType activation_type,
@@ -174,6 +175,7 @@ Transformer_Block * init_transformer_block(DataflowDatatype block_dt, DataflowDa
 
 
 	(block -> config).normalization_type = normalization_type;
+	(block -> config).position_embedding_type = position_embedding_type;
 	(block -> config).attention_type = attention_type;
 	(block -> config).mlp_type = mlp_type;
 
@@ -198,28 +200,28 @@ Transformer_Block * init_transformer_block(DataflowDatatype block_dt, DataflowDa
 		}
 
 
-		if (moe_config -> num_global_experts <= 0){
-			fprintf(stderr, "Error: specified a moe_config, number of global experts must be > 0...\n");
+		if (moe_config -> num_global_routed_experts <= 0){
+			fprintf(stderr, "Error: specified a moe_config, number of global routed experts must be > 0...\n");
 			free(block);
 			return NULL;
 		}
 
-		if (moe_config -> num_local_experts > moe_config -> num_global_experts){
-			fprintf(stderr, "Error: specified a moe_config, number of global experts must be >= number of local experts...\n");
+		if (moe_config -> num_local_experts > (moe_config -> num_shared_experts + moe_config -> num_global_routed_experts)){
+			fprintf(stderr, "Error: specified a moe_config, number of local experts must be <= number of shared experts + number of global routed experts...\n");
 			free(block);
 			return NULL;
 		}
 
 
-		if ((moe_config -> top_k_experts <= 0) || (moe_config -> top_k_experts > moe_config -> num_global_experts)){
-			fprintf(stderr, "Error: specified a moe_config, but top_k experts must be [0, num_global_experts], but is set to %d...\n", moe_config -> top_k_experts);
+		if ((moe_config -> top_k_experts <= 0) || (moe_config -> top_k_experts > (moe_config -> num_shared_experts + moe_config -> num_global_routed_experts))){
+			fprintf(stderr, "Error: specified a moe_config, but top_k experts must be [0, num_shared_experts + num_global_routed_experts], but is set to %d...\n", moe_config -> top_k_experts);
 			free(block);
 			return NULL;
 		}
 
 		(block -> config).moe_config.top_k_experts = moe_config -> top_k_experts;
-		(block -> config).moe_config.num_global_experts = moe_config -> num_global_experts;
-		(block -> config).moe_config.num_global_experts = moe_config -> num_global_experts;
+		(block -> config).moe_config.num_shared_experts = moe_config -> num_shared_experts;
+		(block -> config).moe_config.num_global_routed_experts = moe_config -> num_global_routed_experts;
 		(block -> config).moe_config.num_local_experts = moe_config -> num_local_experts;
 
 		(block -> config).moe_config.local_expert_inds = malloc(moe_config -> num_local_experts * sizeof(int));
@@ -239,7 +241,8 @@ Transformer_Block * init_transformer_block(DataflowDatatype block_dt, DataflowDa
 		}
 
 		(block -> config).moe_config.top_k_experts = 1;
-		(block -> config).moe_config.num_global_experts = 1;
+		(block -> config).moe_config.num_shared_experts = 1;
+		(block -> config).moe_config.num_global_routed_experts = 0;
 		(block -> config).moe_config.num_local_experts = 1;
 		(block -> config).moe_config.local_expert_inds = malloc(sizeof(int));
 		(block -> config).moe_config.local_expert_inds[0] = 0;

@@ -58,10 +58,6 @@ typedef struct seq_batch_saved_activations {
 	void * attn_norm_rms_vals;
 	void * x_q;
 
-	void * attn_norm_weighted_sums;
-	void * attn_norm_rms_vals;
-	void * x_q;
-
 	// These are the outputs of passing
 	// normalized input through K and V weight
 	// matrices
@@ -78,6 +74,7 @@ typedef struct seq_batch_saved_activations {
 	void ** x_1;
 	void ** x_2;
 	void ** x_3;
+	void * x_layer_out;
 } Seq_Batch_Saved_Activations;
 
 

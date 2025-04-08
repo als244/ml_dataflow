@@ -7,6 +7,13 @@ typedef enum dataflow_normalization_type {
 	DATAFLOW_LAYERNORM
 } DataflowNormalizationType;
 
+typedef enum dataflow_position_embedding_type {
+	DATAFLOW_ROPE,
+	DATAFLOW_NOPE,
+	// not supported yet
+	DATAFLOW_ALIBI
+} DataflowPositionEmbeddingType;
+
 typedef enum dataflow_actviation_type {
 	DATAFLOW_SWIGLU,
 	// not supported yet, could be epilogue of matmul
@@ -40,13 +47,14 @@ typedef struct embedding_config {
 
 typedef struct moe_config {
 	int top_k_experts;
+	int num_shared_experts;
 	// the total number of experts per-block part of 
 	// model spec
-	int num_global_experts;
+	int num_global_routed_experts;
 	// number of experts held within the block's model weights
 	int num_local_experts;
 	// of size num_local_experts (if > 0, else Null)
-	// and contains the expert indices (relative to global experts)
+	// and contains the expert indices (relative to shared + global experts)
 	// held within this block's model weights
 	int * local_expert_inds;
 } MoE_Config;

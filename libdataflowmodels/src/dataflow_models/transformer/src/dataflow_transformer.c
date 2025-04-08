@@ -348,7 +348,7 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
                        head_activations -> head_norm_out,      // B[num_tokens, embedding_size] in row-major
                        NULL,
                        head_activations -> head_out,    // C[num_tokens, vocab_size] in row-major
-                       head_activations -> kernel_workspace, head_activations -> kernel_workspaceBytes);  // No workspace needed
+                       head_activations -> kernel_workspaceBytes, head_activations -> kernel_workspace);  // No workspace needed
     if (ret) {
         fprintf(stderr, "Error: Failed to submit output projection in transformer head...\n");
         return ret;
@@ -415,7 +415,7 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
                        transformer_head -> w_head,      // w_head[embedding_size, vocab_size] in col-major
                        NULL,
                        grad_head_activations -> head_norm_out, // dx_temp[num_tokens, embedding_size] in row-major
-                       grad_head_activations -> kernel_workspace, grad_head_activations -> kernel_workspaceBytes);  // No workspace needed
+                       grad_head_activations -> kernel_workspaceBytes, grad_head_activations -> kernel_workspace);  // No workspace needed
     if (ret) {
         fprintf(stderr, "Error: Failed to submit bwd x head matmul in transformer head...\n");
         return ret;
@@ -441,7 +441,7 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
                        grad_head_activations -> head_out,    // Gradient of output [num_tokens, vocab_size]
                        grad_transformer_head -> w_head,      // Previous gradient
                        grad_transformer_head -> w_head,      // Output gradient
-                       grad_head_activations -> kernel_workspace, grad_head_activations -> kernel_workspaceBytes);                            // No workspace needed
+                       grad_head_activations -> kernel_workspaceBytes, grad_head_activations -> kernel_workspace);                            // No workspace needed
     if (ret) {
         fprintf(stderr, "Error: Failed to submit output bwd weight gradient computation in transformer head...\n");
         return ret;
@@ -535,10 +535,6 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
     int num_seqs = batch_config->num_seqs;
     int total_q = batch_config->total_q;
     int total_k = batch_config->total_k;
-	
-	int num_seqs = batch_config->num_seqs;
-	int total_q = batch_config->total_q;
-	int total_k = batch_config->total_k;
 	
 	int model_dim = (transformer_block -> config).model_dim;
 	int kv_dim = (transformer_block -> config).kv_dim;

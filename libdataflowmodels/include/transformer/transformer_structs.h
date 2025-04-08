@@ -28,6 +28,7 @@ typedef struct transformer_block_config {
 	// if on Geforce using FP16 gives twice as much perf.
 	DataflowDatatype compute_dt;
 	DataflowNormalizationType normalization_type;
+	DataflowPositionEmbeddingType position_embedding_type;
 	DataflowAttentionType attention_type;
 	DataflowMLPType mlp_type;
 	DataflowActivationType activation_type;
