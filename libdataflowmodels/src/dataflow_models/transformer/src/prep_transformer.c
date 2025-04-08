@@ -140,7 +140,13 @@ static int set_transformer_block_weight_offsets(Transformer_Block_Config * confi
 
 	for (int i = 0; i < num_local_experts; i++){
 		set_offset(&((weight_offsets -> w_1)[i]), w_1_size, &raw_size, &aligned_size, pointer_alignment);
+	}
+
+	for (int i = 0; i < num_local_experts; i++){
 		set_offset(&((weight_offsets -> w_3)[i]), w_3_size, &raw_size, &aligned_size, pointer_alignment);
+	}
+
+	for (int i = 0; i < num_local_experts; i++){
 		set_offset(&((weight_offsets -> w_2)[i]), w_2_size, &raw_size, &aligned_size, pointer_alignment);
 	}
 
@@ -342,6 +348,29 @@ int bind_transformer_block(void * buffer, Transformer_Block * transformer_block)
 	return 0;
 }
 
+// the file consists of combined weights for block. 
+// the block should have already been initialized and bound to buffer
+int load_transformer_block(char * filename, Transformer_Block * transformer_block){
+
+	FILE * file = fopen(filename, "rb");
+	if (!file){
+		fprintf(stderr, "Error: could not open file %s...\n", filename);
+		return -1;
+	}
+
+	// For now, assuming loading into host....
+	
+	size_t nread = fread(transformer_block -> buffer, 1, transformer_block -> config.block_aligned_size, file);
+	if (nread != transformer_block -> config.block_aligned_size){
+		fprintf(stderr, "Error: could not read file %s. Expected %zu bytes (aligned size), but read %zu bytes (file size)...\n", filename, transformer_block -> config.block_aligned_size, nread);
+		fclose(file);
+		return -1;
+	}
+
+	fclose(file);
+
+	return 0;
+}
 
 // int bind_transformer_block_activations(void * buffer, Seq_Batch * seq_batch, Transformer_Block * block, Transformer_Block_Activations * activation_buffer) {
 // 	return -1;

@@ -30,8 +30,9 @@ uint64_t get_transformer_block_aligned_size(Transformer_Block * transformer_bloc
 int bind_transformer_block(void * buffer, Transformer_Block * transformer_block);
 
 
-// the file consists of all weights 
-//int load_transformer_block(char * filename, Transformer_Block * transformer_block);
+// the file consists of combined weights for block. 
+// the block should have already been initialized and bound to buffer
+int load_transformer_block(char * filename, Transformer_Block * transformer_block);
 
 
 // Need to set Seq Batch metadata...!

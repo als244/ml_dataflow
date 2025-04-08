@@ -46,7 +46,7 @@ int main(int argc, char * argv[]){
 	
 	
 	// for now using 0 alignment to directly read from combined file...
-	int pointer_alignment = 0;
+	int pointer_alignment = 256;
 
 	Transformer_Block * block = init_transformer_block(block_dt, compute_dt,
 														norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
