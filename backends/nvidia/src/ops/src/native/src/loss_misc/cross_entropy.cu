@@ -2,7 +2,7 @@
 
 
 // subtracts 1 from correct values
-extern "C" __global__ void cross_entropy_loss_fp32_kernel(int n_rows, int n_cols, float * pred_logits, uint32_t * labels, float * loss_vec) {
+extern "C" __global__ void default_cross_entropy_loss_fp32_kernel(int n_rows, int n_cols, float * pred_logits, uint32_t * labels, float * loss_vec) {
 
 	uint64_t row_start = blockIdx.x * blockDim.x;
 
@@ -66,7 +66,7 @@ extern "C" __global__ void cross_entropy_loss_fp32_kernel(int n_rows, int n_cols
 }
 
 // launched with number of rows (total tokens to predict)
-extern "C" __global__ void cross_entropy_loss_fp16_kernel(int n_rows, int n_cols, __half * pred_logits, uint32_t * labels, float * loss_vec){
+extern "C" __global__ void default_cross_entropy_loss_fp16_kernel(int n_rows, int n_cols, __half * pred_logits, uint32_t * labels, float * loss_vec){
 
 	uint64_t row_start = blockIdx.x * blockDim.x;
 
@@ -130,7 +130,7 @@ extern "C" __global__ void cross_entropy_loss_fp16_kernel(int n_rows, int n_cols
 }
 
 
-extern "C" __global__ void cross_entropy_loss_bf16_kernel(int n_rows, int n_cols, __nv_bfloat16 * pred_logits, uint32_t * labels, float * loss_vec){
+extern "C" __global__ void default_cross_entropy_loss_bf16_kernel(int n_rows, int n_cols, __nv_bfloat16 * pred_logits, uint32_t * labels, float * loss_vec){
 
 	uint64_t row_start = blockIdx.x * blockDim.x;
 

@@ -1,6 +1,6 @@
 #include "nvidia_ops.h"
 
-extern "C" __global__ void rope_bwd_x_fp32_kernel(uint64_t N, int model_dim, int head_dim, int num_kv_heads, int theta, int *seq_positions, float *dX_q, float *dX_k) {
+extern "C" __global__ void default_rope_bwd_x_fp32_kernel(uint64_t N, int model_dim, int head_dim, int num_kv_heads, int theta, int *seq_positions, float *dX_q, float *dX_k) {
 	
 	// Each thread handles two consecutive half elements.
 	uint64_t i = 2 * (blockIdx.x * blockDim.x + threadIdx.x);
@@ -59,7 +59,7 @@ extern "C" __global__ void rope_bwd_x_fp32_kernel(uint64_t N, int model_dim, int
 
 
 
-extern "C" __global__ void rope_bwd_x_fp16_kernel(uint64_t N, int model_dim, int head_dim, int num_kv_heads, int theta, int *seq_positions, __half *dX_q, __half *dX_k) {
+extern "C" __global__ void default_rope_bwd_x_fp16_kernel(uint64_t N, int model_dim, int head_dim, int num_kv_heads, int theta, int *seq_positions, __half *dX_q, __half *dX_k) {
 	
 	// Each thread handles two consecutive half elements.
 	uint64_t i = 2 * (blockIdx.x * blockDim.x + threadIdx.x);
@@ -117,7 +117,7 @@ extern "C" __global__ void rope_bwd_x_fp16_kernel(uint64_t N, int model_dim, int
 }
 
 
-extern "C" __global__ void rope_bwd_x_bf16_kernel(uint64_t N, int model_dim, int head_dim, int num_kv_heads, int theta, int *seq_positions, __nv_bfloat16 *dX_q, __nv_bfloat16 *dX_k) {
+extern "C" __global__ void default_rope_bwd_x_bf16_kernel(uint64_t N, int model_dim, int head_dim, int num_kv_heads, int theta, int *seq_positions, __nv_bfloat16 *dX_q, __nv_bfloat16 *dX_k) {
 	
 	// Each thread handles two consecutive half elements.
 	uint64_t i = 2 * (blockIdx.x * blockDim.x + threadIdx.x);

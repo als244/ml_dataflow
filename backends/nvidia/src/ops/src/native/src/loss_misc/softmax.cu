@@ -1,6 +1,6 @@
 #include "nvidia_ops.h"
 
-extern "C" __global__ void softmax_fp32_fp32_kernel(int n_rows, int n_cols, float * X, float * out) {
+extern "C" __global__ void default_softmax_fp32_fp32_kernel(int n_rows, int n_cols, float * X, float * out) {
 
 	uint64_t row_ind = blockIdx.x;
 
@@ -134,7 +134,7 @@ extern "C" __global__ void softmax_fp32_fp32_kernel(int n_rows, int n_cols, floa
 }
 
 
-extern "C" __global__ void softmax_fp16_fp16_kernel(int n_rows, int n_cols, __half * X, __half * out) {
+extern "C" __global__ void default_softmax_fp16_fp16_kernel(int n_rows, int n_cols, __half * X, __half * out) {
 
 	uint64_t row_ind = blockIdx.x;
 
@@ -270,7 +270,7 @@ extern "C" __global__ void softmax_fp16_fp16_kernel(int n_rows, int n_cols, __ha
 	}
 }
 
-extern "C" __global__ void softmax_bf16_bf16_kernel(int n_rows, int n_cols, __nv_bfloat16 * X, __nv_bfloat16 * out) {
+extern "C" __global__ void default_softmax_bf16_bf16_kernel(int n_rows, int n_cols, __nv_bfloat16 * X, __nv_bfloat16 * out) {
 
 	uint64_t row_ind = blockIdx.x;
 
@@ -406,7 +406,7 @@ extern "C" __global__ void softmax_bf16_bf16_kernel(int n_rows, int n_cols, __nv
 	}
 }
 
-extern "C" __global__ void softmax_fp8e4m3_fp16_kernel(int n_rows, int n_cols, __nv_fp8_e4m3 * X, __half * out) {
+extern "C" __global__ void default_softmax_fp8e4m3_fp16_kernel(int n_rows, int n_cols, __nv_fp8_e4m3 * X, __half * out) {
 
 	uint64_t row_ind = blockIdx.x;
 
@@ -543,7 +543,7 @@ extern "C" __global__ void softmax_fp8e4m3_fp16_kernel(int n_rows, int n_cols, _
 }
 
 
-extern "C" __global__ void softmax_fp8e4m3_bf16_kernel(int n_rows, int n_cols, __nv_fp8_e4m3 * X, __nv_bfloat16 * out) {
+extern "C" __global__ void default_softmax_fp8e4m3_bf16_kernel(int n_rows, int n_cols, __nv_fp8_e4m3 * X, __nv_bfloat16 * out) {
 
 	uint64_t row_ind = blockIdx.x;
 
@@ -680,7 +680,7 @@ extern "C" __global__ void softmax_fp8e4m3_bf16_kernel(int n_rows, int n_cols, _
 }
 
 
-extern "C" __global__ void softmax_fp8e5m2_fp16_kernel(int n_rows, int n_cols, __nv_fp8_e5m2 * X, __half * out) {
+extern "C" __global__ void default_softmax_fp8e5m2_fp16_kernel(int n_rows, int n_cols, __nv_fp8_e5m2 * X, __half * out) {
 
 	uint64_t row_ind = blockIdx.x;
 
@@ -817,7 +817,7 @@ extern "C" __global__ void softmax_fp8e5m2_fp16_kernel(int n_rows, int n_cols, _
 }
 
 
-extern "C" __global__ void softmax_fp8e5m2_bf16_kernel(int n_rows, int n_cols, __nv_fp8_e5m2 * X, __nv_bfloat16 * out) {
+extern "C" __global__ void default_softmax_fp8e5m2_bf16_kernel(int n_rows, int n_cols, __nv_fp8_e5m2 * X, __nv_bfloat16 * out) {
 
 	uint64_t row_ind = blockIdx.x;
 
@@ -962,7 +962,7 @@ extern "C" __global__ void softmax_fp8e5m2_bf16_kernel(int n_rows, int n_cols, _
 // And block_idx is the row
 
 // very naive implementation for now....
-extern "C" __global__ void softmax_fp16_fp32_kernel(int n_rows, int n_cols, __half * X_in, float * out, uint32_t * arg_maxs) {
+extern "C" __global__ void default_softmax_fp16_fp32_kernel(int n_rows, int n_cols, __half * X_in, float * out, uint32_t * arg_maxs) {
 
 	uint64_t row_ind = blockIdx.x;
 
@@ -1105,7 +1105,7 @@ extern "C" __global__ void softmax_fp16_fp32_kernel(int n_rows, int n_cols, __ha
 	}
 }
 
-extern "C" __global__ void softmax_bf16_fp32_kernel(int n_rows, int n_cols, __nv_bfloat16 * X_in, float * out, uint32_t * arg_maxs) {
+extern "C" __global__ void default_softmax_bf16_fp32_kernel(int n_rows, int n_cols, __nv_bfloat16 * X_in, float * out, uint32_t * arg_maxs) {
 
 	uint64_t row_ind = blockIdx.x;
 

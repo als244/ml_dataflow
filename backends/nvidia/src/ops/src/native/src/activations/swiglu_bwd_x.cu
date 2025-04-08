@@ -1,7 +1,7 @@
 #include "nvidia_ops.h"
 
 
-extern "C" __global__ void swiglu_bwd_x_fp32_fp32_kernel(int num_rows, int num_cols, float * x_w1, float * x_w3, float * upstream_dX, float * dX_w1, float * dX_w3) {
+extern "C" __global__ void default_swiglu_bwd_x_fp32_fp32_kernel(int num_rows, int num_cols, float * x_w1, float * x_w3, float * upstream_dX, float * dX_w1, float * dX_w3) {
 
         int row_num = blockIdx.x;
         int thread_id = threadIdx.x;
@@ -27,7 +27,7 @@ extern "C" __global__ void swiglu_bwd_x_fp32_fp32_kernel(int num_rows, int num_c
         }
 }
 
-extern "C" __global__ void swiglu_bwd_x_fp16_fp16_kernel(int num_rows, int num_cols, __half * x_w1, __half * x_w3, __half * upstream_dX, __half * dX_w1, __half * dX_w3) {
+extern "C" __global__ void default_swiglu_bwd_x_fp16_fp16_kernel(int num_rows, int num_cols, __half * x_w1, __half * x_w3, __half * upstream_dX, __half * dX_w1, __half * dX_w3) {
 
         int row_num = blockIdx.x;
         int thread_id = threadIdx.x;
@@ -53,7 +53,7 @@ extern "C" __global__ void swiglu_bwd_x_fp16_fp16_kernel(int num_rows, int num_c
         }
 }
  
-extern "C" __global__ void swiglu_bwd_x_bf16_bf16_kernel(int num_rows, int num_cols, __nv_bfloat16 * x_w1, __nv_bfloat16 * x_w3, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX_w1, __nv_bfloat16 * dX_w3) {
+extern "C" __global__ void default_swiglu_bwd_x_bf16_bf16_kernel(int num_rows, int num_cols, __nv_bfloat16 * x_w1, __nv_bfloat16 * x_w3, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX_w1, __nv_bfloat16 * dX_w3) {
 
         int row_num = blockIdx.x;
         int thread_id = threadIdx.x;
@@ -79,7 +79,7 @@ extern "C" __global__ void swiglu_bwd_x_bf16_bf16_kernel(int num_rows, int num_c
         }
 }
 
-extern "C" __global__ void swiglu_bwd_x_fp8e4m3_fp16_kernel(int num_rows, int num_cols, __nv_fp8_e4m3 * x_w1, __nv_fp8_e4m3 * x_w3, __half * upstream_dX, __half * dX_w1, __half * dX_w3){
+extern "C" __global__ void default_swiglu_bwd_x_fp8e4m3_fp16_kernel(int num_rows, int num_cols, __nv_fp8_e4m3 * x_w1, __nv_fp8_e4m3 * x_w3, __half * upstream_dX, __half * dX_w1, __half * dX_w3){
 
         int row_num = blockIdx.x;
         int thread_id = threadIdx.x;
@@ -105,7 +105,7 @@ extern "C" __global__ void swiglu_bwd_x_fp8e4m3_fp16_kernel(int num_rows, int nu
         }
 }
 
-extern "C" __global__ void swiglu_bwd_x_fp8e4m3_bf16_kernel(int num_rows, int num_cols, __nv_fp8_e4m3 * x_w1, __nv_fp8_e4m3 * x_w3, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX_w1, __nv_bfloat16 * dX_w3){
+extern "C" __global__ void default_swiglu_bwd_x_fp8e4m3_bf16_kernel(int num_rows, int num_cols, __nv_fp8_e4m3 * x_w1, __nv_fp8_e4m3 * x_w3, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX_w1, __nv_bfloat16 * dX_w3){
 
         int row_num = blockIdx.x;
         int thread_id = threadIdx.x;
@@ -132,7 +132,7 @@ extern "C" __global__ void swiglu_bwd_x_fp8e4m3_bf16_kernel(int num_rows, int nu
 }
 
 
-extern "C" __global__ void swiglu_bwd_x_fp8e5m2_fp16_kernel(int num_rows, int num_cols, __nv_fp8_e5m2 * x_w1, __nv_fp8_e5m2 * x_w3, __half * upstream_dX, __half * dX_w1, __half * dX_w3){
+extern "C" __global__ void default_swiglu_bwd_x_fp8e5m2_fp16_kernel(int num_rows, int num_cols, __nv_fp8_e5m2 * x_w1, __nv_fp8_e5m2 * x_w3, __half * upstream_dX, __half * dX_w1, __half * dX_w3){
 
         int row_num = blockIdx.x;
         int thread_id = threadIdx.x;
@@ -158,7 +158,7 @@ extern "C" __global__ void swiglu_bwd_x_fp8e5m2_fp16_kernel(int num_rows, int nu
         }
 }
 
-extern "C" __global__ void swiglu_bwd_x_fp8e5m2_bf16_kernel(int num_rows, int num_cols, __nv_fp8_e5m2 * x_w1, __nv_fp8_e5m2 * x_w3, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX_w1, __nv_bfloat16 * dX_w3){
+extern "C" __global__ void default_swiglu_bwd_x_fp8e5m2_bf16_kernel(int num_rows, int num_cols, __nv_fp8_e5m2 * x_w1, __nv_fp8_e5m2 * x_w3, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX_w1, __nv_bfloat16 * dX_w3){
 
         int row_num = blockIdx.x;
         int thread_id = threadIdx.x;

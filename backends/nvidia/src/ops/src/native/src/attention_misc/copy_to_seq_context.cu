@@ -1,6 +1,6 @@
 #include "nvidia_ops.h"
 
-extern "C" __global__ void copy_to_seq_context_fp32_kernel(uint64_t N, int total_tokens, int kv_dim, float * keys, float * values, int * seq_positions, uint64_t * seq_context_ptrs, int * seq_context_sizes){
+extern "C" __global__ void default_copy_to_seq_context_fp32_kernel(uint64_t N, int total_tokens, int kv_dim, float * keys, float * values, int * seq_positions, uint64_t * seq_context_ptrs, int * seq_context_sizes){
 
 	uint64_t i = (blockIdx.x * blockDim.x + threadIdx.x);
 
@@ -21,7 +21,7 @@ extern "C" __global__ void copy_to_seq_context_fp32_kernel(uint64_t N, int total
 
 
 // N = total_tokens * kv_dim
-extern "C" __global__ void copy_to_seq_context_fp16_kernel(uint64_t N, int total_tokens, int kv_dim, __half * keys, __half * values, int * seq_positions, uint64_t * seq_context_ptrs, int * seq_context_sizes){
+extern "C" __global__ void default_copy_to_seq_context_fp16_kernel(uint64_t N, int total_tokens, int kv_dim, __half * keys, __half * values, int * seq_positions, uint64_t * seq_context_ptrs, int * seq_context_sizes){
 
 	uint64_t i = (blockIdx.x * blockDim.x + threadIdx.x);
 
@@ -41,7 +41,7 @@ extern "C" __global__ void copy_to_seq_context_fp16_kernel(uint64_t N, int total
 }
 
 
-extern "C" __global__ void copy_to_seq_context_bf16_kernel(uint64_t N, int total_tokens, int kv_dim, __nv_bfloat16 * keys, __nv_bfloat16 * values, int * seq_positions, uint64_t * seq_context_ptrs, int * seq_context_sizes){
+extern "C" __global__ void default_copy_to_seq_context_bf16_kernel(uint64_t N, int total_tokens, int kv_dim, __nv_bfloat16 * keys, __nv_bfloat16 * values, int * seq_positions, uint64_t * seq_context_ptrs, int * seq_context_sizes){
 
 	uint64_t i = (blockIdx.x * blockDim.x + threadIdx.x);
 
@@ -61,7 +61,7 @@ extern "C" __global__ void copy_to_seq_context_bf16_kernel(uint64_t N, int total
 }
 
 
-extern "C" __global__ void copy_to_seq_context_fp8e4m3_kernel(uint64_t N, int total_tokens, int kv_dim, __nv_fp8_e4m3 * keys, __nv_fp8_e4m3 * values, int * seq_positions, uint64_t * seq_context_ptrs, int * seq_context_sizes){
+extern "C" __global__ void default_copy_to_seq_context_fp8e4m3_kernel(uint64_t N, int total_tokens, int kv_dim, __nv_fp8_e4m3 * keys, __nv_fp8_e4m3 * values, int * seq_positions, uint64_t * seq_context_ptrs, int * seq_context_sizes){
 
 	uint64_t i = (blockIdx.x * blockDim.x + threadIdx.x);
 
@@ -81,7 +81,7 @@ extern "C" __global__ void copy_to_seq_context_fp8e4m3_kernel(uint64_t N, int to
 }
 
 
-extern "C" __global__ void copy_to_seq_context_fp8e5m2_kernel(uint64_t N, int total_tokens, int kv_dim, __nv_fp8_e5m2 * keys, __nv_fp8_e5m2 * values, int * seq_positions, uint64_t * seq_context_ptrs, int * seq_context_sizes){
+extern "C" __global__ void default_copy_to_seq_context_fp8e5m2_kernel(uint64_t N, int total_tokens, int kv_dim, __nv_fp8_e5m2 * keys, __nv_fp8_e5m2 * values, int * seq_positions, uint64_t * seq_context_ptrs, int * seq_context_sizes){
 
 	uint64_t i = (blockIdx.x * blockDim.x + threadIdx.x);
 

@@ -1,7 +1,7 @@
 #include "nvidia_ops.h"
 
 
-extern "C" __global__ void swiglu_fp32_kernel(int num_rows, int num_cols, float * x_w1, float * x_w3, float * out){
+extern "C" __global__ void default_swiglu_fp32_kernel(int num_rows, int num_cols, float * x_w1, float * x_w3, float * out){
 
         int row_num = blockIdx.x;
         int thread_id = threadIdx.x;
@@ -23,7 +23,7 @@ extern "C" __global__ void swiglu_fp32_kernel(int num_rows, int num_cols, float 
         }
 }
 
-extern "C" __global__ void swiglu_fp16_kernel(int num_rows, int num_cols, __half * x_w1, __half * x_w3, __half * out){
+extern "C" __global__ void default_swiglu_fp16_kernel(int num_rows, int num_cols, __half * x_w1, __half * x_w3, __half * out){
 
         int row_num = blockIdx.x;
         int thread_id = threadIdx.x;
@@ -45,7 +45,7 @@ extern "C" __global__ void swiglu_fp16_kernel(int num_rows, int num_cols, __half
         }
 }
 
-extern "C" __global__ void swiglu_bf16_kernel(int num_rows, int num_cols, __nv_bfloat16 * x_w1, __nv_bfloat16 * x_w3, __nv_bfloat16 * out){
+extern "C" __global__ void default_swiglu_bf16_kernel(int num_rows, int num_cols, __nv_bfloat16 * x_w1, __nv_bfloat16 * x_w3, __nv_bfloat16 * out){
 
         int row_num = blockIdx.x;
         int thread_id = threadIdx.x;
@@ -67,7 +67,7 @@ extern "C" __global__ void swiglu_bf16_kernel(int num_rows, int num_cols, __nv_b
         }
 }
 
-extern "C" __global__ void swiglu_fp8e4m3_kernel(int num_rows, int num_cols, __nv_fp8_e4m3 * x_w1, __nv_fp8_e4m3 * x_w3, __nv_fp8_e4m3 * out){
+extern "C" __global__ void default_swiglu_fp8e4m3_kernel(int num_rows, int num_cols, __nv_fp8_e4m3 * x_w1, __nv_fp8_e4m3 * x_w3, __nv_fp8_e4m3 * out){
 
         int row_num = blockIdx.x;
         int thread_id = threadIdx.x;
@@ -89,7 +89,7 @@ extern "C" __global__ void swiglu_fp8e4m3_kernel(int num_rows, int num_cols, __n
         }
 }
 
-extern "C" __global__ void swiglu_fp8e5m2_kernel(int num_rows, int num_cols, __nv_fp8_e5m2 * x_w1, __nv_fp8_e5m2 * x_w3, __nv_fp8_e5m2 * out){
+extern "C" __global__ void default_swiglu_fp8e5m2_kernel(int num_rows, int num_cols, __nv_fp8_e5m2 * x_w1, __nv_fp8_e5m2 * x_w3, __nv_fp8_e5m2 * out){
 
         int row_num = blockIdx.x;
         int thread_id = threadIdx.x;

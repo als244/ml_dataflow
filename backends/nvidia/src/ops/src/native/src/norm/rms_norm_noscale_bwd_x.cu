@@ -1,7 +1,7 @@
 #include "nvidia_ops.h"
 
 
-extern "C" __global__ void rms_norm_noscale_bwd_x_fp32_fp32_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, float * X_inp, float * upstream_dX, float * dX) {
+extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp32_fp32_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, float * X_inp, float * upstream_dX, float * dX) {
 		
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
@@ -81,7 +81,7 @@ extern "C" __global__ void rms_norm_noscale_bwd_x_fp32_fp32_kernel(int n_rows, i
 // Here dX is (N, model_dim) and contains the backprop loss flow that we will update in-place
 // This needs to be called after the bwd_weight because the weight we use the updstream dL/dX and this function will
 // modify the same pointer...
-extern "C" __global__ void rms_norm_noscale_bwd_x_fp16_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __half * X_inp, __half * upstream_dX, __half * dX){
+extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp16_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __half * X_inp, __half * upstream_dX, __half * dX){
 		
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
@@ -157,7 +157,7 @@ extern "C" __global__ void rms_norm_noscale_bwd_x_fp16_fp16_kernel(int n_rows, i
 }
 
 
-extern "C" __global__ void rms_norm_noscale_bwd_x_bf16_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __nv_bfloat16 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX) {
+extern "C" __global__ void default_rms_norm_noscale_bwd_x_bf16_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __nv_bfloat16 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX) {
 		
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
@@ -233,7 +233,7 @@ extern "C" __global__ void rms_norm_noscale_bwd_x_bf16_bf16_kernel(int n_rows, i
 }
 
 
-extern "C" __global__ void rms_norm_noscale_bwd_x_fp8e4m3_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __nv_fp8_e4m3 * X_inp, __half * upstream_dX, __half * dX) {
+extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp8e4m3_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __nv_fp8_e4m3 * X_inp, __half * upstream_dX, __half * dX) {
 		
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
@@ -308,7 +308,7 @@ extern "C" __global__ void rms_norm_noscale_bwd_x_fp8e4m3_fp16_kernel(int n_rows
 	}
 }
 
-extern "C" __global__ void rms_norm_noscale_bwd_x_fp8e4m3_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __nv_fp8_e4m3 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX) {
+extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp8e4m3_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __nv_fp8_e4m3 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX) {
 		
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
@@ -385,7 +385,7 @@ extern "C" __global__ void rms_norm_noscale_bwd_x_fp8e4m3_bf16_kernel(int n_rows
 }
 
 
-extern "C" __global__ void rms_norm_noscale_bwd_x_fp8e5m2_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __nv_fp8_e5m2 * X_inp, __half * upstream_dX, __half * dX) {
+extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp8e5m2_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __nv_fp8_e5m2 * X_inp, __half * upstream_dX, __half * dX) {
 		
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
@@ -459,7 +459,7 @@ extern "C" __global__ void rms_norm_noscale_bwd_x_fp8e5m2_fp16_kernel(int n_rows
 	}
 }
 
-extern "C" __global__ void rms_norm_noscale_bwd_x_fp8e5m2_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __nv_fp8_e5m2 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX) {
+extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp8e5m2_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __nv_fp8_e5m2 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX) {
 		
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];

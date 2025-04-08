@@ -1,7 +1,7 @@
 #include "nvidia_ops.h"
 
 
-extern "C" __global__ void rms_norm_fp32_kernel(int n_rows, int n_cols, float eps, float * rms_weight, float * X, float * out, float * weighted_sums, float * rms_vals) {
+extern "C" __global__ void default_rms_norm_fp32_kernel(int n_rows, int n_cols, float eps, float * rms_weight, float * X, float * out, float * weighted_sums, float * rms_vals) {
 
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
@@ -140,7 +140,7 @@ extern "C" __global__ void rms_norm_fp32_kernel(int n_rows, int n_cols, float ep
 
 
 // num_stages is defined by amount of smem avail, so needs to be passed in as arg
-extern "C" __global__ void rms_norm_fp16_kernel(int n_rows, int n_cols, float eps, __half * rms_weight, __half * X, __half * out, float * weighted_sums, float * rms_vals) {
+extern "C" __global__ void default_rms_norm_fp16_kernel(int n_rows, int n_cols, float eps, __half * rms_weight, __half * X, __half * out, float * weighted_sums, float * rms_vals) {
 
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
@@ -277,7 +277,7 @@ extern "C" __global__ void rms_norm_fp16_kernel(int n_rows, int n_cols, float ep
 }
 
 
-extern "C" __global__ void rms_norm_bf16_kernel(int n_rows, int n_cols, float eps, __nv_bfloat16 * rms_weight, __nv_bfloat16 * X, __nv_bfloat16 * out, float * weighted_sums, float * rms_vals) {
+extern "C" __global__ void default_rms_norm_bf16_kernel(int n_rows, int n_cols, float eps, __nv_bfloat16 * rms_weight, __nv_bfloat16 * X, __nv_bfloat16 * out, float * weighted_sums, float * rms_vals) {
 
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
@@ -412,7 +412,7 @@ extern "C" __global__ void rms_norm_bf16_kernel(int n_rows, int n_cols, float ep
 }
 
 
-extern "C" __global__ void rms_norm_fp8e4m3_kernel(int n_rows, int n_cols, float eps, __nv_fp8_e4m3 * rms_weight, __nv_fp8_e4m3 * X, __nv_fp8_e4m3 * out, float * weighted_sums, float * rms_vals) {
+extern "C" __global__ void default_rms_norm_fp8e4m3_kernel(int n_rows, int n_cols, float eps, __nv_fp8_e4m3 * rms_weight, __nv_fp8_e4m3 * X, __nv_fp8_e4m3 * out, float * weighted_sums, float * rms_vals) {
 
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
@@ -546,7 +546,7 @@ extern "C" __global__ void rms_norm_fp8e4m3_kernel(int n_rows, int n_cols, float
 }
 
 
-extern "C" __global__ void rms_norm_fp8e5m2_kernel(int n_rows, int n_cols, float eps, __nv_fp8_e5m2 * rms_weight, __nv_fp8_e5m2 * X, __nv_fp8_e5m2 * out, float * weighted_sums, float * rms_vals) {
+extern "C" __global__ void default_rms_norm_fp8e5m2_kernel(int n_rows, int n_cols, float eps, __nv_fp8_e5m2 * rms_weight, __nv_fp8_e5m2 * X, __nv_fp8_e5m2 * out, float * weighted_sums, float * rms_vals) {
 
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];

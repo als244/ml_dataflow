@@ -1,6 +1,6 @@
 #include "nvidia_ops_config.h"
 
-int rms_norm_set_attribute_config(Dataflow_Handle * dataflow_handle, Cuda_Function * cuda_function) {
+int default_rms_norm_set_attribute_config(Dataflow_Handle * dataflow_handle, Cuda_Function * cuda_function) {
 
 	int ret;
 
@@ -27,7 +27,7 @@ int rms_norm_set_attribute_config(Dataflow_Handle * dataflow_handle, Cuda_Functi
 	return 0;
 }
 
-int rms_norm_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Dataflow_Handle * dataflow_handle, Cuda_Function * cuda_function, Op * op) {
+int default_rms_norm_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Dataflow_Handle * dataflow_handle, Cuda_Function * cuda_function, Op * op) {
 
 	Op_Skeleton * op_skeleton = &(cuda_function -> op_skeleton);
 
@@ -78,7 +78,7 @@ int rms_norm_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Dataflow
 	return 0;
 }
 
-int rms_norm_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Dataflow_Handle * dataflow_handle, Cuda_Function * cuda_function, Op * op) {
+int default_rms_norm_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Dataflow_Handle * dataflow_handle, Cuda_Function * cuda_function, Op * op) {
 
 	Op_Skeleton * op_skeleton = &(cuda_function -> op_skeleton);
 
@@ -151,7 +151,7 @@ int rms_norm_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Da
 }
 
 // Same as bwd_x....
-int rms_norm_bwd_w_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Dataflow_Handle * dataflow_handle, Cuda_Function * cuda_function, Op * op) {
+int default_rms_norm_bwd_w_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Dataflow_Handle * dataflow_handle, Cuda_Function * cuda_function, Op * op) {
 
 	Op_Skeleton * op_skeleton = &(cuda_function -> op_skeleton);
 
@@ -222,7 +222,7 @@ int rms_norm_bwd_w_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Da
 }
 
 
-int rms_norm_noscale_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Dataflow_Handle * dataflow_handle, Cuda_Function * cuda_function, Op * op) {
+int default_rms_norm_noscale_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Dataflow_Handle * dataflow_handle, Cuda_Function * cuda_function, Op * op) {
 
 	Op_Skeleton * op_skeleton = &(cuda_function -> op_skeleton);
 
@@ -274,7 +274,7 @@ int rms_norm_noscale_set_launch_config(Cuda_Launch_Config * cuda_launch_config, 
 	return 0;
 }
 
-int rms_norm_noscale_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Dataflow_Handle * dataflow_handle, Cuda_Function * cuda_function, Op * op) {
+int default_rms_norm_noscale_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Dataflow_Handle * dataflow_handle, Cuda_Function * cuda_function, Op * op) {
 
 	Op_Skeleton * op_skeleton = &(cuda_function -> op_skeleton);
 

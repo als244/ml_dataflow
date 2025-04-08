@@ -1,6 +1,6 @@
 #include "nvidia_ops.h"
 
-extern "C" __global__ void select_experts_fp32_kernel(int total_tokens, int n_experts, int top_k_experts,  float * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert) {
+extern "C" __global__ void default_select_experts_fp32_kernel(int total_tokens, int n_experts, int top_k_experts,  float * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert) {
 
     // DETERMINING HOW MANY TOKENS THIS THREADBLOCK IS RESPONSIBLE FOR
 
@@ -33,6 +33,15 @@ extern "C" __global__ void select_experts_fp32_kernel(int total_tokens, int n_ex
         row_offset = row_base * rows_per_block + rows_remain;
     }
 
+    int thread_id = threadIdx.x;
+
+    int warp_id = thread_id / WARP_SIZE;
+    int lane_id = thread_id % WARP_SIZE;
+
+    if (row_offset + warp_id >= row_offset + rows_per_block){
+        return;
+    }
+
     // each warp is responsible for a row and every lane
     // will update it's current value for leader to scan through
     // the top k values in iteration and see if any of them 
@@ -52,11 +61,6 @@ extern "C" __global__ void select_experts_fp32_kernel(int total_tokens, int n_ex
 
     // smem counts with atomicAdd before doing global sync in order to copy token row correctly into
     int * block_expert_counts = (int *) (warp_top_k_expert_inds + (num_warps * top_k_experts));
-
-    int thread_id = threadIdx.x;
-
-    int warp_id = thread_id / WARP_SIZE;
-    int lane_id = thread_id % WARP_SIZE;
 
     uint64_t orig_token_row;
     uint16_t expert_id;
@@ -240,7 +244,7 @@ extern "C" __global__ void select_experts_fp32_kernel(int total_tokens, int n_ex
 
 
 
-extern "C" __global__ void select_experts_fp16_kernel(int total_tokens, int n_experts, int top_k_experts,  __half * X_routed, __half * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert) {
+extern "C" __global__ void default_select_experts_fp16_kernel(int total_tokens, int n_experts, int top_k_experts,  __half * X_routed, __half * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert) {
 
     // DETERMINING HOW MANY TOKENS THIS THREADBLOCK IS RESPONSIBLE FOR
 
@@ -273,6 +277,15 @@ extern "C" __global__ void select_experts_fp16_kernel(int total_tokens, int n_ex
         row_offset = row_base * rows_per_block + rows_remain;
     }
 
+    int thread_id = threadIdx.x;
+
+    int warp_id = thread_id / WARP_SIZE;
+    int lane_id = thread_id % WARP_SIZE;
+
+    if (row_offset + warp_id >= row_offset + rows_per_block){
+        return;
+    }
+
     // each warp is responsible for a row and every lane
     // will update it's current value for leader to scan through
     // the top k values in iteration and see if any of them 
@@ -293,10 +306,6 @@ extern "C" __global__ void select_experts_fp16_kernel(int total_tokens, int n_ex
     // smem counts with atomicAdd before doing global sync in order to copy token row correctly into
     int * block_expert_counts = (int *) (warp_top_k_expert_inds + (num_warps * top_k_experts));
 
-    int thread_id = threadIdx.x;
-
-    int warp_id = thread_id / WARP_SIZE;
-    int lane_id = thread_id % WARP_SIZE;
 
     uint64_t orig_token_row;
     uint16_t expert_id;
@@ -475,7 +484,7 @@ extern "C" __global__ void select_experts_fp16_kernel(int total_tokens, int n_ex
 }
 
 
-extern "C" __global__ void select_experts_bf16_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_bfloat16 * X_routed, __nv_bfloat16 * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert) {
+extern "C" __global__ void default_select_experts_bf16_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_bfloat16 * X_routed, __nv_bfloat16 * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert) {
 
     // DETERMINING HOW MANY TOKENS THIS THREADBLOCK IS RESPONSIBLE FOR
 
@@ -508,6 +517,15 @@ extern "C" __global__ void select_experts_bf16_kernel(int total_tokens, int n_ex
         row_offset = row_base * rows_per_block + rows_remain;
     }
 
+    int thread_id = threadIdx.x;
+
+    int warp_id = thread_id / WARP_SIZE;
+    int lane_id = thread_id % WARP_SIZE;
+
+    if (row_offset + warp_id >= row_offset + rows_per_block){
+        return;
+    }
+
     // each warp is responsible for a row and every lane
     // will update it's current value for leader to scan through
     // the top k values in iteration and see if any of them 
@@ -528,10 +546,6 @@ extern "C" __global__ void select_experts_bf16_kernel(int total_tokens, int n_ex
     // smem counts with atomicAdd before doing global sync in order to copy token row correctly into
     int * block_expert_counts = (int *) (warp_top_k_expert_inds + (num_warps * top_k_experts));
 
-    int thread_id = threadIdx.x;
-
-    int warp_id = thread_id / WARP_SIZE;
-    int lane_id = thread_id % WARP_SIZE;
 
     uint64_t orig_token_row;
     uint16_t expert_id;
@@ -711,7 +725,7 @@ extern "C" __global__ void select_experts_bf16_kernel(int total_tokens, int n_ex
 
 
 
-extern "C" __global__ void select_experts_fp8e4m3_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_fp8_e4m3 * X_routed, __nv_fp8_e4m3 * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert) {
+extern "C" __global__ void default_select_experts_fp8e4m3_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_fp8_e4m3 * X_routed, __nv_fp8_e4m3 * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert) {
 
     // DETERMINING HOW MANY TOKENS THIS THREADBLOCK IS RESPONSIBLE FOR
 
@@ -744,6 +758,15 @@ extern "C" __global__ void select_experts_fp8e4m3_kernel(int total_tokens, int n
         row_offset = row_base * rows_per_block + rows_remain;
     }
 
+    int thread_id = threadIdx.x;
+
+    int warp_id = thread_id / WARP_SIZE;
+    int lane_id = thread_id % WARP_SIZE;
+
+    if (row_offset + warp_id >= row_offset + rows_per_block){
+        return;
+    }
+
     // each warp is responsible for a row and every lane
     // will update it's current value for leader to scan through
     // the top k values in iteration and see if any of them 
@@ -764,10 +787,7 @@ extern "C" __global__ void select_experts_fp8e4m3_kernel(int total_tokens, int n
     // smem counts with atomicAdd before doing global sync in order to copy token row correctly into
     int * block_expert_counts = (int *) (warp_top_k_expert_inds + (num_warps * top_k_experts));
 
-    int thread_id = threadIdx.x;
-
-    int warp_id = thread_id / WARP_SIZE;
-    int lane_id = thread_id % WARP_SIZE;
+    
 
     uint64_t orig_token_row;
     uint16_t expert_id;
@@ -946,7 +966,7 @@ extern "C" __global__ void select_experts_fp8e4m3_kernel(int total_tokens, int n
 }
 
 
-extern "C" __global__ void select_experts_fp8e5m2_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_fp8_e5m2 * X_routed, __nv_fp8_e5m2 * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert) {
+extern "C" __global__ void default_select_experts_fp8e5m2_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_fp8_e5m2 * X_routed, __nv_fp8_e5m2 * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert) {
 
     // DETERMINING HOW MANY TOKENS THIS THREADBLOCK IS RESPONSIBLE FOR
 
@@ -979,6 +999,15 @@ extern "C" __global__ void select_experts_fp8e5m2_kernel(int total_tokens, int n
         row_offset = row_base * rows_per_block + rows_remain;
     }
 
+    int thread_id = threadIdx.x;
+
+    int warp_id = thread_id / WARP_SIZE;
+    int lane_id = thread_id % WARP_SIZE;
+
+    if (row_offset + warp_id >= row_offset + rows_per_block){
+        return;
+    }
+
     // each warp is responsible for a row and every lane
     // will update it's current value for leader to scan through
     // the top k values in iteration and see if any of them 
@@ -999,10 +1028,6 @@ extern "C" __global__ void select_experts_fp8e5m2_kernel(int total_tokens, int n
     // smem counts with atomicAdd before doing global sync in order to copy token row correctly into
     int * block_expert_counts = (int *) (warp_top_k_expert_inds + (num_warps * top_k_experts));
 
-    int thread_id = threadIdx.x;
-
-    int warp_id = thread_id / WARP_SIZE;
-    int lane_id = thread_id % WARP_SIZE;
 
     uint64_t orig_token_row;
     uint16_t expert_id;
