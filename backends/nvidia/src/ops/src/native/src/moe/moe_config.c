@@ -77,10 +77,6 @@ int default_select_experts_set_launch_config(Cuda_Launch_Config * cuda_launch_co
 
 	int smem_per_warp = WARP_SIZE * dtype_size_temp + top_k_experts * dtype_size_temp + top_k_experts * dtype_size_top_k;
 
-
-	int num_warps = (cuda_launch_config -> blockDimX + WARP_SIZE - 1) / WARP_SIZE;
-
-
 	int select_experts_max_smem = (cuda_function -> function_config).func_max_smem;
 
 	int select_experts_base_smem = num_experts * dtype_size_exp_token_cnts;

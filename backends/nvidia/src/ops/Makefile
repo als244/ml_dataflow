@@ -42,7 +42,7 @@ NATIVE_OP_KERNELS_SRC = ${NATIVE_OP_PATH}/src/cuda_kernels.cu
 DATAFLOW_LIB_INCLUDE_DIR = ../../../../libdataflow/include
 CUDA_DATAFLOW_HANDLE_INCLUDE_DIR = ../../include
 
-NATIVE_OP_CONFIG_LIB_SRC = ${NATIVE_OP_PATH}/src/preprocess/embedding_config.c ${NATIVE_OP_PATH}/src/norm/rms_norm_config.c ${NATIVE_OP_PATH}/src/attention_misc/attn_misc_config.c ${NATIVE_OP_PATH}/src/activations/swiglu_config.c ${NATIVE_OP_PATH}/src/loss_misc/loss_misc_config.c
+NATIVE_OP_CONFIG_LIB_SRC = ${NATIVE_OP_PATH}/src/preprocess/embedding_table_config.c ${NATIVE_OP_PATH}/src/norm/rms_norm_config.c ${NATIVE_OP_PATH}/src/attention_misc/attn_misc_config.c ${NATIVE_OP_PATH}/src/moe/moe_config.c ${NATIVE_OP_PATH}/src/activations/swiglu_config.c ${NATIVE_OP_PATH}/src/loss_misc/loss_misc_config.c
 
 NATIVE_OP_CONFIG_LIB_ALL_INCLUDES = -I${NATIVE_OP_PATH}/include -I${CUDA_DATAFLOW_HANDLE_INCLUDE_DIR} -I${DATAFLOW_LIB_INCLUDE_DIR} -I${CUDA_INCLUDE_DIR}
 
