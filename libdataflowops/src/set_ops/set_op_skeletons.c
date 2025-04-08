@@ -35,6 +35,9 @@ int dataflow_set_op_skeleton(Op_Skeleton * skeleton, char * op_name, DataflowDat
 	else if (strcmp(op_name, "default_copy_to_seq_context") == 0) {
 		dataflow_set_default_copy_to_seq_context_skeleton(skeleton, fwd_dt);
 	}
+	else if (strcmp(op_name, "default_select_experts") == 0) {
+		dataflow_set_default_select_experts_skeleton(skeleton, fwd_dt);
+	}
 	else if (strcmp(op_name, "default_swiglu") == 0) {
 		dataflow_set_default_swiglu_skeleton(skeleton, fwd_dt);
 	}
