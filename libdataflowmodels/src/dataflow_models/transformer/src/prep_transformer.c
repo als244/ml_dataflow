@@ -9,7 +9,9 @@ static void set_offset(uint64_t * cur_offset, uint64_t cur_size, uint64_t * raw_
 	*raw_size += cur_size;
 	*aligned_size += cur_size;
 
-	*aligned_size += pointer_alignment - (*aligned_size % pointer_alignment);
+	if ((pointer_alignment > 0) && (*aligned_size % pointer_alignment > 0)) {
+		*aligned_size += pointer_alignment - (*aligned_size % pointer_alignment);
+	}
 
 	return;
 }

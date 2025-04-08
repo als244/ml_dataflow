@@ -24,18 +24,18 @@ int main(int argc, char * argv[]){
 	int theta = 500000;
 
 	// llama3 70B config
+	/*
 	int num_q_heads = 64;
 	int num_kv_heads = 8;
 	int head_dim = 128;
 	int ffn_dim = 28672;
+	*/
 
-	/*
 	// llama3 8b config
 	int num_q_heads = 32;
 	int num_kv_heads = 8;
 	int head_dim = 128;
 	int ffn_dim = 14336;
-	*/	
 
 	MoE_Config * moe_config = NULL;
 
@@ -43,7 +43,10 @@ int main(int argc, char * argv[]){
 	// setting to host page size.
 	// really needs to be 256 in order to use tensor cores
 	// depending on filesystem in order to use O_RDONLY | O_DIRECT, alignment may be different...
-	int pointer_alignment = 4096;
+	
+	
+	// for now using 0 alignment to directly read from combined file...
+	int pointer_alignment = 0;
 
 	Transformer_Block * block = init_transformer_block(block_dt, compute_dt,
 														norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
