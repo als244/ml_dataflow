@@ -40,7 +40,8 @@ int dataflow_submit_transformer_embedding(Dataflow_Handle * dataflow_handle, int
 // ALL BAKED INTO 1 Large Function for now,
 // but really should have subfunctions to do norms, attn, and mlp based on transformer block config...!
 
-int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int compute_stream_id, int out_copy_stream_id, 
+int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int compute_stream_id, 
+										bool to_copy_output_to_block_transition, int out_copy_stream_id, 
 								Transformer_Block_Transition * block_input, 
 								Transformer_Block * transformer_block, 
 								Transformer_Block_Activations * activations, 
@@ -317,20 +318,23 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 
 	// copy to output
 
-	uint64_t block_out_size = total_q * model_dim * x_el_size;
+	if (to_copy_output_to_block_transition){
+		uint64_t block_out_size = total_q * model_dim * x_el_size;
 
-	ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, out_copy_stream_id,
+		ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, out_copy_stream_id,
 										block_output -> X,
 										(working_activations -> x_2)[0], 
 										block_out_size);
 
-	if (ret){
-		fprintf(stderr, "Error: failed to copy block output...\n");
-		return -1;
+		if (ret){
+			fprintf(stderr, "Error: failed to copy block output...\n");
+			return -1;
+		}
+
+		return 0;
 	}
 
-
-
+	block_output -> X = (working_activations -> x_2)[0];
 
 	return 0;
 

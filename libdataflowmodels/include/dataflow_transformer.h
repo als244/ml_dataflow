@@ -44,9 +44,11 @@ int dataflow_submit_transformer_embedding(Dataflow_Handle * dataflow_handle, int
 											Transformer_Block_Transition * embedding_output);
 
 
-int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int compute_stream_id, int out_copy_stream_id,
+int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int compute_stream_id, 
+										bool to_copy_output_to_block_transition, int out_copy_stream_id, 
 								Transformer_Block_Transition * block_input, 
-								Transformer_Block * transformer_block, Transformer_Block_Activations * activations, 
+								Transformer_Block * transformer_block, 
+								Transformer_Block_Activations * activations, 
 								Transformer_Block_Transition * block_output);
 
 int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_stream_id, int out_copy_stream_id,

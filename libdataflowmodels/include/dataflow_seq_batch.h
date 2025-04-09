@@ -37,6 +37,8 @@ uint64_t get_seq_batch_saved_activations_buffer_size(Seq_Batch * seq_batch);
 int bind_seq_batch_saved_activations_buffer(Seq_Batch * seq_batch, Seq_Batch_Saved_Activations * saved_activations, void * saved_activations_buffer, uint64_t saved_activations_buffer_size,
                                             int layer_id);
 
+uint64_t get_seq_batch_activation_workspace_buffer_size(Seq_Batch * seq_batch, Transformer_Block_Config * block_config);
+
 uint64_t get_seq_batch_recomputed_activations_buffer_size(Seq_Batch * seq_batch);
 int bind_seq_batch_recomputed_activations_buffer(Seq_Batch_Saved_Activations * saved_activations, void * recomputed_activations_buffer, uint64_t recomputed_activations_buffer_size);
 

@@ -457,7 +457,30 @@ int bind_seq_batch_saved_activations_buffer(Seq_Batch * seq_batch, Seq_Batch_Sav
     saved_activations -> ffn_norm_weighted_sums = (float *) (saved_activations_buffer + saved_activations_offsets -> ffn_norm_weighted_sums);
     saved_activations -> ffn_norm_rms_vals = (float *) (saved_activations_buffer + saved_activations_offsets -> ffn_norm_rms_vals);
 
-    if (saved_activations_offsets -> num_tokens_per_expert != saved_activations_offsets -> ffn_norm_rms_vals){
+
+    // for non-MoE, num_local_experts should be 1 
+    // and the initial init_offsets should have set the saved_activations_offsets -> x_1, x_2, x_3 to the correct offsets...
+    int num_local_experts = saved_activations_offsets -> num_local_experts;
+
+    saved_activations -> x_1 = malloc(num_local_experts * sizeof(void *));
+    if (!saved_activations -> x_1){
+        fprintf(stderr, "Error: failed to allocate x_1 for saved activations...\n");
+        return -1;
+    }
+
+    saved_activations -> x_3 = malloc(num_local_experts * sizeof(void *));
+    if (!saved_activations -> x_3){
+        fprintf(stderr, "Error: failed to allocate x_3 for saved activations...\n");
+        return -1;
+    }
+
+    saved_activations -> x_2 = malloc(num_local_experts * sizeof(void *));
+    if (!saved_activations -> x_2){
+        fprintf(stderr, "Error: failed to allocate x_2 for saved activations...\n");
+        return -1;
+    }
+
+    if (saved_activations_offsets -> num_tokens_per_expert != saved_activations_offsets -> token_to_experts_mapping){
         fprintf(stderr, "Error: cannot handle MoE for now...\n");
         return -1;
     }
@@ -467,9 +490,7 @@ int bind_seq_batch_saved_activations_buffer(Seq_Batch * seq_batch, Seq_Batch_Sav
     saved_activations -> token_to_experts_mapping = NULL;
     saved_activations -> experts_to_tokens_mapping = NULL;
 
-    // for non-MoE, num_local_experts should be 1 
-    // and the initial init_offsets should have set the saved_activations_offsets -> x_1, x_2, x_3 to the correct offsets...
-    int num_local_experts = saved_activations_offsets -> num_local_experts;
+    
 
     for (int i = 0; i < num_local_experts; i++){
         saved_activations -> x_1[i] = (void *) (saved_activations_buffer + saved_activations_offsets -> x_1[i]);
@@ -508,4 +529,19 @@ int bind_seq_batch_recomputed_activations_buffer(Seq_Batch_Saved_Activations * s
     saved_activations -> recomputed_activations -> recomputed_ffn_norm = (void *) (recomputed_activations_buffer + recomputed_activations_offsets -> recomputed_ffn_norm);
 
     return 0;
+}
+
+uint64_t get_seq_batch_activation_workspace_buffer_size(Seq_Batch * seq_batch, Transformer_Block_Config * block_config){
+
+    
+
+    uint64_t total_tokens = seq_batch -> total_tokens;
+
+    uint64_t dtype_size = dataflow_sizeof_element(block_config -> block_dt);
+
+    uint64_t activation_workspace_size = 0;
+    activation_workspace_size += total_tokens * (uint64_t) block_config -> model_dim * (uint64_t) dtype_size;
+    activation_workspace_size += total_tokens * (uint64_t) block_config -> ffn_dim * (uint64_t) dtype_size;
+
+    return activation_workspace_size;
 }
