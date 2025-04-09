@@ -58,7 +58,7 @@ extern "C" __global__ void default_cross_entropy_loss_fp32_kernel(int n_rows, in
 		}
 
 		if (threadIdx.x == 0) {
-			atomicAdd(&loss_vec[n_rows], warp_sum);
+			atomicAdd(&loss_vec[n_rows], warp_sum / (float)n_rows);
 		}
 	}
 
@@ -122,7 +122,7 @@ extern "C" __global__ void default_cross_entropy_loss_fp16_kernel(int n_rows, in
 		}
 
 		if (threadIdx.x == 0) {
-			atomicAdd(&loss_vec[n_rows], warp_sum);
+			atomicAdd(&loss_vec[n_rows], warp_sum / (float)n_rows);
 		}
 	}
 
@@ -186,7 +186,7 @@ extern "C" __global__ void default_cross_entropy_loss_bf16_kernel(int n_rows, in
 		}
 
 		if (threadIdx.x == 0) {
-			atomicAdd(&loss_vec[n_rows], warp_sum);
+			atomicAdd(&loss_vec[n_rows], warp_sum / (float)n_rows);
 		}
 	}
 
