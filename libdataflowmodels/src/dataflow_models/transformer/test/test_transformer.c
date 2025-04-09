@@ -648,8 +648,7 @@ int main(int argc, char * argv[]){
 	activations -> kernelWorkspace = kernelWorkspace;
 	activations -> kernelWorkspaceBytes = kernelWorkspaceBytes;
 	
-	
-	
+	printf("Submitting transformer block...!\n\n");
 	
 
 	ret = dataflow_submit_transformer_block(&dataflow_handle, compute_stream_id, 
@@ -664,9 +663,15 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
-	ret = dataflow_handle.sync_stream(&dataflow_handle, compute_stream_id);
+	void * compute_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, compute_stream_id);
+	if (!compute_stream_state){
+		fprintf(stderr, "Error: failed to get compute stream state...\n");
+		return -1;
+	}
+
+	ret = dataflow_handle.submit_dependency(&dataflow_handle, outbound_stream_id, compute_stream_state);
 	if (ret){
-		fprintf(stderr, "Error: failed to sync compute stream...\n");
+		fprintf(stderr, "Error: failed to submit dependency...\n");
 		return -1;
 	}
 
@@ -676,7 +681,18 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
+
+	printf("Ensuring block transition arrives before saving layer output...\n");
+
+	ret = dataflow_handle.sync_stream(&dataflow_handle, outbound_stream_id);
+	if (ret){
+		fprintf(stderr, "Error: failed to sync outbound stream...\n");
+		return -1;
+	}
+
 	// save the block transitions...
+
+	printf("Saving layer output...\n");
 
 	ret = save_host_matrix("data/8B/layers/0/example_layer_output.dat", sys_block_transitions[1].X, total_tokens, model_dim, block_dt);
 	if (ret){

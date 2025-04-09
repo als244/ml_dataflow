@@ -1,5 +1,52 @@
 #include "dataflow_transformer.h"
 
+#define TO_SAVE_FILE 1
+
+static int save_file(Dataflow_Handle * dataflow_handle, int stream_id, char * filename, void * dev_ptr, int M, int N, DataflowDatatype dt){
+
+	int ret;
+
+	size_t num_els = (size_t) M * (size_t) N;
+
+	size_t el_size = dataflow_sizeof_element(dt);
+
+	void * host_ptr = malloc(num_els * el_size);
+
+	ret = (dataflow_handle -> submit_outbound_transfer)(dataflow_handle, stream_id, host_ptr, dev_ptr, num_els * el_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit outbound transfer...\n");
+		return -1;
+	}
+
+	ret = (dataflow_handle -> sync_stream)(dataflow_handle, stream_id);
+	if (ret){
+		fprintf(stderr, "Error: failed to sync stream...\n");
+		return -1;
+	}
+
+	FILE * fp = fopen(filename, "wb");
+	if (!fp){
+		fprintf(stderr, "Error: failed to open file...\n");
+		return -1;
+	}
+
+	size_t num_written = fwrite(host_ptr, el_size, num_els, fp);
+	if (num_written != num_els){
+		fprintf(stderr, "Error: failed to write to file, wrote %zu elements instead of %zu\n", num_written, num_els);
+		return -1;
+	}
+
+	fclose(fp);
+
+	free(host_ptr);
+
+	return 0;
+	
+	
+	
+	
+}
+
 
 int dataflow_submit_transformer_embedding(Dataflow_Handle * dataflow_handle, int compute_stream_id,
 											Transformer_Model_Input * model_input,
@@ -119,7 +166,15 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	if (ret){
 		fprintf(stderr, "Error: failed to submit attention norm...\n");
 		return -1;
-	}	
+	}
+
+	if (TO_SAVE_FILE){
+		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/attn_norm.dat", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save attention nor file...\n");
+			return -1;
+		}
+	}
 
 
 
@@ -140,11 +195,19 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 		return -1;
 	}
 
+	if (TO_SAVE_FILE){
+		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_q.dat", working_activations -> x_q, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_q file...\n");
+			return -1;
+		}
+	}
+
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
 					fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
 					compute_dt,
 					to_transa, to_transb,
-					model_dim, kv_dim, total_q, 
+					kv_dim, model_dim, total_q, 
 					1.0, 0.0,
 					transformer_block -> w_k, activation_workspace -> x_temp, NULL, working_activations -> x_k_local,
 					kernelWorkspaceBytes, kernelWorkspace);
@@ -154,11 +217,19 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 		return -1;
 	}
 
+	if (TO_SAVE_FILE){
+		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_k.dat", working_activations -> x_k_local, total_q, kv_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_k file...\n");
+			return -1;
+		}
+	}
+
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
 					fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
 					compute_dt,
 					to_transa, to_transb,
-					model_dim, kv_dim, total_q, 
+					kv_dim, model_dim, total_q, 
 					1.0, 0.0,
 					transformer_block -> w_v, activation_workspace -> x_temp, NULL, working_activations -> x_v_local,
 					kernelWorkspaceBytes, kernelWorkspace);
@@ -166,6 +237,14 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	if (ret){
 		fprintf(stderr, "Error: failed to submit V matmul proj...\n");
 		return -1;
+	}
+
+	if (TO_SAVE_FILE){
+		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_v.dat", working_activations -> x_v_local, total_q, kv_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_v file...\n");
+			return -1;
+		}
 	}
 
 
@@ -185,6 +264,22 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	if (ret){
 		fprintf(stderr, "Error: failed to submit rope...\n");
 		return -1;
+	}
+
+	if (TO_SAVE_FILE){
+		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_q_rope.dat", working_activations -> x_q, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_q_rope file...\n");
+			return -1;
+		}
+	}
+
+	if (TO_SAVE_FILE){
+		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_k_rope.dat", working_activations -> x_k_local, total_q, kv_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_k_rope file...\n");
+			return -1;
+		}
 	}
 
 
@@ -230,6 +325,14 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 		return -1;
 	}
 
+	if (TO_SAVE_FILE){
+		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_attn.dat", working_activations -> x_attn_out, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_attn file...\n");
+			return -1;
+		}
+	}
+
 
 	printf("Submitting Attention Output Matmul...!\n");
 
@@ -248,6 +351,14 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 		return -1;
 	}
 
+	if (TO_SAVE_FILE){
+		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_attn_final_out.dat", working_activations -> x_o, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_attn_final_out file...\n");
+			return -1;
+		}
+	}
+
 
 	printf("Submitting FFN RMS Norm...!\n");
 
@@ -260,6 +371,14 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	if (ret){
 		fprintf(stderr, "Error: failed to submit ffn norm...\n");
 		return -1;
+	}
+
+	if (TO_SAVE_FILE){
+		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_ffn_norm_out.dat", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_attn_final_out file...\n");
+			return -1;
+		}
 	}
 
 
@@ -279,6 +398,14 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 		return -1;
 	}
 
+	if (TO_SAVE_FILE){
+		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_1.dat", (working_activations -> x_1)[0], total_q, ffn_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_1 file...\n");
+			return -1;
+		}
+	}
+
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
 					fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
 					compute_dt,
@@ -293,6 +420,14 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 		return -1;
 	}
 
+	if (TO_SAVE_FILE){
+		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_3.dat", (working_activations -> x_3)[0], total_q, ffn_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_3 file...\n");
+			return -1;
+		}
+	}
+
 
 	printf("Submitting SwiGLU Activation...!\n");
 
@@ -305,6 +440,14 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	if (ret){
 		fprintf(stderr, "Error: failed to submit swiglu activation...\n");
 		return -1;
+	}
+
+	if (TO_SAVE_FILE){
+		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_swiglu.dat", activation_workspace -> x_temp_mlp, total_q, ffn_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_swiglu file...\n");
+			return -1;
+		}
 	}
 
 
