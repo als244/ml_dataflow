@@ -946,6 +946,8 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
     int to_transa = 1;
     int to_transb = 0;
 
+	
+
 	// 1.) Recompute-Swiglu in order to compute w2 grad
 	ret = dataflow_submit_default_swiglu(dataflow_handle, compute_stream_id,
 						fwd_dt,
@@ -963,7 +965,7 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
                     bwd_dt, bwd_dt, bwd_dt, bwd_dt,
                     compute_dt,
                     to_transa, to_transb,
-                    ffn_dim, model_dim, total_q,
+                    ffn_dim, total_q, model_dim, 
                     1.0, 1.0,  // Accumulate gradients
                     grad_stream -> X, activation_workspace -> x_temp_mlp, (grad_weights -> w_2)[0], (grad_weights -> w_2)[0],
                     kernelWorkspaceBytes, kernelWorkspace);
@@ -977,7 +979,7 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
                     bwd_dt, bwd_dt, bwd_dt, bwd_dt,
                     compute_dt,
                     to_transa, to_transb,
-                    ffn_dim, model_dim, total_q,
+                    ffn_dim, total_q, model_dim, 
                     1.0, 1.0,  // Accumulate gradients
                     (bwd_activations -> x_1)[0], bwd_activations -> recomputed_activations -> recomputed_ffn_norm, (grad_weights -> w_1)[0], (grad_weights -> w_1)[0],
                     kernelWorkspaceBytes, kernelWorkspace);
@@ -990,7 +992,7 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
                     bwd_dt, bwd_dt, bwd_dt, bwd_dt,
                     compute_dt,
                     to_transa, to_transb,
-                    ffn_dim, model_dim, total_q,
+                    ffn_dim, total_q, model_dim,
                     1.0, 1.0,  // Accumulate gradients
                     (bwd_activations -> x_3)[0], bwd_activations -> recomputed_activations -> recomputed_ffn_norm, (grad_weights -> w_3)[0], (grad_weights -> w_3)[0],
                     kernelWorkspaceBytes, kernelWorkspace);
@@ -1006,7 +1008,7 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
                     bwd_dt, bwd_dt, bwd_dt, bwd_dt,
                     compute_dt,
                     to_transa, to_transb,
-                    model_dim, model_dim, total_q,
+                    model_dim, total_q, model_dim, 
                     1.0, 1.0,  // Accumulate gradients
                     bwd_activations -> x_o, fwd_activations -> x_attn_out, grad_weights -> w_o, grad_weights -> w_o,
                     kernelWorkspaceBytes, kernelWorkspace);
@@ -1016,12 +1018,11 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
     }
 
     // 5. Q, K, V projection weight gradients
-
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
                     bwd_dt, bwd_dt, bwd_dt, bwd_dt,
                     compute_dt,
                     to_transa, to_transb,
-                    kv_dim, model_dim, total_q,
+                    kv_dim, total_q, model_dim,
                     1.0, 1.0,  // Accumulate gradients
                     bwd_activations -> x_v_local, bwd_activations -> recomputed_activations -> recomputed_attn_norm, grad_weights -> w_v, grad_weights -> w_v,
                     kernelWorkspaceBytes, kernelWorkspace);
@@ -1034,7 +1035,7 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
                     bwd_dt, bwd_dt, bwd_dt, bwd_dt,
                     compute_dt,
                     to_transa, to_transb,
-                    kv_dim, model_dim, total_q,
+                    kv_dim, total_q, model_dim,
                     1.0, 1.0,  // Accumulate gradients
                     bwd_activations -> x_k_local, bwd_activations -> recomputed_activations -> recomputed_attn_norm, grad_weights -> w_k, grad_weights -> w_k,
                     kernelWorkspaceBytes, kernelWorkspace);
@@ -1048,7 +1049,7 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
                     bwd_dt, bwd_dt, bwd_dt, bwd_dt,
                     compute_dt,
                     to_transa, to_transb,
-                    model_dim, model_dim, total_q,
+                    model_dim, total_q, model_dim,
                     1.0, 1.0,  // Accumulate gradients
                     bwd_activations -> x_q, bwd_activations -> recomputed_activations -> recomputed_attn_norm, grad_weights -> w_q, grad_weights -> w_q,
                     kernelWorkspaceBytes, kernelWorkspace);
