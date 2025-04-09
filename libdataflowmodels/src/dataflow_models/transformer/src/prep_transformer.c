@@ -2,6 +2,11 @@
 
 static void set_offset(uint64_t * cur_offset, uint64_t cur_size, uint64_t * raw_size, uint64_t * aligned_size, int pointer_alignment){
 
+	if (cur_size == 0){
+		*cur_offset = *aligned_size;
+		return;
+	}
+
 	// set it equal to current aligned size
 	*cur_offset = *aligned_size;
 

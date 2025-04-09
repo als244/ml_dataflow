@@ -73,8 +73,10 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
     saved_activations_offsets -> x_v_local = cur_offset;
     cur_offset += total_tokens * kv_dim * dt_size;
 
+    int num_q_heads = (block_config -> num_q_heads);
+
     saved_activations_offsets -> softmax_lse = cur_offset;
-    cur_offset += total_tokens * sizeof(float);
+    cur_offset += total_tokens * num_q_heads * sizeof(float);
 
     saved_activations_offsets -> x_attn_out = cur_offset;
     cur_offset += total_tokens * model_dim * dt_size;
@@ -103,16 +105,16 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
         saved_activations_offsets -> experts_to_tokens_mapping = cur_offset;
 
 
-        saved_activations_offsets -> x_1[0] = cur_offset;
+        (saved_activations_offsets -> x_1)[0] = cur_offset;
         cur_offset += total_tokens * ffn_dim * dt_size;
 
-        saved_activations_offsets -> x_3[0] = cur_offset;
+        (saved_activations_offsets -> x_3)[0] = cur_offset;
         cur_offset += total_tokens * ffn_dim * dt_size;
 
-        saved_activations_offsets -> x_2[0] = cur_offset;
+        (saved_activations_offsets -> x_2)[0] = cur_offset;
         cur_offset += total_tokens * model_dim * dt_size;
 
-        saved_activations_offsets -> x_layer_out = saved_activations_offsets -> x_2[0];
+        saved_activations_offsets -> x_layer_out = (saved_activations_offsets -> x_2)[0];
         saved_activations_offsets -> total_size = cur_offset;
         return;
     }
@@ -493,18 +495,18 @@ int bind_seq_batch_saved_activations_buffer(Seq_Batch * seq_batch, Seq_Batch_Sav
     
 
     for (int i = 0; i < num_local_experts; i++){
-        saved_activations -> x_1[i] = (void *) (saved_activations_buffer + saved_activations_offsets -> x_1[i]);
+        (saved_activations -> x_1)[i] = (void *) (saved_activations_buffer + (saved_activations_offsets -> x_1)[i]);
     }
 
     for (int i = 0; i < num_local_experts; i++){
-        saved_activations -> x_3[i] = (void *) (saved_activations_buffer + saved_activations_offsets -> x_3[i]);
+        (saved_activations -> x_3)[i] = (void *) (saved_activations_buffer + (saved_activations_offsets -> x_3)[i]);
     }
 
     for (int i = 0; i < num_local_experts; i++){
-        saved_activations -> x_2[i] = (void *) (saved_activations_buffer + saved_activations_offsets -> x_2[i]);
+        (saved_activations -> x_2)[i] = (void *) (saved_activations_buffer + (saved_activations_offsets -> x_2)[i]);
     }
 
-    saved_activations -> x_layer_out = (void *) (saved_activations_buffer + saved_activations_offsets -> x_layer_out);
+    (saved_activations -> x_layer_out) = (void *) (saved_activations_buffer + (saved_activations_offsets -> x_layer_out));
 
     return 0;
 }

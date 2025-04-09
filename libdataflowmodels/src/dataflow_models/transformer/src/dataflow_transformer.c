@@ -208,13 +208,21 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 
 	Seq_Batch_Context * context = seq_batch -> context;
 
+	void * x_k_global = working_activations -> x_k_local;
+	void * x_v_global = working_activations -> x_v_local;
+
+	if (context){
+		x_k_global = context -> x_k;
+		x_v_global = context -> x_v;
+	}
+
 	ret = dataflow_submit_attention(dataflow_handle, compute_stream_id,
 						 fwd_dt, 
 						 num_seqs, total_q, total_k,
 						 q_seq_offsets, q_seq_lens, max_seqlen_q,
 						 k_seq_offsets, k_seq_lens, max_seqlen_k,
 						 num_q_heads, num_kv_heads, head_dim,
-						 working_activations -> x_q, context -> x_k, context -> x_v,
+						 working_activations -> x_q, x_k_global, x_v_global,
 						 working_activations -> x_attn_out, working_activations -> softmax_lse, 
 						 kernelWorkspaceBytes, kernelWorkspace);
 	if (ret){
@@ -263,7 +271,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 					to_transa, to_transb,
 					ffn_dim, model_dim, total_q, 
 					1.0, 0.0,
-					transformer_block -> w_1, activation_workspace -> x_temp, NULL, (working_activations -> x_1)[0],
+					(transformer_block -> w_1)[0], activation_workspace -> x_temp, NULL, (working_activations -> x_1)[0],
 					kernelWorkspaceBytes, kernelWorkspace);
 
 	if (ret){
@@ -277,7 +285,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 					to_transa, to_transb,
 					ffn_dim, model_dim, total_q, 
 					1.0, 0.0,
-					transformer_block -> w_3, activation_workspace -> x_temp, NULL, (working_activations -> x_3)[0],
+					(transformer_block -> w_3)[0], activation_workspace -> x_temp, NULL, (working_activations -> x_3)[0],
 					kernelWorkspaceBytes, kernelWorkspace);
 
 	if (ret){
@@ -308,7 +316,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 					to_transa, to_transb,
 					model_dim, ffn_dim, total_q, 
 					1.0, 1.0,
-					transformer_block -> w_2, activation_workspace -> x_temp_mlp, working_activations -> x_o, (working_activations -> x_2)[0],
+					(transformer_block -> w_2)[0], activation_workspace -> x_temp_mlp, working_activations -> x_o, (working_activations -> x_2)[0],
 					kernelWorkspaceBytes, kernelWorkspace);
 
 	if (ret){
@@ -320,6 +328,18 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 
 	if (to_copy_output_to_block_transition){
 		uint64_t block_out_size = total_q * model_dim * x_el_size;
+
+		void * compute_stream_state = (dataflow_handle -> get_stream_state)(dataflow_handle, compute_stream_id);
+		if (!compute_stream_state){
+			fprintf(stderr, "Error: failed to get compute stream state...\n");
+			return -1;
+		}
+
+		ret = (dataflow_handle -> submit_dependency)(dataflow_handle, out_copy_stream_id, compute_stream_state);
+		if (ret){
+			fprintf(stderr, "Error: failed to submit dependency for block output copy...\n");
+			return -1;
+		}
 
 		ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, out_copy_stream_id,
 										block_output -> X,
@@ -648,7 +668,7 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 					to_transa, to_transb,
 					ffn_dim, model_dim, total_q,  // M = ffn_dim, K = model_dim, N = num_tokens
 					1.0, 0.0,
-					transformer_block -> w_2[0], inp_grad_stream -> X, NULL, activation_workspace -> x_temp_mlp,
+					(transformer_block -> w_2)[0], inp_grad_stream -> X, NULL, activation_workspace -> x_temp_mlp,
 					kernelWorkspaceBytes, kernelWorkspace);
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit w2 backward matmul...\n");
@@ -659,9 +679,9 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 	ret = dataflow_submit_default_swiglu_bwd_x(dataflow_handle, compute_stream_id,
 						bwd_dt, bwd_dt,
 						total_q, ffn_dim,
-						fwd_activations -> x_1[0], fwd_activations -> x_3[0],
+						(fwd_activations -> x_1)[0], (fwd_activations -> x_3)[0],
 						activation_workspace -> x_temp_mlp,
-						working_activations -> x_1[0], working_activations -> x_3[0]);
+						(working_activations -> x_1)[0], (working_activations -> x_3)[0]);
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit swiglu backward...\n");
 		return -1;
@@ -679,7 +699,7 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 					to_transa, to_transb,
 					model_dim, ffn_dim, total_q,  // M = model_dim, K = ffn_dim, N = num_tokens
 					1.0, 0.0,
-					transformer_block -> w_1[0], working_activations -> x_1[0], NULL, activation_workspace -> x_temp,
+					(transformer_block -> w_1)[0], (working_activations -> x_1)[0], NULL, activation_workspace -> x_temp,
 					kernelWorkspaceBytes, kernelWorkspace);
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit w1 backward matmul...\n");
@@ -692,7 +712,7 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 					to_transa, to_transb,
 					model_dim, ffn_dim, total_q,  // M = model_dim, K = ffn_dim, N = num_tokens
 					1.0, 1.0,  // Add to previous gradient
-					transformer_block -> w_3[0], working_activations -> x_3[0], NULL, activation_workspace -> x_temp,
+					(transformer_block -> w_3)[0], (working_activations -> x_3)[0], NULL, activation_workspace -> x_temp,
 					kernelWorkspaceBytes, kernelWorkspace);
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit w3 backward matmul...\n");
@@ -974,7 +994,7 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
 	ret = dataflow_submit_default_swiglu(dataflow_handle, compute_stream_id,
 						fwd_dt,
 						total_q, ffn_dim,
-						fwd_activations -> x_1[0], fwd_activations -> x_3[0],
+						(fwd_activations -> x_1)[0], (fwd_activations -> x_3)[0],
 						activation_workspace -> x_temp_mlp);
 	if (ret){
 		fprintf(stderr, "Error: failed to submit swiglu when recomputing for w2 grad....\n");

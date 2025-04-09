@@ -504,7 +504,9 @@ int main(int argc, char * argv[]){
 	}
 
 
+	// For now set seq_batch context to NULL to indicate no other context...
 
+	seq_batch -> context = NULL;
 	/*
 
 	// For now just calling sync_stream to inspect outputs (with cuda-gdb...)
@@ -557,7 +559,7 @@ int main(int argc, char * argv[]){
 	ret = dataflow_submit_transformer_embedding(&dataflow_handle, compute_stream_id,
 											model_input,
 											embedding_table,
-											&block_transitions[0]);
+											&(block_transitions[0]));
 	if (ret){
 		fprintf(stderr, "Error: failed to submit transformer embedding...\n");
 		return -1;
@@ -603,7 +605,7 @@ int main(int argc, char * argv[]){
 	uint64_t saved_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batch);
 	
 	for (int i = 0; i < num_saved_activation_buffers; i++){
-		ret = bind_seq_batch_saved_activations_buffer(seq_batch, &saved_activations[i], cur_dev_mem, saved_activations_buffer_size, i);
+		ret = bind_seq_batch_saved_activations_buffer(seq_batch, &(saved_activations[i]), cur_dev_mem, saved_activations_buffer_size, i);
 		if (ret){
 			fprintf(stderr, "Error: failed to bind seq_batch saved_activations buffer...\n");
 			return -1;
@@ -621,12 +623,11 @@ int main(int argc, char * argv[]){
 	}
 
 	activation_workspace -> activationWorkspaceBuffer = cur_dev_mem;
-
-
 	activation_workspace -> activationWorkspaceBytes = activation_workspace_size;
 
 	activation_workspace -> x_temp = cur_dev_mem;
-	activation_workspace -> x_temp_mlp = activation_workspace -> x_temp + (total_tokens * (uint64_t) model_dim * (uint64_t) block_dt_size);
+	activation_workspace -> x_temp_mlp = activation_workspace -> x_temp + ((uint64_t) total_tokens * (uint64_t) model_dim * (uint64_t) block_dt_size);
+	
 	cur_dev_mem += activation_workspace_size;
 
 
@@ -642,8 +643,8 @@ int main(int argc, char * argv[]){
 
 	activations -> block = blocks[0];
 	activations -> seq_batch = seq_batch;
-	activations -> working_activations = &saved_activations[0];
-	
+	activations -> working_activations = &(saved_activations[0]);
+	activations -> activation_workspace = activation_workspace;
 	activations -> kernelWorkspace = kernelWorkspace;
 	activations -> kernelWorkspaceBytes = kernelWorkspaceBytes;
 	
@@ -653,10 +654,10 @@ int main(int argc, char * argv[]){
 
 	ret = dataflow_submit_transformer_block(&dataflow_handle, compute_stream_id, 
 										false, -1, 
-								&block_transitions[0], 
+								&(block_transitions[0]), 
 								blocks[0], 
 								activations, 
-								&block_transitions[1]);
+								&(block_transitions[1]));
 
 	if (ret){
 		fprintf(stderr, "Error: failed to submit transformer block...\n");

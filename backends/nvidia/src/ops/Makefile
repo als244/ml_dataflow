@@ -14,7 +14,7 @@ NATIVE_OP_PATH = src/native
 ## setting up variables for native op kernels
 
 NVCC = nvcc
-DEV_NVCC_FLAGS = -g -G
+DEV_NVCC_FLAGS = -g -G -Xptxas=-v
 BUILD_NVCC_FLAGS = -O4 --use_fast_math
 PROF_NVCC_FLAGS = -O4 --use_fast_math --generate-line-info -Xptxas=-v
 NVCC_FLAGS = ${PROF_NVCC_FLAGS}
