@@ -23,6 +23,7 @@ typedef struct seq_batch_metadata_offsets {
 
 	// Loss Stuff
 	uint64_t labels;
+	uint64_t loss_vec;
 
 	uint64_t total_size;
 } Seq_Batch_Metadata_Offsets;
@@ -170,6 +171,10 @@ typedef struct seq_batch_loss_config {
 
 	// of size num_tokens_to_predict
 	uint32_t * labels;
+
+	// of size num_tokens_to_predic + 1
+	// last index is the avg loss across all tokens in batch
+	float * loss_vec;
 } Seq_Batch_Loss_Config;
 
 typedef struct seq_batch_recomputed_activations {

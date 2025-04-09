@@ -155,9 +155,6 @@ typedef struct transformer_model_input {
 typedef struct transformer_model_output {
 	Seq_Batch * seq_batch;
 	void * logits;
-	// array of size config
-	void * loss;
-	float loss_avg;
 } Transformer_Model_Output;
 
 #endif

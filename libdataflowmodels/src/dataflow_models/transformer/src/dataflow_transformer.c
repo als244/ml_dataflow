@@ -343,7 +343,6 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
                         Transformer_Model_Output * model_output,
 						// during interference these would be NULL
 						Transformer_Head * grad_transformer_head,
-						Transformer_Head_Activations * grad_head_activations,
 						Transformer_Block_Transition * grad_stream,
 						Transformer_Block_Transition * next_grad_stream) {
 
@@ -396,6 +395,11 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
 
     // Apply softmax over vocabulary dimension
     // Each row (corresponding to a token) should sum to 1
+
+	// using an extra N_tokens x vocab_size buffer for the softmax, 
+	// because makes it easier if fwd_dtype != bwd_dtype...
+
+	// if necessary can update head_out in place if same dtype...
     ret = dataflow_submit_default_softmax(dataflow_handle, compute_stream_id,
                         transformer_head -> fwd_dt,
                         transformer_head -> bwd_dt,  // Use bwd_dt for backward pass
@@ -434,10 +438,11 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
                                   head_activations -> num_tokens,  // Number of rows (tokens)
                                   vocab_size,                      // Number of columns (vocab size)
                                   model_output -> logits,         // Predicted logits
-                                  (seq_batch -> loss_config).labels,
-								  model_output -> loss);        // Ground truth labels
-    if (ret) {
-        fprintf(stderr, "Error: Failed to submit cross entropy loss in transformer head backward...\n");
+                                  (seq_batch -> loss_config).labels,  // Ground truth labels
+								  (seq_batch -> loss_config).loss_vec);       // per token loss + avg loss as last el
+       
+	if (ret){
+	    fprintf(stderr, "Error: Failed to submit cross entropy loss in transformer head backward...\n");
         return ret;
     }
 
@@ -456,26 +461,6 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
 
 	float grad_avg_scale = 1.0f / ((float)head_activations -> num_tokens);
 
-    ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
-                       transformer_head -> bwd_dt,
-                       transformer_head -> bwd_dt,
-                       DATAFLOW_NONE,
-                       transformer_head -> bwd_dt,
-                       transformer_head -> compute_dt,
-                       0, 0,
-                       embedding_size,
-					   vocab_size, 
-					   head_activations -> num_tokens,
-                       grad_avg_scale, 0.0,
-					   transformer_head -> w_head,     // w_head[embedding_size, vocab_size] in col-major
-                       model_output -> logits,         // dlogits[num_tokens, vocab_size] in row-major
-                       NULL,     
-                       grad_head_activations -> head_norm_out, // dx_temp[num_tokens, embedding_size] in row-major
-                       grad_head_activations -> kernelWorkspaceBytes, grad_head_activations -> kernelWorkspace);  // No workspace needed
-    if (ret) {
-        fprintf(stderr, "Error: Failed to submit bwd x head matmul in transformer head...\n");
-        return ret;
-    }
 
 	 // 2. Output projection weight gradients
     // Forward: [num_tokens, embedding_size] @ [embedding_size, vocab_size] -> [num_tokens, vocab_size]
@@ -498,11 +483,36 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
                        head_activations -> head_norm_out,    // Input activations [num_tokens, embedding_size]     
                        grad_transformer_head -> w_head,      // Previous gradient
                        grad_transformer_head -> w_head,      // Output gradient
-                       grad_head_activations -> kernelWorkspaceBytes, grad_head_activations -> 	kernelWorkspace);
+                       head_activations -> kernelWorkspaceBytes, head_activations -> kernelWorkspace);
     if (ret) {
         fprintf(stderr, "Error: Failed to submit output bwd weight gradient computation in transformer head...\n");
         return ret;
     }
+
+	// Now repurpose head_activation -> head_norm_out as the derivative of the norm
+
+    ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+                       transformer_head -> bwd_dt,
+                       transformer_head -> bwd_dt,
+                       DATAFLOW_NONE,
+                       transformer_head -> bwd_dt,
+                       transformer_head -> compute_dt,
+                       0, 0,
+                       embedding_size,
+					   vocab_size, 
+					   head_activations -> num_tokens,
+                       grad_avg_scale, 0.0,
+					   transformer_head -> w_head,     // w_head[embedding_size, vocab_size] in col-major
+                       model_output -> logits,         // dlogits[num_tokens, vocab_size] in row-major
+                       NULL,     
+                       head_activations -> head_norm_out, // dx_temp[num_tokens, embedding_size] in row-major
+                       head_activations -> kernelWorkspaceBytes, head_activations -> kernelWorkspace);  // No workspace needed
+    if (ret) {
+        fprintf(stderr, "Error: Failed to submit bwd x head matmul in transformer head...\n");
+        return ret;
+    }
+
+	
 
 	// Finally backpropagate through RMS normalization
     ret = dataflow_submit_default_rms_norm_bwd_x(dataflow_handle, compute_stream_id,
@@ -515,7 +525,7 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
                                head_activations -> head_norm_rms_vals,
                                transformer_head -> w_head_norm,
                                block_input -> X,         // Original input
-                               grad_head_activations -> head_norm_out,      // Upstream gradient
+                               head_activations -> head_norm_out,      // Upstream gradient
                                grad_stream -> X);
 	if (ret) {
         fprintf(stderr, "Error: Failed to submit bwd x rms norm in transformer head...\n");
@@ -530,7 +540,7 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
                                grad_transformer_head -> eps,
                                head_activations -> head_norm_rms_vals,  // RMS values from forward pass
                                head_activations -> head_out,            // Original input
-                               grad_head_activations -> head_norm_out,         // Upstream gradient
+                               head_activations -> head_norm_out,         // Upstream gradient
                                grad_transformer_head -> w_head_norm);   // Output gradient
 	if (ret) {
         fprintf(stderr, "Error: Failed to submit bwd w rms norm in transformer head...\n");

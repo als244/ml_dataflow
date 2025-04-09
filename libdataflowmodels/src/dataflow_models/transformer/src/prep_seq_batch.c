@@ -38,6 +38,9 @@ void init_seq_batch_metadata_offsets(Seq_Batch_Metadata_Offsets * metadata_offse
     metadata_offsets -> labels = cur_offset;
     cur_offset += total_tokens * sizeof(uint32_t);
 
+    metadata_offsets -> loss_vec = cur_offset;
+    cur_offset += (total_tokens + 1) * sizeof(float);
+
     metadata_offsets -> total_size = cur_offset;
 
     return;
@@ -265,6 +268,7 @@ int bind_seq_batch_metadata_buffer(Seq_Batch * seq_batch, void * metadata_buffer
     // Seq Batch Loss Config
     Seq_Batch_Loss_Config * loss_config = &(seq_batch -> loss_config);
     loss_config -> labels = (uint32_t *) (metadata_buffer + metadata_offsets -> labels);
+    loss_config -> loss_vec = (float *) (metadata_buffer + metadata_offsets -> loss_vec);
 
     return 0;
 }
@@ -279,9 +283,7 @@ struct token_index_pair {
 static int compare_pairs(const void *a, const void *b) {
     struct token_index_pair *pair_a = (struct token_index_pair *)a;
     struct token_index_pair *pair_b = (struct token_index_pair *)b;
-    if (pair_a->token < pair_b->token) return -1;
-    if (pair_a->token > pair_b->token) return 1;
-    return 0;
+    return pair_a -> token - pair_b -> token;
 }
 
 int populate_seq_batch_metadata_buffer(Dataflow_Handle * dataflow_handle, int inbound_stream_id, 
