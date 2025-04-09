@@ -1,118 +1,190 @@
 #include "nvidia_ops.h"
 
-extern "C" __global__ void default_embedding_table_fp32_kernel(int nums_tokens, int embed_dim, uint32_t * token_ids, float* embedding_table, float * output){
 
-    int token_num = blockIdx.x;
+extern "C" __global__ void default_embedding_table_fp32_kernel(int num_unique_tokens, int embed_dim, uint32_t * sorted_token_ids, uint32_t * sorted_token_mapping, uint32_t * unique_token_sorted_inds_start, float * embedding_table, float * output) {
 
-    if (token_num >= nums_tokens){
+     // this gets dynamically allocated the size of model_dim
+	extern __shared__ uint8_t sdata[];
+
+    float * embed_row = (float *) (sdata);
+
+    int unique_token_num = blockIdx.x;
+
+    if (unique_token_num >= num_unique_tokens){
         return;
     }
 
-    uint64_t dtype_size = sizeof(float);
+    int unique_token_start = unique_token_sorted_inds_start[unique_token_num];
 
-    uint64_t token_id = (uint64_t) token_ids[token_num];
+    int num_repeated_tokens = unique_token_sorted_inds_start[unique_token_num + 1] - unique_token_start;
 
-    uint64_t embedding_table_offset = token_id * embed_dim * dtype_size;
-    
-    uint64_t output_offset = token_num * embed_dim * dtype_size;
-    
-    for (int d = threadIdx.x; d < embed_dim; d += blockDim.x){
-        output[output_offset + d] = embedding_table[embedding_table_offset + d];
+    int token_id = sorted_token_ids[unique_token_start];
+
+    // load in embedding table row into shared memory
+    for (int i = threadIdx.x; i < embed_dim; i += blockDim.x){
+        embed_row[i] = embedding_table[token_id * embed_dim + i];
+    }
+
+    __syncthreads();
+
+    // now store the embedding table row into output
+    int out_row_id;
+    for (int i = 0; i < num_repeated_tokens; i++){
+        out_row_id = sorted_token_mapping[unique_token_start + i];
+        for (int j = threadIdx.x; j < embed_dim; j += blockDim.x){
+            output[out_row_id * embed_dim + j] = embed_row[j];
+        }
     }
 
     return;
 }
 
 
-extern "C" __global__ void default_embedding_table_fp16_kernel(int nums_tokens, int embed_dim, uint32_t * token_ids, __half * embedding_table, __half * output){
+extern "C" __global__ void default_embedding_table_fp16_kernel(int num_unique_tokens, int embed_dim, uint32_t * sorted_token_ids, uint32_t * sorted_token_mapping, uint32_t * unique_token_sorted_inds_start, __half * embedding_table, __half * output){
 
-    int token_num = blockIdx.x;
+    // this gets dynamically allocated the size of model_dim
+	extern __shared__ uint8_t sdata[];
 
-    if (token_num >= nums_tokens){
+    __half * embed_row = (__half *) (sdata);
+
+    int unique_token_num = blockIdx.x;
+
+    if (unique_token_num >= num_unique_tokens){
         return;
-    }   
+    }
 
-    uint64_t dtype_size = sizeof(__half);
+    int unique_token_start = unique_token_sorted_inds_start[unique_token_num];
 
-    uint64_t token_id = (uint64_t) token_ids[token_num];
+    int num_repeated_tokens = unique_token_sorted_inds_start[unique_token_num + 1] - unique_token_start;
 
-    uint64_t embedding_table_offset = token_id * embed_dim * dtype_size;    
-    
-    uint64_t output_offset = token_num * embed_dim * dtype_size;
+    int token_id = sorted_token_ids[unique_token_start];
 
-    for (int d = threadIdx.x; d < embed_dim; d += blockDim.x){
-        output[output_offset + d] = embedding_table[embedding_table_offset + d];
+    // load in embedding table row into shared memory
+    for (int i = threadIdx.x; i < embed_dim; i += blockDim.x){
+        embed_row[i] = embedding_table[token_id * embed_dim + i];
+    }
+
+    __syncthreads();
+
+    // now store the embedding table row into output
+    for (int i = 0; i < num_repeated_tokens; i++){
+        int out_row_id = sorted_token_mapping[unique_token_start + i];
+        for (int j = threadIdx.x; j < embed_dim; j += blockDim.x){
+            output[out_row_id * embed_dim + j] = embed_row[j];
+        }
     }
 
     return;
 
 }
 
-extern "C" __global__ void default_embedding_table_bf16_kernel(int nums_tokens, int embed_dim, uint32_t * token_ids, __nv_bfloat16 * embedding_table, __nv_bfloat16 * output){
+extern "C" __global__ void default_embedding_table_bf16_kernel(int num_unique_tokens, int embed_dim, uint32_t * sorted_token_ids, uint32_t * sorted_token_mapping, uint32_t * unique_token_sorted_inds_start, __nv_bfloat16 * embedding_table, __nv_bfloat16 * output){
 
-    int token_num = blockIdx.x;
+    // this gets dynamically allocated the size of model_dim
+	extern __shared__ uint8_t sdata[];
 
-    if (token_num >= nums_tokens){
+    __nv_bfloat16 * embed_row = (__nv_bfloat16 *) (sdata);
+
+    int unique_token_num = blockIdx.x;
+
+    if (unique_token_num >= num_unique_tokens){
         return;
     }
-    
-    uint64_t dtype_size = sizeof(__nv_bfloat16);
 
-    uint64_t token_id = (uint64_t) token_ids[token_num];
+    int unique_token_start = unique_token_sorted_inds_start[unique_token_num];
 
-    uint64_t embedding_table_offset = token_id * embed_dim * dtype_size;
+    int num_repeated_tokens = unique_token_sorted_inds_start[unique_token_num + 1] - unique_token_start;
 
-    uint64_t output_offset = token_num * embed_dim * dtype_size;
+    int token_id = sorted_token_ids[unique_token_start];
 
-    for (int d = threadIdx.x; d < embed_dim; d += blockDim.x){
-        output[output_offset + d] = embedding_table[embedding_table_offset + d];
+    // load in embedding table row into shared memory
+    for (int i = threadIdx.x; i < embed_dim; i += blockDim.x){
+        embed_row[i] = embedding_table[token_id * embed_dim + i];
+    }
+
+    __syncthreads();
+
+    // now store the embedding table row into output
+    for (int i = 0; i < num_repeated_tokens; i++){
+        int out_row_id = sorted_token_mapping[unique_token_start + i];
+        for (int j = threadIdx.x; j < embed_dim; j += blockDim.x){
+            output[out_row_id * embed_dim + j] = embed_row[j];
+        }
     }
 
     return;
 }
 
-extern "C" __global__ void default_embedding_table_fp8e4m3_kernel(int nums_tokens, int embed_dim, uint32_t * token_ids, __nv_fp8_e4m3  * embedding_table, __nv_fp8_e4m3  * output){
+extern "C" __global__ void default_embedding_table_fp8e4m3_kernel(int num_unique_tokens, int embed_dim, uint32_t * sorted_token_ids, uint32_t * sorted_token_mapping, uint32_t * unique_token_sorted_inds_start, __nv_fp8_e4m3  * embedding_table, __nv_fp8_e4m3  * output){
 
-    int token_num = blockIdx.x;
+     // this gets dynamically allocated the size of model_dim
+	extern __shared__ uint8_t sdata[];
 
-    if (token_num >= nums_tokens){
+    __nv_fp8_e4m3 * embed_row = (__nv_fp8_e4m3 *) (sdata);
+
+    int unique_token_num = blockIdx.x;
+
+    if (unique_token_num >= num_unique_tokens){
         return;
     }
-    
-    uint64_t dtype_size = sizeof(__nv_fp8_e4m3);
 
-    uint64_t token_id = (uint64_t) token_ids[token_num];
+    int unique_token_start = unique_token_sorted_inds_start[unique_token_num];
 
-    uint64_t embedding_table_offset = token_id * embed_dim * dtype_size;
+    int num_repeated_tokens = unique_token_sorted_inds_start[unique_token_num + 1] - unique_token_start;
 
-    uint64_t output_offset = token_num * embed_dim * dtype_size;
-    
-    for (int d = threadIdx.x; d < embed_dim; d += blockDim.x){
-        output[output_offset + d] = embedding_table[embedding_table_offset + d];
+    int token_id = sorted_token_ids[unique_token_start];
+
+    // load in embedding table row into shared memory
+    for (int i = threadIdx.x; i < embed_dim; i += blockDim.x){
+        embed_row[i] = embedding_table[token_id * embed_dim + i];
+    }
+
+    __syncthreads();
+
+    // now store the embedding table row into output
+    for (int i = 0; i < num_repeated_tokens; i++){
+        int out_row_id = sorted_token_mapping[unique_token_start + i];
+        for (int j = threadIdx.x; j < embed_dim; j += blockDim.x){
+            output[out_row_id * embed_dim + j] = embed_row[j];
+        }
     }
 
     return;
 
 }
 
-extern "C" __global__ void default_embedding_table_fp8e5m2_kernel(int nums_tokens, int embed_dim, uint32_t * token_ids, __nv_fp8_e5m2  * embedding_table, __nv_fp8_e5m2  * output){
+extern "C" __global__ void default_embedding_table_fp8e5m2_kernel(int num_unique_tokens, int embed_dim, uint32_t * sorted_token_ids, uint32_t * sorted_token_mapping, uint32_t * unique_token_sorted_inds_start, __nv_fp8_e5m2  * embedding_table, __nv_fp8_e5m2  * output){
 
-    int token_num = blockIdx.x; 
+     // this gets dynamically allocated the size of model_dim
+	extern __shared__ uint8_t sdata[];
 
-    if (token_num >= nums_tokens){
+    __nv_fp8_e5m2 * embed_row = (__nv_fp8_e5m2 *) (sdata);
+
+    int unique_token_num = blockIdx.x;
+
+    if (unique_token_num >= num_unique_tokens){
         return;
     }
 
-    uint64_t dtype_size = sizeof(__nv_fp8_e5m2);
+    int unique_token_start = unique_token_sorted_inds_start[unique_token_num];
 
-    uint64_t token_id = (uint64_t) token_ids[token_num];
+    int num_repeated_tokens = unique_token_sorted_inds_start[unique_token_num + 1] - unique_token_start;
 
-    uint64_t embedding_table_offset = token_id * embed_dim * dtype_size;
+    int token_id = sorted_token_ids[unique_token_start];
 
-    uint64_t output_offset = token_num * embed_dim * dtype_size;
-    
-    for (int d = threadIdx.x; d < embed_dim; d += blockDim.x){
-        output[output_offset + d] = embedding_table[embedding_table_offset + d];
+    // load in embedding table row into shared memory
+    for (int i = threadIdx.x; i < embed_dim; i += blockDim.x){
+        embed_row[i] = embedding_table[token_id * embed_dim + i];
+    }
+
+    __syncthreads();
+
+    // now store the embedding table row into output
+    for (int i = 0; i < num_repeated_tokens; i++){
+        int out_row_id = sorted_token_mapping[unique_token_start + i];
+        for (int j = threadIdx.x; j < embed_dim; j += blockDim.x){
+            output[out_row_id * embed_dim + j] = embed_row[j];
+        }
     }
 
     return;

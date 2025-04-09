@@ -76,17 +76,17 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 	int num_base_ops = 8;
 	char * op_base_names[8] = {"default_embedding_table", "default_rms_norm", "default_rms_norm_noscale", "default_rope", "default_select_experts", "default_swiglu", "default_softmax", "default_cross_entropy_loss"};
 
-	char * op_init_symbols[8] = {NULL, "default_rms_norm_set_attribute_config", "default_rms_norm_set_attribute_config", NULL, "default_select_experts_set_attribute_config", NULL, NULL, NULL};
+	char * op_init_symbols[8] = {"default_embedding_table_set_attribute_config", "default_rms_norm_set_attribute_config", "default_rms_norm_set_attribute_config", NULL, "default_select_experts_set_attribute_config", NULL, NULL, NULL};
 	
 	
 	// cross entropy loss doesn't have function for fp8 yet...
 	bool num_fwd_ops[8] = {5, 5, 5, 5, 5, 5, 7, 3};
-	bool num_bwd_ops[8] = {0, 14, 7, 3, 0, 7, 0, 0};
+	bool num_bwd_ops[8] = {3, 14, 7, 3, 0, 7, 0, 0};
 
-	int num_funcs = 71;
+	int num_funcs = 74;
 
 	bool has_bwd_x[8] = {false, true, true, true, false, true, false, false};
-	bool has_bwd_w[8] = {false, true, false, false, false, false, false, false};
+	bool has_bwd_w[8] = {true, true, false, false, false, false, false, false};
 
 	int bwd_combos = 7;
 
@@ -204,15 +204,29 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 
 		if (has_bwd_w[i]){
 			sprintf(op_base_bwd_extented, "%s_bwd_w", op_base_names[i]);
-			for (int s = 0; s < bwd_combos; s++){
-				if (op_init_symbols[i]){
-					native_func_init_symbols[cur_func] = calloc(FUNC_SYMBOL_MAX_LEN, sizeof(char));
-					sprintf(native_func_init_symbols[cur_func], "%s", op_init_symbols[i]);
+			if (strcmp(op_base_bwd_extented, "default_embedding_table_bwd_w") != 0){
+				for (int s = 0; s < bwd_combos; s++){
+					if (op_init_symbols[i]){
+						native_func_init_symbols[cur_func] = calloc(FUNC_SYMBOL_MAX_LEN, sizeof(char));
+						sprintf(native_func_init_symbols[cur_func], "%s", op_init_symbols[i]);
+					}
+					sprintf(native_func_symbols[cur_func], "%s_%s_%s", op_base_bwd_extented, bwd_combo_strs[s], suffix);
+					sprintf(native_func_launch_symbols[cur_func], "%s_set_launch_config", op_base_bwd_extented);
+					dataflow_set_op_skeleton(&native_op_skeletons[cur_func], op_base_bwd_extented, bwd_combo_fwd_dts[s], bwd_combo_bwd_dts[s]);
+					cur_func++;
 				}
-				sprintf(native_func_symbols[cur_func], "%s_%s_%s", op_base_bwd_extented, bwd_combo_strs[s], suffix);
-				sprintf(native_func_launch_symbols[cur_func], "%s_set_launch_config", op_base_bwd_extented);
-				dataflow_set_op_skeleton(&native_op_skeletons[cur_func], op_base_bwd_extented, bwd_combo_fwd_dts[s], bwd_combo_bwd_dts[s]);
-				cur_func++;
+			}
+			else {
+				for (int s = 0; s < num_bwd_datatypes; s++){
+					if (op_init_symbols[i]){
+						native_func_init_symbols[cur_func] = calloc(FUNC_SYMBOL_MAX_LEN, sizeof(char));
+						sprintf(native_func_init_symbols[cur_func], "%s", op_init_symbols[i]);
+					}
+					sprintf(native_func_symbols[cur_func], "%s_%s_%s", op_base_bwd_extented, bwd_strs[s], suffix);
+					sprintf(native_func_launch_symbols[cur_func], "%s_set_launch_config", op_base_bwd_extented);
+					dataflow_set_op_skeleton(&native_op_skeletons[cur_func], op_base_bwd_extented, DATAFLOW_NONE, bwd_datatypes[s]);
+					cur_func++;
+				}
 			}
 		}
 	}

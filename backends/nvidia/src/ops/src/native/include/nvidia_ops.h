@@ -41,12 +41,15 @@
 
 
 // Embedding
-extern "C" __global__ void default_embedding_table_fp32_kernel(int nums_tokens, int embed_dim, uint32_t * token_ids, float* embedding_table, float * output);
-extern "C" __global__ void default_embedding_table_fp16_kernel(int nums_tokens, int embed_dim, uint32_t * token_ids, __half * embedding_table, __half * output);
-extern "C" __global__ void default_embedding_table_bf16_kernel(int nums_tokens, int embed_dim, uint32_t * token_ids, __nv_bfloat16 * embedding_table, __nv_bfloat16 * output);
-extern "C" __global__ void default_embedding_table_fp8e4m3_kernel(int nums_tokens, int embed_dim, uint32_t * token_ids, __nv_fp8_e4m3 * embedding_table, __nv_fp8_e4m3 * output);
-extern "C" __global__ void default_embedding_table_fp8e5m2_kernel(int nums_tokens, int embed_dim, uint32_t * token_ids, __nv_fp8_e5m2 * embedding_table, __nv_fp8_e5m2 * output);
+extern "C" __global__ void default_embedding_table_fp32_kernel(int num_unique_tokens, int embed_dim, uint32_t * sorted_token_ids, uint32_t * sorted_token_mapping, uint32_t * unique_token_sorted_inds_start, float * embedding_table, float * output);
+extern "C" __global__ void default_embedding_table_fp16_kernel(int num_unique_tokens, int embed_dim, uint32_t * sorted_token_ids, uint32_t * sorted_token_mapping, uint32_t * unique_token_sorted_inds_start, __half * embedding_table, __half * output);
+extern "C" __global__ void default_embedding_table_bf16_kernel(int num_unique_tokens, int embed_dim, uint32_t * sorted_token_ids, uint32_t * sorted_token_mapping, uint32_t * unique_token_sorted_inds_start, __nv_bfloat16 * embedding_table, __nv_bfloat16 * output);
 
+extern "C" __global__ void default_embedding_table_bwd_w_fp32_kernel(int num_unique_tokens, int embed_dim, uint32_t * sorted_token_ids, uint32_t * sorted_token_mapping, uint32_t * unique_token_sorted_inds_start, float * grad_stream, float * grad_embedding_table);
+extern "C" __global__ void default_embedding_table_bwd_w_fp16_kernel(int num_unique_tokens, int embed_dim, uint32_t * sorted_token_ids, uint32_t * sorted_token_mapping, uint32_t * unique_token_sorted_inds_start, __half * grad_stream, __half * grad_embedding_table);
+extern "C" __global__ void default_embedding_table_bwd_w_bf16_kernel(int num_unique_tokens, int embed_dim, uint32_t * sorted_token_ids, uint32_t * sorted_token_mapping, uint32_t * unique_token_sorted_inds_start, __nv_bfloat16 * grad_stream, __nv_bfloat16 * grad_embedding_table);
+extern "C" __global__ void default_embedding_table_bwd_w_fp8e4m3_kernel(int num_unique_tokens, int embed_dim, uint32_t * sorted_token_ids, uint32_t * sorted_token_mapping, uint32_t * unique_token_sorted_inds_start, __nv_fp8_e4m3 * grad_stream, __nv_fp8_e4m3 * grad_embedding_table);
+extern "C" __global__ void default_embedding_table_bwd_w_fp8e5m2_kernel(int num_unique_tokens, int embed_dim, uint32_t * sorted_token_ids, uint32_t * sorted_token_mapping, uint32_t * unique_token_sorted_inds_start, __nv_fp8_e5m2 * grad_stream, __nv_fp8_e5m2 * grad_embedding_table);
 
 // Norm 
 // Forward
@@ -108,13 +111,13 @@ extern "C" __global__ void default_rope_bwd_x_fp16_kernel(uint64_t N, int model_
 extern "C" __global__ void default_rope_bwd_x_bf16_kernel(uint64_t N, int model_dim, int head_dim, int num_kv_heads, int theta, int *seq_positions, __nv_bfloat16 *dX_q, __nv_bfloat16 *dX_k);
 
 
-
+/*
 extern "C" __global__ void default_copy_to_seq_context_fp32_kernel(uint64_t N, int total_tokens, int kv_dim, float * keys, float * values, int * seq_positions, uint64_t * seq_context_ptrs, int * seq_context_sizes);
 extern "C" __global__ void default_copy_to_seq_context_fp16_kernel(uint64_t N, int total_tokens, int kv_dim, __half * keys, __half * values, int * seq_positions, uint64_t * seq_context_ptrs, int * seq_context_sizes);
 extern "C" __global__ void default_copy_to_seq_context_bf16_kernel(uint64_t N, int total_tokens, int kv_dim, __nv_bfloat16 * keys, __nv_bfloat16 * values, int * seq_positions, uint64_t * seq_context_ptrs, int * seq_context_sizes);
 extern "C" __global__ void default_copy_to_seq_context_fp8e4m3_kernel(uint64_t N, int total_tokens, int kv_dim, __nv_fp8_e4m3 * keys, __nv_fp8_e4m3 * values, int * seq_positions, uint64_t * seq_context_ptrs, int * seq_context_sizes);
 extern "C" __global__ void default_copy_to_seq_context_fp8e5m2_kernel(uint64_t N, int total_tokens, int kv_dim, __nv_fp8_e5m2 * keys, __nv_fp8_e5m2 * values, int * seq_positions, uint64_t * seq_context_ptrs, int * seq_context_sizes);
-
+*/
 
 
 
