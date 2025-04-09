@@ -142,8 +142,15 @@ int dataflow_submit_attention_bwd(Dataflow_Handle * handle, int stream_id,
 // From preprocess_ops.c
 int dataflow_submit_default_embedding_table(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, 
-						int num_tokens, int embed_dim, 
-						uint32_t * token_ids, void * embedding_table, void * output);
+						int num_unique_tokens, int embed_dim, 
+						uint32_t * sorted_token_ids, uint32_t * sorted_token_mapping, uint32_t * unique_token_sorted_inds_start, 
+						void * embedding_table, void * output);
+
+int dataflow_submit_default_embedding_table_bwd_w(Dataflow_Handle * handle, int stream_id, 
+						DataflowDatatype bwd_dt, 
+						int num_unique_tokens, int embed_dim, 
+						uint32_t * sorted_token_ids, uint32_t * sorted_token_mapping, uint32_t * unique_token_sorted_inds_start, 
+						void * grad_stream, void * grad_embedding_table);
 
 // From norm_ops.c
 

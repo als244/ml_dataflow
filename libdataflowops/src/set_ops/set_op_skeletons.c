@@ -10,7 +10,10 @@ int dataflow_set_op_skeleton(Op_Skeleton * skeleton, char * op_name, DataflowDat
 
 	if (strcmp(op_name, "default_embedding_table") == 0) {
         dataflow_set_default_embedding_table_skeleton(skeleton, fwd_dt);
-    } 
+    }
+	else if (strcmp(op_name, "default_embedding_table_bwd_w") == 0) {
+        dataflow_set_default_embedding_table_bwd_w_skeleton(skeleton, bwd_dt);
+    }
 	else if (strcmp(op_name, "default_rms_norm") == 0) {
         dataflow_set_default_rms_norm_skeleton(skeleton, fwd_dt);
     }
@@ -315,21 +318,26 @@ void dataflow_set_default_embedding_table_skeleton(Op_Skeleton * skeleton, Dataf
 	// last character must be null no matter what, if nickname is less than null bytes were added prior
 	(skeleton_header -> op_nickname)[MAX_OP_NICKNAME_SIZE] = '\0'; 
 	
-	int num_args = 5;
+	int num_args = 7;
 
 	skeleton_header -> num_args = num_args;
 
 	DataflowDatatype * arg_dtypes = skeleton_header -> arg_dtypes;
 
-	// num tokens
+	// num unqiue tokens
 	arg_dtypes[0] = DATAFLOW_INT_SCALAR;
+	// embed dim
 	arg_dtypes[1] = DATAFLOW_INT_SCALAR;
-	// token ids
+	// sorted token ids
 	arg_dtypes[2] = DATAFLOW_UINT32;
+	// sorted token mapping
+	arg_dtypes[3] = DATAFLOW_UINT32;
+	// unique token sorted inds start
+	arg_dtypes[4] = DATAFLOW_UINT32;
 	// embedding table	
-	arg_dtypes[3] = fwd_datatype;
+	arg_dtypes[5] = fwd_datatype;
 	// output
-	arg_dtypes[4] = fwd_datatype;
+	arg_dtypes[6] = fwd_datatype;
 
 	for (int i = num_args; i < MAX_OP_ARGS; i++){
 		arg_dtypes[i] = DATAFLOW_NONE;
@@ -337,6 +345,47 @@ void dataflow_set_default_embedding_table_skeleton(Op_Skeleton * skeleton, Dataf
 
 	dataflow_do_fingerprinting(skeleton_header, sizeof(Op_Skeleton_Header), (skeleton -> identifier).fingerprint);
 	
+}
+
+void dataflow_set_default_embedding_table_bwd_w_skeleton(Op_Skeleton * skeleton, DataflowDatatype bwd_datatype){
+
+	Op_Skeleton_Header * skeleton_header = &(skeleton -> header);
+
+	char op_nickname[MAX_OP_NICKNAME_SIZE];
+
+	sprintf(op_nickname, "%s_%s", "default_embedding_table_bwd_w", dataflow_datatype_as_string(bwd_datatype));
+
+	// MAX nicknmae size is set to 255 with 256 allocated space...
+	strncpy(skeleton_header -> op_nickname, op_nickname, MAX_OP_NICKNAME_SIZE);
+	// last character must be null no matter what, if nickname is less than null bytes were added prior
+	(skeleton_header -> op_nickname)[MAX_OP_NICKNAME_SIZE] = '\0'; 
+	
+	int num_args = 7;
+
+	skeleton_header -> num_args = num_args;
+
+	DataflowDatatype * arg_dtypes = skeleton_header -> arg_dtypes;
+
+	// num unqiue tokens
+	arg_dtypes[0] = DATAFLOW_INT_SCALAR;
+	// embed dim
+	arg_dtypes[1] = DATAFLOW_INT_SCALAR;
+	// sorted token ids
+	arg_dtypes[2] = DATAFLOW_UINT32;
+	// sorted token mapping
+	arg_dtypes[3] = DATAFLOW_UINT32;
+	// unique token sorted inds start
+	arg_dtypes[4] = DATAFLOW_UINT32;
+	// grad_stream
+	arg_dtypes[5] = bwd_datatype;
+	// grad_embedding_table
+	arg_dtypes[6] = bwd_datatype;
+
+	for (int i = num_args; i < MAX_OP_ARGS; i++){
+		arg_dtypes[i] = DATAFLOW_NONE;
+	}
+
+	dataflow_do_fingerprinting(skeleton_header, sizeof(Op_Skeleton_Header), (skeleton -> identifier).fingerprint);
 }
 
 void dataflow_set_default_rms_norm_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype){
