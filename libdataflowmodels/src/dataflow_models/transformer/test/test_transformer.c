@@ -2,12 +2,12 @@
 
 int main(int argc, char * argv[]){
 
-	DataflowDatatype block_dt = DATAFLOW_FP16;
+	DataflowDatatype block_dt = DATAFLOW_BF16;
 
 	// for matmul accumulations...
 	// on Geforce using FP16 gets double perf,
 	// on datacenter cards should use DATAFLOW_FP32
-	DataflowDatatype compute_dt = DATAFLOW_FP16;
+	DataflowDatatype compute_dt = DATAFLOW_BF16;
 
 
 	DataflowNormalizationType norm_type = DATAFLOW_RMSNORM;

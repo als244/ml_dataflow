@@ -1,5 +1,41 @@
 #include "dataflow_transformer.h"
 
+
+int dataflow_submit_transformer_embedding(Dataflow_Handle * dataflow_handle, int compute_stream_id,
+											Transformer_Model_Input * model_input,
+											Transformer_Embedding_Table * embedding_table,
+											Transformer_Block_Transition * embedding_output) {
+
+
+		int ret;
+
+		Seq_Batch_Config * batch_config = model_input -> batch_config;
+
+		int num_unique_tokens = batch_config -> num_unique_tokens;
+
+		Embedding_Config * embedding_config = embedding_table -> config;
+
+		int embedding_dim = embedding_config -> embedding_size;
+
+		DataflowDatatype embed_dt = embedding_config -> embed_dt;
+
+		uint32_t * sorted_token_ids = batch_config -> sorted_token_ids;
+		uint32_t * sorted_token_mapping = batch_config -> sorted_token_mapping;
+		uint32_t * unique_token_sorted_inds_start = batch_config -> unique_token_sorted_inds_start;
+
+		ret = dataflow_submit_default_embedding_table(dataflow_handle, compute_stream_id,
+														embed_dt, num_unique_tokens, embedding_dim, 
+														sorted_token_ids, sorted_token_mapping, unique_token_sorted_inds_start,
+														embedding_table -> embedding_table, embedding_output -> X);
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit embedding table...\n");
+			return -1;
+		}
+
+		return 0;
+}
+
 // ALL BAKED INTO 1 Large Function for now,
 // but really should have subfunctions to do norms, attn, and mlp based on transformer block config...!
 
@@ -310,8 +346,10 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
     int ret;
 
     // Get dimensions from embedding config
-    int vocab_size = (transformer_head -> embedding_config).vocab_size;
-    int embedding_size = (transformer_head -> embedding_config).embedding_size;
+    int vocab_size = (transformer_head -> embedding_config) -> vocab_size;
+    int embedding_size = (transformer_head -> embedding_config) -> embedding_size;
+
+	Seq_Batch_Config * batch_config = block_input -> batch_config;
 
     // RMS Normalization
     ret = dataflow_submit_default_rms_norm(dataflow_handle, compute_stream_id,
@@ -385,7 +423,7 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
                                   head_activations -> num_tokens,  // Number of rows (tokens)
                                   vocab_size,                      // Number of columns (vocab size)
                                   model_output -> logits,         // Predicted logits
-                                  model_output -> labels,
+                                  batch_config -> labels,
 								  model_output -> loss);        // Ground truth labels
     if (ret) {
         fprintf(stderr, "Error: Failed to submit cross entropy loss in transformer head backward...\n");
@@ -998,3 +1036,35 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
 }
 
 
+int dataflow_submit_transformer_embedding_bwd_w(Dataflow_Handle * dataflow_handle, int compute_stream_id,
+											Transformer_Block_Transition * grad_stream,
+											Transformer_Embedding_Table * grad_embedding_table) {
+
+		int ret;
+
+		Seq_Batch_Config * batch_config = grad_stream -> batch_config;
+
+		int num_unique_tokens = batch_config -> num_unique_tokens;
+
+		Embedding_Config * embedding_config = grad_embedding_table -> config;
+
+		int embedding_dim = embedding_config -> embedding_size;
+
+		DataflowDatatype embed_dt = embedding_config -> embed_dt;
+
+		uint32_t * sorted_token_ids = batch_config -> sorted_token_ids;
+		uint32_t * sorted_token_mapping = batch_config -> sorted_token_mapping;
+		uint32_t * unique_token_sorted_inds_start = batch_config -> unique_token_sorted_inds_start;
+
+		ret = dataflow_submit_default_embedding_table(dataflow_handle, compute_stream_id,
+														embed_dt, num_unique_tokens, embedding_dim, 
+														sorted_token_ids, sorted_token_mapping, unique_token_sorted_inds_start,
+														grad_stream -> X, grad_embedding_table -> embedding_table);
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit embedding table bwd_w...\n");
+			return -1;
+		}
+
+		return 0;
+}

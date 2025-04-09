@@ -6,6 +6,36 @@
 typedef struct seq_batch_config {
 	int num_seqs;
 
+	// should be same as total_q...
+	int total_tokens;
+
+	// same form model_input
+	uint32_t * token_ids;
+
+
+	int num_unique_tokens;
+
+	// in order to do bwd pass we want to accumulate
+	// gradients for each token id, so nice to have them
+	// sorted for embedding_bwd_w
+
+	// can also use sorted_token_ids during fwd pass for
+	// more efficient smem usage...
+	uint32_t * sorted_token_ids;
+	// mapping from sorted_token_ids to token_ids
+
+	// this is mapping from index in sorted_token_ids to index in token_ids
+	uint32_t * sorted_token_mapping;
+	
+	// length of num_unique_tokens + 1
+	// each index represents the starting 
+	// index of the token in sorted_token_ids
+	// starts at 0 and ends at total_tokens - 1
+	uint32_t * unique_token_sorted_inds_start;
+
+	// same form model_input
+	uint32_t * labels;
+
 	// will be sum of q_seq_lens
 	int total_q;
 	// will be sum of k_seq_lens

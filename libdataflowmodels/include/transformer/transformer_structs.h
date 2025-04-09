@@ -98,7 +98,7 @@ typedef struct transformer_head {
 	float eps;
 	// contains the vocab size which 
 	// has dimensionality out of w_out output
-	Embedding_Config embedding_config;
+	Embedding_Config * embedding_config;
 	void * buffer;
 	void * w_head_norm;
 	void * w_head;
@@ -133,17 +133,23 @@ typedef struct transformer_block_transition {
 	void * X;
 } Transformer_Block_Transition;
 
+typedef struct transformer_embedding_table {
+	Embedding_Config * config;
+	void * buffer;
+	uint64_t embedding_table_size;
+	void * embedding_table;
+
+	// workspace for the backward pass...
+	uint64_t kernel_workspaceBytes;
+	void * kernel_workspace;
+} Transformer_Embedding_Table;
 
 typedef struct transformer_model_input {
 	Seq_Batch_Config * batch_config;
-	uint32_t * token_ids;
 } Transformer_Model_Input;
 
 typedef struct transformer_model_output {
 	Seq_Batch_Config * batch_config;
-	// same form model_input
-	uint32_t * token_ids;
-	uint32_t * labels;
 	void * logits;
 	// array of size config
 	void * loss;

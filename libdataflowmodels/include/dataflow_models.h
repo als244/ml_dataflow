@@ -43,6 +43,7 @@ typedef struct embedding_config {
 	int vocab_size;
 	// should = model_dim for transformers
 	int embedding_size;
+	DataflowDatatype embed_dt;
 } Embedding_Config;
 
 typedef struct moe_config {
