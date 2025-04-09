@@ -106,10 +106,19 @@ typedef struct transformer_head {
 
 typedef struct transformer_block_activations {
 	Transformer_Block * block;
-	Seq_Batch_Config * batch_config;
-	Seq_Batch_Saved_Activations * saved_activations;
-	Seq_Batch_Context * context;
-	Seq_Batch_Activation_Workspace *activation_workspace;	
+	Seq_Batch * seq_batch;
+	// this holds pointer on device memory and correct pointers
+	// are bound (size + alignment) during beginning of processing
+	// the device buffers are passed in during binding process
+	// and are configuraed to be hold the max # tokens per seq_batch
+	Seq_Batch_Saved_Activations * working_activations;
+	// similar to working_activations, but this is used as a temporary buffer
+	Seq_Batch_Activation_Workspace * activation_workspace;
+	
+	// workspace for attention and matmuls in block...
+	// needs to be zeroed out before attention fwd and bwd...
+	void * kernelWorkspace;
+	uint64_t kernelWorkspaceBytes;
 } Transformer_Block_Activations;
 
 
@@ -123,33 +132,28 @@ typedef struct transformer_head_activations {
 	void * head_norm_rms_vals;
 	void * head_out;
 
-	// temporary buffer for recomputed norm output
-	void * kernel_workspace;
-	uint64_t kernel_workspaceBytes;
+	// workspace for matmuls in head...
+	void * kernelWorkspace;
+	uint64_t kernelWorkspaceBytes;
 } Transformer_Head_Activations;
 
 typedef struct transformer_block_transition {
-	Seq_Batch_Config * batch_config;
+	Seq_Batch * seq_batch;
 	void * X;
 } Transformer_Block_Transition;
 
 typedef struct transformer_embedding_table {
 	Embedding_Config * config;
-	void * buffer;
 	uint64_t embedding_table_size;
 	void * embedding_table;
-
-	// workspace for the backward pass...
-	uint64_t kernel_workspaceBytes;
-	void * kernel_workspace;
 } Transformer_Embedding_Table;
 
 typedef struct transformer_model_input {
-	Seq_Batch_Config * batch_config;
+	Seq_Batch * seq_batch;
 } Transformer_Model_Input;
 
 typedef struct transformer_model_output {
-	Seq_Batch_Config * batch_config;
+	Seq_Batch * seq_batch;
 	void * logits;
 	// array of size config
 	void * loss;

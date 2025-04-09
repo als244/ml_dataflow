@@ -9,19 +9,20 @@ int dataflow_submit_transformer_embedding(Dataflow_Handle * dataflow_handle, int
 
 		int ret;
 
-		Seq_Batch_Config * batch_config = model_input -> batch_config;
+		Seq_Batch * seq_batch = model_input -> seq_batch;
 
-		int num_unique_tokens = batch_config -> num_unique_tokens;
+		Embedding_Config * embedding_table_config = embedding_table -> config;
 
-		Embedding_Config * embedding_config = embedding_table -> config;
+		int embedding_dim = embedding_table_config -> embedding_size;
 
-		int embedding_dim = embedding_config -> embedding_size;
+		Seq_Batch_Embedding_Config * batch_embedding_config = &(seq_batch -> embedding_config);
 
-		DataflowDatatype embed_dt = embedding_config -> embed_dt;
+		DataflowDatatype embed_dt = embedding_table_config -> embed_dt;
 
-		uint32_t * sorted_token_ids = batch_config -> sorted_token_ids;
-		uint32_t * sorted_token_mapping = batch_config -> sorted_token_mapping;
-		uint32_t * unique_token_sorted_inds_start = batch_config -> unique_token_sorted_inds_start;
+		int num_unique_tokens = batch_embedding_config -> num_unique_tokens;
+		uint32_t * sorted_token_ids = batch_embedding_config -> sorted_token_ids;
+		uint32_t * sorted_token_mapping = batch_embedding_config -> sorted_token_mapping;
+		uint32_t * unique_token_sorted_inds_start = batch_embedding_config -> unique_token_sorted_inds_start;
 
 		ret = dataflow_submit_default_embedding_table(dataflow_handle, compute_stream_id,
 														embed_dt, num_unique_tokens, embedding_dim, 
@@ -46,27 +47,30 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 								Transformer_Block_Transition * block_output) {
 
     int ret;
-    DataflowDatatype fwd_dt = transformer_block->config.block_dt;
+
+	Transformer_Block_Config * block_config = &(transformer_block -> config);
+    DataflowDatatype fwd_dt = block_config -> block_dt;
+	DataflowDatatype compute_dt = block_config -> compute_dt;
+
+	int model_dim = block_config -> model_dim;
+    int kv_dim = block_config -> kv_dim;
+    int ffn_dim = block_config -> ffn_dim;
 
 	size_t x_el_size = dataflow_sizeof_element(fwd_dt);
-    DataflowDatatype compute_dt = transformer_block->config.compute_dt;
 
-	Seq_Batch_Config * batch_config = activations -> batch_config;
+	   
+	Seq_Batch * seq_batch = block_input -> seq_batch;
+	Seq_Batch_Attention_Config * batch_attention_config = &(seq_batch -> attention_config);
+    int num_seqs = batch_attention_config -> num_seqs;
+    int total_q = batch_attention_config -> total_q;
+    int total_k = batch_attention_config -> total_k;
+ 
 
-
-    int num_seqs = batch_config->num_seqs;
-    int total_q = batch_config->total_q;
-    int total_k = batch_config->total_k;
-    
-    int model_dim = transformer_block->config.model_dim;
-    int kv_dim = transformer_block->config.kv_dim;
-    int ffn_dim = transformer_block->config.ffn_dim;
-
-	Seq_Batch_Saved_Activations * saved_activations = activations -> saved_activations;
+	Seq_Batch_Saved_Activations * working_activations = activations -> working_activations;
 	Seq_Batch_Activation_Workspace * activation_workspace = activations -> activation_workspace;
 
-    uint64_t kernel_workspaceBytes = activation_workspace -> kernel_workspaceBytes;
-    void * kernel_workspace = activation_workspace -> kernel_workspace;
+    uint64_t kernelWorkspaceBytes = activations -> kernelWorkspaceBytes;
+    void * kernelWorkspace = activations -> kernelWorkspace;
 
 
 	// Assume weights are in col-major format.
@@ -109,7 +113,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 						fwd_dt, 
 						total_q, model_dim, (transformer_block -> config).eps, 
 						transformer_block -> w_attn_norm, block_input -> X, activation_workspace -> x_temp, 
-						saved_activations -> attn_norm_weighted_sums, saved_activations -> attn_norm_rms_vals);
+						working_activations -> attn_norm_weighted_sums, working_activations -> attn_norm_rms_vals);
 
 	if (ret){
 		fprintf(stderr, "Error: failed to submit attention norm...\n");
@@ -127,8 +131,8 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 					to_transa, to_transb,
 					model_dim, model_dim, total_q, 
 					1.0, 0.0,
-					transformer_block -> w_q, activation_workspace -> x_temp, NULL, saved_activations -> x_q,
-					kernel_workspaceBytes, kernel_workspace);
+					transformer_block -> w_q, activation_workspace -> x_temp, NULL, working_activations -> x_q,
+					kernelWorkspaceBytes, kernelWorkspace);
 
 	if (ret){
 		fprintf(stderr, "Error: failed to submit Q matmul proj...\n");
@@ -141,8 +145,8 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 					to_transa, to_transb,
 					model_dim, kv_dim, total_q, 
 					1.0, 0.0,
-					transformer_block -> w_k, activation_workspace -> x_temp, NULL, saved_activations -> x_k_local,
-					kernel_workspaceBytes, kernel_workspace);
+					transformer_block -> w_k, activation_workspace -> x_temp, NULL, working_activations -> x_k_local,
+					kernelWorkspaceBytes, kernelWorkspace);
 
 	if (ret){
 		fprintf(stderr, "Error: failed to submit K matmul proj...\n");
@@ -155,8 +159,8 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 					to_transa, to_transb,
 					model_dim, kv_dim, total_q, 
 					1.0, 0.0,
-					transformer_block -> w_v, activation_workspace -> x_temp, NULL, saved_activations -> x_v_local,
-					kernel_workspaceBytes, kernel_workspace);
+					transformer_block -> w_v, activation_workspace -> x_temp, NULL, working_activations -> x_v_local,
+					kernelWorkspaceBytes, kernelWorkspace);
 
 	if (ret){
 		fprintf(stderr, "Error: failed to submit V matmul proj...\n");
@@ -176,7 +180,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	ret = dataflow_submit_default_rope(dataflow_handle, compute_stream_id, 
 						fwd_dt, 
 						N, model_dim, head_dim, num_kv_heads, (transformer_block -> config).theta,
-						batch_config -> seq_positions, saved_activations -> x_q, saved_activations -> x_k_local);
+						batch_attention_config -> seq_positions, working_activations -> x_q, working_activations -> x_k_local);
 	if (ret){
 		fprintf(stderr, "Error: failed to submit rope...\n");
 		return -1;
@@ -187,21 +191,21 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 
 	// ensure workspace is zerod out beforehand....
 
-	ret = (dataflow_handle -> set_mem)(dataflow_handle, compute_stream_id, kernel_workspace, 0, kernel_workspaceBytes);
+	ret = (dataflow_handle -> set_mem)(dataflow_handle, compute_stream_id, kernelWorkspace, 0, kernelWorkspaceBytes);
 	if (ret){
 		fprintf(stderr, "Error: unable to set attention workspace mem to 0 before submitting...\n");
 		return -1;
 	}
 
-	void * q_seq_offsets = batch_config -> q_seq_offsets;
-	void * q_seq_lens = batch_config -> q_seq_lens;
-	int max_seqlen_q = batch_config -> max_seqlen_q;
+	void * q_seq_offsets = batch_attention_config -> q_seq_offsets;
+	void * q_seq_lens = batch_attention_config -> q_seq_lens;
+	int max_seqlen_q = batch_attention_config -> max_seqlen_q;
 
-	void * k_seq_offsets = batch_config -> k_seq_offsets;
-	void * k_seq_lens = batch_config -> k_seq_lens;
-	int max_seqlen_k = batch_config -> max_seqlen_k;
+	void * k_seq_offsets = batch_attention_config -> k_seq_offsets;
+	void * k_seq_lens = batch_attention_config -> k_seq_lens;
+	int max_seqlen_k = batch_attention_config -> max_seqlen_k;
 
-	Seq_Batch_Context * context = activations -> context;
+	Seq_Batch_Context * context = seq_batch -> context;
 
 	ret = dataflow_submit_attention(dataflow_handle, compute_stream_id,
 						 fwd_dt, 
@@ -209,9 +213,9 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 						 q_seq_offsets, q_seq_lens, max_seqlen_q,
 						 k_seq_offsets, k_seq_lens, max_seqlen_k,
 						 num_q_heads, num_kv_heads, head_dim,
-						 saved_activations -> x_q, context -> x_k, context -> x_v,
-						 saved_activations -> x_attn_out, saved_activations -> softmax_lse, 
-						 kernel_workspaceBytes, kernel_workspace);
+						 working_activations -> x_q, context -> x_k, context -> x_v,
+						 working_activations -> x_attn_out, working_activations -> softmax_lse, 
+						 kernelWorkspaceBytes, kernelWorkspace);
 	if (ret){
 		fprintf(stderr, "Error: failed to submit attention...\n");
 		return -1;
@@ -227,8 +231,8 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 					to_transa, to_transb,
 					model_dim, model_dim, total_q, 
 					1.0, 1.0,
-					transformer_block -> w_o, saved_activations -> x_attn_out, block_input -> X, saved_activations -> x_o,
-					kernel_workspaceBytes, kernel_workspace);
+					transformer_block -> w_o, working_activations -> x_attn_out, block_input -> X, working_activations -> x_o,
+					kernelWorkspaceBytes, kernelWorkspace);
 
 	if (ret){
 		fprintf(stderr, "Error: failed to submit o matmul proj...\n");
@@ -241,8 +245,8 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	ret = dataflow_submit_default_rms_norm(dataflow_handle, compute_stream_id, 
 						fwd_dt, 
 						total_q, model_dim, (transformer_block -> config).eps, 
-						transformer_block -> w_ffn_norm, saved_activations -> x_o, activation_workspace -> x_temp, 
-						saved_activations -> ffn_norm_weighted_sums, saved_activations -> ffn_norm_rms_vals);
+						transformer_block -> w_ffn_norm, working_activations -> x_o, activation_workspace -> x_temp, 
+						working_activations -> ffn_norm_weighted_sums, working_activations -> ffn_norm_rms_vals);
 
 	if (ret){
 		fprintf(stderr, "Error: failed to submit ffn norm...\n");
@@ -258,8 +262,8 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 					to_transa, to_transb,
 					ffn_dim, model_dim, total_q, 
 					1.0, 0.0,
-					transformer_block -> w_1, activation_workspace -> x_temp, NULL, (saved_activations -> x_1)[0],
-					kernel_workspaceBytes, kernel_workspace);
+					transformer_block -> w_1, activation_workspace -> x_temp, NULL, (working_activations -> x_1)[0],
+					kernelWorkspaceBytes, kernelWorkspace);
 
 	if (ret){
 		fprintf(stderr, "Error: failed to submit w1 matmul proj...\n");
@@ -272,8 +276,8 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 					to_transa, to_transb,
 					ffn_dim, model_dim, total_q, 
 					1.0, 0.0,
-					transformer_block -> w_3, activation_workspace -> x_temp, NULL, (saved_activations -> x_3)[0],
-					kernel_workspaceBytes, kernel_workspace);
+					transformer_block -> w_3, activation_workspace -> x_temp, NULL, (working_activations -> x_3)[0],
+					kernelWorkspaceBytes, kernelWorkspace);
 
 	if (ret){
 		fprintf(stderr, "Error: failed to submit w3 matmul proj...\n");
@@ -287,7 +291,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	ret = dataflow_submit_default_swiglu(dataflow_handle, compute_stream_id, 
 						fwd_dt, 
 						total_q, ffn_dim, 
-						(saved_activations -> x_1)[0], (saved_activations -> x_3)[0], activation_workspace -> x_temp_mlp);
+						(working_activations -> x_1)[0], (working_activations -> x_3)[0], activation_workspace -> x_temp_mlp);
 
 	if (ret){
 		fprintf(stderr, "Error: failed to submit swiglu activation...\n");
@@ -303,8 +307,8 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 					to_transa, to_transb,
 					model_dim, ffn_dim, total_q, 
 					1.0, 1.0,
-					transformer_block -> w_2, activation_workspace -> x_temp_mlp, saved_activations -> x_o, (saved_activations -> x_2)[0],
-					kernel_workspaceBytes, kernel_workspace);
+					transformer_block -> w_2, activation_workspace -> x_temp_mlp, working_activations -> x_o, (working_activations -> x_2)[0],
+					kernelWorkspaceBytes, kernelWorkspace);
 
 	if (ret){
 		fprintf(stderr, "Error: failed to submit w2 matmul proj...\n");
@@ -317,7 +321,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 
 	ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, out_copy_stream_id,
 										block_output -> X,
-										(saved_activations -> x_2)[0], 
+										(working_activations -> x_2)[0], 
 										block_out_size);
 
 	if (ret){
@@ -348,8 +352,6 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
     // Get dimensions from embedding config
     int vocab_size = (transformer_head -> embedding_config) -> vocab_size;
     int embedding_size = (transformer_head -> embedding_config) -> embedding_size;
-
-	Seq_Batch_Config * batch_config = block_input -> batch_config;
 
     // RMS Normalization
     ret = dataflow_submit_default_rms_norm(dataflow_handle, compute_stream_id,
@@ -386,7 +388,7 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
                        head_activations -> head_norm_out,      // B[num_tokens, embedding_size] in row-major
                        NULL,
                        head_activations -> head_out,    // C[num_tokens, vocab_size] in row-major
-                       head_activations -> kernel_workspaceBytes, head_activations -> kernel_workspace);  // No workspace needed
+                       head_activations -> kernelWorkspaceBytes, head_activations -> kernelWorkspace);  // No workspace needed
     if (ret) {
         fprintf(stderr, "Error: Failed to submit output projection in transformer head...\n");
         return ret;
@@ -411,6 +413,15 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
 		return 0;
 	}
 	
+	Seq_Batch * seq_batch = block_input -> seq_batch;
+
+	if (seq_batch -> loss_config.num_tokens_to_predict == 0){
+		return 0;
+	}
+
+
+
+
 	// STARTING BACKPROP HERE!
 
 	// compute cross entropy loss
@@ -423,7 +434,7 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
                                   head_activations -> num_tokens,  // Number of rows (tokens)
                                   vocab_size,                      // Number of columns (vocab size)
                                   model_output -> logits,         // Predicted logits
-                                  batch_config -> labels,
+                                  (seq_batch -> loss_config).labels,
 								  model_output -> loss);        // Ground truth labels
     if (ret) {
         fprintf(stderr, "Error: Failed to submit cross entropy loss in transformer head backward...\n");
@@ -453,7 +464,7 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
                        transformer_head -> w_head,      // w_head[embedding_size, vocab_size] in col-major
                        NULL,
                        grad_head_activations -> head_norm_out, // dx_temp[num_tokens, embedding_size] in row-major
-                       grad_head_activations -> kernel_workspaceBytes, grad_head_activations -> kernel_workspace);  // No workspace needed
+                       grad_head_activations -> kernelWorkspaceBytes, grad_head_activations -> kernelWorkspace);  // No workspace needed
     if (ret) {
         fprintf(stderr, "Error: Failed to submit bwd x head matmul in transformer head...\n");
         return ret;
@@ -479,7 +490,7 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
                        grad_head_activations -> head_out,    // Gradient of output [num_tokens, vocab_size]
                        grad_transformer_head -> w_head,      // Previous gradient
                        grad_transformer_head -> w_head,      // Output gradient
-                       grad_head_activations -> kernel_workspaceBytes, grad_head_activations -> kernel_workspace);                            // No workspace needed
+                       grad_head_activations -> kernelWorkspaceBytes, grad_head_activations -> 	kernelWorkspace);
     if (ret) {
         fprintf(stderr, "Error: Failed to submit output bwd weight gradient computation in transformer head...\n");
         return ret;
@@ -560,33 +571,45 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
 int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int compute_stream_id, int out_copy_stream_id,
 								Transformer_Block * transformer_block, 
 								Transformer_Block_Transition * inp_grad_stream, 
-								Transformer_Block_Activations * activations, Transformer_Block_Transition * fwd_block_input,
+								Seq_Batch_Saved_Activations * fwd_activations, Seq_Batch_Context * fwd_context,
+								Transformer_Block_Transition * fwd_block_input,
 								Transformer_Block_Activations * grad_activations,
 								Transformer_Block * grad_weights, // for the norm weights while using streaming grad
 								Transformer_Block_Transition * out_grad_stream) {
 
+	
 	int ret;
-	DataflowDatatype bwd_dt = (transformer_block -> config).block_dt;
-	DataflowDatatype compute_dt = (transformer_block -> config).compute_dt;
-	Seq_Batch_Config * batch_config = grad_activations -> batch_config;
 
-    int num_seqs = batch_config->num_seqs;
-    int total_q = batch_config->total_q;
-    int total_k = batch_config->total_k;
-	
-	int model_dim = (transformer_block -> config).model_dim;
-	int kv_dim = (transformer_block -> config).kv_dim;
-	int ffn_dim = (transformer_block -> config).ffn_dim;
-	
-	Seq_Batch_Activation_Workspace * bwd_activation_workspace = grad_activations -> activation_workspace;
+	Transformer_Block_Config * fwd_block_config = &(transformer_block -> config);
+    DataflowDatatype fwd_dt = fwd_block_config -> block_dt;
 
-	Seq_Batch_Saved_Activations * fwd_activations = activations -> saved_activations;
-	Seq_Batch_Context * fwd_context = activations -> context;
-	Seq_Batch_Saved_Activations * bwd_activations = grad_activations -> saved_activations;
-	Seq_Batch_Context * bwd_context = grad_activations -> context;
+	Transformer_Block_Config * bwd_block_config = &(grad_weights -> config);
+	DataflowDatatype bwd_dt = bwd_block_config -> block_dt;
+	DataflowDatatype compute_dt = bwd_block_config -> compute_dt;
+
+	int model_dim = bwd_block_config -> model_dim;
+    int kv_dim = bwd_block_config -> kv_dim;
+    int ffn_dim = bwd_block_config -> ffn_dim;
+
+	size_t x_el_size = dataflow_sizeof_element(fwd_dt);
+
+	   
+	Seq_Batch * seq_batch = grad_activations -> seq_batch;
+	Seq_Batch_Attention_Config * batch_attention_config = &(seq_batch -> attention_config);
+    int num_seqs = batch_attention_config -> num_seqs;
+    int total_q = batch_attention_config -> total_q;
+    int total_k = batch_attention_config -> total_k;
+ 
+
+	Seq_Batch_Saved_Activations * working_activations = grad_activations -> working_activations;
+	Seq_Batch_Activation_Workspace * activation_workspace = grad_activations -> activation_workspace;
+
+	uint64_t kernelWorkspaceBytes = grad_activations -> kernelWorkspaceBytes;
+    void * kernelWorkspace = grad_activations -> kernelWorkspace;
+
+	// context gradients being accumulated
+	Seq_Batch_Context * bwd_context = grad_activations -> seq_batch -> context;
 	
-	uint64_t kernel_workspaceBytes = bwd_activation_workspace -> kernel_workspaceBytes;
-	void * kernel_workspace = bwd_activation_workspace -> kernel_workspace;
 
 	int to_transa = 0;
 	int to_transb = 0;
@@ -603,8 +626,8 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 					to_transa, to_transb,
 					ffn_dim, model_dim, total_q,  // M = ffn_dim, K = model_dim, N = num_tokens
 					1.0, 0.0,
-					transformer_block -> w_2[0], inp_grad_stream -> X, NULL, bwd_activation_workspace -> x_temp_mlp,
-					kernel_workspaceBytes, kernel_workspace);
+					transformer_block -> w_2[0], inp_grad_stream -> X, NULL, activation_workspace -> x_temp_mlp,
+					kernelWorkspaceBytes, kernelWorkspace);
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit w2 backward matmul...\n");
 		return -1;
@@ -615,8 +638,8 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 						bwd_dt, bwd_dt,
 						total_q, ffn_dim,
 						fwd_activations -> x_1[0], fwd_activations -> x_3[0],
-						bwd_activation_workspace -> x_temp_mlp,
-						bwd_activations -> x_1[0], bwd_activations -> x_3[0]);
+						activation_workspace -> x_temp_mlp,
+						working_activations -> x_1[0], working_activations -> x_3[0]);
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit swiglu backward...\n");
 		return -1;
@@ -634,8 +657,8 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 					to_transa, to_transb,
 					model_dim, ffn_dim, total_q,  // M = model_dim, K = ffn_dim, N = num_tokens
 					1.0, 0.0,
-					transformer_block -> w_1[0], bwd_activations -> x_1[0], NULL, bwd_activation_workspace -> x_temp,
-					kernel_workspaceBytes, kernel_workspace);
+					transformer_block -> w_1[0], working_activations -> x_1[0], NULL, activation_workspace -> x_temp,
+					kernelWorkspaceBytes, kernelWorkspace);
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit w1 backward matmul...\n");
 		return -1;
@@ -647,8 +670,8 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 					to_transa, to_transb,
 					model_dim, ffn_dim, total_q,  // M = model_dim, K = ffn_dim, N = num_tokens
 					1.0, 1.0,  // Add to previous gradient
-					transformer_block -> w_3[0], bwd_activations -> x_3[0], NULL, bwd_activation_workspace -> x_temp,
-					kernel_workspaceBytes, kernel_workspace);
+					transformer_block -> w_3[0], working_activations -> x_3[0], NULL, activation_workspace -> x_temp,
+					kernelWorkspaceBytes, kernelWorkspace);
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit w3 backward matmul...\n");
 		return -1;
@@ -662,7 +685,7 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 							fwd_activations -> ffn_norm_rms_vals,
 							transformer_block -> w_ffn_norm,
 							fwd_activations -> x_o,  // Input to norm
-							bwd_activation_workspace -> x_temp,  // Upstream gradient
+							activation_workspace -> x_temp,  // Upstream gradient
 							inp_grad_stream -> X);                    // Final output gradient
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit ffn norm backward...\n");
@@ -675,7 +698,7 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 								total_q, model_dim, (transformer_block -> config).eps,
 								fwd_activations -> ffn_norm_rms_vals,
 								fwd_activations -> x_o,
-								bwd_activation_workspace -> x_temp,
+								activation_workspace -> x_temp,
 								grad_weights -> w_ffn_norm);
 	if (ret){
 		fprintf(stderr, "Error: failed to submit ffn norm weight gradient computation during bwd_x...\n");
@@ -694,8 +717,8 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 					to_transa, to_transb,
 					model_dim, model_dim, total_q,  // M = model_dim, K = model_dim, N = num_tokens
 					1.0, 0.0,
-					transformer_block -> w_o, bwd_activations -> x_o, NULL, bwd_activation_workspace -> x_temp,
-					kernel_workspaceBytes, kernel_workspace);
+					transformer_block -> w_o, working_activations -> x_o, NULL, activation_workspace -> x_temp,
+					kernelWorkspaceBytes, kernelWorkspace);
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit attention output backward matmul...\n");
 		return -1;
@@ -704,7 +727,7 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 
 	// ensure workspace is zerod out beforehand....
 
-	ret = (dataflow_handle -> set_mem)(dataflow_handle, compute_stream_id, kernel_workspace, 0, kernel_workspaceBytes);
+	ret = (dataflow_handle -> set_mem)(dataflow_handle, compute_stream_id, kernelWorkspace, 0, kernelWorkspaceBytes);
 	if (ret){
 		fprintf(stderr, "Error: unable to set attention workspace mem to 0 before submitting...\n");
 		return -1;
@@ -714,12 +737,12 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 	ret = dataflow_submit_attention_bwd(dataflow_handle, compute_stream_id,
 							bwd_dt,
 							num_seqs, total_q, total_k,
-							batch_config -> q_seq_offsets,
-							batch_config -> q_seq_lens,
-							batch_config -> max_seqlen_q,
-							batch_config -> k_seq_offsets,
-							batch_config -> k_seq_lens,
-							batch_config -> max_seqlen_k,
+							batch_attention_config -> q_seq_offsets,
+							batch_attention_config -> q_seq_lens,
+							batch_attention_config -> max_seqlen_q,
+							batch_attention_config -> k_seq_offsets,
+							batch_attention_config -> k_seq_lens,
+							batch_attention_config -> max_seqlen_k,
 							(transformer_block -> config).num_q_heads,
 							(transformer_block -> config).num_kv_heads,
 							(transformer_block -> config).head_dim,
@@ -728,17 +751,17 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 							fwd_context -> x_v,  // V input (full context input values)
 							fwd_activations -> x_attn_out,     // Attention output
 							fwd_activations -> softmax_lse,// Softmax scaling factors
-							bwd_activation_workspace -> x_temp,// Upstream gradient
-							bwd_activations -> x_q,   // dQ output
+							activation_workspace -> x_temp,// Upstream gradient
+							working_activations -> x_q,   // dQ output
 							bwd_context -> x_k,  // dK output (full context key grads)
 							bwd_context -> x_v, // dV output (full context grads)
-							kernel_workspaceBytes, kernel_workspace);
+							kernelWorkspaceBytes, kernelWorkspace);
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit attention backward...\n");
 		return -1;
 	}
 
-	// Now bwd_activations -> x_k_locat should be pointer within bwd_context -> x_k
+	// Now workng_activations -> x_k_locat should be pointer within bwd_context -> x_k
 	// with the correct accumulated gradients...
 
 	// 8. Backprop through RoPE
@@ -749,9 +772,9 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 						(transformer_block -> config).head_dim,
 						(transformer_block -> config).num_kv_heads,
 						(transformer_block -> config).theta,
-						batch_config -> seq_positions,
-						bwd_activations -> x_q,
-						bwd_activations -> x_k_local);
+						batch_attention_config -> seq_positions,
+						working_activations -> x_q,
+						working_activations -> x_k_local);
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit rope backward...\n");
 		return -1;
@@ -770,8 +793,8 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 					to_transa, to_transb,
 					model_dim, model_dim, total_q,  // M = model_dim, K = model_dim, N = num_tokens
 					1.0, 0.0,
-					transformer_block -> w_q, bwd_activations -> x_q, NULL, bwd_activation_workspace -> x_temp,
-					kernel_workspaceBytes, kernel_workspace);
+					transformer_block -> w_q, working_activations -> x_q, NULL, activation_workspace -> x_temp,
+					kernelWorkspaceBytes, kernelWorkspace);
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit Q projection backward matmul...\n");
 		return -1;
@@ -789,8 +812,8 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 					to_transa, to_transb,
 					model_dim, kv_dim, total_q,  // M = model_dim, K = kv_dim, N = num_tokens
 					1.0, 1.0,  // Add to previous gradient
-					transformer_block -> w_k, bwd_activations -> x_k_local, NULL, bwd_activation_workspace -> x_temp,
-					kernel_workspaceBytes, kernel_workspace);
+					transformer_block -> w_k, working_activations -> x_k_local, NULL, activation_workspace -> x_temp,
+					kernelWorkspaceBytes, kernelWorkspace);
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit K projection backward matmul...\n");
 		return -1;
@@ -802,8 +825,8 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 					to_transa, to_transb,
 					model_dim, kv_dim, total_q,  // M = model_dim, K = kv_dim, N = num_tokens
 					1.0, 1.0,  // Add to previous gradient
-					transformer_block -> w_v, bwd_activations -> x_v_local, NULL, bwd_activation_workspace -> x_temp,
-					kernel_workspaceBytes, kernel_workspace);
+					transformer_block -> w_v, working_activations -> x_v_local, NULL, activation_workspace -> x_temp,
+					kernelWorkspaceBytes, kernelWorkspace);
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit V projection backward matmul...\n");
 		return -1;
@@ -817,7 +840,7 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 							fwd_activations -> attn_norm_rms_vals,
 							transformer_block -> w_attn_norm,
 							fwd_block_input -> X,  // Input to norm
-							bwd_activation_workspace -> x_temp,  // Upstream gradient
+							activation_workspace -> x_temp,  // Upstream gradient
 							inp_grad_stream -> X);                    // Final output gradient
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit attention norm backward...\n");
@@ -830,7 +853,7 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 								total_q, model_dim, (transformer_block -> config).eps,
 								fwd_activations -> attn_norm_rms_vals,
 								fwd_block_input -> X,
-								bwd_activation_workspace -> x_temp,
+								activation_workspace -> x_temp,
 								grad_weights -> w_attn_norm);
 	if (ret){
 		fprintf(stderr, "Error: failed to submit attention norm weight gradient computation during bwd_w...\n");
@@ -840,13 +863,16 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 	// while we still the layer weights, recompute the RMS norms 
 	// needed to do bwd_w computations...
 
+	// before call to this bwd_x function, we should have already bound
+	// more (temporary) device memory to working_activations to account for recomputed RMS norms...
+
 	// recompute attn norm
 	ret = dataflow_submit_default_rms_norm(dataflow_handle, compute_stream_id,
 							bwd_dt, 
 							total_q, model_dim, (transformer_block -> config).eps,
 							transformer_block -> w_attn_norm,
 							fwd_block_input -> X,
-							bwd_activation_workspace -> recomputed_attn_norm,
+							working_activations -> recomputed_attn_norm,
 							NULL, NULL);
 	if (!ret){
 		fprintf(stderr, "Error: failed to submit recompute attn norm...\n");
@@ -859,12 +885,14 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 							total_q, model_dim, (transformer_block -> config).eps,
 							transformer_block -> w_ffn_norm,
 							fwd_activations -> x_o,
-							bwd_activation_workspace -> recomputed_ffn_norm,
+							working_activations -> recomputed_ffn_norm,
 							NULL, NULL);
 	if (!ret){
 		fprintf(stderr, "Error: failed to submit recompute ffn norm...\n");
 		return -1;
 	}
+
+	// now all gradients should be computed and saved within grad_activations -> working_activations...!!!
 
 	if (out_grad_stream){
 
@@ -887,7 +915,7 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 
 int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int compute_stream_id,
                                 Transformer_Block_Transition * grad_stream,
-                                Transformer_Block_Activations * activations, 
+                                Seq_Batch_Saved_Activations * fwd_activations, 
                                 Transformer_Block_Activations * grad_activations, 
                                 Transformer_Block * grad_weights) {
     
@@ -898,22 +926,22 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
 
     DataflowDatatype compute_dt = (grad_weights -> config).compute_dt;
 
-    Seq_Batch_Config * batch_config = activations -> batch_config;
-    int num_seqs = batch_config->num_seqs;
-    int total_q = batch_config->total_q;
-    int total_k = batch_config->total_k;
+    Seq_Batch * seq_batch = grad_stream -> seq_batch;
+
+	Seq_Batch_Attention_Config * batch_attention_config = &(seq_batch -> attention_config);
+    int num_seqs = seq_batch -> attention_config.num_seqs;
+    int total_q = seq_batch -> attention_config.total_q;
+    int total_k = seq_batch -> attention_config.total_k;
     
     int model_dim = (grad_weights -> config).model_dim;
     int kv_dim = (grad_weights -> config).kv_dim;
     int ffn_dim = (grad_weights -> config).ffn_dim;
     
-
-    Seq_Batch_Saved_Activations * fwd_activations = activations -> saved_activations;
-    Seq_Batch_Saved_Activations * bwd_activations = grad_activations -> saved_activations;
-	Seq_Batch_Activation_Workspace * bwd_activation_workspace = grad_activations -> activation_workspace;
+    Seq_Batch_Saved_Activations * bwd_activations = grad_activations -> working_activations;
+	Seq_Batch_Activation_Workspace * activation_workspace = grad_activations -> activation_workspace;
     
-    uint64_t kernel_workspaceBytes = bwd_activation_workspace -> kernel_workspaceBytes;
-    void * kernel_workspace = bwd_activation_workspace -> kernel_workspace;
+    uint64_t kernelWorkspaceBytes = grad_activations -> kernelWorkspaceBytes;
+    void * kernelWorkspace = grad_activations -> kernelWorkspace;
 
     int to_transa = 1;
     int to_transb = 0;
@@ -923,7 +951,7 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
 						fwd_dt,
 						total_q, ffn_dim,
 						fwd_activations -> x_1[0], fwd_activations -> x_3[0],
-						bwd_activation_workspace -> x_temp_mlp);
+						activation_workspace -> x_temp_mlp);
 	if (ret){
 		fprintf(stderr, "Error: failed to submit swiglu when recomputing for w2 grad....\n");
 		return -1;
@@ -937,8 +965,8 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
                     to_transa, to_transb,
                     ffn_dim, model_dim, total_q,
                     1.0, 1.0,  // Accumulate gradients
-                    grad_stream -> X, bwd_activation_workspace -> x_temp_mlp, (grad_weights -> w_2)[0], (grad_weights -> w_2)[0],
-                    kernel_workspaceBytes, kernel_workspace);
+                    grad_stream -> X, activation_workspace -> x_temp_mlp, (grad_weights -> w_2)[0], (grad_weights -> w_2)[0],
+                    kernelWorkspaceBytes, kernelWorkspace);
     if (ret) {
         fprintf(stderr, "Error: failed to submit w2 weight gradient computation...\n");
         return -1;
@@ -951,8 +979,8 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
                     to_transa, to_transb,
                     ffn_dim, model_dim, total_q,
                     1.0, 1.0,  // Accumulate gradients
-                    (bwd_activations -> x_1)[0], bwd_activation_workspace -> recomputed_ffn_norm, (grad_weights -> w_1)[0], (grad_weights -> w_1)[0],
-                    kernel_workspaceBytes, kernel_workspace);
+                    (bwd_activations -> x_1)[0], bwd_activations -> recomputed_ffn_norm, (grad_weights -> w_1)[0], (grad_weights -> w_1)[0],
+                    kernelWorkspaceBytes, kernelWorkspace);
     if (ret) {
         fprintf(stderr, "Error: failed to submit w1 weight gradient computation...\n");
         return -1;
@@ -964,8 +992,8 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
                     to_transa, to_transb,
                     ffn_dim, model_dim, total_q,
                     1.0, 1.0,  // Accumulate gradients
-                    (bwd_activations -> x_3)[0], bwd_activation_workspace -> recomputed_ffn_norm, (grad_weights -> w_3)[0], (grad_weights -> w_3)[0],
-                    kernel_workspaceBytes, kernel_workspace);
+                    (bwd_activations -> x_3)[0], bwd_activations -> recomputed_ffn_norm, (grad_weights -> w_3)[0], (grad_weights -> w_3)[0],
+                    kernelWorkspaceBytes, kernelWorkspace);
     if (ret) {
         fprintf(stderr, "Error: failed to submit w3 weight gradient computation...\n");
         return -1;
@@ -981,7 +1009,7 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
                     model_dim, model_dim, total_q,
                     1.0, 1.0,  // Accumulate gradients
                     bwd_activations -> x_o, fwd_activations -> x_attn_out, grad_weights -> w_o, grad_weights -> w_o,
-                    kernel_workspaceBytes, kernel_workspace);
+                    kernelWorkspaceBytes, kernelWorkspace);
     if (ret) {
         fprintf(stderr, "Error: failed to submit attention output weight gradient computation...\n");
         return -1;
@@ -995,8 +1023,8 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
                     to_transa, to_transb,
                     kv_dim, model_dim, total_q,
                     1.0, 1.0,  // Accumulate gradients
-                    bwd_activations -> x_v_local, bwd_activation_workspace -> recomputed_ffn_norm, grad_weights -> w_v, grad_weights -> w_v,
-                    kernel_workspaceBytes, kernel_workspace);
+                    bwd_activations -> x_v_local, bwd_activations -> recomputed_attn_norm, grad_weights -> w_v, grad_weights -> w_v,
+                    kernelWorkspaceBytes, kernelWorkspace);
     if (ret) {
         fprintf(stderr, "Error: failed to submit V projection weight gradient computation...\n");
         return -1;
@@ -1008,8 +1036,8 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
                     to_transa, to_transb,
                     kv_dim, model_dim, total_q,
                     1.0, 1.0,  // Accumulate gradients
-                    bwd_activations -> x_k_local, bwd_activation_workspace -> recomputed_attn_norm, grad_weights -> w_k, grad_weights -> w_k,
-                    kernel_workspaceBytes, kernel_workspace);
+                    bwd_activations -> x_k_local, bwd_activations -> recomputed_attn_norm, grad_weights -> w_k, grad_weights -> w_k,
+                    kernelWorkspaceBytes, kernelWorkspace);
     if (ret) {
         fprintf(stderr, "Error: failed to submit K projection weight gradient computation...\n");
         return -1;
@@ -1022,8 +1050,8 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
                     to_transa, to_transb,
                     model_dim, model_dim, total_q,
                     1.0, 1.0,  // Accumulate gradients
-                    bwd_activations -> x_q, bwd_activation_workspace -> recomputed_ffn_norm, grad_weights -> w_q, grad_weights -> w_q,
-                    kernel_workspaceBytes, kernel_workspace);
+                    bwd_activations -> x_q, bwd_activations -> recomputed_attn_norm, grad_weights -> w_q, grad_weights -> w_q,
+                    kernelWorkspaceBytes, kernelWorkspace);
     if (ret) {
         fprintf(stderr, "Error: failed to submit Q projection weight gradient computation...\n");
         return -1;
@@ -1042,19 +1070,20 @@ int dataflow_submit_transformer_embedding_bwd_w(Dataflow_Handle * dataflow_handl
 
 		int ret;
 
-		Seq_Batch_Config * batch_config = grad_stream -> batch_config;
+		Seq_Batch * seq_batch = grad_stream -> seq_batch;
 
-		int num_unique_tokens = batch_config -> num_unique_tokens;
+		Embedding_Config * embedding_table_config = grad_embedding_table -> config;
 
-		Embedding_Config * embedding_config = grad_embedding_table -> config;
+		int embedding_dim = embedding_table_config -> embedding_size;
 
-		int embedding_dim = embedding_config -> embedding_size;
+		Seq_Batch_Embedding_Config * batch_embedding_config = &(seq_batch -> embedding_config);
 
-		DataflowDatatype embed_dt = embedding_config -> embed_dt;
+		DataflowDatatype embed_dt = embedding_table_config -> embed_dt;
 
-		uint32_t * sorted_token_ids = batch_config -> sorted_token_ids;
-		uint32_t * sorted_token_mapping = batch_config -> sorted_token_mapping;
-		uint32_t * unique_token_sorted_inds_start = batch_config -> unique_token_sorted_inds_start;
+		int num_unique_tokens = batch_embedding_config -> num_unique_tokens;
+		uint32_t * sorted_token_ids = batch_embedding_config -> sorted_token_ids;
+		uint32_t * sorted_token_mapping = batch_embedding_config -> sorted_token_mapping;
+		uint32_t * unique_token_sorted_inds_start = batch_embedding_config -> unique_token_sorted_inds_start;
 
 		ret = dataflow_submit_default_embedding_table(dataflow_handle, compute_stream_id,
 														embed_dt, num_unique_tokens, embedding_dim, 
