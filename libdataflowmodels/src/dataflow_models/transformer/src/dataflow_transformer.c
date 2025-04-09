@@ -449,20 +449,27 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
     // M = fwd_K = embedding_size
     // K = fwd_N = vocab_size
     // N = fwd_M = num_tokens
+
+	// 
+
+
+
+	float grad_avg_scale = 1.0f / ((float)head_activations -> num_tokens);
+
     ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
                        transformer_head -> bwd_dt,
                        transformer_head -> bwd_dt,
                        DATAFLOW_NONE,
                        transformer_head -> bwd_dt,
                        transformer_head -> compute_dt,
-                       0, 0,  // transa=0 for row-major dlogits, transb=0 for col-major weights
-                       embedding_size,                  // m = embedding_size (fwd_K)
-                       head_activations -> num_tokens,  // n = num_tokens (fwd_M)
-                       vocab_size,                      // k = vocab_size (fwd_N)
-                       1.0, 0.0,
+                       0, 0,
+                       embedding_size,
+					   vocab_size, 
+					   head_activations -> num_tokens,
+                       grad_avg_scale, 0.0,
+					   transformer_head -> w_head,     // w_head[embedding_size, vocab_size] in col-major
                        model_output -> logits,         // dlogits[num_tokens, vocab_size] in row-major
-                       transformer_head -> w_head,      // w_head[embedding_size, vocab_size] in col-major
-                       NULL,
+                       NULL,     
                        grad_head_activations -> head_norm_out, // dx_temp[num_tokens, embedding_size] in row-major
                        grad_head_activations -> kernelWorkspaceBytes, grad_head_activations -> kernelWorkspace);  // No workspace needed
     if (ret) {
@@ -477,6 +484,7 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
     // M = embedding_size (rows of dW)
     // K = num_tokens (reduction dim)
     // N = vocab_size (cols of dW)
+
     ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
                        grad_transformer_head -> bwd_dt,
                        grad_transformer_head -> bwd_dt,
@@ -484,10 +492,10 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
                        grad_transformer_head -> bwd_dt,
                        grad_transformer_head -> compute_dt,
                        1, 0,  // transa=1 for X^T, transb=0 for dY
-                       embedding_size, vocab_size, head_activations -> num_tokens,  // M, K, N
-                       1.0, 1.0,  // Accumulate gradients
-                       head_activations -> head_norm_out,           // Input activations [num_tokens, embedding_size]
-                       grad_head_activations -> head_out,    // Gradient of output [num_tokens, vocab_size]
+                       vocab_size, head_activations -> num_tokens, embedding_size,
+                       grad_avg_scale, 1.0,  // Accumulate gradients,
+					   model_output -> logits, // Gradient of output [num_tokens, vocab_size]
+                       head_activations -> head_norm_out,    // Input activations [num_tokens, embedding_size]     
                        grad_transformer_head -> w_head,      // Previous gradient
                        grad_transformer_head -> w_head,      // Output gradient
                        grad_head_activations -> kernelWorkspaceBytes, grad_head_activations -> 	kernelWorkspace);
