@@ -872,7 +872,7 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 							total_q, model_dim, (transformer_block -> config).eps,
 							transformer_block -> w_attn_norm,
 							fwd_block_input -> X,
-							working_activations -> recomputed_attn_norm,
+							working_activations -> recomputed_activations -> recomputed_attn_norm,
 							NULL, NULL);
 	if (!ret){
 		fprintf(stderr, "Error: failed to submit recompute attn norm...\n");
@@ -885,7 +885,7 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 							total_q, model_dim, (transformer_block -> config).eps,
 							transformer_block -> w_ffn_norm,
 							fwd_activations -> x_o,
-							working_activations -> recomputed_ffn_norm,
+							working_activations -> recomputed_activations -> recomputed_ffn_norm,
 							NULL, NULL);
 	if (!ret){
 		fprintf(stderr, "Error: failed to submit recompute ffn norm...\n");
@@ -979,7 +979,7 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
                     to_transa, to_transb,
                     ffn_dim, model_dim, total_q,
                     1.0, 1.0,  // Accumulate gradients
-                    (bwd_activations -> x_1)[0], bwd_activations -> recomputed_ffn_norm, (grad_weights -> w_1)[0], (grad_weights -> w_1)[0],
+                    (bwd_activations -> x_1)[0], bwd_activations -> recomputed_activations -> recomputed_ffn_norm, (grad_weights -> w_1)[0], (grad_weights -> w_1)[0],
                     kernelWorkspaceBytes, kernelWorkspace);
     if (ret) {
         fprintf(stderr, "Error: failed to submit w1 weight gradient computation...\n");
@@ -992,7 +992,7 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
                     to_transa, to_transb,
                     ffn_dim, model_dim, total_q,
                     1.0, 1.0,  // Accumulate gradients
-                    (bwd_activations -> x_3)[0], bwd_activations -> recomputed_ffn_norm, (grad_weights -> w_3)[0], (grad_weights -> w_3)[0],
+                    (bwd_activations -> x_3)[0], bwd_activations -> recomputed_activations -> recomputed_ffn_norm, (grad_weights -> w_3)[0], (grad_weights -> w_3)[0],
                     kernelWorkspaceBytes, kernelWorkspace);
     if (ret) {
         fprintf(stderr, "Error: failed to submit w3 weight gradient computation...\n");
@@ -1023,7 +1023,7 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
                     to_transa, to_transb,
                     kv_dim, model_dim, total_q,
                     1.0, 1.0,  // Accumulate gradients
-                    bwd_activations -> x_v_local, bwd_activations -> recomputed_attn_norm, grad_weights -> w_v, grad_weights -> w_v,
+                    bwd_activations -> x_v_local, bwd_activations -> recomputed_activations -> recomputed_attn_norm, grad_weights -> w_v, grad_weights -> w_v,
                     kernelWorkspaceBytes, kernelWorkspace);
     if (ret) {
         fprintf(stderr, "Error: failed to submit V projection weight gradient computation...\n");
@@ -1036,7 +1036,7 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
                     to_transa, to_transb,
                     kv_dim, model_dim, total_q,
                     1.0, 1.0,  // Accumulate gradients
-                    bwd_activations -> x_k_local, bwd_activations -> recomputed_attn_norm, grad_weights -> w_k, grad_weights -> w_k,
+                    bwd_activations -> x_k_local, bwd_activations -> recomputed_activations -> recomputed_attn_norm, grad_weights -> w_k, grad_weights -> w_k,
                     kernelWorkspaceBytes, kernelWorkspace);
     if (ret) {
         fprintf(stderr, "Error: failed to submit K projection weight gradient computation...\n");
@@ -1050,7 +1050,7 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
                     to_transa, to_transb,
                     model_dim, model_dim, total_q,
                     1.0, 1.0,  // Accumulate gradients
-                    bwd_activations -> x_q, bwd_activations -> recomputed_attn_norm, grad_weights -> w_q, grad_weights -> w_q,
+                    bwd_activations -> x_q, bwd_activations -> recomputed_activations -> recomputed_attn_norm, grad_weights -> w_q, grad_weights -> w_q,
                     kernelWorkspaceBytes, kernelWorkspace);
     if (ret) {
         fprintf(stderr, "Error: failed to submit Q projection weight gradient computation...\n");

@@ -3,8 +3,88 @@
 
 #include "dataflow.h"
 
-
 typedef struct seq_batch Seq_Batch;
+
+
+typedef struct seq_batch_metadata_offsets {
+	
+	// Embedding Stuff
+	uint64_t token_ids;
+	uint64_t sorted_token_ids;
+	uint64_t sorted_token_mapping;
+	uint64_t unique_token_sorted_inds_start;
+
+	// Attention Stuff
+	uint64_t seq_positions;
+	uint64_t q_seq_offsets;
+	uint64_t q_seq_lens;
+	uint64_t k_seq_offsets;
+	uint64_t k_seq_lens;
+
+	// Loss Stuff
+	uint64_t labels;
+
+	uint64_t total_size;
+} Seq_Batch_Metadata_Offsets;
+
+
+typedef struct seq_batch_saved_activations_offsets {
+	uint64_t attn_norm_weighted_sums;
+	uint64_t attn_norm_rms_vals;
+	uint64_t x_q;
+	uint64_t x_k_local;
+	uint64_t x_v_local;
+	uint64_t softmax_lse;
+	uint64_t x_attn_out;
+	uint64_t x_o;
+	uint64_t ffn_norm_weighted_sums;
+	uint64_t ffn_norm_rms_vals;
+
+
+	// MoE specific stuff
+	// the individual partitioning of workspace for each expert
+	// occurs dynamically after the select experts call
+	int max_total_local_expert_tokens;
+	// total number of shared and routed experts
+	// each of these arrays are of size num_local_experts
+	int num_local_experts;
+	int top_k;
+
+
+	// of size num_local_experts
+	uint64_t num_tokens_per_expert;
+
+	// of size total_tokens * top_k
+	uint64_t token_to_experts_mapping;
+	// of size max_total_local_expert_tokens, 
+	// it is dymically paritioned among the experts
+	// using offsets from num_tokens_per_expert
+	// within this parition each value is an index from
+	// original token batch corresponding to row 
+	// within the x_1, x_3, x_2 buffers...
+	uint64_t experts_to_tokens_mapping;
+	
+
+
+
+	// these are of length num_local_experts
+	// if non-moe, these are initialized correctly,
+	// from the first init_seq_batch_offsets call...
+	uint64_t * x_1;
+	uint64_t * x_3;
+	uint64_t * x_2;
+	// if non-moe, takes on same value as x_2[0]...
+	uint64_t x_layer_out;
+
+	uint64_t total_size;
+} Seq_Batch_Saved_Activations_Offsets;
+
+typedef struct seq_batch_recomputed_activations_offsets {
+	uint64_t recomputed_attn_norm;
+	uint64_t recomputed_ffn_norm;
+	uint64_t total_size;
+} Seq_Batch_Recomputed_Activations_Offsets;
+
 typedef struct seq_batch_embedding_config {
 
 	int num_unique_tokens;
@@ -92,6 +172,16 @@ typedef struct seq_batch_loss_config {
 	uint32_t * labels;
 } Seq_Batch_Loss_Config;
 
+typedef struct seq_batch_recomputed_activations {
+	uint64_t recomputedActivationsBufferBytes;
+	void * recomputedActivationsBuffer;
+	// during end of bwd_x (with still access to norm weights) we will populate these with recomputed RMS norms
+    void * recomputed_attn_norm;
+    void * recomputed_ffn_norm;
+
+	uint64_t total_size;
+} Seq_Batch_Recomputed_Activations;
+
 typedef struct seq_batch_saved_activations {
 
 	// the seq_batch this belongs to
@@ -106,8 +196,8 @@ typedef struct seq_batch_saved_activations {
 	uint64_t savedActivationsBufferBytes;
 
 	// used during backprop
-	void * attn_norm_weighted_sums;
-	void * attn_norm_rms_vals;
+	float * attn_norm_weighted_sums;
+	float * attn_norm_rms_vals;
 	void * x_q;
 
 	// These are the outputs of passing
@@ -118,22 +208,38 @@ typedef struct seq_batch_saved_activations {
 	void * x_v_local;
 
 	// softmax_lse
-	void * softmax_lse;
+	float * softmax_lse;
     void * x_attn_out;
 	void * x_o;
 	// used during backprop
-	void * ffn_norm_weighted_sums;
-	void * ffn_norm_rms_vals;
+	float * ffn_norm_weighted_sums;
+	float * ffn_norm_rms_vals;
+
+
+	// MoE specific stuff
+	
+    // if MoE, then this should be sent immediately after the select experts call
+	// (after processing router)
+	// and is needed to dynamically partition the expert workspace
+	// of size num_local_experts
+	int * num_tokens_per_expert;
+
+	// these should also be sent immediately after the select experts call...
+	int * token_to_experts_mapping;
+	// num_tokens_per_expert result determines the boundaries of each expert...
+	int * experts_to_tokens_mapping;
+
+
+
+	// of size num_local_experts
 	void ** x_1;
 	void ** x_2;
 	void ** x_3;
 	void * x_layer_out;
 
-	void * recomputedActivationsBuffer;
-	uint64_t recomputedActivationsBufferBytes;
-    // during end of bwd_x (with still access to norm weights) we will populate these with recomputed RMS norms
-    void * recomputed_attn_norm;
-    void * recomputed_ffn_norm;
+	uint64_t total_size;
+
+	Seq_Batch_Recomputed_Activations * recomputed_activations;
 } Seq_Batch_Saved_Activations;
 
 
@@ -156,10 +262,15 @@ typedef struct seq_batch_context {
 struct seq_batch {
 	
 	int total_tokens;
+	int num_seqs;
+
+	Seq_Batch_Metadata_Offsets metadata_offsets;
+	Seq_Batch_Saved_Activations_Offsets saved_activations_offsets;
+	Seq_Batch_Recomputed_Activations_Offsets recomputed_activations_offsets;
 
 	// the sum of size of device pointers from 
-	void * devConfigBuffer;
-	uint64_t devConfigBufferBytes;
+	void * devMetadataBuffer;
+	uint64_t devMetadataBufferBytes;
 
 	// the embedding config
 	Seq_Batch_Embedding_Config embedding_config;
@@ -204,6 +315,8 @@ typedef struct seq_batch_activation_workspace {
 
 	// used as temporary output buffer during
 	// MLP
+
+	// could have more MoE specific temp buffer stuff here...
 
 	// needs to be total_q * ffn_dim
 	void * x_temp_mlp;

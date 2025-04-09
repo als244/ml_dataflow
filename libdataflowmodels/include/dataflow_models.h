@@ -1,6 +1,8 @@
 #ifndef DATAFLOW_MODELS_H
 #define DATAFLOW_MODELS_H
 
+#include "dataflow.h"
+
 typedef enum dataflow_normalization_type {
 	DATAFLOW_RMSNORM,
 	// not supported yet
@@ -53,6 +55,10 @@ typedef struct moe_config {
 	// model spec
 	int num_global_routed_experts;
 	// number of experts held within the block's model weights
+	// this number includes both shared and routed experts
+	// shared experts start from index 0 and go up to num_shared_experts - 1
+	// routed experts start from index num_shared_experts and go up to 
+	// num_shared_experts + num_global_routed_experts - 1
 	int num_local_experts;
 	// of size num_local_experts (if > 0, else Null)
 	// and contains the expert indices (relative to shared + global experts)

@@ -20,14 +20,17 @@ ALL_LIBS =  -lm -ldl -pthread -L${DATAFLOW_LIB_DIR} -L${CUDA_DATAFLOW_BACKEND_LI
 
 all: test/test_transformer
 
-test/test_transformer: test/test_transformer.c objs/prep_transformer.o objs/dataflow_transformer.o
+test/test_transformer: test/test_transformer.c objs/prep_transformer.o objs/prep_seq_batch.o objs/dataflow_transformer.o
 	${CC} ${CFLAGS} ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
 
 objs/dataflow_transformer.o: src/dataflow_transformer.c
+	${CC} ${CFLAGS} ${ALL_INCLUDES} -c -o $@ $<
+
+objs/prep_seq_batch.o: src/prep_seq_batch.c
 	${CC} ${CFLAGS} ${ALL_INCLUDES} -c -o $@ $<
 
 objs/prep_transformer.o: src/prep_transformer.c
 	${CC} ${CFLAGS} ${ALL_INCLUDES} -c -o $@ $<
 
 clean:
-	rm -f test/test_transformer objs/dataflow_transformer.o objs/prep_transformer.o
+	rm -f test/test_transformer objs/dataflow_transformer.o objs/prep_transformer.o objs/prep_seq_batch.o

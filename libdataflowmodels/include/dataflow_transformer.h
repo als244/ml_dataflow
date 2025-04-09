@@ -1,7 +1,6 @@
 #ifndef DATAFLOW_TRANSFORMER_H
 #define DATAFLOW_TRANSFORMER_H
 
-#include "dataflow.h"
 #include "dataflow_models.h"
 #include "dataflow_ops.h"
 
