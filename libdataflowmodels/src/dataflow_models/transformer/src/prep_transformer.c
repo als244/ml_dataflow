@@ -318,7 +318,7 @@ int bind_transformer_block(void * buffer, Transformer_Block * transformer_block)
 	transformer_block -> w_k = buffer + weight_offsets -> w_k;
 	transformer_block -> w_v = buffer + weight_offsets -> w_v;
 	transformer_block -> w_o = buffer + weight_offsets -> w_o;
-	transformer_block -> w_ffn_norm = buffer + weight_offsets -> w_o;
+	transformer_block -> w_ffn_norm = buffer + weight_offsets -> w_ffn_norm;
 
 	// this will be set to 1 for non-MoE MLP types...
 	int num_local_experts = (transformer_block -> config).moe_config.num_local_experts;
