@@ -235,6 +235,7 @@ uint64_t get_seq_batch_metadata_buffer_size(int num_seqs, int total_tokens) {
     metadata_buffer_size += (total_tokens) * sizeof(int);
     metadata_buffer_size += 2 * (num_seqs + 1) * sizeof(int);
     metadata_buffer_size += 2 * num_seqs * sizeof(int);
+    metadata_buffer_size += (total_tokens + 1) * sizeof(float);
 
     return metadata_buffer_size;
 }
