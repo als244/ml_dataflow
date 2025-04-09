@@ -284,7 +284,7 @@ static int compare_pairs(const void *a, const void *b) {
     return 0;
 }
 
-int populate_seq_batch_metadata_buffer(Dataflow_Handle * dataflow_handle, int preprocess_stream_id, 
+int populate_seq_batch_metadata_buffer(Dataflow_Handle * dataflow_handle, int inbound_stream_id, 
                                         Seq_Batch * seq_batch,
                                         void * sys_registered_metadata_buffer, uint64_t sys_registered_metadata_buffer_size,
                                         int total_tokens, int num_seqs,
@@ -412,7 +412,7 @@ int populate_seq_batch_metadata_buffer(Dataflow_Handle * dataflow_handle, int pr
         }
 
         // now can copy the sys_seq_batch metadata buffer to the device...
-        ret = (dataflow_handle -> submit_inbound_transfer)(dataflow_handle, preprocess_stream_id, 
+        ret = (dataflow_handle -> submit_inbound_transfer)(dataflow_handle, inbound_stream_id, 
                                                             seq_batch -> devMetadataBuffer, sys_seq_batch.devMetadataBuffer, 
                                                             sys_seq_batch.metadata_offsets.total_size);
         if (ret){
