@@ -281,5 +281,23 @@ int main(int argc, char * argv[]){
 
 	printf("Succeeded!\n\nReady for embedding...\n");
 
+
+	// TODO: Embedding...
+
+	// 1. Create Transformer_Embedding_Table: set embedding config, reserve space for embedding table...
+	// 2. load embedding table weights from filesystem...
+	// 3. populate embedding table weights into device memory...
+	// 4. Wrap seq batch in Transformer_Model_Input...
+	// reserve space for Transformer Block Transition (embedding output)...
+
+	
+	/*
+	int dataflow_submit_transformer_embedding(Dataflow_Handle * dataflow_handle, int compute_stream_id,
+											Transformer_Model_Input * model_input,
+											Transformer_Embedding_Table * embedding_table,
+											Transformer_Block_Transition * embedding_output);
+	*/
+
+
 	return 0;
 }
