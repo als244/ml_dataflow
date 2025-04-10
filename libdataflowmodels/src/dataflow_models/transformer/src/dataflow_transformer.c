@@ -117,8 +117,8 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	Seq_Batch_Saved_Activations * working_activations = activations -> working_activations;
 	Seq_Batch_Activation_Workspace * activation_workspace = activations -> activation_workspace;
 
-    uint64_t kernelWorkspaceBytes = activations -> kernelWorkspaceBytes;
-    void * kernelWorkspace = activations -> kernelWorkspace;
+    uint64_t kernelWorkspaceBytes = activation_workspace -> kernelWorkspaceBytes;
+    void * kernelWorkspace = activation_workspace -> kernelWorkspace;
 
 
 	// Assume weights are in col-major format.
@@ -779,7 +779,7 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 	size_t x_el_size = dataflow_sizeof_element(fwd_dt);
 
 	   
-	Seq_Batch * seq_batch = grad_activations -> seq_batch;
+	Seq_Batch * seq_batch = inp_grad_stream -> seq_batch;
 	Seq_Batch_Attention_Config * batch_attention_config = &(seq_batch -> attention_config);
     int num_seqs = batch_attention_config -> num_seqs;
     int total_q = batch_attention_config -> total_q;
@@ -789,11 +789,11 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 	Seq_Batch_Saved_Activations * working_activations = grad_activations -> working_activations;
 	Seq_Batch_Activation_Workspace * activation_workspace = grad_activations -> activation_workspace;
 
-	uint64_t kernelWorkspaceBytes = grad_activations -> kernelWorkspaceBytes;
-    void * kernelWorkspace = grad_activations -> kernelWorkspace;
+	uint64_t kernelWorkspaceBytes = activation_workspace -> kernelWorkspaceBytes;
+    void * kernelWorkspace = activation_workspace -> kernelWorkspace;
 
 	// context gradients being accumulated
-	Seq_Batch_Context * bwd_context = grad_activations -> seq_batch -> context;
+	Seq_Batch_Context * bwd_context = seq_batch -> context;
 	
 
 	int to_transa = 0;
@@ -1125,8 +1125,8 @@ int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int comput
     Seq_Batch_Saved_Activations * bwd_activations = grad_activations -> working_activations;
 	Seq_Batch_Activation_Workspace * activation_workspace = grad_activations -> activation_workspace;
     
-    uint64_t kernelWorkspaceBytes = grad_activations -> kernelWorkspaceBytes;
-    void * kernelWorkspace = grad_activations -> kernelWorkspace;
+    uint64_t kernelWorkspaceBytes = activation_workspace -> kernelWorkspaceBytes;
+    void * kernelWorkspace = activation_workspace -> kernelWorkspace;
 
     int to_transa = 1;
     int to_transb = 0;

@@ -105,8 +105,6 @@ typedef struct transformer_head {
 } Transformer_Head;
 
 typedef struct transformer_block_activations {
-	Transformer_Block * block;
-	Seq_Batch * seq_batch;
 	// this holds pointer on device memory and correct pointers
 	// are bound (size + alignment) during beginning of processing
 	// the device buffers are passed in during binding process
@@ -114,11 +112,6 @@ typedef struct transformer_block_activations {
 	Seq_Batch_Saved_Activations * working_activations;
 	// similar to working_activations, but this is used as a temporary buffer
 	Seq_Batch_Activation_Workspace * activation_workspace;
-	
-	// workspace for attention and matmuls in block...
-	// needs to be zeroed out before attention fwd and bwd...
-	void * kernelWorkspace;
-	uint64_t kernelWorkspaceBytes;
 } Transformer_Block_Activations;
 
 

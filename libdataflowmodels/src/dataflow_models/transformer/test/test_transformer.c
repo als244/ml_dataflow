@@ -641,12 +641,11 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
-	activations -> block = blocks[0];
-	activations -> seq_batch = seq_batch;
+
 	activations -> working_activations = &(saved_activations[0]);
+	activation_workspace -> kernelWorkspace = kernelWorkspace;
+	activation_workspace -> kernelWorkspaceBytes = kernelWorkspaceBytes;
 	activations -> activation_workspace = activation_workspace;
-	activations -> kernelWorkspace = kernelWorkspace;
-	activations -> kernelWorkspaceBytes = kernelWorkspaceBytes;
 	
 	printf("Submitting transformer block...!\n\n");
 	

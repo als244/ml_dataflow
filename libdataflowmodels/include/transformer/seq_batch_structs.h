@@ -309,6 +309,8 @@ struct seq_batch {
 // This can doesn't have to be tied to a seq_batch
 // and can be parameterized based on maximum seq_batch #tokens...
 
+// Can just keep a copy laying around and pass in as needed...
+
 typedef struct seq_batch_activation_workspace {
 	// the buffer for the activation workspace
 	void * activationWorkspaceBuffer;
@@ -325,6 +327,11 @@ typedef struct seq_batch_activation_workspace {
 
 	// needs to be total_q * ffn_dim
 	void * x_temp_mlp;
+
+	// workspace for attention and matmuls in block...
+	// needs to be zeroed out before attention fwd and bwd...
+	void * kernelWorkspace;
+	uint64_t kernelWorkspaceBytes;
 } Seq_Batch_Activation_Workspace;
 
 
