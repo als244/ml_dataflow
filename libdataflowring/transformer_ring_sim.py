@@ -31,7 +31,7 @@ device_opacity = 0.3
 transferDistance = 13
 total_distance = transferDistance
 
-# --- Stall Node Parame	ters ---
+# --- Stall Node Parameters ---
 stall_node_distance_offset = 5.25
 stall_node_radius = 2.5
 stall_node_opacity = 0.4
@@ -72,13 +72,13 @@ do_backward = True
 are_chunks_same_seq = True
 save_grad_activation_in_layer_buffer = True
 
-max_frames = 4800
+max_frames = 4800 # Limit animation length for performance if needed
 
 # --- Speed/Interval Parameters ---
 min_speed_level = 1
 max_speed_level = 100
 min_interval = 1
-max_interval = 80
+max_interval = 100
 initial_speed_level = 50
 
 def calculate_interval(speed_level, s_min, s_max, i_min, i_max):
@@ -120,10 +120,8 @@ COLOR_OUTBOUND_WGT_GRAD = 'lightgreen' # For weight gradient storage
 COLOR_RING_CCW = 'indigo' # Was FWD
 COLOR_RING_CW = 'orange'  # Was BWD
 
-# *** MODIFICATION 1 START ***
 # Use the stall_node_opacity defined earlier directly in the RGBA tuple
 COLOR_STALL_NODE_FILL = (1.0, 0.0, 0.0, stall_node_opacity) # Red with alpha
-# *** MODIFICATION 1 END ***
 
 
 # --- Setup ---
@@ -138,20 +136,20 @@ center_pos = np.array([0, 0])
 # --- Legend Text ---
 legend_text = (
     f"Simulated Configuration:\n\n"
-    f"    - Num Layers: {total_layers}\n"
-    f"    - Num Devices: {N}\n"
-    f"    - Num Chunks: {total_chunks}\n"
-    f"    - Chunks from Same Sequence: {are_chunks_same_seq}\n"
-    f"    - Do Backward: {do_backward}\n"
-    f"        - Store Activation Gradients in Layer Buffer: {save_grad_activation_in_layer_buffer}\n"
-    f"    - Per-Device Layer Capacity: {layer_capacity}\n"
-    f"    - Per-Device Layer Activations Capacity: {activations_capacity}\n"
-    f"    - Per-Device Layer Transitions Capacity: {transitions_capacity}\n"
-    f"    - Constants:\n"
-    f"        - Layer Computation: {computationFrames} Cycles\n"
-    f"        - Layer Transfer: {layerTransferFrames} Cycles\n"
-    f"        - Activation Transfer: {savedActivationsFrames} Cycles\n"
-    f"        - Block Transition: {activationTransitionFrames} Cycles\n"
+    f"     - Num Layers: {total_layers}\n"
+    f"     - Num Devices: {N}\n"
+    f"     - Num Chunks: {total_chunks}\n"
+    f"     - Chunks from Same Sequence: {are_chunks_same_seq}\n"
+    f"     - Do Backward: {do_backward}\n"
+    f"         - Store Activation Gradients in Layer Buffer: {save_grad_activation_in_layer_buffer}\n"
+    f"     - Per-Device Layer Capacity: {layer_capacity}\n"
+    f"     - Per-Device Layer Activations Capacity: {activations_capacity}\n"
+    f"     - Per-Device Layer Transitions Capacity: {transitions_capacity}\n"
+    f"     - Constants:\n"
+    f"         - Layer Computation: {computationFrames} Cycles\n"
+    f"         - Layer Transfer: {layerTransferFrames} Cycles\n"
+    f"         - Activation Transfer: {savedActivationsFrames} Cycles\n"
+    f"         - Block Transition: {activationTransitionFrames} Cycles\n"
 )
 
 at = AnchoredText(legend_text, loc='upper left', bbox_to_anchor=(1.01, 1.01),
@@ -201,7 +199,7 @@ for i in range(N):
     inner_square_side = inner_node_radius * np.sqrt(2)
     inner_square_bottom_left = inner_center - np.array([inner_square_side / 2, inner_square_side / 2])
     inner_square = patches.Rectangle(inner_square_bottom_left, inner_square_side, inner_square_side,
-                                      fc=color, ec='black', alpha=inner_node_opacity, zorder=2)
+                                     fc=color, ec='black', alpha=inner_node_opacity, zorder=2)
     ax.add_patch(inner_square)
     device_artists[f'inner_square_{i}'] = inner_square
     inner_label = ax.text(inner_center[0], inner_center[1], f'D{i} Home', ha='center', va='center', fontsize=6, zorder=3)
@@ -265,9 +263,9 @@ for i in range(N):
     # Keep ring arrows (Device -> Device)
     start_pos_ring = outer_pos
     arrow_ring = patches.FancyArrowPatch(posA=start_pos_ring, posB=start_pos_ring,
-                                        arrowstyle=arrow_style_str, color=COLOR_RING_CCW, linestyle='solid', # Default CCW color
-                                        mutation_scale=mut_scale, lw=edge_linewidth, zorder=1,
-                                        connectionstyle=f"arc3,rad=0.2") # Add curve
+                                         arrowstyle=arrow_style_str, color=COLOR_RING_CCW, linestyle='solid', # Default CCW color
+                                         mutation_scale=mut_scale, lw=edge_linewidth, zorder=1,
+                                         connectionstyle=f"arc3,rad=0.2") # Add curve
     ax.add_patch(arrow_ring)
     label_ring = ax.text(start_pos_ring[0], start_pos_ring[1], "", color=COLOR_RING_CCW, fontsize=edge_label_fontsize, ha='center', va='center', zorder=4) # zorder=4
     edge_artists[f'ring_{i}'] = (arrow_ring, label_ring)
@@ -366,9 +364,9 @@ class Device:
 
         self.next_saved_activations_layer_id = last_fwd_layer_on_device # Last layer whose acts might be saved
         if are_chunks_same_seq:
-             self.next_saved_activations_chunk_id = self.total_chunks - 1
+              self.next_saved_activations_chunk_id = self.total_chunks - 1
         else:
-             self.next_saved_activations_chunk_id = 0
+              self.next_saved_activations_chunk_id = 0
 
         # Backward pass setup
         if do_backward:
@@ -377,12 +375,12 @@ class Device:
             # This device is responsible for the "head gradient" computation if it holds the last layer
             if last_fwd_layer_on_device != -1 and last_fwd_layer_on_device + self.total_devices == total_layers:
                 cur_layer_id = head_layer_conceptual_id
-                 # Add conceptual "head weight" to storage if needed (might represent loss state)
+                # Add conceptual "head weight" to storage if needed (might represent loss state)
                 self.outbound_storage.add((-1, cur_layer_id, False))
                 if are_chunks_same_seq:
                     chunk_order = range(total_chunks - 1, -1, -1)
                 else:
-                     chunk_order = range(total_chunks)
+                      chunk_order = range(total_chunks)
                 # Add "head computation" tasks (generates initial gradient)
                 for i in chunk_order:
                     self.computation_queue.append((i, cur_layer_id, False, False, -1, computationFrames)) # Feeds grad CW
@@ -397,7 +395,7 @@ class Device:
                 if are_chunks_same_seq:
                     chunk_order = range(total_chunks - 1, -1, -1)
                 else:
-                    chunk_order = range(total_chunks)
+                      chunk_order = range(total_chunks)
                 # Bwd Activation Gradient (X) computation tasks
                 for i in chunk_order:
                     self.computation_queue.append((i, cur_layer_id, True, False, -1, computationFrames)) # is_bwd_grad=True, feeds grad CW
@@ -465,8 +463,8 @@ class Device:
                 loc = "Trans"
 
             if TO_PRINT:
-                 item_type = "Grad" if is_grad else "Out"
-                 print(f"T={T}, Dev {self.device_id}: TX PEER {item_type} C{chunk_id},L{layer_id} -> Dev {peer_id} {loc} Idx {rep_ind}.")
+                  item_type = "Grad" if is_grad else "Out"
+                  print(f"T={T}, Dev {self.device_id}: TX PEER {item_type} C{chunk_id},L{layer_id} -> Dev {peer_id} {loc} Idx {rep_ind}.")
 
             self.is_peer_transferring = False
             self.cur_ring_edge = ""
@@ -511,6 +509,7 @@ class Device:
                     self.stall_reason = f"Missing:\nHead Weights\nAct. Stream"
                 elif not has_weight:
                     self.stall_reason = f"Missing:\nHead Weights"
+                    #print(f"HEAD WEIGHTS STALL! CURRENT READY WEIGHTS: {self.cur_ready_weights}")
                 else:
                     self.stall_reason = f"Missing:\nAct. Stream"
         else: # Backward pass dependency checks
@@ -569,10 +568,10 @@ class Device:
                 if TO_PRINT:
                     print(f"T={T}, Dev {self.device_id}: STALL on Task {next_task}")
                     # Optional: More detailed print of missing dependencies
-                    if is_fwd: print(f"    Need Wgt L{lid} (Have: {lid in self.cur_ready_weights}), Need Trans C{cid},L{lid-1} (Have: {(cid, lid - 1, False) in self.cur_ready_transitions})")
-                    elif is_head: print(f"    Need Head Wgt L{lid} (Have: {lid in self.cur_ready_weights}), Need ModelOut C{cid},L{lid-1} (Have: {(cid, lid - 1, False) in self.cur_model_outputs})")
-                    elif bX: print(f"    Need Wgt L{lid} (Have: {lid in self.cur_ready_weights}), Need UpGrad C{cid},L{lid+1} (Have: {(cid, lid + 1, True) in self.cur_ready_transitions})") # Corrected print
-                    elif bW: print(f"    Need ActGrad C{cid},L{lid} (Have: {(cid, lid) in self.cur_ready_grad_activations}), Need FwdAct C{cid},L{lid} (Have: {(cid, lid) in self.cur_fetched_activations})")
+                    if is_fwd: print(f"     Need Wgt L{lid} (Have: {lid in self.cur_ready_weights}), Need Trans C{cid},L{lid-1} (Have: {(cid, lid - 1, False) in self.cur_ready_transitions})")
+                    elif is_head: print(f"     Need Head Wgt L{lid} (Have: {lid in self.cur_ready_weights}), Need ModelOut C{cid},L{lid-1} (Have: {(cid, lid - 1, False) in self.cur_model_outputs})")
+                    elif bX: print(f"     Need Wgt L{lid} (Have: {lid in self.cur_ready_weights}), Need UpGrad C{cid},L{lid+1} (Have: {(cid, lid + 1, True) in self.cur_ready_transitions})") # Corrected print
+                    elif bW: print(f"     Need ActGrad C{cid},L{lid} (Have: {(cid, lid) in self.cur_ready_grad_activations}), Need FwdAct C{cid},L{lid} (Have: {(cid, lid) in self.cur_fetched_activations})")
 
         return has_deps
 
@@ -637,7 +636,7 @@ class Device:
                 if current_val_at_idx != wgt_needed and current_val_at_idx != -2:
                      # Check if the needed weight exists in persistent storage
                     if (-1, wgt_needed, False) in self.outbound_storage:
-                         # Queue the inbound fetch request
+                        # Queue the inbound fetch request
                         self.inbound_queue.append((-1, wgt_needed, False, idx_to_replace, layerTransferFrames))
                         self.cur_ready_weights[idx_to_replace] = -2 # Mark as fetch in progress
 
@@ -685,14 +684,14 @@ class Device:
                 # Send activation outbound unless it's the last one AND we save locally
                 if not is_last_fwd_for_bwd_save or not save_grad_activation_in_layer_buffer:
                     self.outbound_queue.append((cid, lid, False, savedActivationsFrames))
-                    # if TO_PRINT: print(f"     -> Q Out Act {cid},{lid}")
+                    # if TO_PRINT: print(f"      -> Q Out Act {cid},{lid}")
 
                 # Save activation locally if it's the last one AND configured to do so
                 if is_last_fwd_for_bwd_save and save_grad_activation_in_layer_buffer:
                     idx = self.cur_fetched_activations_replace_ind
                     self.cur_fetched_activations[idx] = (cid, lid)
                     self.cur_fetched_activations_replace_ind = (idx - 1 + self.total_chunks) % self.total_chunks
-                    # if TO_PRINT: print(f"     -> Store local Act {cid},{lid} -> Idx {idx}")
+                    # if TO_PRINT: print(f"      -> Store local Act {cid},{lid} -> Idx {idx}")
 
                 # Queue peer transfer (CCW)
                 target_peer_id = (self.device_id + tdir) % self.total_devices # tdir is +1 for Fwd
@@ -702,12 +701,12 @@ class Device:
                     idx = all_devices[target_peer_id].cur_model_outputs_replace_ind
                     self.peer_transfer_queue.append((target_peer_id, cid, lid, False, idx, activationTransitionFrames))
                     all_devices[target_peer_id].cur_model_outputs_replace_ind = (idx + 1) % all_devices[target_peer_id].total_chunks # Advance peer's index
-                    # if TO_PRINT: print(f"     -> Q Peer Out {cid},{lid} -> Dev{target_peer_id} HeadIn Idx {idx}")
+                    # if TO_PRINT: print(f"      -> Q Peer Out {cid},{lid} -> Dev{target_peer_id} HeadIn Idx {idx}")
                 else: # Send to peer's transition buffer
                     idx = all_devices[target_peer_id].cur_transitions_replace_ind
                     self.peer_transfer_queue.append((target_peer_id, cid, lid, False, idx, activationTransitionFrames))
                     all_devices[target_peer_id].cur_transitions_replace_ind = (idx + 1) % all_devices[target_peer_id].transitions_capacity # Advance peer's index
-                    # if TO_PRINT: print(f"     -> Q Peer Out {cid},{lid} -> Dev{target_peer_id} Trans Idx {idx}")
+                    # if TO_PRINT: print(f"      -> Q Peer Out {cid},{lid} -> Dev{target_peer_id} Trans Idx {idx}")
 
             elif is_head: # --- Conceptual Head Task Completion ---
                 # Generates initial gradient, send it via peer transfer (CW)
@@ -716,7 +715,7 @@ class Device:
                 # Send gradient (is_grad=True) to peer's transition buffer
                 self.peer_transfer_queue.append((target_peer_id, cid, lid, True, idx, activationTransitionFrames))
                 all_devices[target_peer_id].cur_transitions_replace_ind = (idx + 1) % all_devices[target_peer_id].transitions_capacity # Advance peer's index
-                # if TO_PRINT: print(f"     -> Q Peer Grad(H) {cid},{lid} -> Dev{target_peer_id} Trans Idx {idx}")
+                # if TO_PRINT: print(f"      -> Q Peer Grad(H) {cid},{lid} -> Dev{target_peer_id} Trans Idx {idx}")
 
             else: # --- Backward Pass Task Completion ---
                 if bX: # --- Bwd Activation Gradient Task ---
@@ -724,14 +723,14 @@ class Device:
                     idx = self.cur_grad_activations_replace_ind
                     self.cur_ready_grad_activations[idx] = (cid, lid)
                     self.cur_grad_activations_replace_ind = (idx - 1 + self.grad_activations_capacity) % self.grad_activations_capacity
-                    # if TO_PRINT: print(f"     -> Store ActGrad {cid},{lid} -> Idx {idx}")
+                    # if TO_PRINT: print(f"      -> Store ActGrad {cid},{lid} -> Idx {idx}")
 
                     # Send gradient via peer transfer (CW) to the next device in the sequence
                     target_peer_id = (self.device_id + tdir) % self.total_devices # tdir is -1 for bX
                     idx = all_devices[target_peer_id].cur_transitions_replace_ind
                     self.peer_transfer_queue.append((target_peer_id, cid, lid, True, idx, activationTransitionFrames))
                     all_devices[target_peer_id].cur_transitions_replace_ind = (idx + 1) % all_devices[target_peer_id].transitions_capacity # Advance peer's index
-                    # if TO_PRINT: print(f"     -> Q Peer Grad(X) {cid},{lid} -> Dev{target_peer_id} Trans Idx {idx}")
+                    # if TO_PRINT: print(f"      -> Q Peer Grad(X) {cid},{lid} -> Dev{target_peer_id} Trans Idx {idx}")
 
                 elif bW: # --- Bwd Weight Gradient Task ---
                     # Check if this is the last chunk for this weight gradient accumulation
@@ -739,12 +738,12 @@ class Device:
                     if are_chunks_same_seq and cid == 0:
                         is_last_chunk_for_wgrad = True
                     elif not are_chunks_same_seq and cid == self.total_chunks - 1:
-                         is_last_chunk_for_wgrad = True
+                          is_last_chunk_for_wgrad = True
 
                     # If last chunk, queue outbound transfer for the accumulated weight gradient
                     if is_last_chunk_for_wgrad:
                         self.outbound_queue.append((-1, lid, True, layerTransferFrames)) # chunk_id=-1, is_grad=True
-                        # if TO_PRINT: print(f"     -> Q Out WgtGrad L{lid}")
+                        # if TO_PRINT: print(f"      -> Q Out WgtGrad L{lid}")
                     # else: Accumulation continues, do nothing specific here
 
             # --- Prefetching Logic ---
@@ -762,7 +761,7 @@ class Device:
                     if needs_fetch and (-1, self.next_weight_layer_id, False) in self.outbound_storage:
                         self.inbound_queue.append((-1, self.next_weight_layer_id, False, target_idx, layerTransferFrames))
                         self.cur_ready_weights[target_idx] = -2 # Mark as fetching
-                        # if TO_PRINT: print(f"     -> Q FWD Fetch Wgt L{self.next_weight_layer_id} -> Idx {target_idx}")
+                        # if TO_PRINT: print(f"      -> Q FWD Fetch Wgt L{self.next_weight_layer_id} -> Idx {target_idx}")
 
                     # Advance to next weight layer ID and replacement index
                     next_potential_layer_id = self.next_weight_layer_id + self.total_devices
@@ -779,9 +778,9 @@ class Device:
                         # Reset BWD weight replacement index (start replacing from index before current target_idx)
                         self.cur_weight_replace_ind = (target_idx -1 + self.layer_capacity) % self.layer_capacity # Adjust for circular buffer logic in BWD fetch
 
-                        # if TO_PRINT: print(f"     -> REVERSED direction. Next BWD Wgt Target: L{self.next_weight_layer_id}, Start Replace Idx: {self.cur_weight_replace_ind}")
+                        # if TO_PRINT: print(f"      -> REVERSED direction. Next BWD Wgt Target: L{self.next_weight_layer_id}, Start Replace Idx: {self.cur_weight_replace_ind}")
                     else:
-                         self.next_weight_layer_id = next_potential_layer_id # Continue FWD fetch sequence
+                          self.next_weight_layer_id = next_potential_layer_id # Continue FWD fetch sequence
 
             elif do_backward: # --- Backward Prefetching Trigger ---
                  # Trigger BWD prefetch after completing the last chunk of a Head task OR a BWD Weight task
@@ -789,7 +788,7 @@ class Device:
                  is_last_chunk_bwd_w = bW and ( (are_chunks_same_seq and cid == 0) or (not are_chunks_same_seq and cid == self.total_chunks - 1) )
 
                  if is_last_chunk_head or is_last_chunk_bwd_w:
-                      self.handle_bwd_fetch(T) # Call dedicated BWD fetch handler
+                       self.handle_bwd_fetch(T) # Call dedicated BWD fetch handler
 
             # --- Reset compute state and check next task ---
             self.is_computing = False
@@ -797,7 +796,7 @@ class Device:
             self.stall_reason = "" # Clear stall reason on compute completion
 
             if len(self.computation_queue) > 0:
-                 self.handle_computation_depends(T) # Check dependencies for the next task
+                  self.handle_computation_depends(T) # Check dependencies for the next task
             else: # No tasks left
                 if not self.device_has_finished:
                     self.device_finish_time = T
@@ -873,7 +872,7 @@ all_devices = {}
 total_tasks = 0
 total_completed_tasks = {} # Dict to store completed tasks per frame
 total_computation_time = 0
-current_frame_index = 0
+current_frame_index = 0 # THIS IS THE MASTER TIME COUNTER
 animation_paused = False  # Start playing automatically
 completion_text_artist = None
 
@@ -897,8 +896,8 @@ def reset_simulation():
 
     # Reset state variables
     total_completed_tasks = {-1: 0} # Initialize with base case for frame -1
-    current_frame_index = 0
-    animation_paused = False # Ensure reset respects initial auto-play state
+    current_frame_index = 0 # RESET THE MASTER TIME COUNTER
+    animation_paused = False # Reset to initial desired state (False = play)
 
     # Remove completion text if it exists
     if completion_text_artist is not None:
@@ -941,6 +940,7 @@ def reset_simulation():
         label_ring.set_text("")
         arrow_ring.set_color(COLOR_RING_CCW) # Default to CCW color
         arrow_ring.set_positions(start_pos_ring, start_pos_ring) # Zero length at static start
+        arrow_ring.set_connectionstyle(f"arc3,rad=0.2") # Reset curve
 
         # Reset stall node visuals
         if f'stall_node_{i}' in device_artists:
@@ -953,22 +953,23 @@ def reset_simulation():
         if f'circle_{i}' in device_label_artists:
             device_label_artists[f'circle_{i}'].set_text(f'D{i}\nIdle')
         if f'inner_label_{i}' in device_label_artists:
-            device_label_artists[f'inner_label_{i}'].set_text(f'D{i} Home\nT=0')
+            device_label_artists[f'inner_label_{i}'].set_text(f'D{i}\nHome') # Simplified label
 
-    # Reset title
+    # Reset title using the now zero current_frame_index
     title_obj.set_text(f'Cycle {current_frame_index}')
 
     if TO_PRINT:
         print(f"Reset complete. Total tasks: {total_tasks}")
 
-# --- Update Function ---
-def update(frame):
+# --- Update Function (MODIFIED) ---
+def update(frame): # Keep frame argument, but we'll ignore its value for T
     """Main animation update function."""
     global total_completed_tasks, current_frame_index, completion_text_artist, animation_paused
 
     # If paused, don't update simulation state, just return existing artists
     # This prevents state changes while visually paused.
-    if animation_paused and frame != 0: # Allow frame 0 for initial draw on reset
+    # Important: Do NOT increment current_frame_index if paused.
+    if animation_paused:
         all_artists = [title_obj]
         for i in range(N):
             all_artists.extend([
@@ -982,36 +983,34 @@ def update(frame):
             ])
         if completion_text_artist:
             all_artists.append(completion_text_artist)
-        # Ensure title reflects current frame even if paused
-        # title_obj.set_text(f'Cycle {current_frame_index} (Paused)') # Title update handled in pause callback
-        return all_artists
+        # Let pause_animation callback handle adding "(Paused)" text
+        return all_artists # RETURN EARLY
 
-    T = frame
-    current_frame_index = T # Update global index only when running
+    # --- Use Global Frame Index ---
+    # Use the global state variable as the current simulation time T
+    T = current_frame_index
 
-    # Ensure completion count exists for this frame
-    if T not in total_completed_tasks:
-        # Find the completion count from the latest frame before T
-        last_known_frame = max(k for k in total_completed_tasks if k < T) if any(k < T for k in total_completed_tasks) else -1
-        total_completed_tasks[T] = total_completed_tasks.get(last_known_frame, 0) # Use last known value
-
-    artists_to_update = []
+    # Update title FIRST using the correct T for this cycle
     title_obj.set_text(f'Cycle {T}')
-    artists_to_update.append(title_obj)
+    artists_to_update = [title_obj] # Initialize the list of artists to return
 
-    # --- Run Simulation Step ---
+    # Ensure completion count exists for this frame T
+    if T not in total_completed_tasks:
+        last_known_frame = max(k for k in total_completed_tasks if k < T) if any(k < T for k in total_completed_tasks) else -1
+        total_completed_tasks[T] = total_completed_tasks.get(last_known_frame, 0)
+
+    # --- Run Simulation Step (using T) ---
     for i in range(N):
         all_devices[i].handle_completed_transfers(T, all_devices)
 
-    # Compute step returns newly completed tasks count
     newly_completed = sum(all_devices[i].handle_computation(T, all_devices) for i in range(N))
-    # Update total completed based on previous frame's count + newly completed
+    # Update total completed based on previous frame's count + newly completed THIS frame
     total_completed_tasks[T] = total_completed_tasks.get(T-1, 0) + newly_completed
 
     for i in range(N):
-         all_devices[i].handle_new_transfers(T)
+            all_devices[i].handle_new_transfers(T)
 
-    # --- Update Visuals ---
+    # --- Update Visuals (using T and device states) ---
     for i in range(N):
         unit_dir = unit_directions[i]
         inner_center = inner_node_centers[i]
@@ -1023,25 +1022,16 @@ def update(frame):
         device = all_devices[i]
 
         # --- Update Labels and Stall Node ---
-        # Outer Node Label (D{i} + Compute/Stall Status)
         outer_label_artist = device_label_artists[f'circle_{i}']
-        status_text = device.computing_status # Excludes reason
+        status_text = device.computing_status
         outer_label_artist.set_text(f'D{i}\n{status_text}')
-        artists_to_update.append(outer_label_artist)
 
-        # Inner Node Label (D{i} Home + Time)
         inner_label_artist = device_label_artists[f'inner_label_{i}']
-        inner_label_artist.set_text(f"D{i}\nHome")
-        artists_to_update.append(inner_label_artist)
+        inner_label_artist.set_text(f"D{i}\nHome") # Simplified
 
-        # Stall Node Label and Visibility
         stall_node_artist = device_artists[f'stall_node_{i}']
         stall_label_artist = device_label_artists[f'stall_label_{i}']
         if device.is_stalled and device.stall_reason:
-            # Could Wrap text for better fit inside the octagon
-            # But this messes up custom formatting with newlines
-            # wrapped_reason = textwrap.fill(device.stall_reason, width=15) # Adjust width as needed
-            #stall_label_artist.set_text(wrapped_reason)
             stall_label_artist.set_text(device.stall_reason)
             stall_label_artist.set_visible(True)
             stall_node_artist.set_visible(True)
@@ -1049,135 +1039,84 @@ def update(frame):
             stall_label_artist.set_text("")
             stall_label_artist.set_visible(False)
             stall_node_artist.set_visible(False)
-        artists_to_update.extend([stall_node_artist, stall_label_artist])
 
         # --- Update Edges ---
         arrow_vis_inbound, label_vis_inbound = edge_artists[f'in_{i}']
         arrow_vis_outbound, label_vis_outbound = edge_artists[f'out_{i}']
         arrow_ring, label_ring = edge_artists[f'ring_{i}']
 
-        # --- Inbound state (Network -> Device) ---
-        len_in_prog = 0.0
-        cur_inbound_edge_text = ""
-        color_inbound = COLOR_INBOUND_DEFAULT # Default color
+        # Inbound state
+        len_in_prog = 0.0; cur_inbound_edge_text = ""; color_inbound = COLOR_INBOUND_DEFAULT
         if device.is_inbound_transferring and device.cur_inbound_duration > 0:
             prog_frac = min(1.0, (T - device.cur_inbound_start_time) / device.cur_inbound_duration)
             len_in_prog = prog_frac * transfer_dist_i
             cur_inbound_edge_text = device.cur_inbound_edge
-            is_act = "Act:" in cur_inbound_edge_text
-            is_wgt = "L:" in cur_inbound_edge_text
-            # Determine color based on content and direction
-            if is_act and device.has_reversed: # Activation fetch during backward pass
-                color_inbound = COLOR_INBOUND_ACTIVATION
-            elif is_wgt: # Weight fetch (could be fwd or bwd)
-                color_inbound = COLOR_INBOUND_WEIGHT
-            # else: Keep default color_inbound
+            is_act = "Act:" in cur_inbound_edge_text; is_wgt = "L:" in cur_inbound_edge_text
+            if is_act and device.has_reversed: color_inbound = COLOR_INBOUND_ACTIVATION
+            elif is_wgt: color_inbound = COLOR_INBOUND_WEIGHT
         arrow_vis_inbound.set_color(color_inbound)
         label_vis_inbound.set_color(color_inbound)
 
-        # --- Outbound state (Device -> Network) ---
-        len_out_prog = 0.0
-        cur_outbound_edge_text = ""
-        color_outbound = COLOR_OUTBOUND_DEFAULT # Default color
+        # Outbound state
+        len_out_prog = 0.0; cur_outbound_edge_text = ""; color_outbound = COLOR_OUTBOUND_DEFAULT
         if device.is_outbound_transferring and device.cur_outbound_duration > 0:
-              prog_frac = min(1.0, (T - device.cur_outbound_start_time) / device.cur_outbound_duration)
-              len_out_prog = prog_frac * transfer_dist_i
-              cur_outbound_edge_text = device.cur_outbound_edge
-              is_wgt_grad = "Grad:L" in cur_outbound_edge_text
-              if is_wgt_grad: # Weight Gradient storage
-                  color_outbound = COLOR_OUTBOUND_WGT_GRAD
-              # else: Keep default (likely fwd activation storage)
+            prog_frac = min(1.0, (T - device.cur_outbound_start_time) / device.cur_outbound_duration)
+            len_out_prog = prog_frac * transfer_dist_i
+            cur_outbound_edge_text = device.cur_outbound_edge
+            is_wgt_grad = "Grad:L" in cur_outbound_edge_text
+            if is_wgt_grad: color_outbound = COLOR_OUTBOUND_WGT_GRAD
         arrow_vis_outbound.set_color(color_outbound)
         label_vis_outbound.set_color(color_outbound)
 
-        # --- Peer transfer state (Device -> Device) ---
-        len_ring_prog = 0.0
-        peer_device_id = -1
-        cur_ring_edge_text = ""
-        color_ring = COLOR_RING_CCW # Default to CCW color
-        connection_style_ring = f"arc3,rad=0.2" # Default curve CCW
-
+        # Peer transfer state
+        len_ring_prog = 0.0; peer_device_id = -1; cur_ring_edge_text = ""; color_ring = COLOR_RING_CCW; connection_style_ring = f"arc3,rad=0.2"
         if device.is_peer_transferring and device.cur_peer_transfer_duration > 0:
-            peer_item = device.peer_transfer_queue[0] # Get target ID
-            peer_device_id = peer_item[0]
+            peer_item = device.peer_transfer_queue[0]; peer_device_id = peer_item[0]
             prog_frac = min(1.0, (T - device.cur_peer_transfer_start_time) / device.cur_peer_transfer_duration)
             len_ring_prog = prog_frac
             cur_ring_edge_text = device.cur_ring_edge
-
-            # Determine target direction based on actual peer ID
-            target_is_cw = (peer_device_id == (i - 1 + N) % N) # Clockwise (i-1)
-            target_is_ccw = (peer_device_id == (i + 1) % N) # Counter-Clockwise (i+1)
-
-            # Set color and curve based on direction
-            if target_is_cw:
-                color_ring = COLOR_RING_CW
-                connection_style_ring = f"arc3,rad=-0.2" # Curve CW
-            else: # Assume CCW or other (e.g., skip connection? default to CCW style)
-                 color_ring = COLOR_RING_CCW
-                 connection_style_ring = f"arc3,rad=0.2" # Curve CCW
-
+            target_is_cw = (peer_device_id == (i - 1 + N) % N); target_is_ccw = (peer_device_id == (i + 1) % N)
+            if target_is_cw: color_ring = COLOR_RING_CW; connection_style_ring = f"arc3,rad=-0.2"
+            else: color_ring = COLOR_RING_CCW; connection_style_ring = f"arc3,rad=0.2"
         arrow_ring.set_color(color_ring)
         label_ring.set_color(color_ring)
         arrow_ring.set_connectionstyle(connection_style_ring)
 
-        # --- Calculate Edge Positions ---
-        # Inbound Arrow (Visually Outward)
+        # Calculate Edge Positions
         inner_edge_conn_point = inner_center + unit_dir * inner_node_radius
         start_vis_inbound = inner_edge_conn_point + edge_offset
         end_vis_inbound = start_vis_inbound + unit_dir * len_in_prog
 
-        # Outbound Arrow (Visually Inward)
         outer_edge_conn_point = outer_pos - unit_dir * outer_node_radius
         start_vis_outbound = outer_edge_conn_point - edge_offset
         end_vis_outbound = start_vis_outbound - unit_dir * len_out_prog
 
-        # Ring Arrow
         start_pos_ring_geo = outer_pos
-        # Point to target only if actively transferring
         if peer_device_id != -1:
             target_pos_ring_geo = outer_circle_positions[peer_device_id]
-            # Shorten slightly to avoid overlapping node centers perfectly
-            vec = target_pos_ring_geo - start_pos_ring_geo
-            norm = np.linalg.norm(vec)
+            vec = target_pos_ring_geo - start_pos_ring_geo; norm = np.linalg.norm(vec)
             if norm > 1e-6:
-                 # Stop arrow edge at target circle radius
-                 target_pos_ring_geo = start_pos_ring_geo + vec * (1 - outer_node_radius / norm)
-
+                target_pos_ring_geo = start_pos_ring_geo + vec * (1 - outer_node_radius / norm)
+                start_offset_dir = vec / norm
+                start_pos_ring_geo = outer_pos + start_offset_dir * outer_node_radius # Offset start point
             current_end_point_ring = start_pos_ring_geo + (target_pos_ring_geo - start_pos_ring_geo) * len_ring_prog
-            # Ensure start point is also slightly off the source node edge for curve
-            # Calculate vector from source center towards target center
-            start_offset_dir = vec / norm if norm > 1e-6 else unit_dir # Use unit_dir if norm is zero
-            start_pos_ring_geo = outer_pos + start_offset_dir * outer_node_radius
-
-        else: # If not transferring, make it zero length starting at edge
-            # Use unit dir pointing outwards as default direction if no target
-            start_pos_ring_geo = outer_pos + unit_dir * outer_node_radius
-            target_pos_ring_geo = start_pos_ring_geo
+        else:
+            start_pos_ring_geo = outer_pos + unit_dir * outer_node_radius # Point outwards if no target
             current_end_point_ring = start_pos_ring_geo # Zero length
 
-
-        # --- Calculate Label Positions ---
+        # Calculate Label Positions
         label_perp_offset = radial_perp_vector * label_offset_distance
-        # Position labels slightly away from the arrow lines
-        midpoint_vis_in = (start_vis_inbound + end_vis_inbound) / 2
-        label_pos_vis_in = midpoint_vis_in + label_perp_offset * 2 # Further offset
-
-        midpoint_vis_out = (start_vis_outbound + end_vis_outbound) / 2
-        label_pos_vis_out = midpoint_vis_out - label_perp_offset * 2 # Further offset
-
-        midpoint_ring = (start_pos_ring_geo + current_end_point_ring) / 2
-        label_pos_ring = midpoint_ring
-        # Offset ring label perpendicular to the chord connecting start/end
+        midpoint_vis_in = (start_vis_inbound + end_vis_inbound) / 2; label_pos_vis_in = midpoint_vis_in + label_perp_offset * 2
+        midpoint_vis_out = (start_vis_outbound + end_vis_outbound) / 2; label_pos_vis_out = midpoint_vis_out - label_perp_offset * 2
+        midpoint_ring = (start_pos_ring_geo + current_end_point_ring) / 2; label_pos_ring = midpoint_ring
         if len_ring_prog > 1e-6:
-            edge_vec = current_end_point_ring - start_pos_ring_geo
-            norm = np.linalg.norm(edge_vec)
+            edge_vec = current_end_point_ring - start_pos_ring_geo; norm = np.linalg.norm(edge_vec)
             if norm > 1e-6:
                 perp_vec = np.array([-edge_vec[1], edge_vec[0]]) / norm
-                # Adjust offset based on curve direction (rad > 0 is CCW)
-                offset_factor = 1.0 if connection_style_ring.endswith("0.2") else -1.0 # Check rad sign
-                label_pos_ring = midpoint_ring + perp_vec * label_offset_distance * 3 * offset_factor # Larger offset
+                offset_factor = 1.0 if connection_style_ring.endswith("0.2") else -1.0
+                label_pos_ring = midpoint_ring + perp_vec * label_offset_distance * 3 * offset_factor
 
-        # --- Update Artists ---
+        # Update Artists
         arrow_vis_inbound.set_positions(start_vis_inbound, end_vis_inbound)
         label_vis_inbound.set_position(label_pos_vis_in)
         label_vis_inbound.set_text(cur_inbound_edge_text)
@@ -1190,30 +1129,26 @@ def update(frame):
         label_ring.set_position(label_pos_ring)
         label_ring.set_text(cur_ring_edge_text)
 
-        artists_to_update.extend([arrow_vis_inbound, label_vis_inbound, arrow_vis_outbound, label_vis_outbound, arrow_ring, label_ring])
+        # Add updated artists to the list
+        artists_to_update.extend([outer_label_artist, inner_label_artist, stall_node_artist, stall_label_artist,
+                                  arrow_vis_inbound, label_vis_inbound, arrow_vis_outbound, label_vis_outbound,
+                                  arrow_ring, label_ring])
 
-    # --- Check for Completion ---
+    # --- Check for Completion (using T) ---
     current_total_completed = total_completed_tasks.get(T, 0)
-    # Only pause automatically if the animation is currently running and not already complete
     is_newly_complete = (current_total_completed >= total_tasks) and (total_completed_tasks.get(T-1, 0) < total_tasks)
-    should_stop_animation = is_newly_complete # Stop condition doesn't depend on whether it was paused
+    should_stop_animation = is_newly_complete
 
     if current_total_completed >= total_tasks and completion_text_artist is None:
         if TO_PRINT:
-             print(f"T={T}: Completed all {current_total_completed}/{total_tasks} tasks!")
+            print(f"T={T}: Completed all {current_total_completed}/{total_tasks} tasks!")
         # Calculate stats
         start_bubble = sum(d.device_start_time for d in all_devices.values() if d.device_has_started)
         stop_bubble = sum(max(0, T - d.device_finish_time) for d in all_devices.values() if d.device_has_finished)
         total_dev_time = T * N if T > 0 else 0
         steady_time = total_dev_time - stop_bubble - start_bubble if total_dev_time > 0 else 0
-
-        overall_eff = 0.0
-        if total_dev_time > 0:
-             overall_eff = (total_computation_time / total_dev_time * 100)
-
-        steady_eff = 0.0
-        if steady_time > 0:
-            steady_eff = (total_computation_time / steady_time * 100)
+        overall_eff = (total_computation_time / total_dev_time * 100) if total_dev_time > 0 else 0.0
+        steady_eff = (total_computation_time / steady_time * 100) if steady_time > 0 else 0.0
 
         completion_text = (
              f"Simulation Complete!\nFinal Cycle Count: {T}\n\n"
@@ -1234,18 +1169,31 @@ def update(frame):
             print(completion_text)
         artists_to_update.append(completion_text_artist)
 
-    # Stop the animation automatically if it just completed, regardless of whether it was paused before
+
+    # Stop the animation timer AFTER processing frame T, BEFORE incrementing index
     if should_stop_animation and ani is not None and ani.event_source is not None:
         if not animation_paused: # Only stop if it was actually running
             ani.event_source.stop()
             print("Animation Complete - Paused")
         animation_paused = True # Ensure state is paused
-        # Update title one last time to remove "(Paused)" if it was added
+        # Update title one last time for the final completed frame T
         title_obj.set_text(f'Cycle {T}')
-        artists_to_update.append(title_obj)
+        # No need to append title_obj again, it was done at the start
+
+
+    # --- Increment Global Frame Index for the *next* call ---
+    # Only increment if the animation isn't paused (it might have just become paused above)
+    if not animation_paused:
+        current_frame_index += 1
+        # Optional: Stop if max_frames reached to prevent infinite run if completion condition fails
+        if current_frame_index >= max_frames:
+            print(f"Max frames ({max_frames}) reached, stopping animation.")
+            ani.event_source.stop()
+            animation_paused = True
+            title_obj.set_text(f'Cycle {T} (Max Frames)')
+
 
     return artists_to_update
-
 
 
 # --- Create Animation ---
@@ -1273,7 +1221,7 @@ def pause_animation(event):
         if ani.event_source is not None:
             ani.event_source.stop()
         animation_paused = True
-        title_obj.set_text(f'Cycle {current_frame_index} (Paused)')
+        title_obj.set_text(f'Cycle {current_frame_index} (Paused)') # Use master index
         fig.canvas.draw_idle()
         print("Animation Paused")
     else:
@@ -1282,10 +1230,11 @@ def pause_animation(event):
 def play_animation(event):
     """Callback function for the Play button."""
     global animation_paused
+    # Check completion using the MASTER frame index
     current_completed = total_completed_tasks.get(current_frame_index, 0)
-    if animation_paused and current_completed < total_tasks:
+    if animation_paused and current_completed < total_tasks and current_frame_index < max_frames: # Check completion and max frames
         if ani.event_source is not None:
-            title_obj.set_text(f'Cycle {current_frame_index}')
+            title_obj.set_text(f'Cycle {current_frame_index}') # Update title before resuming
             ani.event_source.start()
             animation_paused = False
             print("Animation Resumed")
@@ -1293,6 +1242,8 @@ def play_animation(event):
              print("Error: Animation event source not found.")
     elif current_completed >= total_tasks:
         print("Animation already complete.")
+    elif current_frame_index >= max_frames:
+        print("Animation stopped at max frames.")
     elif not animation_paused:
         print("Animation already playing.")
 
@@ -1311,21 +1262,23 @@ def update_speed(val):
         print("Error: Could not access animation timer to update interval.")
         return # Exit if timer cannot be accessed
 
+    # Check completion using the MASTER frame index
     current_completed = total_completed_tasks.get(current_frame_index, 0)
 
-    # Only restart if it was playing before and not complete
-    if was_playing and current_completed < total_tasks:
+    # Only restart if it was playing before and not complete/maxed
+    if was_playing and current_completed < total_tasks and current_frame_index < max_frames:
         ani.event_source.start()
         animation_paused = False # Ensure state is correct
     else:
-        animation_paused = True # Stay paused if it wasn't playing or is complete
-        # Update title to show paused if necessary and not complete
-        if current_completed < total_tasks:
-             title_obj.set_text(f'Cycle {current_frame_index} (Paused)')
-             fig.canvas.draw_idle()
+        animation_paused = True # Stay paused if it wasn't playing or is complete/maxed
+        # Update title to show paused if necessary and not complete/maxed
+        if current_completed < total_tasks and current_frame_index < max_frames:
+            title_obj.set_text(f'Cycle {current_frame_index} (Paused)')
+            fig.canvas.draw_idle()
 
     print(f"Speed Level: {int(round(speed_level))}, Interval set to: {new_interval} ms")
 
+# --- Restart Callback (MODIFIED) ---
 def restart_animation_callback(event):
     """Callback function for the Restart button."""
     global animation_paused
@@ -1333,29 +1286,37 @@ def restart_animation_callback(event):
     if ani.event_source is not None:
         ani.event_source.stop() # Stop current animation timer
 
-    reset_simulation()       # Reset simulation variables and artists (this now sets animation_paused based on initial setting)
+    reset_simulation()        # Reset simulation variables and artists (this now sets animation_paused based on initial setting)
+
+    # --- Draw the reset state immediately ---
+    # This ensures "Cycle 0" is shown even if the animation starts paused.
+    fig.canvas.draw_idle()
+    try: # Flush events if possible to make redraw more immediate
+        fig.canvas.flush_events()
+        # print("Restart CB: Flushed events") # Optional debug
+    except AttributeError:
+        pass # Ignore if flush_events not available
 
     # If the desired initial state is *playing*, start the timer after reset
     if not animation_paused:
         if ani.event_source is not None:
-            title_obj.set_text(f'Cycle 0') # Update title before starting
+            # Title is already set by reset_simulation and will be updated correctly
+            # by the first call to update() which will now use T=0
             ani.event_source.start()
             print("Simulation reset and playing from Cycle 0.")
         else:
             print("Error: Cannot restart animation timer after reset.")
             animation_paused = True # Fallback to paused state
-            title_obj.set_text(f'Cycle 0 (Paused)')
+            # Title reflects the reset state (Cycle 0), add (Paused)
+            title_obj.set_text(f'Cycle {current_frame_index} (Paused)')
+            fig.canvas.draw_idle() # Redraw with paused state
     else:
-        # If the desired initial state is *paused*, just draw frame 0
-        update(0)                # Call update once for frame 0 to draw initial state
-        fig.canvas.draw_idle()   # Request redraw of the initial state
-        try: # Add try/except as flush_events might not exist on all backends
-            fig.canvas.flush_events()
-            print("Restart CB (Paused): Flushed events")
-        except AttributeError:
-            pass
+        # If the desired initial state is *paused*, we already drew frame 0 via draw_idle()
+        # Title is already set correctly by reset_simulation
         print("Simulation reset and paused at Cycle 0.")
-
+        # Optionally ensure "(Paused)" is added if needed, though pause_animation handles this better
+        # title_obj.set_text(f'Cycle {current_frame_index} (Paused)')
+        # fig.canvas.draw_idle()
 
 
 # --- Connect Widgets to Callbacks ---
@@ -1378,46 +1339,33 @@ def on_hover(event):
     if currently_over and not is_cursor_over_widget:
         # Mouse entered a widget axis: Change to hand cursor
         try: # Use try-except as set_cursor might fail in some backend/state combos
-             fig.canvas.set_cursor(Cursors.HAND)
+            fig.canvas.set_cursor(Cursors.HAND)
         except Exception as e:
-             # print(f"Debug: Could not set cursor to HAND - {e}") # Optional debug
-             pass # Ignore if setting cursor fails
+            # print(f"Debug: Could not set cursor to HAND - {e}") # Optional debug
+            pass # Ignore if setting cursor fails
         is_cursor_over_widget = True
     elif not currently_over and is_cursor_over_widget:
         # Mouse left a widget axis: Change back to default pointer
         try:
             fig.canvas.set_cursor(Cursors.POINTER)
         except Exception as e:
-             # print(f"Debug: Could not set cursor to POINTER - {e}") # Optional debug
-             pass
+            # print(f"Debug: Could not set cursor to POINTER - {e}") # Optional debug
+            pass
         is_cursor_over_widget = False
 
 # Connect the motion_notify_event to the on_hover function
 fig.canvas.mpl_connect('motion_notify_event', on_hover)
 
 # --- Display ---
-# Call reset_simulation first, which now handles initial state and drawing frame 0 if paused
+# Call reset_simulation first to set the initial state correctly
+# This will set current_frame_index=0 and update the title initially.
+# It also sets animation_paused=False by default.
 print("Initializing display...")
-reset_simulation() # Reset state first (this now respects initial animation_paused state)r)
+reset_simulation()
 
-
-
-
-
-## START DISPLAYING!
-
-
-
-
-
-
-# --- Display ---
-
-# If animation is set to start automatically, the FuncAnimation call already started the timer.
-# If it's set to start paused, reset_simulation called update(0) and draw_idle().
-
-
-
+# FuncAnimation starts the timer automatically if repeat=False (unless interval=None)
+# If animation_paused was True after reset, the first update call would hit the early return.
+# If animation_paused was False (default), it starts running and the first call to update will use T=0.
 
 print("Showing plot...")
 plt.show()
