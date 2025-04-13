@@ -228,7 +228,7 @@ for i in range(N):
     outer_circle = patches.Circle(outer_pos, radius=outer_node_radius, fc=color, ec='black', alpha=device_opacity, zorder=2)
     ax.add_patch(outer_circle)
     device_artists[f'circle_{i}'] = outer_circle
-    outer_label = ax.text(outer_pos[0], outer_pos[1], f'D{i}', ha='center', va='center', fontsize=7, zorder=3, bbox=dict(boxstyle='round,pad=0.1', fc=(1,1,1,0.5), ec='none'))
+    outer_label = ax.text(outer_pos[0], outer_pos[1], f'D{i}', ha='center', va='center', fontsize=7, zorder=3)
     device_label_artists[f'circle_{i}'] = outer_label
 
     # Inner Square (Home/Storage)
