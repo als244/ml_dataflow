@@ -14,6 +14,25 @@ import textwrap
 from collections import deque # Use deque for efficient queue operations
 # import pdb; pdb.set_trace() # Keep commented out unless debugging
 
+# --- Simulation Parameters ---
+
+## Larger Model Parameters
+N = 16 # Number of devices
+total_layers = 64
+total_chunks = 32
+
+## Smaller Model Parameters
+# N = 8 # Number of devices
+# total_layers = 32
+# total_chunks = 16
+
+layerTransferFrames = 100 # Cycles to transfer weights
+computationFrames = layerTransferFrames // N # Cycles per compute task
+savedActivationsFrames = computationFrames # Cycles to transfer activations (save/fetch)
+activationTransitionFrames = computationFrames # Cycles to transfer activations/grads between devices
+
+layer_capacity = 2 # Max weights per device
+
 # --- Global Control Flags ---
 TO_PRINT = False # ENABLE DEBUG PRINTING
 
@@ -56,16 +75,9 @@ mut_scale = 6
 if sys.platform == 'darwin':
     matplotlib.use('MacOSX')
 
-# --- Simulation Parameters ---
-N = 8 # Number of devices
-layerTransferFrames = 100 # Cycles to transfer weights
-computationFrames = layerTransferFrames // N # Cycles per compute task
-savedActivationsFrames = computationFrames # Cycles to transfer activations (save/fetch)
-activationTransitionFrames = 5 # Cycles to transfer activations/grads between devices
 
-total_layers = 32
-total_chunks = 16
-layer_capacity = 2 # Max weights per device
+
+## NOT USING THESE CORRECTLY FOR NOW....
 activations_capacity = 4 # Max CHECKPOINTED activations kept resident from FWD per device
 transitions_capacity = N # Buffer size for incoming FWD data from peers
 grad_activations_capacity = total_chunks # Buffer size for local dL/dA results
@@ -1213,28 +1225,40 @@ def update(frame):
     # ********************************************************************
 
     # Display completion text only once, when computation first finishes
-    if is_computation_complete and completion_text_artist is None:
-        # Use the recorded computation finish time
-        final_time = simulation_computation_finish_time if simulation_computation_finish_time is not None else T
-        start_times = [d.device_start_time for d in all_devices.values() if d.device_has_started]
-        first_start_time = min(start_times) if start_times else 0
-        # Calculate efficiency based on the time computation finished
-        total_dev_time = (final_time - first_start_time) * N if final_time > first_start_time else 0
-        overall_eff = (total_computation_time / total_dev_time * 100) if total_dev_time > 0 else 0.0
-        completion_text = (
-            # ***** FIX: Update completion text *****
-            f"Computation Complete!\nFinal Compute Cycle: {final_time}\n\n"
-            f"Problem:\nTotal Tasks: {total_tasks}\nTotal Task Comp Time: {total_computation_time}\n"
-            f"Utilized {N} devices for aggregate {total_dev_time:.0f} cycles\n\nEFFICIENCY (Compute): {overall_eff:.2f}%"
-            # ***************************************
-        )
-        completion_text_artist = ax.text(0.5, 0.5, completion_text, transform=ax.transAxes, ha='center', va='center', fontsize=14, color='navy', fontweight='bold', bbox=dict(boxstyle='round,pad=0.5', fc=(0.9, 0.9, 1, 0.95), ec='black'), zorder=10)
+    if current_total_completed >= total_tasks and completion_text_artist is None:
         if TO_PRINT:
-            print("\n" + "="*20 + " Computation Complete " + "="*20)
+             print(f"T={T}: Completed all {current_total_completed}/{total_tasks} tasks!")
+        # Calculate stats
+        start_bubble = sum(d.device_start_time for d in all_devices.values() if d.device_has_started)
+        stop_bubble = sum(max(0, T - d.device_finish_time) for d in all_devices.values() if d.device_has_finished)
+        total_dev_time = T * N if T > 0 else 0
+        steady_time = total_dev_time - stop_bubble - start_bubble if total_dev_time > 0 else 0
+
+        overall_eff = 0.0
+        if total_dev_time > 0:
+             overall_eff = (total_computation_time / total_dev_time * 100)
+
+        steady_eff = 0.0
+        if steady_time > 0:
+            steady_eff = (total_computation_time / steady_time * 100)
+
+        completion_text = (
+             f"Simulation Complete!\nFinal Cycle Count: {T}\n\n"
+             f"Problem:\nTotal Tasks: {total_tasks}\n"
+             f"Total Task Computation Time: {total_computation_time}\n"
+             f"Utilized {N} devices for aggregate {total_dev_time} cycles\n\n"
+             f"Pipeline:\nFill Time: {start_bubble}\n"
+             f"Flush Time: {stop_bubble}\n"
+             f"Steady-State Time: {steady_time}\n\n"
+             f"EFFICIENCY:\nOverall: {overall_eff:.2f}%\n"
+             f"Steady-State: {steady_eff:.2f}%"
+        )
+        completion_text_artist = ax.text(0.5, 0.5, completion_text, transform=ax.transAxes,
+                                         ha='center', va='center', fontsize=14, color='navy', fontweight='bold',
+                                         bbox=dict(boxstyle='round,pad=0.5', fc=(0.9, 0.9, 1, 0.95), ec='black'),
+                                         zorder=10)
+        if TO_PRINT:
             print(completion_text)
-            # Print final buffer states for debugging
-            for i in range(N): all_devices[i].print_buffer_status()
-            print("="*60 + "\n")
         artists_to_update.append(completion_text_artist)
         # ***** FIX: Update title one last time when showing completion text *****
         title_obj.set_text(f'Cycle {final_time} (Complete)')
