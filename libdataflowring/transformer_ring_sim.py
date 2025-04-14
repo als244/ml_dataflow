@@ -58,8 +58,8 @@ if sys.platform == 'darwin':
 
 # --- Simulation Parameters ---
 N = 8 # Number of devices
-computationFrames = 50 # Cycles per compute task
-layerTransferFrames = N * computationFrames # Cycles to transfer weights
+layerTransferFrames = 100 # Cycles to transfer weights
+computationFrames = layerTransferFrames // N # Cycles per compute task
 savedActivationsFrames = computationFrames # Cycles to transfer activations (save/fetch)
 activationTransitionFrames = 5 # Cycles to transfer activations/grads between devices
 
@@ -114,7 +114,7 @@ if TO_PRINT:
 # --- Define Default Colors ---
 COLOR_INBOUND_DEFAULT = 'gray'
 COLOR_INBOUND_WEIGHT = 'olive'
-COLOR_INBOUND_BWD_FETCHED_ACTIVATION = 'cyan'
+COLOR_INBOUND_BWD_FETCHED_ACTIVATION = 'magenta'
 COLOR_OUTBOUND_DEFAULT = 'gray'
 COLOR_OUTBOUND_FWD_ACTIVATION = 'magenta'
 COLOR_OUTBOUND_WGT_GRAD = 'saddlebrown'
@@ -139,6 +139,8 @@ center_pos = np.array([0, 0])
 
 # --- Legend Text ---
 wrap_width = 40
+
+"""
 legend_text = (
     f"Simulated Configuration:\n\n"
     f"      - Num Layers: {total_layers}\n"
@@ -159,6 +161,24 @@ legend_text += (
     f"      - Constants:\n"
     f"              - Layer Computation: {computationFrames} Cycles\n"
     f"              - Layer Transfer: {layerTransferFrames} Cycles\n"
+    f"              - Activation Transfer: {savedActivationsFrames} Cycles\n"
+    f"              - Block Transition: {activationTransitionFrames} Cycles\n"
+)
+"""
+
+legend_text = (
+    f"Simulated Configuration:\n\n"
+    f"      - Num Layers: {total_layers}\n"
+    f"      - Num Devices: {N}\n"
+    f"      - Num Chunks: {total_chunks}\n"
+)
+if do_backward: legend_text += f"      - Do Backward: Yes\n"
+else: legend_text += f"      - Do Backward: No\n"
+legend_text += (
+    f"      - Per-Device Layer (Weight) Capacity: {layer_capacity}\n"
+    f"      - Constants:\n"
+    f"              - Layer Transfer: {layerTransferFrames} Cycles\n"
+    f"              - Layer Computation: {computationFrames} Cycles\n"
     f"              - Activation Transfer: {savedActivationsFrames} Cycles\n"
     f"              - Block Transition: {activationTransitionFrames} Cycles\n"
 )
@@ -783,11 +803,12 @@ class Device:
             is_in_storage = actual_storage_key in self.outbound_storage
             if is_in_storage:
                 self.is_inbound_transferring = True; self.cur_inbound_start_time = T; self.cur_inbound_duration = duration
-                label_lid_str = "Head" if lid == total_layers else str(lid)
+                label_lid_str = f"Wgt:\nHead" if lid == total_layers else f"Wgt:\nL{lid}"
                 edge_color = COLOR_INBOUND_DEFAULT
-                if target_buffer_type == 'weight': self.cur_inbound_edge, edge_color = f"Wgt:L{label_lid_str}", COLOR_INBOUND_WEIGHT
-                elif target_buffer_type == 'bwd_fetched_act': self.cur_inbound_edge, edge_color = f"Fetch:C{cid},L{lid}", COLOR_INBOUND_BWD_FETCHED_ACTIVATION
-                else: self.cur_inbound_edge = f"? C{cid},L{lid}"
+                if target_buffer_type == 'weight': 
+                    self.cur_inbound_edge, edge_color = label_lid_str, COLOR_INBOUND_WEIGHT
+                elif target_buffer_type == 'bwd_fetched_act': self.cur_inbound_edge, edge_color = f"Act:\nC{cid},L{lid}", COLOR_INBOUND_BWD_FETCHED_ACTIVATION
+                else: self.cur_inbound_edge = f"UNKNOWN\nC{cid},L{lid}"
                 arrow_vis, _ = edge_artists[f'in_{self.device_id}']; arrow_vis.set_color(edge_color)
             else:
                 if TO_PRINT: print(f"T={T}, Dev {self.device_id}: ERROR - Inbound request {item} with key {actual_storage_key} not found in storage. Removing from queue.")
@@ -795,11 +816,14 @@ class Device:
         if not self.is_outbound_transferring and self.outbound_queue:
             item = self.outbound_queue[0]; cid, lid, isg, duration = item
             self.is_outbound_transferring = True; self.cur_outbound_start_time = T; self.cur_outbound_duration = duration
-            label_lid_str = "Head" if lid == total_layers else str(lid)
+            label_lid_str = f"Grad:\nHead" if lid == total_layers else f"Grad:\nL{lid}"
             edge_color = COLOR_OUTBOUND_DEFAULT
-            if cid >= 0: self.cur_outbound_edge, edge_color = f"Act:C{cid},L{lid}", COLOR_OUTBOUND_FWD_ACTIVATION
-            elif isg: self.cur_outbound_edge, edge_color = f"Grad:L{label_lid_str}", COLOR_OUTBOUND_WGT_GRAD
-            else: self.cur_outbound_edge, edge_color = f"Wgt:L{lid}", COLOR_OUTBOUND_DEFAULT
+            if cid >= 0: 
+                self.cur_outbound_edge, edge_color = f"Act:\nC{cid},L{lid}", COLOR_OUTBOUND_FWD_ACTIVATION
+            elif isg:
+                self.cur_outbound_edge, edge_color = label_lid_str, COLOR_OUTBOUND_WGT_GRAD
+            else: 
+                self.cur_outbound_edge, edge_color = f"Wgt:\nL{lid}", COLOR_OUTBOUND_DEFAULT
             arrow_vis, _ = edge_artists[f'out_{self.device_id}']; arrow_vis.set_color(edge_color)
         if not self.is_peer_transferring and self.peer_transfer_queue:
             item = self.peer_transfer_queue[0]; pid, cid, lid, isg, duration = item
@@ -808,9 +832,11 @@ class Device:
             is_gradient_data = isg; edge_color = COLOR_RING_CW if is_gradient_data else COLOR_RING_CCW
             connection_style_ring = f"arc3,rad={'-' if is_gradient_data else ''}0.2"
             if isg:
-                 if lid == total_layers: self.cur_ring_edge = f"HGrad:C{cid}"
-                 else: self.cur_ring_edge = f"Grad:C{cid},L{lid}"
-            else: self.cur_ring_edge = f"Out:C{cid},L{lid}"
+                 if lid == total_layers: 
+                     self.cur_ring_edge = f"Grad:\nC{cid},Head"
+                 else: 
+                     self.cur_ring_edge = f"Grad:\nC{cid},L{lid}"
+            else: self.cur_ring_edge = f"Out:\nC{cid},L{lid}"
             arrow_vis, _ = edge_artists[f'ring_{self.device_id}']; arrow_vis.set_color(edge_color); arrow_vis.set_connectionstyle(connection_style_ring)
 
     def print_buffer_status(self): # Unchanged
@@ -1305,13 +1331,23 @@ def update_speed(val):
     global animation_paused
     speed_level = slider_speed.val
     new_interval = calculate_interval(speed_level, min_speed_level, max_speed_level, min_interval, max_interval)
-    was_running = False
+   
+     # Use our own state flag to determine if the animation was running
+    was_running = not animation_paused
+    timer_stopped = False # Keep track if we successfully stopped the timer
+
     if ani.event_source is not None:
-        was_running = ani.event_source.running # Check if it was running before stop
+        # Always stop the timer before changing interval
         ani.event_source.stop()
-        ani.event_source.interval = new_interval; ani._interval = new_interval
-    else: print("Error: Could not access animation timer."); return
-    # ***** FIX: Check completion based on computation time *****
+        timer_stopped = True # Record that we stopped it
+        # Set the interval on the timer object directly
+        ani.event_source.interval = new_interval
+        # Crucially, also update the interval stored in the Animation object itself
+        ani._interval = new_interval
+    else:
+        print("Error: Could not access animation timer.")
+        return # Cannot proceed without a timer
+    
     is_computation_finished = (simulation_computation_finish_time is not None)
     is_at_max_frames = (current_frame_index >= max_frames)
     should_resume = was_running and not is_computation_finished and not is_at_max_frames and target_cycle is None
