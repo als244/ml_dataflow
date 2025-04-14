@@ -16,15 +16,17 @@ from collections import deque # Use deque for efficient queue operations
 
 # --- Simulation Parameters ---
 
-## Larger Model Parameters
-N = 16 # Number of devices
-total_layers = 64
-total_chunks = 32
-
 ## Smaller Model Parameters
-# N = 8 # Number of devices
-# total_layers = 32
-# total_chunks = 16
+N = 8 # Number of devices
+total_layers = 32
+total_chunks = 16
+
+
+## Larger Model Parameters
+# N = 16 # Number of devices
+# total_layers = 64
+# total_chunks = 32
+
 
 layerTransferFrames = 100 # Cycles to transfer weights
 computationFrames = layerTransferFrames // N # Cycles per compute task
