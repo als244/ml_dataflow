@@ -31,6 +31,7 @@ initial_speed_level = 50
 N = 8 # Number of devices
 total_layers = 31
 
+vocab_size_k = 128
 model_dim = 5120
 kv_factor = .125
 kv_dim = int(model_dim * kv_factor)
@@ -52,6 +53,8 @@ base_flops_per_layer = matmul_attn_flops_per_layer + matmul_ffn_flops_per_layer
 ## this is multiplied by the chunk_size + cur seq len
 flops_per_attn_chunk_mult = 2 * chunk_size * model_dim
 
+## head does fwd + bwd
+head_flops = 2 * (2 * (vocab_size_k * 1000) * model_dim * chunk_size)
 
 seqlen_thousands = 128
 seqlen = (1 << 10) * seqlen_thousands
@@ -64,6 +67,8 @@ total_chunks = math.ceil(seqlen / chunk_size)
 ## FP8 = 989 * 2 TFLOPS
 hardware_max_flops = int((989 * (2 / dtype_bytes)) * 1e12)
 flop_efficiency = 0.7
+
+head_computation_times_sec = head_flops / (hardware_max_flops * flop_efficiency)
 
 computation_times_sec = {}
 computation_times_frames = {}
@@ -108,6 +113,7 @@ transition_transfer_time_sec = (output_size_bytes * 8) / (peer_transfer_bw_gb_se
 
 
 layerTransferFrames = int(layer_transfer_time_sec * cycles_per_second) # Cycles to transfer weights
+headFrames = int(head_computation_times_sec * cycles_per_second)
 computationFrames = computation_times_frames[0] # Cycles per compute task
 max_computationFrames = computation_times_frames[total_chunks-1]
 savedActivationsFrames = int(activation_transfer_time_sec * cycles_per_second) # Cycles to transfer activations (save/fetch)
@@ -244,15 +250,17 @@ legend_text = (
     f"         - Per-Expert Dim: {expert_dim}\n"
     f"         - Num Experts: {num_experts}\n"
     f"         - Top K Experts: {top_k_experts}\n"
+    f"         - Vocab Size: {vocab_size_k}k\n"
     f"      - Training Parameters:\n"
     f"         - Sequence Length: {seqlen_thousands}k\n"
     f"         - Chunk Size: {chunk_size}\n"
     f"         - Total Chunks: {total_chunks}\n"
     f"      - Dataflow Parameters:\n"
     f"          - Per-Device Layer Capacity: {layer_capacity}\n"
-    f"      - Derived Simulation Cycles ({int(cycles_per_second)} cycles per second):\n"
+    f"      - Derived Simulation Cycles ({int(cycles_per_second / 1000)}k cycles per second):\n"
     f"         - C0 Computation: {computationFrames} Cycles\n"
     f"         - C{total_chunks-1} Computation: {max_computationFrames} Cycles\n"
+    f"         - Head Computation: {headFrames} Cycles\n"
     f"         - Layer Transfer: {layerTransferFrames} Cycles\n"
     f"         - Activation Transfer: {savedActivationsFrames} Cycles\n"
     f"         - Block Transition: {activationTransitionFrames} Cycles\n"
@@ -440,7 +448,7 @@ class Device:
             for i in range(self.total_chunks):
                 transfer_direction = 1 if cur_layer_id < self.total_layers - 1 else 0
                 if cur_layer_id == self.total_layers -1: transfer_direction = 1
-                self.computation_queue.append((i, cur_layer_id, False, False, transfer_direction, computationFrames))
+                self.computation_queue.append((i, cur_layer_id, False, False, transfer_direction, computation_times_frames[i]))
             cur_layer_id += self.total_devices
         self.next_weight_layer_id = self.device_id + self.layer_capacity * self.total_devices
         if self.last_fwd_layer_on_device != -1 and self.next_weight_layer_id > self.last_fwd_layer_on_device:
@@ -458,14 +466,15 @@ class Device:
                     self.cur_ready_weights[head_wgt_idx] = cur_layer_id_for_head_task
                 head_task_queue_order = []
                 if are_chunks_same_seq:
+                    ## half of the total chu
                     cutoff_chunk_id = self.total_chunks // 2
                     head_task_queue_order.extend(range(cutoff_chunk_id))
                     head_task_queue_order.extend(range(self.total_chunks - 1, cutoff_chunk_id - 1, -1))
                     self.head_final_chunk_id = cutoff_chunk_id
                 else:
-                    head_task_queue_order.extend(range(self.total_chunks))
+                    head_task_queue_order.extend(range(cutoff_chunk_id, self.total_chunks))
                     self.head_final_chunk_id = self.total_chunks - 1
-                for i in head_task_queue_order: self.computation_queue.append((i, cur_layer_id_for_head_task, False, False, -1, computation_times_frames[i]))
+                for i in head_task_queue_order: self.computation_queue.append((i, cur_layer_id_for_head_task, False, False, -1, headFrames))
                 cur_layer_id_for_bwd_loop = self.last_fwd_layer_on_device
             else: cur_layer_id_for_bwd_loop = self.last_fwd_layer_on_device
             if cur_layer_id_for_bwd_loop >= 0:
@@ -1305,14 +1314,16 @@ def update(frame):
         if steady_time > 0:
             steady_eff = (total_computation_time / steady_time * 100)
 
+        runtime_in_seconds = T / cycles_per_second
+
         completion_text = (
-             f"Simulation Complete!\nFinal Cycle Count: {T}\n\n"
+             f"Simulation Complete!\nFinal Cycle Count: {T}\nRuntime: {runtime_in_seconds:.5f} seconds\n\n\n"
              f"Problem:\nTotal Tasks: {total_tasks}\n"
-             f"Total Task Computation Time: {total_computation_time}\n"
+             f"Total Task Computation Cycles: {total_computation_time}\n"
              f"Utilized {N} devices for aggregate {total_dev_time} cycles\n\n"
-             f"Pipeline:\nFill Time: {start_bubble}\n"
-             f"Flush Time: {stop_bubble}\n"
-             f"Steady-State Time: {steady_time}\n\n"
+             f"Pipeline:\nFill Cycles: {start_bubble}\n"
+             f"Flush Cycles: {stop_bubble}\n"
+             f"Steady-State Cycles: {steady_time}\n\n"
              f"EFFICIENCY:\nOverall: {overall_eff:.2f}%\n"
              f"Steady-State: {steady_eff:.2f}%"
         )
