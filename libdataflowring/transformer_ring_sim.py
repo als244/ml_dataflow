@@ -69,8 +69,8 @@ attn_efficiency = 0.6
 
 
 ## communication configs
-home_bw_gb_sec = 512
-peer_transfer_bw_gb_sec = 200
+home_bw_gb_sec = 400
+peer_transfer_bw_gb_sec = 100
 
 
 
