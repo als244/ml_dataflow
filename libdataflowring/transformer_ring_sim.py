@@ -31,7 +31,7 @@ initial_speed_level = 50
 
 ## Smaller Model Parameters
 N = 8 # Number of devices
-total_layers = 63
+total_layers = 64
 
 do_backward = True
 # True=Pipeline Parallel (BWD Reversed), False=Data Parallel(BWD Same Order)
@@ -49,13 +49,30 @@ expert_dim = int(ffn_dim // num_experts)
 chunk_size = 1536
 
 ## FP8
-bitwidth = 8
+bitwidth = 16
 dtype_bytes = bitwidth / 8
-
-attn_type = "Exact"
 
 
 seqlen_thousands = 32
+
+
+
+
+
+
+
+## THese config params not implemented yet...
+
+
+
+
+
+
+
+
+
+
+attn_type = "Exact"
 seqlen = (1 << 10) * seqlen_thousands
 
 total_chunks = math.ceil(seqlen / chunk_size)
