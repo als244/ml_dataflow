@@ -15,8 +15,8 @@ from collections import deque # Use deque for efficient queue operations
 # import pdb; pdb.set_trace() # Keep commented out unless debugging
 
 import math
-# --- Simulation Parameters ---
 
+# --- Simulation Parameters ---
 ## making 100 microseconds equivalent to 1 cycle
 cycles_per_second = 1e4
 
@@ -341,9 +341,8 @@ legend_text = (
     f"         - Layer Transfer: {layerTransferFrames} Cycles\n"
     f"         - Activation Transfer: {savedActivationsFrames} Cycles\n"
     f"         - Block Transition: {activationTransitionFrames} Cycles\n\n"
-    f"       - Runtime Lower-Bounds:\n"
-    f"         - With Theoretical Max TFLOPS: {int((total_flops / N) / ((hardware_max_flops)) * cycles_per_second)} cycles\n"
-    f"         - With Practical Matmul/Attn Efficiency: {int(((total_matmul_flops / N) / (hardware_max_flops * matmul_efficiency) + (total_attn_flops / N) / (hardware_max_flops * attn_efficiency)) * cycles_per_second)} cycles\n"
+    f"       - Runtime Lower-Bound:\n"
+    f"         - Based on Matmul/Attn Efficiency: {int(((total_matmul_flops / N) / (hardware_max_flops * matmul_efficiency) + (total_attn_flops / N) / (hardware_max_flops * attn_efficiency)) * cycles_per_second)} cycles\n"
 )
 wrapped_legend_text = legend_text
 at = AnchoredText(wrapped_legend_text, loc='upper left', bbox_to_anchor=(1.01, 1.01),
