@@ -35,7 +35,7 @@ do_backward = True
 # True=Pipeline Parallel (BWD Reversed), False=Data Parallel(BWD Same Order)
 are_chunks_same_seq = True
 
-vocab_size_k = 128
+vocab_size = 151646
 model_dim = 5120
 kv_factor = .125
 kv_dim = int(model_dim * kv_factor)
@@ -50,8 +50,8 @@ chunk_size = 1536
 bitwidth = 16
 dtype_bytes = bitwidth / 8
 
-
 seqlen_thousands = 32
+seqlen = (1 << 10) * seqlen_thousands
 
 
 ## hardware configs
@@ -72,7 +72,6 @@ peer_transfer_bw_gb_sec = 100
 
 ## THese config params not implemented yet...
 attn_type = "Exact"
-seqlen = (1 << 10) * seqlen_thousands
 
 total_chunks = math.ceil(seqlen / chunk_size)
 train_chunk_freq = 1
@@ -89,7 +88,7 @@ base_flops_per_layer = matmul_attn_flops_per_layer + matmul_ffn_flops_per_layer
 flops_per_attn_chunk_mult = 2 * chunk_size * model_dim
 
 ## head does fwd + bwd
-head_flops = 2 * (2 * (vocab_size_k * 1000) * model_dim * chunk_size)
+head_flops = 2 * (2 * vocab_size * model_dim * chunk_size)
 
 
 total_matmul_flops = 0
@@ -312,7 +311,7 @@ legend_text = (
     f"         - Per-Expert Dim: {expert_dim}\n"
     f"         - Num Experts: {num_experts}\n"
     f"         - Active Experts: {active_experts}\n"
-    f"         - Vocab Size: {vocab_size_k}k\n\n"
+    f"         - Vocab Size: {vocab_size}\n\n"
     f"      - Compute Environment Constants:\n"
     f"         - Hardware Theoretical MAX TFLOPs: {int(hardware_max_flops / 1e12)} TFLOPs\n"
     f"         - Matmul Efficiency: {matmul_efficiency}\n"
@@ -321,7 +320,7 @@ legend_text = (
     f"         - Device-to-Home BW (Gb/s): {home_bw_gb_sec}\n"
     f"         - Peer-to-Peer BW (Gb/s): {peer_transfer_bw_gb_sec}\n\n"
     f"      - Training Parameters:\n"
-    f"         - Sequence Length: {seqlen_thousands}k\n"
+    f"         - Sequence Length: {seqlen}\n"
     f"         - Chunk Training Frequency: {train_chunk_freq}\n"
     f"         - Num Sequences: {num_sequences}\n\n"
     f"      - FLOP Breakdown\n"     
