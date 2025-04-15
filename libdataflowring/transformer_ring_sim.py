@@ -41,6 +41,7 @@ top_k_experts = 1
 expert_dim = int(ffn_dim // num_experts)
 chunk_size = 1536
 
+## FP8
 dtype_bytes = 1
 
 matmul_attn_flops_per_layer =2 * (model_dim * model_dim) + (4 * model_dim * kv_dim * chunk_size)
@@ -57,7 +58,11 @@ seqlen = (1 << 10) * seqlen_thousands
 
 total_chunks = math.ceil(seqlen / chunk_size)
 
-hardware_max_flops = 1500 * 1e12
+## H100 TFLOPS
+
+## FP16 = 989 TFLOPS
+## FP8 = 989 * 2 TFLOPS
+hardware_max_flops = int((989 * (1 / dtype_bytes)) * 1e12)
 flop_efficiency = 0.7
 
 computation_times_sec = {}
