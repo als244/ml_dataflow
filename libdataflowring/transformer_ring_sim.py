@@ -1439,7 +1439,7 @@ def update(frame):
         )
         completion_text_artist = ax.text(0.5, 0.5, completion_text, transform=ax.transAxes,
                                          ha='center', va='center', fontsize=14, color='navy', fontweight='bold',
-                                         bbox=dict(boxstyle='round,pad=0.5', fc=(0.9, 0.9, 1, 0.95), ec='black'),
+                                         bbox=dict(boxstyle='round,pad=0.5', fc=(0.9, 0.9, 1, 0.9), ec='black'),
                                          zorder=10)
         if TO_PRINT:
             print(completion_text)
