@@ -31,7 +31,7 @@ initial_speed_level = 50
 
 ## Smaller Model Parameters
 N = 8 # Number of devices
-total_layers = 31
+total_layers = 63
 
 do_backward = True
 # True=Pipeline Parallel (BWD Reversed), False=Data Parallel(BWD Same Order)
@@ -41,20 +41,27 @@ vocab_size_k = 128
 model_dim = 5120
 kv_factor = .125
 kv_dim = int(model_dim * kv_factor)
-ffn_multiplier = 4 
+ffn_multiplier = 5.4 
 ffn_dim = int(model_dim * ffn_multiplier)
 num_experts = 1
 active_experts = 1
 expert_dim = int(ffn_dim // num_experts)
 chunk_size = 1536
 
+## FP8
 bitwidth = 8
 dtype_bytes = bitwidth / 8
 
 attn_type = "Exact"
 
-## FP8
+
+seqlen_thousands = 32
+seqlen = (1 << 10) * seqlen_thousands
+
+total_chunks = math.ceil(seqlen / chunk_size)
 train_chunk_freq = 1
+
+num_sequences = 1
 
 
 matmul_attn_flops_per_layer =2 * (model_dim * model_dim) + (4 * model_dim * kv_dim * chunk_size)
@@ -68,11 +75,6 @@ flops_per_attn_chunk_mult = 2 * chunk_size * model_dim
 ## head does fwd + bwd
 head_flops = 2 * (2 * (vocab_size_k * 1000) * model_dim * chunk_size)
 
-seqlen_thousands = 128
-seqlen = (1 << 10) * seqlen_thousands
-
-total_chunks = math.ceil(seqlen / chunk_size)
-
 ## H100 TFLOPS
 
 ## FP16 = 989 TFLOPS
@@ -83,6 +85,9 @@ attn_efficiency = 0.6
 
 total_matmul_flops = 0
 total_attn_flops = 0
+
+total_fwd_flops = 0
+total_bwd_flops = 0
 
 
 
@@ -110,6 +115,9 @@ for i in range(total_chunks):
     total_attn_flops += total_layers * attn_flops
     total_matmul_flops += total_layers * base_flops_per_layer
     layer_flops = base_flops_per_layer + attn_flops
+
+    total_fwd_flops += total_layers * layer_flops
+
     computation_times_sec[i] = base_flops_per_layer / (hardware_max_flops * matmul_efficiency) + attn_flops / (hardware_max_flops * attn_efficiency)
     computation_times_frames[i] = int(computation_times_sec[i] * cycles_per_second)
     
@@ -128,9 +136,14 @@ for i in range(total_chunks):
 
         per_layer_chunk_flops += bwd_w_flops
         total_matmul_flops += total_layers * base_flops_per_layer
+
+        total_bwd_flops += total_layers * bwd_x_flops + total_layers * bwd_w_flops
     
     total_chunk_flops += total_layers * per_layer_chunk_flops
     total_chunk_flops += head_flops
+
+    total_fwd_flops += head_flops / 2
+    total_bwd_flops += head_flops / 2
 
     total_matmul_flops += head_flops
 
@@ -303,10 +316,14 @@ legend_text = (
     f"         - Vocab Size: {vocab_size_k}k\n\n"
     f"      - Training Parameters:\n"
     f"         - Sequence Length: {seqlen_thousands}k\n"
-    f"         - Chunk Training Frequency: {train_chunk_freq}\n"
-    f"         - Total TFLOPs: {int(total_flops / 1e12)}\n"
-    f"              - Total Matmul TFLOPs: {int(total_matmul_flops / 1e12)} TFLOPs\n"
-    f"              - Total Attn TFLOPs: {int(total_attn_flops / 1e12)} TFLOPs\n"
+    f"         - Chunk Training Frequency: {train_chunk_freq}\n\n"
+    f"         - Num Sequences: {num_sequences}\n\n"
+    f"      - FLOP Breakdown\n"     
+    f"          - Total TFLOPs: {int(total_flops / 1e12)}\n"
+    f"              - FWD TFLOPs: {int(total_fwd_flops / 1e12)} TFLOPs\n"
+    f"              - BWD TFLOPs: {int(total_bwd_flops / 1e12)} TFLOPs\n"
+    f"              - Overall Matmul TFLOPs: {int(total_matmul_flops / 1e12)} TFLOPs\n"
+    f"              - Overall Attn TFLOPs: {int(total_attn_flops / 1e12)} TFLOPs\n\n"
     f"      - Dataflow Parameters:\n"
     f"          - Per-Device Layer Capacity: {layer_capacity}\n"
     f"          - Chunk Size: {chunk_size}\n"
