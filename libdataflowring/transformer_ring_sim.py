@@ -29,7 +29,7 @@ initial_speed_level = 50
 
 ## Smaller Model Parameters
 N = 8 # Number of devices
-total_layers = 32
+total_layers = 31
 
 model_dim = 5120
 kv_factor = .125
@@ -62,7 +62,7 @@ total_chunks = math.ceil(seqlen / chunk_size)
 
 ## FP16 = 989 TFLOPS
 ## FP8 = 989 * 2 TFLOPS
-hardware_max_flops = int((989 * (1 / dtype_bytes)) * 1e12)
+hardware_max_flops = int((989 * (2 / dtype_bytes)) * 1e12)
 flop_efficiency = 0.7
 
 computation_times_sec = {}
