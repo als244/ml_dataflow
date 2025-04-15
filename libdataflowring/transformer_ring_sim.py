@@ -332,7 +332,7 @@ legend_text = (
     f"      - Model Info:\n"
     f"         - Total Blocks (non-head): {total_layers}\n"
     f"         - Bitwidth: {bitwidth}\n"
-    f"         - Attn Type: {attn_type}\n"
+    f"         - Attention Algo: {attn_type}\n"
     f"         - Model Dim: {model_dim}\n"
     f"         - KV Dim: {kv_dim}\n"
     f"         - Per-Expert Dim: {expert_dim}\n"
@@ -1433,9 +1433,9 @@ def update(frame):
              f"% Active during Steady-State: {steady_eff:.2f}%\n\n"
              f"TFLOP Info:\n"
              f"Total Task Computation TFLOPs: {int(total_flops / 1e12)}\n"
-             f"Advertised Max TFLOPS: {hardware_max_flops}\n"
-             f"Practical Max TFLOPS: {int(hardware_max_flops * practical_efficiency)}\n"
-             f"Achieved Avg. TFLOPS: {int(((total_flops / N) / runtime_in_seconds) / 1e12)}\n\n"
+             f"Advertised Max TFLOPS: {hardware_max_flops / 1e12} TFLOPS\n"
+             f"Practical Max TFLOPS: {int((hardware_max_flops * practical_efficiency) / 1e12)} TFLOPS\n"
+             f"Achieved Avg. TFLOPS: {int(((total_flops / N) / runtime_in_seconds) / 1e12)} TFLOPS\n\n"
         )
         completion_text_artist = ax.text(0.5, 0.5, completion_text, transform=ax.transAxes,
                                          ha='center', va='center', fontsize=14, color='navy', fontweight='bold',
@@ -1445,7 +1445,7 @@ def update(frame):
             print(completion_text)
         artists_to_update.append(completion_text_artist)
         # ***** FIX: Update title one last time when showing completion text *****
-        title_obj.set_text(f'Cycle {final_time} (Complete)')
+        title_obj.set_text(f'Cycle {T} (Complete)')
         # ************************************************************************
 
     # Stop the animation timer
