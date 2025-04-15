@@ -14,24 +14,99 @@ import textwrap
 from collections import deque # Use deque for efficient queue operations
 # import pdb; pdb.set_trace() # Keep commented out unless debugging
 
+import math
 # --- Simulation Parameters ---
+
+## making 100 microseconds equivalent to 1 cycle
+cycles_per_second = 1e4
+
+# --- Speed/Interval Parameters ---
+min_speed_level = 1
+max_speed_level = 100
+min_interval = 1
+max_interval = 100
+initial_speed_level = 50
 
 ## Smaller Model Parameters
 N = 8 # Number of devices
 total_layers = 32
-total_chunks = 16
+
+model_dim = 5120
+kv_factor = .125
+kv_dim = int(model_dim * kv_factor)
+ffn_multiplier = 4 
+ffn_dim = int(model_dim * ffn_multiplier)
+num_experts = 1
+top_k_experts = 1
+expert_dim = int(ffn_dim // num_experts)
+chunk_size = 1536
+
+dtype_bytes = 1
+
+matmul_attn_flops_per_layer =2 * (model_dim * model_dim) + (4 * model_dim * kv_dim * chunk_size)
+matmul_ffn_flops_per_layer = 3 * (2 * model_dim * ffn_dim * chunk_size * top_k_experts)
+
+base_flops_per_layer = matmul_attn_flops_per_layer + matmul_ffn_flops_per_layer
+
+## this is multiplied by the chunk_size + cur seq len
+flops_per_attn_chunk_mult = 2 * chunk_size * model_dim
 
 
-## Larger Model Parameters
-# N = 16 # Number of devices
-# total_layers = 64
-# total_chunks = 32
+seqlen_thousands = 128
+seqlen = (1 << 10) * seqlen_thousands
+
+total_chunks = math.ceil(seqlen / chunk_size)
+
+hardware_max_flops = 1500 * 1e12
+flop_efficiency = 0.7
+
+computation_times_sec = {}
+computation_times_frames = {}
+
+computation_times_sec_bwd = {}
+computation_times_frames_bwd = {}
+
+prev_seq_len = 0
+for i in range(total_chunks):
+    cur_seq_len = prev_seq_len + chunk_size
+    attn_flops = flops_per_attn_chunk_mult * cur_seq_len
+    layer_flops = base_flops_per_layer + attn_flops
+    computation_times_sec[i] = layer_flops / (hardware_max_flops * flop_efficiency)
+    computation_times_frames[i] = int(computation_times_sec[i] * cycles_per_second)
+    
+    ## attention layer for bwd x has double the flops...
+    computation_times_sec_bwd[i] = (layer_flops + attn_flops) / (hardware_max_flops * flop_efficiency)
+    computation_times_frames_bwd[i] = int(computation_times_sec_bwd[i] * cycles_per_second)
+    prev_seq_len = cur_seq_len
+
+## hardware configs
+home_bw_gb_sec = 512
+peer_transfer_bw_gb_sec = 200
+
+attn_block_size_bytes = dtype_bytes * (2 * model_dim * model_dim + 4 * model_dim * kv_dim)
+ffn_block_size_bytes = dtype_bytes * (3 * model_dim * expert_dim * num_experts)
+layer_size_bytes = attn_block_size_bytes + ffn_block_size_bytes
+
+layer_transfer_time_sec = (layer_size_bytes * 8) / (home_bw_gb_sec * 1e9)
+
+## model input, query, key, value, attn output, attn ouut output
+attn_activation_bytes = dtype_bytes * 4 * (model_dim * chunk_size) + 2 * (kv_dim * chunk_size)
+ffn_activation_bytes = dtype_bytes * (expert_dim * chunk_size * top_k_experts)
+activation_size_bytes = attn_activation_bytes + ffn_activation_bytes
+
+activation_transfer_time_sec = (activation_size_bytes * 8) / (home_bw_gb_sec * 1e9)
+
+output_size_bytes = dtype_bytes * (model_dim * chunk_size)
+
+transition_transfer_time_sec = (output_size_bytes * 8) / (peer_transfer_bw_gb_sec * 1e9)
 
 
-layerTransferFrames = 100 # Cycles to transfer weights
-computationFrames = layerTransferFrames // N # Cycles per compute task
-savedActivationsFrames = computationFrames # Cycles to transfer activations (save/fetch)
-activationTransitionFrames = computationFrames # Cycles to transfer activations/grads between devices
+
+layerTransferFrames = int(layer_transfer_time_sec * cycles_per_second) # Cycles to transfer weights
+computationFrames = computation_times_frames[0] # Cycles per compute task
+max_computationFrames = computation_times_frames[total_chunks-1]
+savedActivationsFrames = int(activation_transfer_time_sec * cycles_per_second) # Cycles to transfer activations (save/fetch)
+activationTransitionFrames = int(transition_transfer_time_sec * cycles_per_second) # Cycles to transfer activations/grads between devices
 
 layer_capacity = 2 # Max weights per device
 
@@ -81,7 +156,7 @@ if sys.platform == 'darwin':
 
 ## NOT USING THESE CORRECTLY FOR NOW....
 activations_capacity = 4 # Max CHECKPOINTED activations kept resident from FWD per device
-transitions_capacity = N # Buffer size for incoming FWD data from peers
+transitions_capacity = total_chunks # Buffer size for incoming FWD data from peers
 grad_activations_capacity = total_chunks # Buffer size for local dL/dA results
 
 do_backward = True
@@ -90,12 +165,7 @@ are_chunks_same_seq = True
 
 max_frames = 100000 # Limit animation length for performance if needed
 
-# --- Speed/Interval Parameters ---
-min_speed_level = 1
-max_speed_level = 100
-min_interval = 1
-max_interval = 100
-initial_speed_level = 50
+
 
 def calculate_interval(speed_level, s_min, s_max, i_min, i_max):
     """Linearly maps speed level (s_min to s_max) to interval (i_max to i_min)."""
@@ -154,47 +224,33 @@ center_pos = np.array([0, 0])
 # --- Legend Text ---
 wrap_width = 40
 
-"""
 legend_text = (
     f"Simulated Configuration:\n\n"
-    f"      - Num Layers: {total_layers}\n"
-    f"      - Num Devices: {N}\n"
-    f"      - Num Chunks: {total_chunks}\n"
-)
-if are_chunks_same_seq: legend_text += f"      - Chunk Order: Pipeline Parallel (BWD Reversed)\n"
-else: legend_text += f"      - Chunk Order: Data Parallel (BWD Same Order)\n"
-if do_backward: legend_text += f"      - Do Backward: Yes\n"
-else: legend_text += f"      - Do Backward: No\n"
-legend_text += (
-    f"      - Per-Device Layer (Weight) Capacity: {layer_capacity}\n"
-    f"      - Per-Device Resident Activation Capacity: {activations_capacity}\n"
-    f"      - Per-Device FWD Transition Capacity: {transitions_capacity}\n"
-    f"      - Per-Device BWD Transition Capacity: {total_chunks}\n"
-    f"      - Per-Device Grad Activation Capacity: {grad_activations_capacity}\n"
-    f"      - Per-Device BWD Fetched Act. Capacity: {total_chunks * 2}\n" # Show corrected capacity
-    f"      - Constants:\n"
-    f"              - Layer Computation: {computationFrames} Cycles\n"
-    f"              - Layer Transfer: {layerTransferFrames} Cycles\n"
-    f"              - Activation Transfer: {savedActivationsFrames} Cycles\n"
-    f"              - Block Transition: {activationTransitionFrames} Cycles\n"
-)
-"""
-
-legend_text = (
-    f"Simulated Configuration:\n\n"
-    f"      - Num Layers: {total_layers}\n"
-    f"      - Num Devices: {N}\n"
-    f"      - Num Chunks: {total_chunks}\n"
-)
-if do_backward: legend_text += f"      - Do Backward: Yes\n"
-else: legend_text += f"      - Do Backward: No\n"
-legend_text += (
-    f"      - Per-Device Layer (Weight) Capacity: {layer_capacity}\n"
-    f"      - Constants:\n"
-    f"              - Layer Transfer: {layerTransferFrames} Cycles\n"
-    f"              - Layer Computation: {computationFrames} Cycles\n"
-    f"              - Activation Transfer: {savedActivationsFrames} Cycles\n"
-    f"              - Block Transition: {activationTransitionFrames} Cycles\n"
+    f"      - Hardware Environment Constants:\n"
+    f"         - Num Devices: {N}\n"
+    f"         - Hardware Theoretical MAX TFLOPs: {int(hardware_max_flops / 1e12)} TFLOPs\n"
+    f"         - Per-Layer Compute Efficiency: {int(hardware_max_flops * flop_efficiency / 1e12)} TFLOPs\n"   
+    f"         - Device-to-Home BW (Gb/s): {home_bw_gb_sec}\n"
+    f"         - Peer-to-Peer BW (Gb/s): {peer_transfer_bw_gb_sec}\n"
+    f"      - Model Info:\n"
+    f"         - Total Blocks (non-head): {total_layers}\n"
+    f"         - Model Dim: {model_dim}\n"
+    f"         - KV Dim: {kv_dim}\n"
+    f"         - Per-Expert Dim: {expert_dim}\n"
+    f"         - Num Experts: {num_experts}\n"
+    f"         - Top K Experts: {top_k_experts}\n"
+    f"      - Training Parameters:\n"
+    f"         - Sequence Length: {seqlen_thousands}k\n"
+    f"         - Chunk Size: {chunk_size}\n"
+    f"         - Total Chunks: {total_chunks}\n"
+    f"      - Dataflow Parameters:\n"
+    f"          - Per-Device Layer Capacity: {layer_capacity}\n"
+    f"      - Derived Simulation Cycles ({int(cycles_per_second)} cycles per second):\n"
+    f"         - C0 Computation: {computationFrames} Cycles\n"
+    f"         - C{total_chunks-1} Computation: {max_computationFrames} Cycles\n"
+    f"         - Layer Transfer: {layerTransferFrames} Cycles\n"
+    f"         - Activation Transfer: {savedActivationsFrames} Cycles\n"
+    f"         - Block Transition: {activationTransitionFrames} Cycles\n"
 )
 wrapped_legend_text = legend_text
 at = AnchoredText(wrapped_legend_text, loc='upper left', bbox_to_anchor=(1.01, 1.01),
@@ -404,7 +460,7 @@ class Device:
                 else:
                     head_task_queue_order.extend(range(self.total_chunks))
                     self.head_final_chunk_id = self.total_chunks - 1
-                for i in head_task_queue_order: self.computation_queue.append((i, cur_layer_id_for_head_task, False, False, -1, computationFrames))
+                for i in head_task_queue_order: self.computation_queue.append((i, cur_layer_id_for_head_task, False, False, -1, computation_times_frames[i]))
                 cur_layer_id_for_bwd_loop = self.last_fwd_layer_on_device
             else: cur_layer_id_for_bwd_loop = self.last_fwd_layer_on_device
             if cur_layer_id_for_bwd_loop >= 0:
@@ -414,8 +470,8 @@ class Device:
                     else: chunk_order = range(self.total_chunks)
                     for i in chunk_order:
                         transfer_direction = -1 if current_bwd_layer > 0 else 0
-                        self.computation_queue.append((i, current_bwd_layer, True, False, transfer_direction, computationFrames))
-                    for i in chunk_order: self.computation_queue.append((i, current_bwd_layer, False, True, 0, computationFrames))
+                        self.computation_queue.append((i, current_bwd_layer, True, False, transfer_direction, computation_times_frames_bwd[i]))
+                    for i in chunk_order: self.computation_queue.append((i, current_bwd_layer, False, True, 0, computation_times_frames[0]))
                     current_bwd_layer -= self.total_devices
 
     def handle_completed_transfers(self, T, all_devices): # Unchanged
