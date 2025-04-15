@@ -257,7 +257,7 @@ legend_text = (
     f"         - Total Chunks: {total_chunks}\n"
     f"      - Dataflow Parameters:\n"
     f"          - Per-Device Layer Capacity: {layer_capacity}\n"
-    f"      - Derived Simulation Cycles ({int(cycles_per_second / 1000)}k cycles per second):\n"
+    f"      - Derived Cycles ({int(cycles_per_second / 1000)}k cycles per second):\n"
     f"         - C0 Computation: {computationFrames} Cycles\n"
     f"         - C{total_chunks-1} Computation: {max_computationFrames} Cycles\n"
     f"         - Head Computation: {headFrames} Cycles\n"
