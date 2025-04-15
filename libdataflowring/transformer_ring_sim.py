@@ -341,7 +341,7 @@ legend_text = (
     f"         - Vocab Size: {vocab_size_k}k\n\n"
     f"      - Training Parameters:\n"
     f"         - Sequence Length: {seqlen_thousands}k\n"
-    f"         - Chunk Training Frequency: {train_chunk_freq}\n\n"
+    f"         - Chunk Training Frequency: {train_chunk_freq}\n"
     f"         - Num Sequences: {num_sequences}\n\n"
     f"      - FLOP Breakdown\n"     
     f"          - Total TFLOPs: {int(total_flops / 1e12)}\n"
