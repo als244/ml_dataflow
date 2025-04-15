@@ -56,6 +56,24 @@ dtype_bytes = bitwidth / 8
 seqlen_thousands = 32
 
 
+## hardware configs
+
+## compute configs
+## H100 TFLOPS
+
+## FP16 = 989 TFLOPS
+## FP8 = 989 * 2 TFLOPS
+hardware_max_flops = int((989 * (2 / dtype_bytes)) * 1e12)
+matmul_efficiency = 0.7
+attn_efficiency = 0.6
+
+
+## communication configs
+home_bw_gb_sec = 512
+peer_transfer_bw_gb_sec = 200
+
+
+
 
 
 
@@ -92,13 +110,6 @@ flops_per_attn_chunk_mult = 2 * chunk_size * model_dim
 ## head does fwd + bwd
 head_flops = 2 * (2 * (vocab_size_k * 1000) * model_dim * chunk_size)
 
-## H100 TFLOPS
-
-## FP16 = 989 TFLOPS
-## FP8 = 989 * 2 TFLOPS
-hardware_max_flops = int((989 * (2 / dtype_bytes)) * 1e12)
-matmul_efficiency = 0.7
-attn_efficiency = 0.6
 
 total_matmul_flops = 0
 total_attn_flops = 0
@@ -169,9 +180,6 @@ for i in range(total_chunks):
     prev_seq_len = cur_seq_len
    
 
-## hardware configs
-home_bw_gb_sec = 512
-peer_transfer_bw_gb_sec = 200
 
 attn_block_size_bytes = dtype_bytes * (2 * model_dim * model_dim + 4 * model_dim * kv_dim)
 ffn_block_size_bytes = dtype_bytes * (3 * model_dim * expert_dim * num_experts)
