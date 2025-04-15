@@ -48,8 +48,14 @@ active_experts = 1
 expert_dim = int(ffn_dim // num_experts)
 chunk_size = 1536
 
+bitwidth = 8
+dtype_bytes = bitwidth / 8
+
+attn_type = "Exact"
+
 ## FP8
-dtype_bytes = 1
+train_chunk_freq = 1
+
 
 matmul_attn_flops_per_layer =2 * (model_dim * model_dim) + (4 * model_dim * kv_dim * chunk_size)
 matmul_ffn_flops_per_layer = 3 * (2 * model_dim * ffn_dim * chunk_size * active_experts)
@@ -72,9 +78,15 @@ total_chunks = math.ceil(seqlen / chunk_size)
 ## FP16 = 989 TFLOPS
 ## FP8 = 989 * 2 TFLOPS
 hardware_max_flops = int((989 * (2 / dtype_bytes)) * 1e12)
-flop_efficiency = 0.7
+matmul_efficiency = 0.7
+attn_efficiency = 0.6
 
-head_computation_times_sec = head_flops / (hardware_max_flops * flop_efficiency)
+total_matmul_flops = 0
+total_attn_flops = 0
+
+
+
+head_computation_times_sec = head_flops / (hardware_max_flops * matmul_efficiency)
 
 computation_times_sec = {}
 computation_times_frames = {}
@@ -90,30 +102,41 @@ bwd_w_flops = base_flops_per_layer
 bwd_x_flops = 0
 
 for i in range(total_chunks):
-    per_layer_chunk_flopts = 0
+    per_layer_chunk_flops = 0
     total_chunk_flops = 0
     cur_seq_len = prev_seq_len + chunk_size
     attn_flops = flops_per_attn_chunk_mult * cur_seq_len
+
+    total_attn_flops += total_layers * attn_flops
+    total_matmul_flops += total_layers * base_flops_per_layer
     layer_flops = base_flops_per_layer + attn_flops
-    computation_times_sec[i] = layer_flops / (hardware_max_flops * flop_efficiency)
+    computation_times_sec[i] = base_flops_per_layer / (hardware_max_flops * matmul_efficiency) + attn_flops / (hardware_max_flops * attn_efficiency)
     computation_times_frames[i] = int(computation_times_sec[i] * cycles_per_second)
     
-    per_layer_chunk_flopts += layer_flops
-
-    ## attention layer for bwd x has double the flops...
-    bwd_x_flops = layer_flops + attn_flops
-    computation_times_sec_bwd[i] = bwd_x_flops / (hardware_max_flops * flop_efficiency)
-    computation_times_frames_bwd[i] = int(computation_times_sec_bwd[i] * cycles_per_second)
-    prev_seq_len = cur_seq_len
+    per_layer_chunk_flops += layer_flops
 
     if do_backward:
-        per_layer_chunk_flopts += bwd_x_flops
-        per_layer_chunk_flopts += bwd_w_flops
+        ## attention layer for bwd x has double the flops...
+        bwd_x_flops = layer_flops + attn_flops
+        computation_times_sec_bwd[i] = base_flops_per_layer / (hardware_max_flops * matmul_efficiency) + (2 * attn_flops) / (hardware_max_flops * attn_efficiency)
+        computation_times_frames_bwd[i] = int(computation_times_sec_bwd[i] * cycles_per_second)
+
+        per_layer_chunk_flops += bwd_x_flops
+
+        total_matmul_flops += total_layers * base_flops_per_layer
+        total_attn_flops += 2 * total_layers * attn_flops
+
+        per_layer_chunk_flops += bwd_w_flops
+        total_matmul_flops += total_layers * base_flops_per_layer
     
-    total_chunk_flops += total_layers * per_layer_chunk_flopts
+    total_chunk_flops += total_layers * per_layer_chunk_flops
     total_chunk_flops += head_flops
 
+    total_matmul_flops += head_flops
+
     total_flops += total_chunk_flops
+
+    prev_seq_len = cur_seq_len
    
 
 ## hardware configs
@@ -260,27 +283,34 @@ wrap_width = 40
 
 legend_text = (
     f"Simulated Configuration:\n\n"
-    f"      - Hardware Environment Constants:\n"
+    f"      - Compute Environment Constants:\n"
     f"         - Num Devices: {N}\n"
     f"         - Hardware Theoretical MAX TFLOPs: {int(hardware_max_flops / 1e12)} TFLOPs\n"
-    f"         - Per-Layer Compute Efficiency: {int(hardware_max_flops * flop_efficiency / 1e12)} TFLOPs\n"   
+    f"         - Matmul Efficiency: {matmul_efficiency}\n"
+    f"         - Attn Efficiency: {attn_efficiency}\n"
+    f"      - Communication Environment Constants:\n"
     f"         - Device-to-Home BW (Gb/s): {home_bw_gb_sec}\n"
-    f"         - Peer-to-Peer BW (Gb/s): {peer_transfer_bw_gb_sec}\n"
+    f"         - Peer-to-Peer BW (Gb/s): {peer_transfer_bw_gb_sec}\n\n"
     f"      - Model Info:\n"
     f"         - Total Blocks (non-head): {total_layers}\n"
+    f"         - Bitwidth: {bitwidth}\n"
+    f"         - Attn Type: {attn_type}\n"
     f"         - Model Dim: {model_dim}\n"
     f"         - KV Dim: {kv_dim}\n"
     f"         - Per-Expert Dim: {expert_dim}\n"
     f"         - Num Experts: {num_experts}\n"
     f"         - Active Experts: {active_experts}\n"
-    f"         - Vocab Size: {vocab_size_k}k\n"
+    f"         - Vocab Size: {vocab_size_k}k\n\n"
     f"      - Training Parameters:\n"
     f"         - Sequence Length: {seqlen_thousands}k\n"
+    f"         - Chunk Training Frequency: {train_chunk_freq}\n"
     f"         - Total TFLOPs: {int(total_flops / 1e12)}\n"
+    f"              - Total Matmul TFLOPs: {int(total_matmul_flops / 1e12)} TFLOPs\n"
+    f"              - Total Attn TFLOPs: {int(total_attn_flops / 1e12)} TFLOPs\n"
     f"      - Dataflow Parameters:\n"
     f"          - Per-Device Layer Capacity: {layer_capacity}\n"
     f"          - Chunk Size: {chunk_size}\n"
-    f"             - Total Chunks: {total_chunks}\n"
+    f"             - Total Chunks: {total_chunks}\n\n"
     f"      - Derived Cycles ({int(cycles_per_second / 1000)}k cycles per second):\n"
     f"         - C0 Computation: {computationFrames} Cycles\n"
     f"         - C{total_chunks-1} Computation: {max_computationFrames} Cycles\n"
@@ -290,7 +320,7 @@ legend_text = (
     f"         - Block Transition: {activationTransitionFrames} Cycles\n\n"
     f"       - Runtime Lower-Bounds:\n"
     f"         - With Theoretical Max TFLOPS: {int((total_flops / N) / ((hardware_max_flops)) * cycles_per_second)} cycles\n"
-    f"         - With Practical Compute Efficiency: {int((total_flops / N) / (hardware_max_flops * flop_efficiency) * cycles_per_second)} cycles\n"
+    f"         - With Practical Matmul/Attn Efficiency: {int(((total_matmul_flops / N) / (hardware_max_flops * matmul_efficiency) + (total_attn_flops / N) / (hardware_max_flops * attn_efficiency)) * cycles_per_second)} cycles\n"
 )
 wrapped_legend_text = legend_text
 at = AnchoredText(wrapped_legend_text, loc='upper left', bbox_to_anchor=(1.01, 1.01),
@@ -1343,6 +1373,10 @@ def update(frame):
 
         runtime_in_seconds = T / cycles_per_second
 
+        matmul_flop_ratio = total_matmul_flops / total_flops
+        attn_flop_ratio = total_attn_flops / total_flops
+
+        practical_efficiency = matmul_efficiency * matmul_flop_ratio + attn_efficiency * attn_flop_ratio
 
 
         completion_text = (
@@ -1358,9 +1392,7 @@ def update(frame):
              f"TFLOP Info:\n"
              f"Total Task Computation TFLOPs: {int(total_flops / 1e12)}\n"
              f"Advertised Max TFLOPS: {hardware_max_flops}\n"
-             f"Theoretical Runtime Lower-Bound: {int((total_flops / N) / ((hardware_max_flops))):.3f} seconds\n"
-             f"Practical Max TFLOPS: {int(hardware_max_flops * flop_efficiency)}\n"
-             f"True Runtime Lower-Bound: {int((total_flops / N) / (hardware_max_flops * flop_efficiency)):.3f} seconds\n"
+             f"Practical Max TFLOPS: {int(hardware_max_flops * practical_efficiency)}\n"
              f"Achieved Avg. TFLOPS: {int(((total_flops / N) / runtime_in_seconds) / 1e12)}\n\n"
         )
         completion_text_artist = ax.text(0.5, 0.5, completion_text, transform=ax.transAxes,
