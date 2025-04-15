@@ -366,7 +366,7 @@ legend_text = (
 )
 wrapped_legend_text = legend_text
 at = AnchoredText(wrapped_legend_text, loc='upper left', bbox_to_anchor=(1.01, 1.01),
-                  prop=dict(size=10), frameon=True, pad=0.4, borderpad=0.5,
+                  prop=dict(size=8), frameon=True, pad=0.4, borderpad=0.5,
                   bbox_transform=ax.transAxes)
 at.patch.set_boxstyle("round,pad=0.,rounding_size=0.2")
 at.patch.set_facecolor((1, 1, 1, 0.8))
@@ -1433,8 +1433,8 @@ def update(frame):
              f"% Active during Steady-State: {steady_eff:.2f}%\n\n"
              f"TFLOP Info:\n"
              f"Total Task Computation TFLOPs: {int(total_flops / 1e12)}\n"
-             f"Advertised Max TFLOPS: {hardware_max_flops / 1e12} TFLOPS\n"
-             f"Practical Max TFLOPS: {int((hardware_max_flops * practical_efficiency) / 1e12)} TFLOPS\n"
+             f"Advertised Upper-BoundTFLOPS: {int(hardware_max_flops / 1e12)} TFLOPS\n"
+             f"Upper-Bound based on Matmul/Attn Efficiency: {int((hardware_max_flops * practical_efficiency) / 1e12)} TFLOPS\n"
              f"Achieved Avg. TFLOPS: {int(((total_flops / N) / runtime_in_seconds) / 1e12)} TFLOPS\n\n"
         )
         completion_text_artist = ax.text(0.5, 0.5, completion_text, transform=ax.transAxes,
