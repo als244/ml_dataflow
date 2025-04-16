@@ -396,6 +396,10 @@ for i in range(N):
     device_artists[f'stall_node_{i}'] = stall_node
     stall_label = ax.text(stall_node_pos[0], stall_node_pos[1], "", ha='center', va='center', fontsize=stall_node_fontsize, fontweight='semibold', color='white', zorder=3, visible=False)
     device_label_artists[f'stall_label_{i}'] = stall_label
+    finish_indicator_color = (0.0, 0.8, 0.0, stall_node_opacity) # Green, semi-transparent
+    finish_indicator = patches.Circle(stall_node_pos, radius=stall_node_radius, fc=finish_indicator_color, ec=color, lw=stall_node_border_width, zorder=2, visible=False)
+    ax.add_patch(finish_indicator)
+    device_artists[f'finish_indicator_{i}'] = finish_indicator
     inner_edge_conn_point = inner_center + unit_dir * inner_node_radius
     outer_edge_conn_point = outer_pos - unit_dir * outer_node_radius
     dist = np.linalg.norm(outer_edge_conn_point - inner_edge_conn_point)
@@ -1611,16 +1615,14 @@ def reset_simulation():
     """ Resets the simulation state and visual elements. """
     global all_devices, total_tasks, total_completed_tasks, total_computation_time
     global current_frame_index, animation_paused, completion_text_artist, target_cycle
-    # ***** FIX: Reset new state variable *****
     global simulation_computation_finish_time
-    # *****************************************
     global N
 
     if TO_PRINT:
         print("\n" + "="*20 + " Resetting Simulation " + "="*20)
 
     all_devices = {i: Device(i, layer_capacity, activations_capacity, transitions_capacity,
-                              N, total_layers, total_chunks)
+                             N, total_layers, total_chunks)
                    for i in range(N)}
 
     total_tasks = sum(len(d.computation_queue) for d in all_devices.values())
@@ -1630,16 +1632,14 @@ def reset_simulation():
     current_frame_index = 0
     animation_paused = False
     target_cycle = None
-    # ***** FIX: Reset new state variable *****
     simulation_computation_finish_time = None
-    # *****************************************
 
     if completion_text_artist is not None:
         if completion_text_artist.axes is not None:
             completion_text_artist.remove()
         completion_text_artist = None
 
-    # Reset visuals (Unchanged logic, just layout)
+    # Reset visuals
     for i in range(N):
         unit_dir = unit_directions[i]
         inner_center = inner_node_centers[i]
@@ -1673,7 +1673,14 @@ def reset_simulation():
         if f'stall_label_{i}' in device_label_artists:
             device_label_artists[f'stall_label_{i}'].set_text("")
             device_label_artists[f'stall_label_{i}'].set_visible(False)
+
+        # --- ADDED: Reset Finish Indicator ---
+        if f'finish_indicator_{i}' in device_artists:
+             device_artists[f'finish_indicator_{i}'].set_visible(False)
+        # --- END ADDED ---
+
         if f'circle_{i}' in device_label_artists:
+            # Initial status should be Idle
             device_label_artists[f'circle_{i}'].set_text(f'D{i}\nIdle')
         if f'inner_label_{i}' in device_label_artists:
             device_label_artists[f'inner_label_{i}'].set_text(f'D{i}\nHome')
@@ -1705,6 +1712,7 @@ def update(frame):
               all_artists.extend([
                   device_label_artists[f'circle_{i}'], device_label_artists[f'inner_label_{i}'],
                   device_artists[f'stall_node_{i}'], device_label_artists[f'stall_label_{i}'],
+                   device_artists[f'finish_indicator_{i}'],
                   edge_artists[f'in_{i}'][0], edge_artists[f'in_{i}'][1],
                   edge_artists[f'out_{i}'][0], edge_artists[f'out_{i}'][1],
                   edge_artists[f'ring_{i}'][0], edge_artists[f'ring_{i}'][1],
@@ -1731,6 +1739,7 @@ def update(frame):
              all_artists.extend([
                  device_label_artists[f'circle_{i}'], device_label_artists[f'inner_label_{i}'],
                  device_artists[f'stall_node_{i}'], device_label_artists[f'stall_label_{i}'],
+                 device_artists[f'finish_indicator_{i}'],
                  edge_artists[f'in_{i}'][0], edge_artists[f'in_{i}'][1],
                  edge_artists[f'out_{i}'][0], edge_artists[f'out_{i}'][1],
                  edge_artists[f'ring_{i}'][0], edge_artists[f'ring_{i}'][1],
@@ -1788,15 +1797,26 @@ def update(frame):
         inner_label_artist.set_text(f"D{i}\nHome")
         stall_node_artist = device_artists[f'stall_node_{i}']
         stall_label_artist = device_label_artists[f'stall_label_{i}']
-        if device.is_stalled and device.stall_reason:
+        finish_indicator_artist = device_artists[f'finish_indicator_{i}'] # Get the new artist
+
+        if device.device_has_finished:
+            # Show finish indicator and hide stall indicator
+            finish_indicator_artist.set_visible(True)
+            stall_node_artist.set_visible(False)
+            stall_label_artist.set_visible(False)
+        elif device.is_stalled and device.stall_reason:
+            # Show stall indicator and hide finish indicator
             wrapped_stall_reason = textwrap.fill(device.stall_reason.replace("\n", " "), width=15)
             stall_label_artist.set_text(wrapped_stall_reason)
             stall_label_artist.set_visible(True)
             stall_node_artist.set_visible(True)
+            finish_indicator_artist.set_visible(False)
         else:
+            # Hide both stall and finish indicators
             stall_label_artist.set_text("")
             stall_label_artist.set_visible(False)
             stall_node_artist.set_visible(False)
+            finish_indicator_artist.set_visible(False)
 
         # Update Arrows (Inbound, Outbound, Ring)
         arrow_vis_inbound, label_vis_inbound = edge_artists[f'in_{i}']
@@ -1964,7 +1984,7 @@ def update(frame):
 
         # Add updated artists for this device
         artists_to_update.extend([ outer_label_artist, inner_label_artist, stall_node_artist, stall_label_artist,
-                                  arrow_vis_inbound, label_vis_inbound, arrow_vis_outbound, label_vis_outbound,
+                                  finish_indicator_artist, arrow_vis_inbound, label_vis_inbound, arrow_vis_outbound, label_vis_outbound,
                                   arrow_ring, label_ring, compute_arc ])
 
     # --- Check for Simulation Completion (Based on Computation Tasks) ---
