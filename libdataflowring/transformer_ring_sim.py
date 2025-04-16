@@ -554,7 +554,13 @@ class Device:
                 head_task_queue_order = []
                 if are_chunks_same_seq:
                     ## half of the total chu
-                    cutoff_chunk_id = self.total_chunks // 2
+                    head_diff = headFrames - computation_times_frames[0]
+                    if head_diff <= 0:
+                        cutoff_chunk_id = self.total_chunks // 2
+                    else:
+                        total_chunk_frames = sum([computation_times_frames[i] for i in range(self.total_chunks)])
+                        cutoff_chunk_id = math.ceil((total_chunk_frames / 2) / headFrames)
+                    print(f"Cutoff Chunk ID: {cutoff_chunk_id}")
                     head_task_queue_order.extend(range(cutoff_chunk_id))
                     head_task_queue_order.extend(range(self.total_chunks - 1, cutoff_chunk_id - 1, -1))
                     self.head_final_chunk_id = cutoff_chunk_id
@@ -2015,7 +2021,7 @@ def update(frame):
              f"% Active during Steady-State: {steady_eff:.2f}%\n\n"
              f"Compute Throughput:\n"
              f"Advertised Upper-Bound: {int(hardware_max_flops / 1e12)} TFLOPS\n"
-             f"Upper-Bound based on Matmul/Attn Efficiency: {int((hardware_max_flops * practical_efficiency) / 1e12)} TFLOPS\n"
+             f"True Upper-Bound: {int((hardware_max_flops * practical_efficiency) / 1e12)} TFLOPS\n"
              f"Achieved Throughput: {int(((total_flops / N) / runtime_in_seconds) / 1e12) if N > 0 and runtime_in_seconds > 0 else 0} TFLOPS\n\n"
         )
         completion_text_artist = ax.text(0.5, 0.5, completion_text, transform=ax.transAxes,
