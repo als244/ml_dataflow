@@ -704,6 +704,14 @@ class Device:
             peer_id, cid, lid, is_grad, duration = peer_item
             
             peer_dev = all_devices[peer_id]
+
+            if is_grad and self.device_id == self.total_devices - 1:
+                print(f"Dev {self.device_id}, Completed Peer Transfer for C{cid},L{lid}")
+                print(f"Cur Transitions Outbound Buffer: {self.transitions_outbound_buffer}")
+                print(f"Cur Transitions Outbound Empty Slot Ind: {self.transitions_outbound_empty_slot_ind}")
+                print(f"Cur Transitions Inbound Buffer: {peer_dev.transitions_inbound_buffer}")
+                print(f"Cur Transitions Inbound Empty Slot Ind: {peer_dev.transitions_inbound_empty_slot_ind}")
+                print("\n\n")
            
             ## indicate as freed up in self outbound buffer
             outbound_idx_to_free = self.transitions_outbound_buffer.index((0, cid, lid, is_grad))
@@ -836,7 +844,7 @@ class Device:
             self.current_computation_layer_id = lid
             self.computing_status = f"COMPUTING:\n{computation_type_str}\nC{cid},L{lid}"
 
-            is_grad_out = not is_fwd or lid == self.total_layers
+            is_grad_out = (not is_fwd) or (lid == self.total_layers)
 
             self.transitions_outbound_buffer[self.transitions_outbound_empty_slot_ind] = (-2, cid, lid, is_grad_out)
             if -1 in self.transitions_outbound_buffer:
