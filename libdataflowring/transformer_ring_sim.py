@@ -704,14 +704,6 @@ class Device:
             peer_id, cid, lid, is_grad, duration = peer_item
             
             peer_dev = all_devices[peer_id]
-
-            if is_grad and self.device_id == self.total_devices - 1:
-                print(f"Dev {self.device_id}, Completed Peer Transfer for C{cid},L{lid}")
-                print(f"Cur Transitions Outbound Buffer: {self.transitions_outbound_buffer}")
-                print(f"Cur Transitions Outbound Empty Slot Ind: {self.transitions_outbound_empty_slot_ind}")
-                print(f"Cur Transitions Inbound Buffer: {peer_dev.transitions_inbound_buffer}")
-                print(f"Cur Transitions Inbound Empty Slot Ind: {peer_dev.transitions_inbound_empty_slot_ind}")
-                print("\n\n")
            
             ## indicate as freed up in self outbound buffer
             outbound_idx_to_free = self.transitions_outbound_buffer.index((0, cid, lid, is_grad))
@@ -822,7 +814,7 @@ class Device:
             has_deps = False
 
         ## ensure that there is room in the transition outbound buffer
-        if has_deps and self.transitions_outbound_empty_slot_ind is None:
+        if (not bW) and has_deps and self.transitions_outbound_empty_slot_ind is None:
             self.stall_reason = "Congested:\nOutbound Transition Buffer Full"
             has_deps = False
 
@@ -845,12 +837,13 @@ class Device:
             self.computing_status = f"COMPUTING:\n{computation_type_str}\nC{cid},L{lid}"
 
             is_grad_out = (not is_fwd) or (lid == self.total_layers)
-
-            self.transitions_outbound_buffer[self.transitions_outbound_empty_slot_ind] = (-2, cid, lid, is_grad_out)
-            if -1 in self.transitions_outbound_buffer:
-                self.transitions_outbound_empty_slot_ind = self.transitions_outbound_buffer.index(-1)
-            else:
-                self.transitions_outbound_empty_slot_ind = None
+            
+            if not bW:
+                self.transitions_outbound_buffer[self.transitions_outbound_empty_slot_ind] = (-2, cid, lid, is_grad_out)
+                if -1 in self.transitions_outbound_buffer:
+                    self.transitions_outbound_empty_slot_ind = self.transitions_outbound_buffer.index(-1)
+                else:
+                    self.transitions_outbound_empty_slot_ind = None
             
         else:
             if not self.is_stalled:
@@ -885,18 +878,8 @@ class Device:
         return
 
     def handle_bwd_prefetch_fwd_act(self):
-        print(f"Dev {self.device_id}, In Bwd Prefetch Fwd Act...\n")
-        print(f"Cur Activations Stack: {self.activations_stack}")
-        print(f"Cur Activations Stack Cutoff Ind: {self.activations_stack_cutoff_ind}")
-        print(f"Cur Activations Stack Next Ind: {self.activations_stack_next_ind}")
-        print(f"Cur Activations Buffer: {self.activations_buffer}")
-        print(f"Cur Activations Write Ptr: {self.activations_write_ptr}")
-        print(f"Cur Activations Empty Slot Ind: {self.activations_empty_slot_ind}")
-        print("\n\n\n")
-
         if self.activations_stack_next_ind >= 0:
             cid, lid = self.activations_stack[self.activations_stack_next_ind]
-            print(f"Prefetching next activation: C{cid},L{lid}")
             next_act_idx = self.activations_empty_slot_ind
             self.inbound_queue.append((cid, lid, False, False, next_act_idx, savedActivationsFrames))
             self.activations_buffer[next_act_idx] = (-2, cid, lid)
@@ -958,6 +941,8 @@ class Device:
                     self.head_output_transitions_empty_slot_ind = first_free_idx
                 else:
                     inp_idx_to_free = self.transitions_inbound_buffer.index((0, cid, depend_transition, is_grad_in))
+                    if self.device_id == self.total_devices - 1:
+                        print(f"Dev {self.device_id}. Completed Comp C{cid},L{lid}. Freeing Input Transition for C{cid},L{lid}")
                     self.transitions_inbound_buffer[inp_idx_to_free] = -1
                     ## wasteful, but keeping orderly with setting -1 to be the first free slot in linear order...
                     ## we know there will be at least one free slot because we just set one...
@@ -967,10 +952,9 @@ class Device:
             ## we can clear the output transition as soon as fwd, bX, or head is done...
             ## no output transition for bW, computed immediately after bX...
             if not bW:
-                ## mark the output transition as completed
                 out_idx_to_update = self.transitions_outbound_buffer.index((-2, cid, lid, is_grad_out))
                 self.transitions_outbound_buffer[out_idx_to_update] = (0, cid, lid, is_grad_out)
-            
+
                 if peer_id != self.device_id:
                     ## append this to the peer transfer queue
                     self.peer_transfer_queue.append((peer_id, cid, lid, is_grad_out, activationTransitionFrames))
@@ -1191,51 +1175,6 @@ class Device:
             arrow_vis, _ = edge_artists[f'ring_{self.device_id}']
             arrow_vis.set_color(edge_color)
             arrow_vis.set_connectionstyle(connection_style_ring)
-
-    def print_buffer_status(self): # Refactored style
-        if 'current_frame_index' in globals():
-             current_T = current_frame_index
-        else:
-             current_T = 'N/A'
-        print(f"--- Dev {self.device_id} Buffer Status (T={current_T}) ---")
-        def format_item(item):
-            if isinstance(item, tuple):
-                if len(item) == 3:
-                    id1, id2, flag = item
-                    flag_str = 'G' if flag else 'A'
-                    return f"({id1},{id2},{flag_str})"
-                elif len(item) == 2:
-                    return f"({item[0]},{item[1]})"
-                else:
-                    return str(item) # Should not happen based on usage
-            elif item == -2:
-                return 'Pend' # Represents a slot pending data arrival
-            elif item >= 0:
-                return f"L{item}" # Represents a loaded layer weight/state
-            else: # item == -1
-                return '_' # Represents an empty slot
-
-        wgt_buf_str = ', '.join([format_item(w) for w in self.cur_weights])
-        print(f"  Ready Wgt:                  [{wgt_buf_str}] (Next Evict Idx: {self.cur_weight_write_ptr})")
-        fwd_trans_buf_str = ', '.join([format_item(t) for t in self.fwd_transitions_buffer])
-        print(f"  Fwd Transitions Buf:        [{fwd_trans_buf_str}] (Cap: {self.transitions_capacity}, Next Write Idx: {self.fwd_transitions_write_ptr})")
-        bwd_grad_trans_buf_str = ', '.join([format_item(t) for t in self.bwd_grad_transitions_buffer])
-        print(f"  Bwd Grad Transitions Buf:   [{bwd_grad_trans_buf_str}] (Cap: {self.bwd_grad_transitions_capacity}, Next Write Idx: {self.bwd_grad_transitions_write_ptr})")
-        print(f"  Local Last Fwd Act (Hot):   {sorted(list(self.local_last_fwd_activations.keys()))}")
-        res_act_buf_str = ', '.join([format_item(a) for a in self.resident_checkpoint_activations])
-        print(f"  Resident Chkpt Act Buf:     [{res_act_buf_str}] (Cap: {self.activations_capacity}, Next Write Idx: {self.resident_checkpoint_write_ptr})")
-        bwd_fetch_buf_str = ', '.join([format_item(a) for a in self.bwd_fetched_activation_buffer])
-        print(f"  BWD Fetched Act Buf:        [{bwd_fetch_buf_str}] (Cap: {self.bwd_fetched_activation_buffer_capacity}, Next Write Idx: {self.bwd_fetched_activation_write_ptr})")
-        grad_act_buf_str = ', '.join([format_item(g) for g in self.cur_ready_grad_activations])
-        print(f"  Ready GradAct (dL/dA):      [{grad_act_buf_str}] (Cap: {self.grad_activations_capacity}, Next Write Idx: {self.cur_grad_activations_write_ptr})")
-        model_out_buf_str = ', '.join([format_item(m) for m in self.cur_model_outputs])
-        print(f"  Model Outputs (Head In):    [{model_out_buf_str}] (Next Write Idx: {self.cur_model_outputs_write_ptr})")
-        head_out_buf_str = ', '.join([format_item(h) for h in self.cur_head_outputs])
-        print(f"  Head Outputs (Bwd In):      [{head_out_buf_str}] (Next Write Idx: {self.cur_head_outputs_write_ptr})")
-        print(f"  Queue Lengths: Comp={len(self.computation_queue)}, In={len(self.inbound_queue)}, Out={len(self.outbound_queue)}, PeerSend={len(self.peer_transfer_queue)}")
-        next_wgt_str = f"L{self.next_weight_layer_id}" if self.next_weight_layer_id is not None else 'None'
-        print(f"  State: Reversed={self.has_reversed}, Last BWD Trigger Layer=L{self.bwd_prefetch_trigger_layer_id}, Next Wgt Target={next_wgt_str}")
-        print(f"-------------------------------------")
 
 
 # --- Global Simulation State ---
@@ -1730,12 +1669,6 @@ def update(frame):
                                                  ha='center', va='center', fontsize=14, color='maroon', fontweight='bold',
                                                  bbox=dict(boxstyle='round,pad=0.5', fc=(1, 0.9, 0.9, 0.95), ec='black'), zorder=10)
                 artists_to_update.append(completion_text_artist)
-                if TO_PRINT:
-                    print("\n" + "="*20 + " Max Frames Reached " + "="*20)
-                    print(completion_text)
-                    for i in range(N):
-                        all_devices[i].print_buffer_status()
-                    print("="*60 + "\n")
 
     return artists_to_update
 
