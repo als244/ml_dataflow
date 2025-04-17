@@ -46,9 +46,9 @@ N = 8
 
 ## Training Info
 num_sequences = 1
-seqlen_thousands = 32
+seqlen_thousands = 64
 seqlen = (1 << 10) * seqlen_thousands
-train_token_ratio = 0.5
+train_token_ratio = 1.0
 min_chunk_size = 1536
 
 
@@ -82,8 +82,8 @@ max_device_memory_bytes = 8 * (1 << 30)
 hardware_max_flops = int((989 * (2 / dtype_bytes)) * 1e12)
 ## 3.35 TB/s
 hardware_mem_bw_bytes_sec = 3.35 * (1 << 40)
-matmul_efficiency = 0.7
-attn_efficiency = 0.6
+matmul_efficiency = 0.85
+attn_efficiency = 0.75
 
 
 ## communication configs
@@ -212,7 +212,7 @@ base_dev_mem += (context_buffer_capacity + grad_context_buffer_capacity) * per_l
 remain_dev_mem = orig_dev_mem - base_dev_mem
 
 if remain_dev_mem < activation_size_bytes:
-    print(f"Error: Currently only supports activation capacity >= 1, layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, and grad context buffer capacity of 1.\nThis requires {(base_dev_mem + activation_size_bytes) / 1e9:.2f} GB of memory, but only {orig_dev_mem / 1e9:.2f} GB is available.\n\nCannot run simulation with current configuration\n")
+    print(f"Error: Currently only supports activation capacity >= 1, layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, and grad context buffer capacity of 1.\nThis requires {(base_dev_mem + activation_size_bytes) / (1 << 30):.2f} GB of memory, but only {orig_dev_mem / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration\n")
     sys.exit(1)
 
 
@@ -237,7 +237,7 @@ output_size_bytes = dtype_bytes * (model_dim * chunk_size)
 ## TODO: implement chunk_type = "Equal Compute", and "Decreasing Compute"
 
 ## The attn component will cause early chunks to 
-transitions_capacity = max(2, total_chunks - N)
+transitions_capacity = max(N,total_chunks - N)
 
 
 ## TODO: determine the head transition capacity by first determining the cutoff
@@ -254,7 +254,7 @@ transition_dev_mem = 2 * transitions_capacity * output_size_bytes
 
 remain_dev_mem -= transition_dev_mem
 if (remain_dev_mem < activation_size_bytes):
-    print(f"Error: Currently only supports activation capacity >= 1 {activation_size_bytes}, transition capacity = total_chunks - num_devices {total_chunks - N}, layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, and grad context buffer capacity of 1.\nThis requires {(base_dev_mem + transition_dev_mem + activation_size_bytes) / 1e9:.2f} GB of memory, but only {orig_dev_mem / 1e9:.2f} GB is available.\n\nCannot run simulation with current configuration\n")
+    print(f"Error: Currently only supports activation capacity >= 1 {activation_size_bytes}, transition capacity = total_chunks - num_devices {total_chunks - N}, layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, and grad context buffer capacity of 1.\nThis requires {(base_dev_mem + transition_dev_mem + activation_size_bytes) / (1 << 30):.2f} GB of memory, but only {orig_dev_mem / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration\n")
     sys.exit(1)
 
 
@@ -324,7 +324,7 @@ for i in range(total_chunks):
 
     per_layer_chunk_flops += layer_flops
 
-    if do_backward and ((i % train_chunk_freq) == 0):
+    if do_backward and (((i % train_chunk_freq) == 0) or (i == total_chunks - 1)):
         ## attention layer for bwd x has double the flops...
         bwd_x_flops = layer_flops + attn_flops
         computation_times_sec_bwd[i] = base_flops_per_layer / (hardware_max_flops * matmul_efficiency) + (2 * attn_flops) / (hardware_max_flops * attn_efficiency)
@@ -376,6 +376,7 @@ bwdWFrames = math.ceil(bwd_w_time_sec * cycles_per_second)
 
 contextTransferFrames = math.ceil(chunk_context_transfer_time_sec * cycles_per_second)
 if chunk_context_transfer_time_sec * cycles_per_second < 1:
+    print(f"Context Transfer True Cycles: {chunk_context_transfer_time_sec * cycles_per_second}\n")
     contextTransferCycleText = "< 1 Cycle"
 else:
     contextTransferCycleText = str(math.ceil(chunk_context_transfer_time_sec * cycles_per_second)) + " Cycles"
@@ -580,16 +581,16 @@ memory_legend_text = (
     f"     - Training Token Ratio: {train_token_ratio}\n"
     f"     - Min Chunk Size: {min_chunk_size}\n\n"
     f" - Num Devices: {N}\n\n"
-    f" - Max Device Memory Bytes: {max_device_memory_bytes / 1e9:.2f} GB\n\n\n"  
+    f" - Max Device Memory Bytes: {max_device_memory_bytes / (1 << 30):.2f} GB\n\n\n"  
     f" ----- Full Training Overview ----- \n"
     f" - Memory Requirements:\n"
     f"     - Full-Model Memory Requirements:\n"
-    f"         - Model Size: {train_model_size / 1e9:.2f} GB\n"
-    f"         - Gradient Size: {train_gradient_size / 1e9:.2f} GB\n"
-    f"         - Optimizer State Size: {(2 * train_model_size) / 1e9:.2f} GB\n"
-    f"         - Activation Size: {train_activation_size / 1e9:.2f} GB\n"
-    f"         - Context (Non-Train) Size: {train_context_size / 1e9:.2f} GB\n"
-    f"     - TOTAL: {aggregate_memory_size / 1e9:.2f} GB\n\n"
+    f"         - Model Size: {train_model_size / (1 << 30):.2f} GB\n"
+    f"         - Gradient Size: {train_gradient_size / (1 << 30):.2f} GB\n"
+    f"         - Optimizer State Size: {(2 * train_model_size) / (1 << 30):.2f} GB\n"
+    f"         - Activation Size: {train_activation_size / (1 << 30):.2f} GB\n"
+    f"         - Context (Non-Train) Size: {train_context_size / (1 << 30):.2f} GB\n"
+    f"     - TOTAL: {aggregate_memory_size / (1 << 30):.2f} GB\n\n"
     f" ----- Derived Configuration ----- \n"
     f" - Chunk Type: {chunk_type}\n"
     f"     - Chunk Size: {chunk_size}\n"
@@ -600,33 +601,37 @@ memory_legend_text = (
     f"     - Workspace Size: {(chunk_workspace_size)/ 1e6:.2f} MB\n\n"
     f" - Device Memory Partitions (Typical):\n"
     f"     - Activation Capacity: {activations_capacity}\n"
-    f"         - Allocation: {(activations_capacity * activation_size_bytes)/ 1e9:.3f} GB\n"
+    f"         - Allocation: {(activations_capacity * activation_size_bytes)/ (1 << 30):.3f} GB\n"
     f"     - Layer Capacity: {layer_capacity}\n"
-    f"         - Allocation: {(layer_capacity * layer_size_bytes)/ 1e9:.3f} GB\n"
+    f"         - Allocation: {(layer_capacity * layer_size_bytes)/ (1 << 30):.3f} GB\n"
     f"     - Grad Layer Capacity: {grad_layer_capacity}\n"
-    f"         - Allocation: {(grad_layer_capacity * layer_size_bytes)/ 1e9:.3f} GB\n"
+    f"         - Allocation: {(grad_layer_capacity * layer_size_bytes)/ (1 << 30):.3f} GB\n"
     f"     - Context Buffer Capacity: {context_buffer_capacity}\n"
-    f"         - Allocation: {(context_buffer_capacity * per_layer_full_context_size)/ 1e9:.3f} GB\n"
+    f"         - Allocation: {(context_buffer_capacity * per_layer_full_context_size)/ (1 << 30):.3f} GB\n"
     f"     - Grad Context Buffer Capacity: {grad_context_buffer_capacity}\n"
-    f"         - Allocation: {(grad_context_buffer_capacity * per_layer_full_context_size)/ 1e9:.3f} GB\n"
+    f"         - Allocation: {(grad_context_buffer_capacity * per_layer_full_context_size)/ (1 << 30):.3f} GB\n"
     f"     - Transition Capacity (Inp/Out): {transitions_capacity}\n"
-    f"         - Allocation: {2 * transitions_capacity * output_size_bytes / 1e9:.3f} GB\n\n"     
-    f" *** TOTAL PER-DEVICE MEMORY: {typical_device_memory_size / 1e9:.2f} GB ***\n\n\n"
+    f"         - Allocation: {2 * transitions_capacity * output_size_bytes / (1 << 30):.3f} GB\n\n"     
+    f" *** TOTAL PER-DEVICE MEMORY: {typical_device_memory_size / (1 << 30):.2f} GB ***\n\n\n"
     f" - Home Memory Partitions (Typical):\n"
-    f"     - Activation Size: {typical_home_activation_size / 1e9:.2f} GB\n"
+    f"     - Activation Size: {typical_home_activation_size / (1 << 30):.2f} GB\n"
     f"         - Home Activations Saved: {home_activation_stack[0]}\n"
-    f"     - Model Shard Size: {per_home_layer_sizes[0] / 1e9:.2f} GB\n"
-    f"     - Gradient Shard Size: {per_home_layer_sizes[0] / 1e9:.2f} GB\n"
-    f"     - Optimizer State Size: {2 * per_home_layer_sizes[0] / 1e9:.2f} GB\n\n"
-    f" *** TOTAL PER-HOME MEMORY: {per_home_total_size[0] / 1e9:.2f} GB ***\n\n"
+    f"     - Model Shard Size: {per_home_layer_sizes[0] / (1 << 30):.2f} GB\n"
+    f"     - Gradient Shard Size: {per_home_layer_sizes[0] / (1 << 30):.2f} GB\n"
+    f"     - Optimizer State Size: {2 * per_home_layer_sizes[0] / (1 << 30):.2f} GB\n\n"
+    f" *** TOTAL PER-HOME MEMORY: {per_home_total_size[0] / (1 << 30):.2f} GB ***\n\n"
 )
+
+matmul_flop_ratio = total_matmul_flops / total_flops if total_flops > 0 else 0
+attn_flop_ratio = total_attn_flops / total_flops if total_flops > 0 else 0
+practical_efficiency = matmul_efficiency * matmul_flop_ratio + attn_efficiency * attn_flop_ratio
 
 compute_legend_text = (
     f"Compute Breakdown:\n\n\n"
     f" ----- USER INPUTS ----- \n"
     f" - Compute Constants:\n"
     f"     - Hardware Theoretical MAX: {int(hardware_max_flops / 1e12)} TFLOPs\n"
-    f"     - Hardware Memory BW: {int(hardware_mem_bw_bytes_sec / 1e9)} GB/s\n"
+    f"     - Hardware Memory BW: {int(hardware_mem_bw_bytes_sec / (1 << 30))} GB/s\n"
     f"     - Peak Matmul Efficiency: {matmul_efficiency}\n"
     f"     - Peak Attn Efficiency: {attn_efficiency}\n"
     f" - Communication Constants:\n"
@@ -651,6 +656,7 @@ compute_legend_text = (
     f"   - Per-Chunk Context Transfer: {contextTransferCycleText}\n"
     f"   - Block Transition: {activationTransitionFrames} Cycles\n\n"
     f" *** RUNTIME LOWER-BOUND: {int(((total_matmul_flops / N) / (hardware_max_flops * matmul_efficiency) + (total_attn_flops / N) / (hardware_max_flops * attn_efficiency)) * cycles_per_second)} Cycles ***\n\n"
+    f" *** THROUGHPUT UPPER-BOUND: {int((hardware_max_flops * practical_efficiency) / 1e12)} TFLOPS ***\n\n"
 )
 
 # Define padding from figure edges (e.g., 2% padding)
@@ -911,7 +917,7 @@ class Device:
             transfer_direction = 1
             for i in range(self.total_chunks):
                 self.computation_queue.append((i, cur_layer_id, False, False, transfer_direction, computation_times_frames[i]))
-                if i % train_chunk_freq == 0:
+                if (i % train_chunk_freq == 0) or (i == self.total_chunks - 1):
                     self.activations_stack.append((i, cur_layer_id))
             ## strictly less as we will process head differently
             if cur_layer_id + self.total_devices < self.total_layers:
@@ -952,10 +958,10 @@ class Device:
             print(f"Cutoff Chunk ID: {cutoff_chunk_id}")
 
             for i in range(cutoff_chunk_id):
-                if i % train_chunk_freq == 0:
+                if (i % train_chunk_freq == 0) or (i == self.total_chunks - 1):
                     self.computation_queue.append((i, self.total_layers, False, False, transfer_direction, headFrames))
             for i in range(self.total_chunks - 1, cutoff_chunk_id - 1, -1):
-                if i % train_chunk_freq == 0:
+                if (i % train_chunk_freq == 0) or (i == self.total_chunks - 1):
                     self.computation_queue.append((i, self.total_layers, False, False, transfer_direction, headFrames))
    
         ## now start backward pass...
@@ -965,7 +971,7 @@ class Device:
             else:
                 transfer_direction = 0
             for i in range(self.total_chunks - 1, -1, -1):
-                if i % train_chunk_freq == 0:
+                if (i % train_chunk_freq == 0) or (i == self.total_chunks - 1):
                     ## add the BwdX first
                     self.computation_queue.append((i, cur_layer_id, True, False, transfer_direction, computation_times_frames_bwd[i]))
                     ## add the BwdW second
@@ -1282,7 +1288,7 @@ class Device:
             if is_fwd: # FWD Finished
 
                 ## determine if we need to send back activations or not...
-                if (cid % train_chunk_freq == 0):
+                if ((cid % train_chunk_freq == 0) or (cid == self.total_chunks - 1)):
                     ## now we need to save the activations in activation buffer
                     ## if at the tail end of forward computation, save the activations down!
                     if (self.cur_fwd_computation_num > self.activations_stack_cutoff_ind):
@@ -1944,11 +1950,6 @@ def update(frame):
              steady_eff = (total_computation_time / steady_time * 100)
 
         runtime_in_seconds = T / cycles_per_second
-
-        matmul_flop_ratio = total_matmul_flops / total_flops if total_flops > 0 else 0
-        attn_flop_ratio = total_attn_flops / total_flops if total_flops > 0 else 0
-
-        practical_efficiency = matmul_efficiency * matmul_flop_ratio + attn_efficiency * attn_flop_ratio
 
         completion_text = (
              f"Simulation Complete!\nFinal Cycle Count: {T}\nRuntime: {runtime_in_seconds:.3f} seconds\n\n"
