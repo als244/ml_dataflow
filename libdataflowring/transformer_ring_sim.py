@@ -814,7 +814,10 @@ class Device:
             has_deps = False
 
         ## ensure that there is room in the transition outbound buffer
-        if (not bW) and has_deps and self.transitions_outbound_empty_slot_ind is None:
+        has_outbound_transition = True
+        if bW or (bX and lid == 0):
+            has_outbound_transition = False
+        if has_deps and has_outbound_transition and self.transitions_outbound_empty_slot_ind is None:
             self.stall_reason = "Congested:\nOutbound Transition Buffer Full"
             has_deps = False
 
