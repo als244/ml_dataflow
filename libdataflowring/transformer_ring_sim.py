@@ -279,7 +279,7 @@ do_backward = True
 
 ## this is multiplied by the chunk_size + cur seq len (number of keys)
 ## here chunk size is fixed number of queries...
-flops_per_attn_chunk_mult = 4 * chunk_size * model_dim
+flops_per_attn_chunk_mult = 2 * chunk_size * model_dim
 
 head_flops = 2 * (2 * vocab_size * model_dim * chunk_size)
 
