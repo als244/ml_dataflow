@@ -30,23 +30,26 @@ initial_speed_level = 50
 ## Number of Devices
 N = 8
 
+## Training Info
+num_sequences = 1
+seqlen_thousands = 32
+seqlen = (1 << 10) * seqlen_thousands
+train_token_ratio = 1.0
+
 ## Dataflow Params
 chunk_size = 1536
 layer_capacity = 2 # Max weights per device
-activations_capacity = 6
-transitions_capacity = 12
-
+activations_capacity = 8
+transitions_capacity = 16
 ## this should be = self.head_cutoff + 1...
 head_transitions_capacity = 20
 do_backward = True
 
 
-## Training Info
-num_sequences = 1
-seqlen_thousands = 32
-seqlen = (1 << 10) * seqlen_thousands
+
 total_chunks = math.ceil(seqlen / chunk_size)
-train_chunk_freq = 1
+train_chunk_freq =  math.ceil(1/ train_token_ratio)
+total_train_chunks = int(total_chunks / train_chunk_freq)
 
 
 ## Model Info
@@ -138,7 +141,7 @@ for i in range(total_chunks):
 
     per_layer_chunk_flops += layer_flops
 
-    if do_backward:
+    if do_backward and (i % train_chunk_freq == 0):
         ## attention layer for bwd x has double the flops...
         bwd_x_flops = layer_flops + attn_flops
         computation_times_sec_bwd[i] = base_flops_per_layer / (hardware_max_flops * matmul_efficiency) + (2 * attn_flops) / (hardware_max_flops * attn_efficiency)
@@ -172,6 +175,9 @@ attn_block_size_bytes = dtype_bytes * (2 * model_dim * model_dim + 4 * model_dim
 ffn_block_size_bytes = dtype_bytes * (3 * model_dim * expert_dim * num_experts)
 layer_size_bytes = attn_block_size_bytes + ffn_block_size_bytes
 
+head_layer_size_bytes = dtype_bytes * (vocab_size * model_dim)
+head_layer_transfer_time_sec = head_layer_size_bytes / (home_bw_gbit_sec * 1e9)
+
 layer_transfer_time_sec = (layer_size_bytes * 8) / (home_bw_gbit_sec * 1e9)
 
 ## model input, query, key, value, attn output, attn ouut output
@@ -187,8 +193,8 @@ transition_transfer_time_sec = (output_size_bytes * 8) / (peer_bw_gbit_sec * 1e9
 
 bwd_w_time_sec = bwd_w_flops / (hardware_max_flops * matmul_efficiency)
 
-context_size_bytes = 2 * (chunk_size * kv_dim * dtype_bytes)
-context_transfer_time_sec = context_size_bytes / (peer_bw_gbit_sec * 1e9)
+chunk_context_size_bytes = 2 * (chunk_size * kv_dim * dtype_bytes)
+chunk_context_transfer_time_sec = chunk_context_size_bytes / (peer_bw_gbit_sec * 1e9)
 
 
 
@@ -198,9 +204,13 @@ max_computationFrames = computation_times_frames[total_chunks-1]
 headFrames = math.ceil(head_computation_times_sec * cycles_per_second)
 bwdWFrames = math.ceil(bwd_w_time_sec * cycles_per_second)
 
-contextTransferFrames = math.ceil(context_transfer_time_sec * cycles_per_second)
+contextTransferFrames = math.ceil(chunk_context_transfer_time_sec * cycles_per_second)
+if chunk_context_transfer_time_sec * cycles_per_second < 1:
+    contextTransferCycleText = "< 1 Cycle"
+else:
+    contextTransferCycleText = str(math.ceil(chunk_context_transfer_time_sec * cycles_per_second)) + " Cycles"
 layerTransferFrames = math.ceil(layer_transfer_time_sec * cycles_per_second) # Cycles to transfer weights
-
+headTransferFrames = math.ceil(head_layer_transfer_time_sec * cycles_per_second)
 savedActivationsFrames = math.ceil(activation_transfer_time_sec * cycles_per_second) # Cycles to transfer activations (save/fetch)
 activationTransitionFrames = math.ceil(transition_transfer_time_sec * cycles_per_second) # Cycles to transfer activations/grads between devices
 
@@ -292,6 +302,7 @@ COLOR_INBOUND_BWD_FETCHED_CTX = 'cyan'
 
 COLOR_OUTBOUND_DEFAULT = 'gray'
 COLOR_OUTBOUND_FWD_ACTIVATION = 'magenta'
+COLOR_OUTBOUND_FWD_CTX = 'cyan'
 COLOR_OUTBOUND_WGT_GRAD = 'saddlebrown'
 
 COLOR_RING_CCW = 'indigo'
@@ -317,78 +328,202 @@ center_pos = np.array([0, 0])
 # --- Legend Text ---
 wrap_width = 40
 
-grad_layer_capacity = 1
+grad_layer_capacity = 2
 
 context_buffer_capacity = 1
-context_buffer_size = seqlen * dtype_bytes * 2 * kv_dim
+layer_context_buffer_size = seqlen * dtype_bytes * 2 * kv_dim
 grad_context_buffer_capacity = 1
 
-legend_text = (
-    f"Simulated Configuration:\n\n"
-    f"      - Num Compute Devices: {N}\n\n"
-    f"      - Dataflow Parameters:\n"
-    f"          - Chunk Size: {chunk_size}\n"
-    f"             - Total Chunks: {total_chunks}\n"
-    f"          - Layer Allocation: {(layer_capacity * layer_size_bytes)/ 1e9:.3f} GB\n" 
-    f"              - Per-Layer Size: {layer_size_bytes / 1e9:.3f} GB\n"
-    f"              - Per-Device Layer Capacity: {layer_capacity}\n"
-    f"          - Activation Allocation: {(activations_capacity * activation_size_bytes)/ 1e9:.3f} GB\n"
-    f"              - Per-Chunk Saved Activation Size: {(activation_size_bytes)/ 1e9:.3f} GB\n"
-    f"              - Per-Device Activation Capacity: {activations_capacity}\n"
-    f"          - Typical Transition Allocation: {(transitions_capacity * output_size_bytes)/ 1e9:.3f} GB\n"
-    f"              - Per-Chunk Transition Size: {(output_size_bytes)/ 1e9:.3f} GB\n"
-    f"              - Per-Device Transition Capacity: {transitions_capacity}\n"
-    f"          - Speical Turn-around Transition Allocation: {(head_transitions_capacity * output_size_bytes)/ 1e9:.3f} GB\n"
-    f"               - Speical Transition Receive Capacities: {head_transitions_capacity}\n"
-    f"          - Per-Device Context Buffer Allocation: {context_buffer_size / 1e9:.3f} GB\n"
-    f"              - Per-Device Context Buffer Capacity: {context_buffer_capacity}\n\n"
-    f"      - Training Parameters:\n"
-    f"         - Sequence Length: {seqlen}\n"
-    f"         - Chunk Training Frequency: {train_chunk_freq}\n"
-    f"         - Num Sequences: {num_sequences}\n\n"
-    f"      - Model Info:\n"
-    f"         - Total Blocks (non-head): {total_layers}\n"
-    f"         - Bitwidth: {bitwidth}\n"
-    f"         - Attention Algo: {attn_type}\n"
+chunk_type = "Equal Data"
+
+## FULL MODEL TRAINING MEMORY INFO
+train_model_size = (layer_size_bytes * total_layers + head_layer_size_bytes)
+## only training chunks need to save activations
+train_activation_size = (total_train_chunks * activation_size_bytes * total_layers)
+## all contexts need to be saved
+train_context_size = ((total_chunks - total_train_chunks) * chunk_context_size_bytes * total_layers)
+train_gradient_size = (train_model_size)
+train_optimizer_state_size = (2 * train_model_size)
+
+aggregate_memory_size = train_model_size + train_activation_size + train_context_size + train_gradient_size + train_optimizer_state_size
+
+
+## DEVICE MEMORY INFO
+chunk_workspace_size = (chunk_size * ffn_dim * dtype_bytes)
+
+layer_allocation = (layer_capacity * layer_size_bytes)
+grad_layer_allocation = (grad_layer_capacity * layer_size_bytes)
+context_buffer_allocation = (context_buffer_capacity * layer_context_buffer_size)
+grad_context_buffer_allocation = (grad_context_buffer_capacity * layer_context_buffer_size)
+activation_allocation = (activations_capacity * activation_size_bytes)
+typical_transition_allocation = (2 * transitions_capacity * output_size_bytes)
+head_transition_allocation = (head_transitions_capacity + transitions_capacity) * output_size_bytes
+
+typical_device_memory_size = layer_allocation + grad_layer_allocation + context_buffer_allocation + grad_context_buffer_allocation + activation_allocation + typical_transition_allocation
+speical_device_memory_size = layer_allocation + grad_layer_allocation + context_buffer_allocation + grad_context_buffer_allocation + activation_allocation + head_transition_allocation
+
+## 
+
+per_home_layers_base = total_layers / N
+print(f"Per-Home Layers Base: {per_home_layers_base}")
+remain_layers = total_layers % N
+
+head_id = total_layers % N
+
+per_home_num_blocks = []
+per_home_layer_sizes = [] 
+
+for i in range(N):
+    if i < remain_layers:
+        per_home_num_blocks.append(per_home_layers_base + 1)
+        per_home_layer_sizes.append((per_home_layers_base + 1) * layer_size_bytes)
+        extra_home_size = per_home_layer_sizes[i]
+    elif i == head_id:
+        per_home_num_blocks.append(per_home_layers_base)
+        per_home_layer_sizes.append((per_home_layers_base) * layer_size_bytes + head_layer_size_bytes)
+        head_home_size = per_home_layer_sizes[i]
+    else:
+        per_home_num_blocks.append(per_home_layers_base)
+        per_home_layer_sizes.append(per_home_layers_base * layer_size_bytes)
+        usual_home_size = per_home_layer_sizes[i]
+
+
+print(f"Per Home Num Blocks: {per_home_num_blocks}")
+print(f"Per Home Layer Sizes: {per_home_layer_sizes}")
+total_activation_cnt_per_device = [int(total_train_chunks * per_home_num_blocks[i]) for i in range(N)]
+
+dev_activation_stack = activations_capacity
+home_activation_stack = [total_activation_cnt_per_device[i] - activations_capacity for i in range(N)]
+
+typical_home_activation_size = home_activation_stack[0] * activation_size_bytes
+   
+per_home_total_size = [home_activation_stack[i] * activation_size_bytes + home_activation_stack[0] + 4 * (per_home_layer_sizes[i]) for i in range(N)]
+
+
+
+memory_legend_text = (
+    f"Simulated Configuration:\n\n\n"
+    f" - Model Info:\n"
+    f"     - Total Blocks (non-head): {total_layers}\n"
+    f"     - Bitwidth: {bitwidth}\n"
+    f"     - Attention Algo: {attn_type}\n"
+    f"     - Dims:\n"
     f"         - Model Dim: {model_dim}\n"
     f"         - KV Dim: {kv_dim}\n"
     f"         - Per-Expert Dim: {expert_dim}\n"
     f"         - Num Experts: {num_experts}\n"
     f"         - Active Experts: {active_experts}\n"
     f"         - Vocab Size: {vocab_size}\n\n"
-    f"      - FLOP Breakdown\n"     
-    f"          - Total TFLOPs: {int(total_flops / 1e12)}\n"
-    f"              - FWD TFLOPs: {int(total_fwd_flops / 1e12)} TFLOPs\n"
-    f"              - BWD TFLOPs: {int(total_bwd_flops / 1e12)} TFLOPs\n"
-    f"              - Overall Matmul TFLOPs: {int(total_matmul_flops / 1e12)} TFLOPs\n"
-    f"              - Overall Attn TFLOPs: {int(total_attn_flops / 1e12)} TFLOPs\n\n"
-    f"      - Compute Environment Constants:\n"
-    f"         - Hardware Theoretical MAX: {int(hardware_max_flops / 1e12)} TFLOPs\n"
-    f"         - Matmul Efficiency: {matmul_efficiency}\n"
-    f"         - Attn Efficiency: {attn_efficiency}\n"
-    f"      - Communication Environment Constants:\n"
-    f"         - Device-to-Home BW (Gb/s): {home_bw_gbit_sec}\n"
-    f"         - Peer-to-Peer BW (Gb/s): {peer_bw_gbit_sec}\n\n"
-    f"      - Derived Cycles ({int(cycles_per_second / 1000)}k cycles per second):\n"
-    f"         - C0 Computation: {computationFrames} Cycles\n"
-    f"         - C{total_chunks-1} Computation: {max_computationFrames} Cycles\n"
-    f"         - Head Computation: {headFrames} Cycles\n"
-    f"         - BwdW Computation: {bwdWFrames} Cycles\n"
-    f"         - Layer Transfer: {layerTransferFrames} Cycles\n"
-    f"         - Activation Transfer: {savedActivationsFrames} Cycles\n"
-    f"         - Per-Chunk Context Transfer: {contextTransferFrames} Cycles\n"
-    f"         - Block Transition: {activationTransitionFrames} Cycles\n\n"
-    f"       - Runtime Lower-Bound:\n"
-    f"         - Based on Matmul/Attn Efficiency: {int(((total_matmul_flops / N) / (hardware_max_flops * matmul_efficiency) + (total_attn_flops / N) / (hardware_max_flops * attn_efficiency)) * cycles_per_second)} cycles\n"
+    f" - Training Parameters:\n"
+    f"     - Sequence Length: {seqlen}\n"
+    f"     - Training Token Ratio: {train_token_ratio}\n\n"             
+    f" - Memory Requirements:\n"
+    f"     - Full-Model Memory Requirements:\n"
+    f"         - Model Size: {train_model_size / 1e9:.2f} GB\n"
+    f"         - Gradient Size: {train_gradient_size / 1e9:.2f} GB\n"
+    f"         - Optimizer State Size: {(2 * train_model_size) / 1e9:.2f} GB\n"
+    f"         - Activation Size: {train_activation_size / 1e9:.2f} GB\n"
+    f"         - Context (Non-Train) Size: {train_context_size / 1e9:.2f} GB\n"
+    f"     - TOTAL: {aggregate_memory_size / 1e9:.2f} GB\n\n"
+    f" - Num Devices: {N}\n\n"
+    f" - Dataflow Parameters:\n"
+    f"     - Chunk Type: {chunk_type}\n"
+    f"         - Chunk Size: {chunk_size}\n"
+    f"             - Total Chunks: {total_chunks}\n"
+    f"     - Chunk Memory Info (Layer-Wise):\n"
+    f"         - Activation Size: {(activation_size_bytes)/ 1e6:.2f} MB\n" 
+    f"         - Context Size: {(chunk_context_size_bytes)/ 1e6:.2f} MB\n"
+    f"         - Workspace Size: {(chunk_workspace_size)/ 1e6:.2f} MB\n\n"
+    f"     - Device Memory Partitions (Typical):\n"
+    f"         - Activation Capacity: {activations_capacity}\n"
+    f"             - Allocation: {(activations_capacity * activation_size_bytes)/ 1e9:.3f} GB\n"
+    f"         - Layer Capacity: {layer_capacity}\n"
+    f"             - Allocation: {(layer_capacity * layer_size_bytes)/ 1e9:.3f} GB\n"
+    f"         - Grad Layer Capacity: {grad_layer_capacity}\n"
+    f"             - Allocation: {(grad_layer_capacity * layer_size_bytes)/ 1e9:.3f} GB\n"
+    f"         - Context Buffer Capacity: {context_buffer_capacity}\n"
+    f"             - Allocation: {(context_buffer_capacity * layer_context_buffer_size)/ 1e9:.3f} GB\n"
+    f"         - Grad Context Buffer Capacity: {grad_context_buffer_capacity}\n"
+    f"             - Allocation: {(grad_context_buffer_capacity * layer_context_buffer_size)/ 1e9:.3f} GB\n"
+    f"         - Transition Capacity (Inp/Out): {transitions_capacity}\n"
+    f"             - Allocation: {2 * transitions_capacity * output_size_bytes / 1e9:.3f} GB\n\n"     
+    f" ** TOTAL PER-DEVICE MEMORY: {typical_device_memory_size / 1e9:.2f} GB **\n\n\n"
+    f"     - Home Memory Partitions (Typical):\n"
+    f"         - Activation Size: {typical_home_activation_size / 1e9:.2f} GB\n"
+    f"             - Home Activations Saved: {home_activation_stack[0]}\n"
+    f"         - Model Shard Size: {per_home_layer_sizes[0] / 1e9:.2f} GB\n"
+    f"         - Gradient Shard Size: {per_home_layer_sizes[0] / 1e9:.2f} GB\n"
+    f"         - Optimizer State Size: {2 * per_home_layer_sizes[0] / 1e9:.2f} GB\n\n"
+    f" ** TOTAL PER-HOME MEMORY: {per_home_total_size[0] / 1e9:.2f} GB **\n\n"
 )
-wrapped_legend_text = legend_text
-at = AnchoredText(wrapped_legend_text, loc='upper left', bbox_to_anchor=(1.01, 1.01),
-                  prop=dict(size=8), frameon=True, pad=0.4, borderpad=0.5,
-                  bbox_transform=ax.transAxes)
-at.patch.set_boxstyle("round,pad=0.,rounding_size=0.2")
-at.patch.set_facecolor((1, 1, 1, 0.8))
-at.patch.set_edgecolor('black')
-ax.add_artist(at)
+
+compute_legend_text = (
+    f" - FLOP Breakdown\n"     
+    f"     - Total TFLOPs: {int(total_flops / 1e12)}\n"
+    f"         - FWD TFLOPs: {int(total_fwd_flops / 1e12)} TFLOPs\n"
+    f"         - BWD TFLOPs: {int(total_bwd_flops / 1e12)} TFLOPs\n"
+    f"         - Overall Matmul TFLOPs: {int(total_matmul_flops / 1e12)} TFLOPs\n"
+    f"         - Overall Attn TFLOPs: {int(total_attn_flops / 1e12)} TFLOPs\n\n"
+    f" - Compute Constants:\n"
+    f"     - Hardware Theoretical MAX: {int(hardware_max_flops / 1e12)} TFLOPs\n"
+    f" - Communication Constants:\n"
+    f"     - Device-to-Home BW (Gb/s): {home_bw_gbit_sec}\n"
+    f"     - Peer-to-Peer BW (Gb/s): {peer_bw_gbit_sec}\n\n"
+    f" - Derived Cycles ({int(cycles_per_second / 1000)}k cycles per second):\n"
+    f"     - C0 Computation: {computationFrames} Cycles\n"
+    f"     - C{total_chunks-1} Computation: {max_computationFrames} Cycles\n"
+    f"     - Head Computation: {headFrames} Cycles\n"
+    f"     - BwdW Computation: {bwdWFrames} Cycles\n"
+    f"     - Layer Transfer: {layerTransferFrames} Cycles\n"
+    f"     - Head Transfer: {headTransferFrames} Cycles\n"
+    f"     - Activation Transfer: {savedActivationsFrames} Cycles\n"
+    f"     - Per-Chunk Context Transfer: {contextTransferCycleText}\n"
+    f"     - Block Transition: {activationTransitionFrames} Cycles\n\n"
+    f" - Runtime Estimation:\n"
+    f"     - Matmul Efficiency: {matmul_efficiency}\n"
+    f"     - Attn Efficiency: {attn_efficiency}\n"
+    f"     - Lower-Bound: {int(((total_matmul_flops / N) / (hardware_max_flops * matmul_efficiency) + (total_attn_flops / N) / (hardware_max_flops * attn_efficiency)) * cycles_per_second)} cycles\n\n"
+)
+
+# Define padding from figure edges (e.g., 2% padding)
+left_pad = 0.02
+right_pad = 0.98
+top_pad = 0.98
+bottom_pad = 0.02 # Not used here, but for reference
+
+# Memory Legend (Top Left)
+at_memory = AnchoredText(
+    memory_legend_text,
+    loc='upper left',                     # Anchor point is the upper left of the text box
+    bbox_to_anchor=(left_pad, top_pad),   # Position: slightly inset from top-left figure corner
+    prop=dict(size=6),                    # Slightly larger text? Adjust as needed.
+    frameon=True,
+    pad=0.4,
+    borderpad=0.5,
+    bbox_transform=fig.transFigure        # IMPORTANT: Use figure coordinates
+)
+at_memory.patch.set_boxstyle("round,pad=0.,rounding_size=0.2")
+at_memory.patch.set_facecolor((1, 1, 1, 0.85)) # Slightly less transparent maybe?
+at_memory.patch.set_edgecolor('black')
+ax.add_artist(at_memory) # Still add it to the axes artist list
+
+# Compute Legend (Top Right)
+at_compute = AnchoredText(
+    compute_legend_text,
+    loc='upper right',                    # Anchor point is the upper right of the text box
+    bbox_to_anchor=(right_pad, top_pad),  # Position: slightly inset from top-right figure corner
+    prop=dict(size=6),                    # Slightly larger text? Adjust as needed.
+    frameon=True,
+    pad=0.4,
+    borderpad=0.5,
+    bbox_transform=fig.transFigure        # IMPORTANT: Use figure coordinates
+)
+at_compute.patch.set_boxstyle("round,pad=0.,rounding_size=0.2")
+at_compute.patch.set_facecolor((1, 1, 1, 0.85)) # Slightly less transparent maybe?
+at_compute.patch.set_edgecolor('black')
+ax.add_artist(at_compute) # Still add it to the axes artist list
+
+
 
 
 # --- Initial Artist Setup ---
@@ -648,9 +783,11 @@ class Device:
             print(f"Cutoff Chunk ID: {cutoff_chunk_id}")
 
             for i in range(cutoff_chunk_id):
-                self.computation_queue.append((i, self.total_layers, False, False, transfer_direction, headFrames))
+                if i % train_chunk_freq == 0:
+                    self.computation_queue.append((i, self.total_layers, False, False, transfer_direction, headFrames))
             for i in range(self.total_chunks - 1, cutoff_chunk_id - 1, -1):
-                self.computation_queue.append((i, self.total_layers, False, False, transfer_direction, headFrames))
+                if i % train_chunk_freq == 0:
+                    self.computation_queue.append((i, self.total_layers, False, False, transfer_direction, headFrames))
    
         ## now start backward pass...
         while cur_layer_id >= 0:
@@ -659,11 +796,12 @@ class Device:
             else:
                 transfer_direction = 0
             for i in range(self.total_chunks - 1, -1, -1):
-                ## add the BwdX first
-                self.computation_queue.append((i, cur_layer_id, True, False, transfer_direction, computation_times_frames_bwd[i]))
-                ## add the BwdW second
-                ## bwd W doesn't have an outbound transfer
-                self.computation_queue.append((i, cur_layer_id, False, True, 0, bwdWFrames))
+                if i % train_chunk_freq == 0:
+                    ## add the BwdX first
+                    self.computation_queue.append((i, cur_layer_id, True, False, transfer_direction, computation_times_frames_bwd[i]))
+                    ## add the BwdW second
+                    ## bwd W doesn't have an outbound transfer
+                    self.computation_queue.append((i, cur_layer_id, False, True, 0, bwdWFrames))
             
             cur_layer_id -= self.total_devices
          
@@ -685,8 +823,9 @@ class Device:
 
         if self.is_outbound_transferring and self.outbound_queue and (self.cur_outbound_start_time + self.cur_outbound_duration <= T):
             outbound_item = self.outbound_queue.pop(0)
-            chunk_id, layer_id, is_grad, duration = outbound_item
-            if chunk_id >= 0:
+            chunk_id, layer_id, is_grad, is_only_context, duration = outbound_item
+            
+            if chunk_id and not is_only_context:
                 activations_ind = self.activations_buffer.index((-2, chunk_id, layer_id))
                 self.activations_buffer[activations_ind] = -1
                 ## wasteful, but keeping orderly with setting -1 to be the first free slot in linear order...
@@ -876,6 +1015,13 @@ class Device:
             print("Trying to prefetch next context, but chunk id not on current layer...\n")
             return
         
+        ## if activations buffer was deep enought to already contain context,
+        ## then we don't need to prefetch it...
+        if (0, chunk_id, next_layer_id) in self.activations_buffer:
+            self.context_buffer[chunk_id] = (0, chunk_id, next_layer_id)
+            return
+        
+        ## otherwise, we need to prefetch the context...
         self.context_buffer[chunk_id] = (-2, chunk_id, next_layer_id)
         self.inbound_queue.append((chunk_id, next_layer_id, False, True, chunk_id, contextTransferFrames))
         return
@@ -959,32 +1105,37 @@ class Device:
             if has_outbound_transition:
                 out_idx_to_update = self.transitions_outbound_buffer.index((-2, cid, lid, is_grad_out))
                 self.transitions_outbound_buffer[out_idx_to_update] = (0, cid, lid, is_grad_out)
-
-                if peer_id != self.device_id:
-                    ## append this to the peer transfer queue
-                    self.peer_transfer_queue.append((peer_id, cid, lid, is_grad_out, activationTransitionFrames))
+                ## append this to the peer transfer queue
+                self.peer_transfer_queue.append((peer_id, cid, lid, is_grad_out, activationTransitionFrames))
             
 
 
             if is_fwd: # FWD Finished
 
-                ## now we need to save the activations in activation buffer
-                ## if at the tail end of forward computation, save the activations down!
-                if (self.cur_fwd_computation_num > self.activations_stack_cutoff_ind):
-                    self.activations_buffer[self.activations_empty_slot_ind] = (0, cid, lid)
-                else:
-                    ## mark as moving into home storage
-                    self.activations_buffer[self.activations_empty_slot_ind] = (-2, cid, lid)
-                    self.outbound_queue.append((cid, lid, False, savedActivationsFrames))
+                ## determine if we need to send back activations or not...
+                if (cid % train_chunk_freq == 0):
+                    ## now we need to save the activations in activation buffer
+                    ## if at the tail end of forward computation, save the activations down!
+                    if (self.cur_fwd_computation_num > self.activations_stack_cutoff_ind):
+                        self.activations_buffer[self.activations_empty_slot_ind] = (0, cid, lid)
+                    else:
+                        ## mark as moving into home storage
+                        self.activations_buffer[self.activations_empty_slot_ind] = (-2, cid, lid)
+                        self.outbound_queue.append((cid, lid, False, False, savedActivationsFrames))
 
-                if -1 in self.activations_buffer:
-                    self.activations_empty_slot_ind = self.activations_buffer.index(-1)
+                    if -1 in self.activations_buffer:
+                        self.activations_empty_slot_ind = self.activations_buffer.index(-1)
+                    else:
+                        self.activations_empty_slot_ind = None
                 else:
-                    self.activations_empty_slot_ind = None
+                    self.outbound_queue.append((cid, lid, False, True, contextTransferFrames))
 
                 ## check to see if we finished a layer and should prefetch next weights...
                 if (cid == self.total_chunks - 1) and self.next_weight_prefetch_layer_id <= self.total_layers:
-                    self.inbound_queue.append((-1, self.next_weight_prefetch_layer_id, False, False, self.cur_weight_write_ptr, layerTransferFrames))
+                    layer_transfer_time = layerTransferFrames
+                    if self.next_weight_prefetch_layer_id == self.total_layers:
+                        layer_transfer_time = headTransferFrames
+                    self.inbound_queue.append((-1, self.next_weight_prefetch_layer_id, False, False, self.cur_weight_write_ptr, layer_transfer_time))
                     self.cur_weights[self.cur_weight_write_ptr] = (-2, self.next_weight_prefetch_layer_id)
                     self.next_weight_prefetch_layer_id += self.total_devices
                     ## if we know we have a valid next weight prefetch layer id,
@@ -1087,15 +1238,19 @@ class Device:
 
         if not self.is_outbound_transferring and self.outbound_queue:
             item = self.outbound_queue[0]
-            chunk_id, layer_id, is_grad, duration = item
+            chunk_id, layer_id, is_grad, is_only_context, duration = item
             self.is_outbound_transferring = True
             self.cur_outbound_start_time = T
             self.cur_outbound_duration = duration
 
             edge_color = COLOR_OUTBOUND_DEFAULT
             if chunk_id >= 0: # Activation save
-                self.cur_outbound_edge = f"Act:\nC{chunk_id},L{layer_id}"
-                edge_color = COLOR_OUTBOUND_FWD_ACTIVATION
+                if not is_only_context:
+                    self.cur_outbound_edge = f"Act:\nC{chunk_id},L{layer_id}"
+                    edge_color = COLOR_OUTBOUND_FWD_ACTIVATION
+                else:
+                    self.cur_outbound_edge = f"Ctx:\nC{chunk_id},L{layer_id}"
+                    edge_color = COLOR_OUTBOUND_FWD_CTX
             elif is_grad: # Weight Gradient save
                 if layer_id == total_layers:
                      label_lid_str = f"Grad:\nHead"
@@ -1176,6 +1331,11 @@ class Device:
                 edge_color = COLOR_RING_CCW
                 connection_style_ring = f"arc3,rad=0.2" # Positive radius for CCW arc
                 self.cur_ring_edge = f"Out:\nC{chunk_id},L{layer_id}"
+
+            ## don't draw self ring edge, makes it look weird
+            ## only applies for N = 1...
+            if peer_id == self.device_id:
+                self.cur_ring_edge = ""
 
             arrow_vis, _ = edge_artists[f'ring_{self.device_id}']
             arrow_vis.set_color(edge_color)
