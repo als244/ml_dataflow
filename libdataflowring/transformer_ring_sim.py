@@ -910,7 +910,8 @@ class Device:
             transfer_direction = 1
             for i in range(self.total_chunks):
                 self.computation_queue.append((i, cur_layer_id, False, False, transfer_direction, computation_times_frames[i]))
-                self.activations_stack.append((i, cur_layer_id))
+                if i % train_chunk_freq == 0:
+                    self.activations_stack.append((i, cur_layer_id))
             ## strictly less as we will process head differently
             if cur_layer_id + self.total_devices < self.total_layers:
                 cur_layer_id += self.total_devices
