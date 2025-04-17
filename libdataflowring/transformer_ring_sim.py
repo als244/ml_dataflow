@@ -841,7 +841,7 @@ class Device:
 
             is_grad_out = (not is_fwd) or (lid == self.total_layers)
             
-            if not bW:
+            if has_outbound_transition:
                 self.transitions_outbound_buffer[self.transitions_outbound_empty_slot_ind] = (-2, cid, lid, is_grad_out)
                 if -1 in self.transitions_outbound_buffer:
                     self.transitions_outbound_empty_slot_ind = self.transitions_outbound_buffer.index(-1)
@@ -944,8 +944,6 @@ class Device:
                     self.head_output_transitions_empty_slot_ind = first_free_idx
                 else:
                     inp_idx_to_free = self.transitions_inbound_buffer.index((0, cid, depend_transition, is_grad_in))
-                    if self.device_id == self.total_devices - 1:
-                        print(f"Dev {self.device_id}. Completed Comp C{cid},L{lid}. Freeing Input Transition for C{cid},L{lid}")
                     self.transitions_inbound_buffer[inp_idx_to_free] = -1
                     ## wasteful, but keeping orderly with setting -1 to be the first free slot in linear order...
                     ## we know there will be at least one free slot because we just set one...
@@ -954,7 +952,11 @@ class Device:
             
             ## we can clear the output transition as soon as fwd, bX, or head is done...
             ## no output transition for bW, computed immediately after bX...
-            if not bW:
+
+            has_outbound_transition = True
+            if bW or (bX and lid == 0):
+                has_outbound_transition = False
+            if has_outbound_transition:
                 out_idx_to_update = self.transitions_outbound_buffer.index((-2, cid, lid, is_grad_out))
                 self.transitions_outbound_buffer[out_idx_to_update] = (0, cid, lid, is_grad_out)
 
