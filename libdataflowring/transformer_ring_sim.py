@@ -989,8 +989,14 @@ class Device:
                 if (cid == self.total_chunks - 1) and self.next_weight_prefetch_layer_id <= self.total_layers:
                     self.inbound_queue.append((-1, self.next_weight_prefetch_layer_id, False, False, self.cur_weight_write_ptr, layerTransferFrames))
                     self.cur_weights[self.cur_weight_write_ptr] = (-2, self.next_weight_prefetch_layer_id)
-                    self.cur_weight_write_ptr = (self.cur_weight_write_ptr + 1) % self.layer_capacity
                     self.next_weight_prefetch_layer_id += self.total_devices
+                    ## if we know we have a valid next weight prefetch layer id,
+                    ## then we can increment the weight write pointer
+
+                    ## otherwise this was our last weight, and we want to evict starting from the location we just
+                    ## fetched in...
+                    if (self.next_weight_prefetch_layer_id <= self.total_layers):
+                        self.cur_weight_write_ptr = (self.cur_weight_write_ptr + 1) % self.layer_capacity
 
                 self.cur_fwd_computation_num += 1
             elif is_head: # Head finished                
