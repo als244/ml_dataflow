@@ -48,7 +48,7 @@ N = 8
 num_sequences = 1
 seqlen_thousands = 32
 seqlen = (1 << 10) * seqlen_thousands
-train_token_ratio = 1.0
+train_token_ratio = 0.5
 min_chunk_size = 1536
 
 
@@ -130,6 +130,7 @@ chunk_size = round_up_to_multiple(chunk_size_base, chunk_multiple)
 
 total_chunks = math.ceil(seqlen / chunk_size)
 train_chunk_freq =  math.ceil(1/ train_token_ratio)
+print(f"train_chunk_freq: {train_chunk_freq}")
 total_train_chunks = int(total_chunks / train_chunk_freq)
 
 
@@ -1322,6 +1323,13 @@ class Device:
 
                 if (lid - self.total_devices >= 0):
                     self.handle_bwd_prefetch_context(cid, lid, lid - self.total_devices)
+
+                ## also should prefetch all contexts for chunks that are not train chunks
+                ## that occur between the current chunk and the next train chunk....
+                next_train_chunk_id = cid - train_chunk_freq
+                if cid > 0:
+                    for non_train_cid in range(cid - 1, next_train_chunk_id, -1):
+                        self.handle_bwd_prefetch_context(non_train_cid, lid, lid - self.total_devices)
 
                 ## if this is the last chunk, now prefetch the next required weight
                 ## which replaces the current weight
