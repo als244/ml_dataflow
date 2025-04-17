@@ -27,14 +27,32 @@ min_interval = 1
 max_interval = 100
 initial_speed_level = 50
 
-## Smaller Model Parameters
-N = 8 # Number of devices
-total_layers = 64
+## Number of Devices
+N = 8
 
+## Dataflow Params
+chunk_size = 1536
+layer_capacity = 2 # Max weights per device
+activations_capacity = 6
+transitions_capacity = 12
+
+## this should be = self.head_cutoff + 1...
+head_transitions_capacity = 20
 do_backward = True
-# True=Pipeline Parallel (BWD Reversed), False=Data Parallel(BWD Same Order)
-are_chunks_same_seq = True
 
+
+## Training Info
+num_sequences = 1
+seqlen_thousands = 32
+seqlen = (1 << 10) * seqlen_thousands
+total_chunks = math.ceil(seqlen / chunk_size)
+train_chunk_freq = 1
+
+
+## Model Info
+bitwidth = 16
+dtype_bytes = bitwidth / 8
+total_layers = 64
 vocab_size = 151646
 model_dim = 5120
 kv_factor = .125
@@ -44,14 +62,8 @@ ffn_dim = int(model_dim * ffn_multiplier)
 num_experts = 1
 active_experts = 1
 expert_dim = int(ffn_dim // num_experts)
-chunk_size = 1536
-
-## FP8
-bitwidth = 16
-dtype_bytes = bitwidth / 8
-
-seqlen_thousands = 32
-seqlen = (1 << 10) * seqlen_thousands
+## THese config params not implemented yet...
+attn_type = "Exact"
 
 
 ## hardware configs
@@ -67,16 +79,11 @@ attn_efficiency = 0.6
 
 
 ## communication configs
-home_bw_gb_sec = 400
-peer_transfer_bw_gb_sec = 100
+home_bw_gbit_sec = 400
+peer_bw_gbit_sec = 100
 
-## THese config params not implemented yet...
-attn_type = "Exact"
 
-total_chunks = math.ceil(seqlen / chunk_size)
-train_chunk_freq = 1
 
-num_sequences = 1
 
 
 matmul_attn_flops_per_layer =2 * (model_dim * model_dim) + (4 * model_dim * kv_dim * chunk_size)
@@ -127,7 +134,7 @@ for i in range(total_chunks):
     total_fwd_flops += total_layers * layer_flops
 
     computation_times_sec[i] = base_flops_per_layer / (hardware_max_flops * matmul_efficiency) + attn_flops / (hardware_max_flops * attn_efficiency)
-    computation_times_frames[i] = int(computation_times_sec[i] * cycles_per_second)
+    computation_times_frames[i] = math.ceil(computation_times_sec[i] * cycles_per_second)
 
     per_layer_chunk_flops += layer_flops
 
@@ -135,7 +142,7 @@ for i in range(total_chunks):
         ## attention layer for bwd x has double the flops...
         bwd_x_flops = layer_flops + attn_flops
         computation_times_sec_bwd[i] = base_flops_per_layer / (hardware_max_flops * matmul_efficiency) + (2 * attn_flops) / (hardware_max_flops * attn_efficiency)
-        computation_times_frames_bwd[i] = int(computation_times_sec_bwd[i] * cycles_per_second)
+        computation_times_frames_bwd[i] = math.ceil(computation_times_sec_bwd[i] * cycles_per_second)
 
         per_layer_chunk_flops += bwd_x_flops
 
@@ -165,29 +172,42 @@ attn_block_size_bytes = dtype_bytes * (2 * model_dim * model_dim + 4 * model_dim
 ffn_block_size_bytes = dtype_bytes * (3 * model_dim * expert_dim * num_experts)
 layer_size_bytes = attn_block_size_bytes + ffn_block_size_bytes
 
-layer_transfer_time_sec = (layer_size_bytes * 8) / (home_bw_gb_sec * 1e9)
+layer_transfer_time_sec = (layer_size_bytes * 8) / (home_bw_gbit_sec * 1e9)
 
 ## model input, query, key, value, attn output, attn ouut output
 attn_activation_bytes = dtype_bytes * 4 * (model_dim * chunk_size) + 2 * (kv_dim * chunk_size)
 ffn_activation_bytes = dtype_bytes * (expert_dim * chunk_size * active_experts)
 activation_size_bytes = attn_activation_bytes + ffn_activation_bytes
 
-activation_transfer_time_sec = (activation_size_bytes * 8) / (home_bw_gb_sec * 1e9)
+activation_transfer_time_sec = (activation_size_bytes * 8) / (home_bw_gbit_sec * 1e9)
 
 output_size_bytes = dtype_bytes * (model_dim * chunk_size)
 
-transition_transfer_time_sec = (output_size_bytes * 8) / (peer_transfer_bw_gb_sec * 1e9)
+transition_transfer_time_sec = (output_size_bytes * 8) / (peer_bw_gbit_sec * 1e9)
+
+bwd_w_time_sec = bwd_w_flops / (hardware_max_flops * matmul_efficiency)
+
+context_size_bytes = 2 * (chunk_size * kv_dim * dtype_bytes)
+context_transfer_time_sec = context_size_bytes / (peer_bw_gbit_sec * 1e9)
 
 
 
-layerTransferFrames = int(layer_transfer_time_sec * cycles_per_second) # Cycles to transfer weights
-headFrames = int(head_computation_times_sec * cycles_per_second)
 computationFrames = computation_times_frames[0] # Cycles per compute task
 max_computationFrames = computation_times_frames[total_chunks-1]
-savedActivationsFrames = int(activation_transfer_time_sec * cycles_per_second) # Cycles to transfer activations (save/fetch)
-activationTransitionFrames = int(transition_transfer_time_sec * cycles_per_second) # Cycles to transfer activations/grads between devices
 
-layer_capacity = 2 # Max weights per device
+headFrames = math.ceil(head_computation_times_sec * cycles_per_second)
+bwdWFrames = math.ceil(bwd_w_time_sec * cycles_per_second)
+
+contextTransferFrames = math.ceil(context_transfer_time_sec * cycles_per_second)
+layerTransferFrames = math.ceil(layer_transfer_time_sec * cycles_per_second) # Cycles to transfer weights
+
+savedActivationsFrames = math.ceil(activation_transfer_time_sec * cycles_per_second) # Cycles to transfer activations (save/fetch)
+activationTransitionFrames = math.ceil(transition_transfer_time_sec * cycles_per_second) # Cycles to transfer activations/grads between devices
+
+
+
+
+
 
 # --- Global Control Flags ---
 TO_PRINT = False # ENABLE DEBUG PRINTING
@@ -231,14 +251,8 @@ mut_scale = 6
 if sys.platform == 'darwin':
     matplotlib.use('MacOSX')
 
-
-
-## NOT USING THESE CORRECTLY FOR NOW....
-activations_capacity = 4 # Max CHECKPOINTED activations kept resident from FWD per device
-transitions_capacity = total_chunks # Buffer size for incoming FWD data from peers
-grad_activations_capacity = total_chunks # Buffer size for local dL/dA results
-
-max_frames = 100000 # Limit animation length for performance if needed
+lower_bound = int(((total_matmul_flops / N) / (hardware_max_flops * matmul_efficiency) + (total_attn_flops / N) / (hardware_max_flops * attn_efficiency)) * cycles_per_second)
+max_frames = int(lower_bound * 1.5)
 
 
 def calculate_interval(speed_level, s_min, s_max, i_min, i_max):
@@ -274,11 +288,15 @@ if TO_PRINT:
 COLOR_INBOUND_DEFAULT = 'gray'
 COLOR_INBOUND_WEIGHT = 'olive'
 COLOR_INBOUND_BWD_FETCHED_ACTIVATION = 'magenta'
+COLOR_INBOUND_BWD_FETCHED_CTX = 'cyan'
+
 COLOR_OUTBOUND_DEFAULT = 'gray'
 COLOR_OUTBOUND_FWD_ACTIVATION = 'magenta'
 COLOR_OUTBOUND_WGT_GRAD = 'saddlebrown'
+
 COLOR_RING_CCW = 'indigo'
 COLOR_RING_CW = 'maroon'
+
 COLOR_COMPUTE_DEFAULT = 'gray'
 COLOR_COMPUTE_FWD = 'darkgreen'
 COLOR_COMPUTE_BWD_X = 'orangered'
@@ -299,9 +317,35 @@ center_pos = np.array([0, 0])
 # --- Legend Text ---
 wrap_width = 40
 
+grad_layer_capacity = 1
+
+context_buffer_capacity = 1
+context_buffer_size = seqlen * dtype_bytes * 2 * kv_dim
+grad_context_buffer_capacity = 1
+
 legend_text = (
     f"Simulated Configuration:\n\n"
     f"      - Num Compute Devices: {N}\n\n"
+    f"      - Dataflow Parameters:\n"
+    f"          - Chunk Size: {chunk_size}\n"
+    f"             - Total Chunks: {total_chunks}\n"
+    f"          - Layer Allocation: {(layer_capacity * layer_size_bytes)/ 1e9:.3f} GB\n" 
+    f"              - Per-Layer Size: {layer_size_bytes / 1e9:.3f} GB\n"
+    f"              - Per-Device Layer Capacity: {layer_capacity}\n"
+    f"          - Activation Allocation: {(activations_capacity * activation_size_bytes)/ 1e9:.3f} GB\n"
+    f"              - Per-Chunk Saved Activation Size: {(activation_size_bytes)/ 1e9:.3f} GB\n"
+    f"              - Per-Device Activation Capacity: {activations_capacity}\n"
+    f"          - Typical Transition Allocation: {(transitions_capacity * output_size_bytes)/ 1e9:.3f} GB\n"
+    f"              - Per-Chunk Transition Size: {(output_size_bytes)/ 1e9:.3f} GB\n"
+    f"              - Per-Device Transition Capacity: {transitions_capacity}\n"
+    f"          - Speical Turn-around Transition Allocation: {(head_transitions_capacity * output_size_bytes)/ 1e9:.3f} GB\n"
+    f"               - Speical Transition Receive Capacities: {head_transitions_capacity}\n"
+    f"          - Per-Device Context Buffer Allocation: {context_buffer_size / 1e9:.3f} GB\n"
+    f"              - Per-Device Context Buffer Capacity: {context_buffer_capacity}\n\n"
+    f"      - Training Parameters:\n"
+    f"         - Sequence Length: {seqlen}\n"
+    f"         - Chunk Training Frequency: {train_chunk_freq}\n"
+    f"         - Num Sequences: {num_sequences}\n\n"
     f"      - Model Info:\n"
     f"         - Total Blocks (non-head): {total_layers}\n"
     f"         - Bitwidth: {bitwidth}\n"
@@ -312,33 +356,27 @@ legend_text = (
     f"         - Num Experts: {num_experts}\n"
     f"         - Active Experts: {active_experts}\n"
     f"         - Vocab Size: {vocab_size}\n\n"
-    f"      - Compute Environment Constants:\n"
-    f"         - Hardware Theoretical MAX TFLOPs: {int(hardware_max_flops / 1e12)} TFLOPs\n"
-    f"         - Matmul Efficiency: {matmul_efficiency}\n"
-    f"         - Attn Efficiency: {attn_efficiency}\n"
-    f"      - Communication Environment Constants:\n"
-    f"         - Device-to-Home BW (Gb/s): {home_bw_gb_sec}\n"
-    f"         - Peer-to-Peer BW (Gb/s): {peer_transfer_bw_gb_sec}\n\n"
-    f"      - Training Parameters:\n"
-    f"         - Sequence Length: {seqlen}\n"
-    f"         - Chunk Training Frequency: {train_chunk_freq}\n"
-    f"         - Num Sequences: {num_sequences}\n\n"
     f"      - FLOP Breakdown\n"     
     f"          - Total TFLOPs: {int(total_flops / 1e12)}\n"
     f"              - FWD TFLOPs: {int(total_fwd_flops / 1e12)} TFLOPs\n"
     f"              - BWD TFLOPs: {int(total_bwd_flops / 1e12)} TFLOPs\n"
     f"              - Overall Matmul TFLOPs: {int(total_matmul_flops / 1e12)} TFLOPs\n"
     f"              - Overall Attn TFLOPs: {int(total_attn_flops / 1e12)} TFLOPs\n\n"
-    f"      - Dataflow Parameters:\n"
-    f"          - Per-Device Layer Capacity: {layer_capacity}\n"
-    f"          - Chunk Size: {chunk_size}\n"
-    f"             - Total Chunks: {total_chunks}\n\n"
+    f"      - Compute Environment Constants:\n"
+    f"         - Hardware Theoretical MAX: {int(hardware_max_flops / 1e12)} TFLOPs\n"
+    f"         - Matmul Efficiency: {matmul_efficiency}\n"
+    f"         - Attn Efficiency: {attn_efficiency}\n"
+    f"      - Communication Environment Constants:\n"
+    f"         - Device-to-Home BW (Gb/s): {home_bw_gbit_sec}\n"
+    f"         - Peer-to-Peer BW (Gb/s): {peer_bw_gbit_sec}\n\n"
     f"      - Derived Cycles ({int(cycles_per_second / 1000)}k cycles per second):\n"
     f"         - C0 Computation: {computationFrames} Cycles\n"
     f"         - C{total_chunks-1} Computation: {max_computationFrames} Cycles\n"
     f"         - Head Computation: {headFrames} Cycles\n"
+    f"         - BwdW Computation: {bwdWFrames} Cycles\n"
     f"         - Layer Transfer: {layerTransferFrames} Cycles\n"
     f"         - Activation Transfer: {savedActivationsFrames} Cycles\n"
+    f"         - Per-Chunk Context Transfer: {contextTransferFrames} Cycles\n"
     f"         - Block Transition: {activationTransitionFrames} Cycles\n\n"
     f"       - Runtime Lower-Bound:\n"
     f"         - Based on Matmul/Attn Efficiency: {int(((total_matmul_flops / N) / (hardware_max_flops * matmul_efficiency) + (total_attn_flops / N) / (hardware_max_flops * attn_efficiency)) * cycles_per_second)} cycles\n"
@@ -447,7 +485,7 @@ for i in range(N):
 
 # --- Device Class ---
 class Device:
-    def __init__(self, device_id, layer_capacity, activations_capacity, transitions_capacity, total_devices, total_layers, total_chunks):
+    def __init__(self, device_id, layer_capacity, activations_capacity, transitions_capacity, head_transitions_capacity, total_devices, total_layers, total_chunks):
         self.device_id = device_id
         self.device_has_started = False
         self.device_start_time = 0
@@ -456,34 +494,38 @@ class Device:
         self.layer_capacity = layer_capacity
         self.activations_capacity = activations_capacity
         self.transitions_capacity = transitions_capacity
+        self.head_transitions_capacity = head_transitions_capacity
         self.total_devices = total_devices
         self.total_layers = total_layers
         self.total_chunks = total_chunks
-        self.bwd_grad_transitions_capacity = total_chunks
-        self.grad_activations_capacity = grad_activations_capacity
-        self.bwd_fetched_activation_buffer_capacity = self.total_chunks * 2
-        self.cur_ready_weights = [-1 for _ in range(layer_capacity)]
-        self.cur_weight_replace_ind = 0
-        self.fwd_transitions_buffer = [-1 for _ in range(self.transitions_capacity)]
-        self.fwd_transitions_write_ptr = 0
-        self.bwd_grad_transitions_buffer = [-1 for _ in range(self.bwd_grad_transitions_capacity)]
-        self.bwd_grad_transitions_write_ptr = 0
-        self.resident_checkpoint_activations = [-1 for _ in range(self.activations_capacity)]
-        self.resident_checkpoint_write_ptr = 0
-        self.bwd_fetched_activation_buffer = [-1 for _ in range(self.bwd_fetched_activation_buffer_capacity)]
-        self.bwd_fetched_activation_write_ptr = 0
-        self.cur_ready_grad_activations = [-1 for _ in range(self.grad_activations_capacity)]
-        self.cur_grad_activations_write_ptr = 0
-        self.cur_model_outputs = [-1 for _ in range(self.total_chunks)]
-        self.cur_model_outputs_write_ptr = 0
-        self.cur_head_outputs = [-1 for _ in range(self.total_chunks)]
-        self.cur_head_outputs_write_ptr = 0
-        self.local_last_fwd_activations = {}
-        self.outbound_storage = set()
+        self.cur_weights = [-1 for _ in range(self.layer_capacity)]
+        self.cur_weight_write_ptr = 0
+        self.activations_buffer = [-1 for _ in range(self.activations_capacity)]
+        self.activations_write_ptr = 0
+        self.activations_empty_slot_ind = 0
+        ## represents the order in which actiavtions are processed
+        self.activations_stack = []
+        self.transitions_inbound_buffer = [-1 for _ in range(self.transitions_capacity)]
+        self.transitions_outbound_buffer = [-1 for _ in range(self.transitions_capacity)]
+        self.transitions_inbound_empty_slot_ind = 0
+        self.transitions_outbound_empty_slot_ind = 0
+
+        ## this is for where the last block puts its output transitions
+        ## exists on device id = (head_device_id
+        self.head_input_transitions_buffer = [-1 for _ in range(self.head_transitions_capacity)]
+        self.head_input_transitions_empty_slot_ind = 0
+        
+        ## this is for where the head block puts its gradient transitions
+        ## exists on device id = (head_device_id - 1) % self.total_devices
+        self.head_output_transitions_buffer = [-1 for _ in range(self.head_transitions_capacity)]
+        self.head_output_transitions_empty_slot_ind = 0
+        
+        self.context_buffer = [-1 for _ in range(self.total_chunks)]
+        self.home_storage = set()
         self.computation_queue = []
-        self.outbound_queue = deque()
-        self.inbound_queue = deque()
-        self.peer_transfer_queue = deque()
+        self.outbound_queue = []
+        self.inbound_queue = []
+        self.peer_transfer_queue = []
         self.is_computing = False
         self.is_stalled = False
         self.stall_start_time = 0
@@ -506,209 +548,187 @@ class Device:
         self.cur_peer_transfer_details = None
         self.computing_status = "Idle"
         self.stall_reason = ""
-        self.has_reversed = False
-        self.last_fwd_layer_on_device = -1
-        self.bwd_prefetch_trigger_layer_id = -1
-        self.next_weight_layer_id = -1
+        
+
+        ## 
+        self.cur_fwd_computation_num = 0
+
+        ## these represent the first activation that will be not be sent back to home storage
+        ## but rather kept within activations buffer
+        self.activations_stack_cutoff_ind = -1
+        
+        ## tracking the next items to prefetch
+        ## weight applies to both forward and backward passes
+        self.next_weight_prefetch_layer_id = -1
+        self.next_bwd_weight_prefetch_layer_id = -1
+        ## this applies to bwd pass only
+        ## it represents the next item to be prefetched
+        ## (and should be initialized to stack_cutoff_ind - 1)
+        ## it is decremented until it reaches -1, at which point
+        self.activations_stack_next_ind = -1
+     
+        ## this applies only to device containing the head...
+        ## it is the chunk id of the last chunk the head will process
+        ## the head process chunks in sequential order until the final
+        ## chunk has transitioning inbound, in which case it will switch
+        ## to processing chunks in reverse order
         self.head_final_chunk_id = -1
         self._initialize_tasks_and_state()
 
-    def _initialize_tasks_and_state(self): # Unchanged
-        initially_loaded_weights = []
-        for i in range(self.layer_capacity):
-            layer_id_to_add = self.device_id + i * self.total_devices
-            if layer_id_to_add < self.total_layers:
-                self.cur_ready_weights[i] = layer_id_to_add
-                self.outbound_storage.add((-1, layer_id_to_add, False))
-                initially_loaded_weights.append(layer_id_to_add)
-        self.cur_weight_replace_ind = 0
+    def _initialize_tasks_and_state(self): # Unchanged        
+        self.cur_weight_write_ptr = 0
         cur_layer_id = self.device_id
-        while cur_layer_id < self.total_layers:
-            self.last_fwd_layer_on_device = cur_layer_id
-            if (-1, cur_layer_id, False) not in self.outbound_storage:
-                self.outbound_storage.add((-1, cur_layer_id, False))
-            for i in range(self.total_chunks):
-                if cur_layer_id < self.total_layers - 1:
-                    transfer_direction = 1
-                else:
-                    transfer_direction = 0
-                # Overwrite condition
-                if cur_layer_id == self.total_layers - 1:
-                    transfer_direction = 1
-                self.computation_queue.append((i, cur_layer_id, False, False, transfer_direction, computation_times_frames[i]))
+
+        total_activations = 0
+
+        ## add all of the layers that this device needs
+        cur_layer_id = self.device_id
+        all_layers = [cur_layer_id]
+        i = 0
+        while cur_layer_id <= self.total_layers:
+            self.home_storage.add((-1, cur_layer_id, False))
+            all_layers.append(cur_layer_id)
+            if i < self.layer_capacity:
+                self.cur_weights[i] = (0, cur_layer_id)
+            else:
+                if i == self.layer_capacity:
+                    self.next_weight_prefetch_layer_id = cur_layer_id
             cur_layer_id += self.total_devices
-        self.next_weight_layer_id = self.device_id + self.layer_capacity * self.total_devices
-        if self.last_fwd_layer_on_device != -1 and self.next_weight_layer_id > self.last_fwd_layer_on_device:
-            if self.last_fwd_layer_on_device + self.total_devices == self.total_layers:
-                self.next_weight_layer_id = self.total_layers
+            i += 1
+
+        ## initialize the bwd weight prefetch layer id
+        if len(all_layers) > self.layer_capacity:
+            self.next_bwd_weight_prefetch_layer_id = all_layers[len(all_layers) - self.layer_capacity - 1]
+        else:
+            self.next_bwd_weight_prefetch_layer_id = -1
+
+        cur_layer_id = self.device_id
+        ## forward pass
+        while cur_layer_id < self.total_layers:
+            transfer_direction = 1
+            for i in range(self.total_chunks):
+                self.computation_queue.append((i, cur_layer_id, False, False, transfer_direction, computation_times_frames[i]))
+                self.activations_stack.append((i, cur_layer_id))
+            ## strictly less as we will process head differently
+            if cur_layer_id + self.total_devices < self.total_layers:
+                cur_layer_id += self.total_devices
             else:
-                self.next_weight_layer_id = None
-        elif self.last_fwd_layer_on_device == -1:
-            self.next_weight_layer_id = None
+                ## here we can initialize the context buffer which should contain all chunks' context 
+                ## for the last block layer...
+                for i in range(self.total_chunks):
+                    self.context_buffer[i] = (0, i, cur_layer_id)
+                break
+        
+        total_activations = len(self.computation_queue)
+        activation_ind_cutoff = total_activations - self.activations_capacity
+        
+        if activation_ind_cutoff <= 0:
+            self.activations_stack_cutoff_ind = 0
+        else:
+            self.activations_stack_cutoff_ind = activation_ind_cutoff
+            self.activations_stack_next_ind = activation_ind_cutoff
 
-        if do_backward:
-            head_layer_conceptual_id = self.total_layers
-            is_head_device = (self.last_fwd_layer_on_device != -1 and self.last_fwd_layer_on_device + self.total_devices == self.total_layers)
-            if is_head_device:
-                cur_layer_id_for_head_task = head_layer_conceptual_id
-                self.outbound_storage.add((-1, cur_layer_id_for_head_task, False))
-                if self.layer_capacity > len(initially_loaded_weights):
-                    head_wgt_idx = len(initially_loaded_weights)
-                    self.cur_ready_weights[head_wgt_idx] = cur_layer_id_for_head_task
-                head_task_queue_order = []
-                if are_chunks_same_seq:
-                    ## half of the total chu
-                    head_diff = headFrames - computation_times_frames[0]
-                    if head_diff <= 0:
-                        cutoff_chunk_id = self.total_chunks // 2
-                    else:
-                        total_chunk_frames = sum([computation_times_frames[i] for i in range(self.total_chunks)])
-                        cutoff_chunk_id = math.ceil((total_chunk_frames / 2) / headFrames)
-                    print(f"Cutoff Chunk ID: {cutoff_chunk_id}")
-                    head_task_queue_order.extend(range(cutoff_chunk_id))
-                    head_task_queue_order.extend(range(self.total_chunks - 1, cutoff_chunk_id - 1, -1))
-                    self.head_final_chunk_id = cutoff_chunk_id
-                else:
-                    # Assuming cutoff_chunk_id needs definition outside the if for this branch
-                    cutoff_chunk_id = self.total_chunks // 2 # Or some other default
-                    head_task_queue_order.extend(range(cutoff_chunk_id, self.total_chunks))
-                    self.head_final_chunk_id = self.total_chunks - 1
-                for i in head_task_queue_order:
-                    self.computation_queue.append((i, cur_layer_id_for_head_task, False, False, -1, headFrames))
-                cur_layer_id_for_bwd_loop = self.last_fwd_layer_on_device
+
+        ## add potential head task
+        if cur_layer_id + self.total_devices == self.total_layers:
+            
+            transfer_direction = -1
+            ## determine head cutoff
+            ## this is heuristic to try and be productive as possible before the
+            ## the final chunk has transitioned into the head device in which case we can 
+            ## flip the direction of chunk processing
+            head_diff = headFrames - computation_times_frames[0]
+            if head_diff <= 0:
+                cutoff_chunk_id = self.total_chunks // 2
             else:
-                cur_layer_id_for_bwd_loop = self.last_fwd_layer_on_device
+                total_chunk_frames = sum([computation_times_frames[i] for i in range(self.total_chunks)])
+                cutoff_chunk_id = math.ceil((total_chunk_frames / 2) / headFrames)
+            
+            self.head_final_chunk_id = cutoff_chunk_id
+            print(f"Cutoff Chunk ID: {cutoff_chunk_id}")
 
-            if cur_layer_id_for_bwd_loop >= 0:
-                current_bwd_layer = cur_layer_id_for_bwd_loop
-                while current_bwd_layer >= 0:
-                    if are_chunks_same_seq:
-                        chunk_order = range(self.total_chunks - 1, -1, -1)
-                    else:
-                        chunk_order = range(self.total_chunks)
+            for i in range(cutoff_chunk_id):
+                self.computation_queue.append((i, self.total_layers, False, False, transfer_direction, headFrames))
+            for i in range(self.total_chunks - 1, cutoff_chunk_id - 1, -1):
+                self.computation_queue.append((i, self.total_layers, False, False, transfer_direction, headFrames))
+   
+        ## now start backward pass...
+        while cur_layer_id >= 0:
+            if cur_layer_id > 0:
+                transfer_direction = -1
+            else:
+                transfer_direction = 0
+            for i in range(self.total_chunks - 1, -1, -1):
+                ## add the BwdX first
+                self.computation_queue.append((i, cur_layer_id, True, False, transfer_direction, computation_times_frames_bwd[i]))
+                ## add the BwdW second
+                ## bwd W doesn't have an outbound transfer
+                self.computation_queue.append((i, cur_layer_id, False, True, 0, bwdWFrames))
+            
+            cur_layer_id -= self.total_devices
+         
+       
 
-                    for i in chunk_order:
-                        if current_bwd_layer > 0:
-                            transfer_direction = -1
-                        else:
-                            transfer_direction = 0
-                        self.computation_queue.append((i, current_bwd_layer, True, False, transfer_direction, computation_times_frames_bwd[i]))
-                    for i in chunk_order:
-                        self.computation_queue.append((i, current_bwd_layer, False, True, 0, computation_times_frames[0]))
-                    current_bwd_layer -= self.total_devices
-
-    def handle_completed_transfers(self, T, all_devices): # Unchanged logic, split lines
+    def handle_completed_transfers(self, T, all_devices):
         if self.is_inbound_transferring and self.inbound_queue and (self.cur_inbound_start_time + self.cur_inbound_duration <= T):
-            inbound_item = self.inbound_queue.popleft()
-            chunk_id, layer_id, is_grad, target_idx, duration, target_buffer_type = inbound_item
-            item_type, status, buffer_name = 'Unknown', 'OK', "N/A"
-            if target_buffer_type == 'weight':
-                item_type, buffer_name = 'Wgt', "Ready Wgt"
-                if 0 <= target_idx < self.layer_capacity:
-                    if self.cur_ready_weights[target_idx] in [-1, -2] or self.cur_ready_weights[target_idx] == layer_id:
-                        self.cur_ready_weights[target_idx] = layer_id
-                    else:
-                        status = f'STALE Wgt (Idx {target_idx} holds L{self.cur_ready_weights[target_idx]}, got L{layer_id})'
-                else:
-                    status = f'ERROR Wgt (Invalid Idx {target_idx})'
-            elif target_buffer_type == 'bwd_fetched_act':
-                item_type, buffer_name = 'Bwd Fetched Act', "Bwd Fetched Act Buf"
-                act_tuple = (chunk_id, layer_id)
-                effective_idx = target_idx % self.bwd_fetched_activation_buffer_capacity
-                if 0 <= effective_idx < self.bwd_fetched_activation_buffer_capacity:
-                    current_val = self.bwd_fetched_activation_buffer[effective_idx]
-                    if current_val == -2 or current_val == act_tuple:
-                        self.bwd_fetched_activation_buffer[effective_idx] = act_tuple
-                    elif current_val != -1:
-                        status = f'STALE Bwd Fetched Act (Idx {effective_idx} holds {current_val}, got {act_tuple})'
-                    else:
-                        self.bwd_fetched_activation_buffer[effective_idx] = act_tuple
-                        status = f'WARN Bwd Fetched Act (Idx {effective_idx} was empty, placed {act_tuple})'
-                else:
-                    status = f'ERROR Bwd Fetched Act (Invalid Idx {effective_idx})'
+            inbound_item = self.inbound_queue.pop(0)
+            chunk_id, layer_id, is_grad, is_context, target_idx, duration = inbound_item
+            if (chunk_id == -1):
+                self.cur_weights[target_idx] = (0, layer_id)
             else:
-                status = f'ERROR Unknown Buffer Type ({target_buffer_type}) for Inbound'
-
-            if TO_PRINT or 'ERROR' in status or 'STALE' in status or 'WARN' in status:
-                if chunk_id != -1:
-                    log_msg = f"T={T}, Dev {self.device_id}: RX INBOUND {item_type} C{chunk_id},L{layer_id}"
+                if is_context:
+                    self.context_buffer[target_idx] = (0, chunk_id, layer_id)
                 else:
-                    log_msg = f"T={T}, Dev {self.device_id}: RX INBOUND {item_type} L{layer_id}"
-
-                log_msg += f" -> Buf '{buffer_name}' Idx {target_idx} Complete."
-                if status != 'OK':
-                    log_msg = log_msg.replace("Complete.", status)
-                print(log_msg)
-
+                    self.activations_buffer[target_idx] = (0, chunk_id, layer_id)
             self.is_inbound_transferring = False
             self.cur_inbound_edge = ""
 
         if self.is_outbound_transferring and self.outbound_queue and (self.cur_outbound_start_time + self.cur_outbound_duration <= T):
-            outbound_item = self.outbound_queue.popleft()
+            outbound_item = self.outbound_queue.pop(0)
             chunk_id, layer_id, is_grad, duration = outbound_item
-            storage_key = (chunk_id, layer_id, is_grad)
-            if storage_key not in self.outbound_storage:
-                self.outbound_storage.add(storage_key)
-                if chunk_id >= 0:
-                    item_type = 'Act'
-                elif is_grad:
-                    item_type = 'WgtGrad'
-                else:
-                    item_type = 'Wgt'
-
-                if TO_PRINT:
-                    print(f"T={T}, Dev {self.device_id}: TX OUTBOUND {item_type} C{chunk_id},L{layer_id} -> Storage COMPLETE. Key: {storage_key}")
-
+            if chunk_id >= 0:
+                activations_ind = self.activations_buffer.index((-2, chunk_id, layer_id))
+                self.activations_buffer[activations_ind] = -1
+                ## wasteful, but keeping orderly with setting -1 to be the first free slot in linear order...
+                ## we know there will be at least one free slot because we just set one...
+                first_free_idx = self.activations_buffer.index(-1)
+                self.activations_empty_slot_ind = first_free_idx
+            
+            self.home_storage.add((chunk_id, layer_id, is_grad))
             self.is_outbound_transferring = False
             self.cur_outbound_edge = ""
 
         if self.is_peer_transferring and self.peer_transfer_queue and (self.cur_peer_transfer_start_time + self.cur_peer_transfer_duration <= T):
-            peer_item = self.peer_transfer_queue.popleft()
-            peer_id, chunk_id, layer_id, is_grad, duration = peer_item
+            
+            peer_item = self.peer_transfer_queue.pop(0)
+            peer_id, cid, lid, is_grad, duration = peer_item
+            
             peer_dev = all_devices[peer_id]
-            item_key = (chunk_id, layer_id, is_grad)
-            status, target_buffer_name, target_idx = "OK", "N/A", -1
-            is_output_to_head_input = (layer_id == self.total_layers - 1) and (not is_grad)
-            is_grad_from_head_output = (layer_id == self.total_layers) and is_grad
-            target_buffer, write_ptr, buffer_capacity = None, -1, 0
+           
+            ## indicate as freed up in self outbound buffer
+            outbound_idx_to_free = self.transitions_outbound_buffer.index((0, cid, lid, is_grad))
+            self.transitions_outbound_buffer[outbound_idx_to_free] = -1
+            ## we know there will be at least one free slot because we just set one...
+            first_free_idx = self.transitions_outbound_buffer.index(-1)
+            self.transitions_outbound_empty_slot_ind = first_free_idx
 
-            if is_output_to_head_input:
-                target_buffer_name, target_buffer, write_ptr, buffer_capacity = "Model Outputs (Head In)", peer_dev.cur_model_outputs, peer_dev.cur_model_outputs_write_ptr, peer_dev.total_chunks
-            elif is_grad_from_head_output:
-                target_buffer_name, target_buffer, write_ptr, buffer_capacity = "Head Outputs (Bwd In)", peer_dev.cur_head_outputs, peer_dev.cur_head_outputs_write_ptr, peer_dev.total_chunks
-            elif is_grad:
-                target_buffer_name, target_buffer, write_ptr, buffer_capacity = "Bwd Grad Transitions", peer_dev.bwd_grad_transitions_buffer, peer_dev.bwd_grad_transitions_write_ptr, peer_dev.bwd_grad_transitions_capacity
+            
+            ## indicate as completed in peer inbound buffer
+
+            ## meant that this was a gradient transition from output,
+            ## so the receiving device has special buffer to put it in
+            if lid == self.total_layers:
+                inbound_idx_to_update = peer_dev.head_output_transitions_buffer.index((-2, cid, lid, is_grad))
+                peer_dev.head_output_transitions_buffer[inbound_idx_to_update] = (0, cid, lid, is_grad)
             else:
-                target_buffer_name, target_buffer, write_ptr, buffer_capacity = "Fwd Transitions", peer_dev.fwd_transitions_buffer, peer_dev.fwd_transitions_write_ptr, peer_dev.transitions_capacity
-
-            if target_buffer is not None and 0 <= write_ptr < buffer_capacity:
-                target_idx = write_ptr
-                if target_buffer[target_idx] != -1:
-                    status = f'WARN Peer Overwrite (Buf {target_buffer_name}, Idx {target_idx} held {target_buffer[target_idx]}, got {item_key})'
-                target_buffer[target_idx] = item_key
-                if is_output_to_head_input:
-                    peer_dev.cur_model_outputs_write_ptr = (target_idx + 1) % buffer_capacity
-                elif is_grad_from_head_output:
-                    peer_dev.cur_head_outputs_write_ptr = (target_idx + 1) % buffer_capacity
-                elif is_grad:
-                    peer_dev.bwd_grad_transitions_write_ptr = (target_idx + 1) % buffer_capacity
+                ## this means that this is a forward transition from last block to the head
+                ## so the head has a special buffer to put it in
+                if lid == self.total_layers - 1 and not is_grad:
+                    inbound_idx_to_update = peer_dev.head_input_transitions_buffer.index((-2, cid, lid, is_grad))
+                    peer_dev.head_input_transitions_buffer[inbound_idx_to_update] = (0, cid, lid, is_grad)
                 else:
-                    peer_dev.fwd_transitions_write_ptr = (target_idx + 1) % buffer_capacity
-            else:
-                status = f'ERROR Peer TX (Invalid Idx {write_ptr} for Peer {peer_id} Buf {target_buffer_name} size {buffer_capacity})'
-
-            item_type = 'Unknown'
-            if is_grad:
-                if layer_id < self.total_layers:
-                    item_type = 'Bwd Grad'
-                else:
-                    item_type = 'Head Grad'
-            else:
-                item_type = 'Fwd Output'
-
-            if TO_PRINT or 'ERROR' in status or 'WARN' in status:
-                log_msg = f"T={T}, Dev {self.device_id}: TX PEER SEND {item_type} C{chunk_id},L{layer_id} -> Dev {peer_id} Complete. (Data {item_key} written to Dev {peer_id} Buf '{target_buffer_name}' Idx {target_idx}). Status: {status}"
-                print(log_msg)
+                    inbound_idx_to_update = peer_dev.transitions_inbound_buffer.index((-2, cid, lid, is_grad))
+                    peer_dev.transitions_inbound_buffer[inbound_idx_to_update] = (0, cid, lid, is_grad)
 
             self.is_peer_transferring = False
             self.cur_ring_edge = ""
@@ -717,151 +737,93 @@ class Device:
     def handle_computation_depends(self, T): # Unchanged logic, refactored style
         if not self.computation_queue:
             return False
+        
         next_task = self.computation_queue[0]
         cid, lid, bX, bW, tdir, dur = next_task
         has_deps = False
-        is_fwd = (not bX) and (not bW) and (lid < self.total_layers)
-        is_head = (lid == self.total_layers)
-        computation_type_str = "Unknown"
+        is_fwd = (not bX) and (not bW)
+
         self.stall_reason = ""
 
         if is_fwd:
-            computation_type_str = "Fwd"
-            has_weight = (lid in self.cur_ready_weights)
+            if lid == self.total_layers:
+                computation_type_str = "Head"
+                weight_str = "Wgt: Head"
+            else:
+                computation_type_str = "Fwd"
+                weight_str = f"Wgt: L{lid}"
+            has_weight = ((0, lid) in self.cur_weights)
+
+            ## set to true for layer 0
             has_input_transition = True
             input_transition_key = None
             if lid > 0:
-                input_transition_key = (cid, lid - 1, False)
-                has_input_transition = any(isinstance(item, tuple) and item == input_transition_key for item in self.fwd_transitions_buffer if item != -1)
+                input_transition_key = (0, cid, lid - 1, False)
+                if lid < self.total_layers:
+                    has_input_transition = input_transition_key in self.transitions_inbound_buffer
+                else:
+                    has_input_transition = input_transition_key in self.head_input_transitions_buffer
             has_deps = has_weight and has_input_transition
             if not has_deps:
-                missing = []
-                if not has_weight:
-                    is_pending = any(q[0]==-1 and q[1]==lid and q[5]=='weight' for q in self.inbound_queue)
-                    if is_pending:
-                        missing.append(f"Weight L{lid} (Pend)")
-                    else:
-                        missing.append(f"Weight L{lid}")
-                if lid > 0 and not has_input_transition:
-                    missing.append(f"Input Fwd Act C{cid},L{lid-1}")
-
-                if missing:
-                    self.stall_reason = "Missing:\n" + "\n".join(missing)
+                if not has_weight and not has_input_transition:
+                    self.stall_reason = f"Missing:\nWgt\nAct. Stream"
+                elif not has_weight:
+                    self.stall_reason = f"Missing:\nWgt"
                 else:
-                    self.stall_reason = "Unknown FWD Dep"
-
-        elif is_head:
-            computation_type_str = "Head"
-            head_weight_lid = self.total_layers
-            has_weight = (head_weight_lid in self.cur_ready_weights)
-            input_key = (cid, self.total_layers - 1, False)
-            has_input_from_last_block = any(isinstance(item, tuple) and item == input_key for item in self.cur_model_outputs if item != -1)
-            has_deps = has_weight and has_input_from_last_block
-            if not has_deps:
-                missing = []
-                if not has_weight:
-                    is_pending = any(q[0]==-1 and q[1]==head_weight_lid and q[5]=='weight' for q in self.inbound_queue)
-                    if is_pending:
-                        missing.append(f"Head State L{head_weight_lid} (Pend)")
-                    else:
-                        missing.append(f"Head State L{head_weight_lid}")
-                if not has_input_from_last_block:
-                    missing.append(f"Input Act C{cid},L{self.total_layers-1}")
-
-                if missing:
-                    self.stall_reason = "Missing:\n" + "\n".join(missing)
-                else:
-                    self.stall_reason = "Unknown HEAD Dep"
-
+                    self.stall_reason = f"Missing:\nAct. Stream"
         elif bX:
             computation_type_str = "Bwd X"
-            has_weight = (lid in self.cur_ready_weights)
-            has_upstream_grad = False
-            upstream_grad_key = (cid, lid + 1, True)
-            upstream_buffer_name, source_buffer_check = "None", None
-            if lid == self.total_layers - 1:
-                upstream_buffer_name, source_buffer_check = "Head Outputs", self.cur_head_outputs
-            elif lid < self.total_layers - 1:
-                upstream_buffer_name, source_buffer_check = "Bwd Grad Transitions", self.bwd_grad_transitions_buffer
-            if source_buffer_check is not None:
-                has_upstream_grad = any(isinstance(item, tuple) and item == upstream_grad_key for item in source_buffer_check if item != -1)
-            has_deps = has_weight and has_upstream_grad
+            has_weight = ((0, lid) in self.cur_weights) 
+            upstream_grad_key = (0, cid, lid + 1, True)
+            context_key = (0, 0, lid)
+            if lid < self.total_layers - 1:
+                has_upstream_grad = upstream_grad_key in self.transitions_inbound_buffer
+            else:
+                has_upstream_grad = upstream_grad_key in self.head_output_transitions_buffer
+            fwd_act_key = (0, cid, lid)
+            has_fwd_activation = fwd_act_key in self.activations_buffer
+            has_context = context_key in self.context_buffer
+            has_deps = has_weight and has_upstream_grad and has_context and has_fwd_activation
             if not has_deps:
                 missing = []
                 if not has_weight:
-                    is_pending = any(q[0]==-1 and q[1]==lid and q[5]=='weight' for q in self.inbound_queue)
-                    if is_pending:
-                        missing.append(f"Weight L{lid} (Pend)")
-                    else:
-                         missing.append(f"Weight L{lid}")
+                    missing.append(f"Wgt")
+                if not has_context:
+                    missing.append(f"Fwd Context")
                 if not has_upstream_grad:
-                    missing.append(f"Upstream Grad C{cid},L{lid+1} (from {upstream_buffer_name})")
-
-                if missing:
-                    self.stall_reason = "Missing:\n" + "\n".join(missing)
-                else:
-                    self.stall_reason = "Unknown BwdX Dep"
-
+                    missing.append(f"Grad Stream")
+                if not has_fwd_activation:
+                    missing.append(f"Fwd Act")
+                self.stall_reason = "Missing:\n" + "\n".join(missing)
         elif bW:
             computation_type_str = "Bwd W"
-            fwd_act_key, act_grad_key = (cid, lid), (cid, lid)
-            has_fwd_activation, fwd_act_source = False, "None"
-            if fwd_act_key in self.local_last_fwd_activations:
-                has_fwd_activation, fwd_act_source = True, "Local Dict"
-            elif any(isinstance(item, tuple) and item == fwd_act_key for item in self.resident_checkpoint_activations if item != -1):
-                has_fwd_activation, fwd_act_source = True, "Resident Chkpt Buf"
-            elif any(isinstance(item, tuple) and item == fwd_act_key for item in self.bwd_fetched_activation_buffer if item != -1):
-                has_fwd_activation, fwd_act_source = True, "Bwd Fetched Buf"
-
-            is_fwd_act_pending_fetch, pending_slot = False, -1
-            if not has_fwd_activation:
-                for idx, item in enumerate(self.bwd_fetched_activation_buffer):
-                    if item == -2:
-                        # Check if this slot is currently being filled by an active inbound transfer
-                        is_slot_active = False
-                        if self.is_inbound_transferring and len(self.inbound_queue) > 0:
-                            active_in_cid, active_in_lid, _, active_in_target_idx, _, active_in_buf_type = self.inbound_queue[0]
-                            if active_in_buf_type == 'bwd_fetched_act' and active_in_target_idx == idx and active_in_cid == cid and active_in_lid == lid:
-                                if T < (self.cur_inbound_start_time + self.cur_inbound_duration):
-                                    is_slot_active = True
-
-                        # Check if this slot is queued but not yet active
-                        is_slot_queued = False
-                        if not is_slot_active:
-                           for q_idx, q in enumerate(self.inbound_queue):
-                               if q_idx == 0 and self.is_inbound_transferring: # Already checked active transfer
-                                   continue
-                               q_cid, q_lid, _, q_target_idx, _, q_buf_type = q
-                               if q_buf_type == 'bwd_fetched_act' and q_target_idx == idx and q_cid == cid and q_lid == lid:
-                                   is_slot_queued = True
-                                   break
-
-                        if is_slot_active or is_slot_queued:
-                            is_fwd_act_pending_fetch, pending_slot = True, idx
-                            break # Found the pending slot
-
-            has_activation_grad = any(isinstance(item, tuple) and item == act_grad_key for item in self.cur_ready_grad_activations if item != -1)
-            has_deps = has_fwd_activation and has_activation_grad
+            ## assuming gradient activation is always present, 
+            ## because this is previously computied for bX and 
+            ## we always scheduling bW immediately after bX
+            ## so we reuse the same grad activation buffer
+            has_fwd_activation = ((0, cid, lid) in self.activations_buffer)
+            has_deps = has_fwd_activation
             if not has_deps:
-                missing = []
-                if not has_fwd_activation:
-                    if is_fwd_act_pending_fetch:
-                        pend_msg = f" (Pend Slot {pending_slot})"
-                    else:
-                        pend_msg = " (Not Found/Queued?)"
-                    missing.append(f"Fwd Act C{cid},L{lid}{pend_msg}")
-                if not has_activation_grad:
-                    missing.append(f"Act Grad C{cid},L{lid}")
+                self.stall_reason = "Missing:\nFwd Act"
+        
+        
 
-                if missing:
-                    self.stall_reason = "Missing:\n" + "\n".join(missing)
-                else:
-                    self.stall_reason = "Unknown BwdW Dep"
+        ## ensure that there is available space in the activations buffer if during fwd pass...
+        if is_fwd and self.activations_empty_slot_ind is None:
+            self.stall_reason = "Congested:\nAct. Buffer Full"
+            has_deps = False
+
+        ## ensure that there is room in the transition outbound buffer
+        if has_deps and self.transitions_outbound_empty_slot_ind is None:
+            self.stall_reason = "Congested:\nOutbound Transition Buffer Full"
+            has_deps = False
+
 
         if has_deps:
             if not self.device_has_started:
                 self.device_start_time = T
                 self.device_has_started = True
+            
             if self.is_stalled and TO_PRINT:
                 print(f"T={T}, Dev {self.device_id}: UNSTALL -> Comp C{cid},L{lid},{computation_type_str}. Stalled for {T - self.stall_start_time} cycles.")
 
@@ -874,64 +836,14 @@ class Device:
             self.current_computation_layer_id = lid
             self.computing_status = f"COMPUTING:\n{computation_type_str}\nC{cid},L{lid}"
 
-            consumed_items = [] # Consumption logic remains the same
-            if is_fwd and lid > 0 and input_transition_key:
-                for idx, item in enumerate(self.fwd_transitions_buffer):
-                    if isinstance(item, tuple) and item == input_transition_key:
-                        self.fwd_transitions_buffer[idx] = -1
-                        consumed_items.append(f"FwdTrans[{idx}]:{input_transition_key}")
-                        break
-            elif is_head:
-                input_key = (cid, self.total_layers - 1, False)
-                for idx, item in enumerate(self.cur_model_outputs):
-                    if isinstance(item, tuple) and item == input_key:
-                        self.cur_model_outputs[idx] = -1
-                        consumed_items.append(f"ModelOut[{idx}]:{input_key}")
-                        break
-            elif bX:
-                upstream_grad_key = (cid, lid + 1, True)
-                source_buffer, buf_name = None, "N/A"
-                if lid == self.total_layers - 1:
-                    source_buffer, buf_name = self.cur_head_outputs, "HeadOut"
-                elif lid < self.total_layers - 1:
-                    source_buffer, buf_name = self.bwd_grad_transitions_buffer, "BwdGradTrans"
-                if source_buffer is not None:
-                    for idx, item in enumerate(source_buffer):
-                        if isinstance(item, tuple) and item == upstream_grad_key:
-                            source_buffer[idx] = -1
-                            consumed_items.append(f"{buf_name}[{idx}]:{upstream_grad_key}")
-                            break
-            elif bW:
-                fwd_act_key = (cid, lid)
-                consumed_fwd_act = False
-                if fwd_act_key in self.local_last_fwd_activations:
-                    del self.local_last_fwd_activations[fwd_act_key]
-                    consumed_items.append(f"LocalActDict:{fwd_act_key}")
-                    consumed_fwd_act = True
-                elif any(isinstance(item, tuple) and item == fwd_act_key for item in self.resident_checkpoint_activations if item != -1):
-                    for idx, item in enumerate(self.resident_checkpoint_activations):
-                        if isinstance(item, tuple) and item == fwd_act_key:
-                            self.resident_checkpoint_activations[idx] = -1
-                            consumed_items.append(f"ResidentAct[{idx}]:{fwd_act_key}")
-                            consumed_fwd_act = True
-                            break
-                elif any(isinstance(item, tuple) and item == fwd_act_key for item in self.bwd_fetched_activation_buffer if item != -1):
-                    for idx, item in enumerate(self.bwd_fetched_activation_buffer):
-                         if isinstance(item, tuple) and item == fwd_act_key:
-                             self.bwd_fetched_activation_buffer[idx] = -1
-                             consumed_items.append(f"BwdFetchedAct[{idx}]:{fwd_act_key}")
-                             consumed_fwd_act = True
-                             break
-                act_grad_key = (cid, lid)
-                for idx, item in enumerate(self.cur_ready_grad_activations):
-                    if isinstance(item, tuple) and item == act_grad_key:
-                        self.cur_ready_grad_activations[idx] = -1
-                        consumed_items.append(f"GradAct[{idx}]:{act_grad_key}")
-                        break
+            is_grad_out = not is_fwd or lid == self.total_layers
 
-            if TO_PRINT and consumed_items:
-                print(f"      T={T}, Dev {self.device_id}: Consumed -> {', '.join(consumed_items)}")
-            return True
+            self.transitions_outbound_buffer[self.transitions_outbound_empty_slot_ind] = (-2, cid, lid, is_grad_out)
+            if -1 in self.transitions_outbound_buffer:
+                self.transitions_outbound_empty_slot_ind = self.transitions_outbound_buffer.index(-1)
+            else:
+                self.transitions_outbound_empty_slot_ind = None
+            
         else:
             if not self.is_stalled:
                 self.is_stalled = True
@@ -942,499 +854,170 @@ class Device:
             self.current_computation_layer_id = -1
             return False
 
-    def queue_bulk_bwd_prefetches(self, T, is_head_trigger=False): # Refactored style
-        if not self.has_reversed:
-            if TO_PRINT:
-                print(f"T={T}, Dev {self.device_id}: WARNING - queue_bulk_bwd_prefetches called before reversing.")
+    def handle_bwd_prefetch_weight(self):
+        
+        ## after last chunk is processed on head, replace head weight with prior weight
+        #W assumes that the 
+        if self.next_bwd_weight_prefetch_layer_id >= 0:
+            self.inbound_queue.append((-1, self.next_bwd_weight_prefetch_layer_id, False, False, self.cur_weight_write_ptr, layerTransferFrames))
+            self.cur_weights[self.cur_weight_write_ptr] = (-2, self.next_bwd_weight_prefetch_layer_id)
+            self.next_bwd_weight_prefetch_layer_id -= self.total_devices
+             ## work backwards when replacing weights....
+            self.cur_weight_write_ptr = (self.cur_weight_write_ptr - 1) % self.layer_capacity
+        return
+
+    def handle_bwd_prefetch_context(self, chunk_id, cur_layer_id, next_layer_id):
+        ## prefetch the context for the next layer
+        if self.context_buffer[chunk_id] != (0, chunk_id, cur_layer_id):
+            print("Trying to prefetch next context, but chunk id not on current layer...\n")
             return
+        
+        self.context_buffer[chunk_id] = (-2, chunk_id, next_layer_id)
+        self.inbound_queue.append((chunk_id, next_layer_id, False, True, chunk_id, contextTransferFrames))
+        return
 
-        if TO_PRINT:
-            if is_head_trigger:
-                trigger_type = "HEAD"
+    def handle_bwd_prefetch_fwd_act(self):
+        print(f"Dev {self.device_id}, In Bwd Prefetch Fwd Act...\n")
+        print(f"Cur Activations Stack: {self.activations_stack}")
+        print(f"Cur Activations Stack Cutoff Ind: {self.activations_stack_cutoff_ind}")
+        print(f"Cur Activations Stack Next Ind: {self.activations_stack_next_ind}")
+        print(f"Cur Activations Buffer: {self.activations_buffer}")
+        print(f"Cur Activations Write Ptr: {self.activations_write_ptr}")
+        print(f"Cur Activations Empty Slot Ind: {self.activations_empty_slot_ind}")
+        print("\n\n\n")
+
+        if self.activations_stack_next_ind >= 0:
+            cid, lid = self.activations_stack[self.activations_stack_next_ind]
+            print(f"Prefetching next activation: C{cid},L{lid}")
+            next_act_idx = self.activations_empty_slot_ind
+            self.inbound_queue.append((cid, lid, False, False, next_act_idx, savedActivationsFrames))
+            self.activations_buffer[next_act_idx] = (-2, cid, lid)
+            if -1 in self.activations_buffer:
+                self.activations_empty_slot_ind = self.activations_buffer.index(-1)
             else:
-                trigger_type = "BWD_X"
-            print(f"T={T}, Dev {self.device_id}: === Bulk BWD Prefetch Triggered ({trigger_type}) ===")
-            print(f"  State Before -> Trigger Layer ID (Completed): L{self.bwd_prefetch_trigger_layer_id}, Next Weight Target: L{self.next_weight_layer_id}")
+                self.activations_empty_slot_ind = None
+            self.activations_stack_next_ind -= 1
+        return
 
-        layer_just_finished_task = self.bwd_prefetch_trigger_layer_id
-
-        if is_head_trigger:
-            layer_just_finished_task = self.last_fwd_layer_on_device
-            if layer_just_finished_task < 0:
-                if TO_PRINT:
-                    print(f"  HEAD Trigger SKIPPED - Device had no forward layers.")
-                return
-        elif layer_just_finished_task < 0 :
-            if TO_PRINT:
-                print(f"  BWD_X Trigger SKIPPED - Tracked layer ID ({layer_just_finished_task}) is invalid.")
-            return
-
-        next_weight_layer_to_fetch = layer_just_finished_task - self.total_devices
-        next_activation_layer_to_fetch = next_weight_layer_to_fetch
-
-        if TO_PRINT:
-            if is_head_trigger:
-                 print(f"  Trigger Origin Layer: LHead(->{self.last_fwd_layer_on_device})")
-            else:
-                 print(f"  Trigger Origin Layer: L{layer_just_finished_task}")
-            print(f"  Next Weight Layer to Fetch: L{next_weight_layer_to_fetch}")
-            print(f"  Next Activation Layer to Fetch: L{next_activation_layer_to_fetch}")
-
-        # Phase 1: Fetch Critical Activation for the layer just completed
-        layer_for_phase_1 = layer_just_finished_task
-        if layer_for_phase_1 >= 0:
-            if are_chunks_same_seq:
-                critical_chunk_id = self.total_chunks - 1
-            else:
-                critical_chunk_id = 0
-
-            act_tuple_p1 = (critical_chunk_id, layer_for_phase_1)
-            storage_key_act_p1 = (critical_chunk_id, layer_for_phase_1, False)
-
-            if TO_PRINT:
-                print(f"  Phase 1: Checking Critical Activation for L{layer_for_phase_1} -> Chunk {critical_chunk_id}")
-
-            is_in_local = act_tuple_p1 in self.local_last_fwd_activations
-            is_in_resident = any(isinstance(item, tuple) and item == act_tuple_p1 for item in self.resident_checkpoint_activations if item != -1)
-            is_in_fetched = any(isinstance(item, tuple) and item == act_tuple_p1 for item in self.bwd_fetched_activation_buffer if item != -1)
-
-            # Check if queued in inbound_queue (but not active)
-            is_pending_queue = False
-            for q_idx, q in enumerate(self.inbound_queue):
-                 if q[0] == critical_chunk_id and q[1] == layer_for_phase_1 and q[5] == 'bwd_fetched_act':
-                     if not (self.is_inbound_transferring and q_idx == 0): # Exclude the active transfer
-                         is_pending_queue = True
-                         break
-
-            # Check if marked as pending (-2) in buffer and associated with an *active* transfer
-            is_pending_buffer = False
-            if self.is_inbound_transferring and len(self.inbound_queue) > 0:
-                 active_in_cid, active_in_lid, _, active_in_target_idx, _, active_in_buf_type = self.inbound_queue[0]
-                 if active_in_buf_type == 'bwd_fetched_act' and active_in_cid == critical_chunk_id and active_in_lid == layer_for_phase_1:
-                      eff_idx = active_in_target_idx % self.bwd_fetched_activation_buffer_capacity
-                      if 0 <= eff_idx < len(self.bwd_fetched_activation_buffer) and self.bwd_fetched_activation_buffer[eff_idx] == -2:
-                           if T < (self.cur_inbound_start_time + self.cur_inbound_duration):
-                                is_pending_buffer = True
-
-            needs_fetch_p1 = (storage_key_act_p1 in self.outbound_storage and
-                              not is_in_local and not is_in_resident and not is_in_fetched and
-                              not is_pending_queue and not is_pending_buffer)
-
-            if needs_fetch_p1:
-                target_idx_p1 = self.bwd_fetched_activation_write_ptr
-                effective_target_idx_p1 = target_idx_p1 % self.bwd_fetched_activation_buffer_capacity
-                slot_is_pending = False
-
-                # Check if the *specific target slot* is pending an active transfer
-                if 0 <= effective_target_idx_p1 < len(self.bwd_fetched_activation_buffer) and self.bwd_fetched_activation_buffer[effective_target_idx_p1] == -2:
-                    if self.is_inbound_transferring and len(self.inbound_queue) > 0:
-                        active_in_cid, active_in_lid, _, active_in_target_idx, _, active_in_buf_type = self.inbound_queue[0]
-                        if active_in_buf_type == 'bwd_fetched_act' and active_in_target_idx == target_idx_p1: # Use original target_idx here
-                             if T < (self.cur_inbound_start_time + self.cur_inbound_duration):
-                                 slot_is_pending = True
-
-                if slot_is_pending:
-                    if TO_PRINT:
-                         print(f"  Phase 1: WARNING - Target BWD fetch slot {target_idx_p1} (Effective: {effective_target_idx_p1}) is already pending an active transfer! Skipping.")
-                else:
-                    if TO_PRINT:
-                        print(f"    Queueing Act C{critical_chunk_id},L{layer_for_phase_1} -> Bwd Fetched Idx {target_idx_p1} (Effective: {effective_target_idx_p1})")
-                    self.inbound_queue.append((critical_chunk_id, layer_for_phase_1, False, target_idx_p1, savedActivationsFrames, 'bwd_fetched_act'))
-                    if 0 <= effective_target_idx_p1 < len(self.bwd_fetched_activation_buffer):
-                        self.bwd_fetched_activation_buffer[effective_target_idx_p1] = -2 # Mark as pending
-                    self.bwd_fetched_activation_write_ptr = (target_idx_p1 + 1) % self.bwd_fetched_activation_buffer_capacity
-            elif TO_PRINT:
-                status_p1 = []
-                if is_in_local: status_p1.append("Local")
-                if is_in_resident: status_p1.append("Resident")
-                if is_in_fetched: status_p1.append("Fetched")
-                if is_pending_queue or is_pending_buffer: status_p1.append("Pending")
-                status_str = ', '.join(status_p1) if status_p1 else 'Not In Storage?'
-                print(f"    Activation C{critical_chunk_id},L{layer_for_phase_1} already available ({status_str}).")
-
-        # Phase 2: Fetch Weight for the *next* BWD layer
-        layer_for_phase_2 = next_weight_layer_to_fetch
-        queued_weight_fetch = False
-        target_idx_p2 = -1
-        if layer_for_phase_2 >= 0:
-            if TO_PRINT:
-                print(f"  Phase 2: Checking Weight for NEXT BWD L{layer_for_phase_2}")
-            storage_key_wgt = (-1, layer_for_phase_2, False)
-            is_in_buffer = (layer_for_phase_2 in self.cur_ready_weights)
-
-            # Check if queued (but not active)
-            is_in_queue = False
-            for q_idx, q in enumerate(self.inbound_queue):
-                if q[0] == -1 and q[1] == layer_for_phase_2 and q[5] == 'weight':
-                    if not (self.is_inbound_transferring and q_idx == 0):
-                         is_in_queue = True
-                         break
-
-            # Check if marked as pending (-2) in buffer and associated with an *active* transfer
-            is_pending_buffer = False
-            if self.is_inbound_transferring and len(self.inbound_queue) > 0:
-                 active_in_cid, active_in_lid, _, active_in_target_idx, _, active_in_buf_type = self.inbound_queue[0]
-                 if active_in_buf_type == 'weight' and active_in_lid == layer_for_phase_2:
-                      if 0 <= active_in_target_idx < len(self.cur_ready_weights) and self.cur_ready_weights[active_in_target_idx] == -2:
-                           if T < (self.cur_inbound_start_time + self.cur_inbound_duration):
-                                is_pending_buffer = True
-
-            needs_fetch_p2 = (storage_key_wgt in self.outbound_storage and
-                              not is_in_buffer and not is_in_queue and not is_pending_buffer)
-
-            if needs_fetch_p2: # Weight Protection Logic starts
-                current_layer_weight_idx = -1
-                try:
-                    current_layer_weight_idx = self.cur_ready_weights.index(layer_just_finished_task)
-                except ValueError:
-                    current_layer_weight_idx = -1
-
-                candidate_idx = self.cur_weight_replace_ind
-                weight_in_candidate_slot = self.cur_ready_weights[candidate_idx] if 0 <= candidate_idx < self.layer_capacity else -1
-                target_idx_p2 = -1 # Reset target index
-
-                if candidate_idx == current_layer_weight_idx and current_layer_weight_idx != -1:
-                    # Candidate slot holds the weight needed for the *current* layer's BWD W pass. Protect it.
-                    if self.layer_capacity > 1:
-                        alternative_idx = (candidate_idx + 1) % self.layer_capacity
-                        weight_in_alternative_slot = self.cur_ready_weights[alternative_idx]
-                        slot_is_pending = False
-                        # Check if alternative slot is pending an active transfer
-                        if self.cur_ready_weights[alternative_idx] == -2:
-                             if self.is_inbound_transferring and len(self.inbound_queue) > 0:
-                                  active_in_cid, active_in_lid, _, active_in_target_idx, _, active_in_buf_type = self.inbound_queue[0]
-                                  if active_in_buf_type == 'weight' and active_in_target_idx == alternative_idx:
-                                       if T < (self.cur_inbound_start_time + self.cur_inbound_duration):
-                                            slot_is_pending = True
-
-                        if weight_in_alternative_slot != layer_just_finished_task and not slot_is_pending:
-                             target_idx_p2 = alternative_idx # Use alternative slot
-                             if TO_PRINT:
-                                 print(f"    LRU slot {candidate_idx} holds protected L{layer_just_finished_task}. Using alternative slot {target_idx_p2}.")
-                        else:
-                            if TO_PRINT:
-                                 print(f"    LRU slot {candidate_idx} holds protected L{layer_just_finished_task}. Alternative slot {alternative_idx} also holds it, is pending, or capacity is 1. Cannot prefetch L{layer_for_phase_2} now.")
-                            target_idx_p2 = -1 # Cannot use alternative
-                    else: # Layer capacity is 1, cannot protect
-                        if TO_PRINT:
-                            print(f"    LRU slot {candidate_idx} holds protected L{layer_just_finished_task}. Layer capacity is 1. Cannot prefetch L{layer_for_phase_2} now.")
-                        target_idx_p2 = -1
-                else:
-                    # Candidate slot does not hold the protected weight, check if it's pending
-                    slot_is_pending = False
-                    if weight_in_candidate_slot == -2:
-                        if self.is_inbound_transferring and len(self.inbound_queue) > 0:
-                             active_in_cid, active_in_lid, _, active_in_target_idx, _, active_in_buf_type = self.inbound_queue[0]
-                             if active_in_buf_type == 'weight' and active_in_target_idx == candidate_idx:
-                                  if T < (self.cur_inbound_start_time + self.cur_inbound_duration):
-                                       slot_is_pending = True
-
-                    if not slot_is_pending:
-                        target_idx_p2 = candidate_idx # Use the candidate slot
-                        if TO_PRINT:
-                             print(f"    Using LRU slot {target_idx_p2} for eviction.")
-                    else:
-                         if TO_PRINT:
-                              print(f"    LRU slot {candidate_idx} is already pending an active transfer. Cannot prefetch L{layer_for_phase_2} now.")
-                         target_idx_p2 = -1
-
-                # Queue the fetch if a valid target index was found
-                if target_idx_p2 != -1:
-                    weight_to_evict = self.cur_ready_weights[target_idx_p2]
-                    if weight_to_evict >= 0:
-                        evict_msg = f"L{weight_to_evict}"
-                    elif weight_to_evict == -2:
-                        evict_msg = 'Pending'
-                    else:
-                        evict_msg = 'Empty'
-
-                    if TO_PRINT:
-                        print(f"    Queueing Wgt L{layer_for_phase_2} -> Target Idx {target_idx_p2} (Evicting {evict_msg})")
-                    self.inbound_queue.append((-1, layer_for_phase_2, False, target_idx_p2, layerTransferFrames, 'weight'))
-                    self.cur_ready_weights[target_idx_p2] = -2 # Mark target slot as pending
-                    self.cur_weight_replace_ind = (target_idx_p2 + 1) % self.layer_capacity
-                    queued_weight_fetch = True
-            elif TO_PRINT:
-                status_p2 = []
-                if is_in_buffer: status_p2.append("InBuffer")
-                if is_in_queue or is_pending_buffer: status_p2.append("Pending")
-                status_str = ', '.join(status_p2) if status_p2 else 'Not In Storage?'
-                print(f"    Weight L{layer_for_phase_2} already available ({status_str}).")
-
-        # Phase 3: Fetch Bulk Activations for the *next* BWD layer
-        layer_for_phase_3 = next_activation_layer_to_fetch
-        if layer_for_phase_3 >= 0:
-            if TO_PRINT:
-                print(f"  Phase 3: Checking Bulk Activations for L{layer_for_phase_3} -> Bwd Fetched Buffer")
-
-            # Determine the critical chunk ID fetched in Phase 1 for this layer (if applicable)
-            critical_chunk_id_p1_for_p3_layer = -1
-            if layer_for_phase_1 == layer_for_phase_3:
-                if are_chunks_same_seq:
-                    critical_chunk_id_p1_for_p3_layer = self.total_chunks - 1
-                else:
-                    critical_chunk_id_p1_for_p3_layer = 0
-
-            bulk_chunk_order = []
-            if are_chunks_same_seq:
-                bulk_chunk_order = [c for c in range(self.total_chunks - 1, -1, -1) if c != critical_chunk_id_p1_for_p3_layer]
-            else:
-                bulk_chunk_order = [c for c in range(self.total_chunks) if c != critical_chunk_id_p1_for_p3_layer]
-
-            num_queued_p3 = 0
-            for chunk_id in bulk_chunk_order:
-                act_tuple_p3 = (chunk_id, layer_for_phase_3)
-                storage_key_act_p3 = (chunk_id, layer_for_phase_3, False)
-
-                is_in_local_p3 = act_tuple_p3 in self.local_last_fwd_activations
-                is_in_resident_p3 = any(isinstance(item, tuple) and item == act_tuple_p3 for item in self.resident_checkpoint_activations if item != -1)
-                is_in_fetched_p3 = any(isinstance(item, tuple) and item == act_tuple_p3 for item in self.bwd_fetched_activation_buffer if item != -1)
-
-                # Check if queued (but not active)
-                is_pending_queue_p3 = False
-                for q_idx, q in enumerate(self.inbound_queue):
-                    if q[0] == chunk_id and q[1] == layer_for_phase_3 and q[5] == 'bwd_fetched_act':
-                         if not (self.is_inbound_transferring and q_idx == 0):
-                             is_pending_queue_p3 = True
-                             break
-
-                # Check if marked as pending (-2) in buffer and associated with an *active* transfer
-                is_pending_buffer_p3 = False
-                if self.is_inbound_transferring and len(self.inbound_queue) > 0:
-                     active_in_cid, active_in_lid, _, active_in_target_idx, _, active_in_buf_type = self.inbound_queue[0]
-                     if active_in_buf_type == 'bwd_fetched_act' and active_in_cid == chunk_id and active_in_lid == layer_for_phase_3:
-                          eff_idx = active_in_target_idx % self.bwd_fetched_activation_buffer_capacity
-                          if 0 <= eff_idx < len(self.bwd_fetched_activation_buffer) and self.bwd_fetched_activation_buffer[eff_idx] == -2:
-                               if T < (self.cur_inbound_start_time + self.cur_inbound_duration):
-                                    is_pending_buffer_p3 = True
-
-                needs_fetch_p3 = (storage_key_act_p3 in self.outbound_storage and
-                                  not is_in_local_p3 and not is_in_resident_p3 and not is_in_fetched_p3 and
-                                  not is_pending_queue_p3 and not is_pending_buffer_p3)
-
-                if needs_fetch_p3:
-                    target_idx_p3 = self.bwd_fetched_activation_write_ptr
-                    effective_target_idx_p3 = target_idx_p3 % self.bwd_fetched_activation_buffer_capacity
-                    slot_is_pending = False
-
-                    # Check if the *specific target slot* is pending an active transfer
-                    if 0 <= effective_target_idx_p3 < len(self.bwd_fetched_activation_buffer) and self.bwd_fetched_activation_buffer[effective_target_idx_p3] == -2:
-                        if self.is_inbound_transferring and len(self.inbound_queue) > 0:
-                             active_in_cid, active_in_lid, _, active_in_target_idx, _, active_in_buf_type = self.inbound_queue[0]
-                             if active_in_buf_type == 'bwd_fetched_act' and active_in_target_idx == target_idx_p3: # Use original target_idx
-                                  if T < (self.cur_inbound_start_time + self.cur_inbound_duration):
-                                      slot_is_pending = True
-
-                    if slot_is_pending:
-                        if TO_PRINT:
-                             print(f"  Phase 3: WARNING - Target BWD fetch slot {target_idx_p3} (Effective: {effective_target_idx_p3}) is already pending an active transfer! Skipping C{chunk_id},L{layer_for_phase_3}.")
-                    else:
-                        self.inbound_queue.append((chunk_id, layer_for_phase_3, False, target_idx_p3, savedActivationsFrames, 'bwd_fetched_act'))
-                        if 0 <= effective_target_idx_p3 < len(self.bwd_fetched_activation_buffer):
-                            self.bwd_fetched_activation_buffer[effective_target_idx_p3] = -2 # Mark as pending
-                        self.bwd_fetched_activation_write_ptr = (target_idx_p3 + 1) % self.bwd_fetched_activation_buffer_capacity
-                        num_queued_p3 += 1
-            if TO_PRINT:
-                print(f"    Queued {num_queued_p3} bulk activations for L{layer_for_phase_3}.")
-        elif TO_PRINT:
-            print("  Phase 3: No valid layer to fetch bulk activations for.")
-
-        # Update the next weight layer ID we'll need after the one we just (tried to) queue
-        potential_next_weight_id = next_weight_layer_to_fetch - self.total_devices
-        if potential_next_weight_id < 0:
-            self.next_weight_layer_id = None
-        else:
-            self.next_weight_layer_id = potential_next_weight_id
-
-        if TO_PRINT:
-            next_wgt_str = f"L{self.next_weight_layer_id}" if self.next_weight_layer_id is not None else 'None'
-            print(f"  Updated State -> Next Trigger Layer ID Target: L{layer_just_finished_task - self.total_devices}, Next Weight Target: {next_wgt_str}")
-            print(f"T={T}, Dev {self.device_id}: === Bulk BWD Prefetch Queuing Complete ===")
-
-    def handle_computation(self, T, all_devices): # Refactored style
+    def handle_computation(self, T):
         completed_tasks = 0
         if not self.is_computing and not self.is_stalled and len(self.computation_queue) > 0:
             self.handle_computation_depends(T)
+
+        ## finished computing!
         elif self.is_computing and (self.cur_computation_start_time + self.cur_computation_duration <= T):
             task = self.computation_queue.pop(0)
             completed_tasks += 1
             cid, lid, bX, bW, tdir, dur = task
             is_head = (lid == self.total_layers)
             is_fwd = (not bX) and (not bW) and (not is_head)
+            
             task_type_str = self.current_computation_type
+
 
             if TO_PRINT:
                 print(f"T={T}, Dev {self.device_id}: FINISHED Comp -> C{cid},L{lid},{task_type_str}")
 
+            ## remove this from the transitoins inbound buffer now!
+            
+            peer_id = (self.device_id + tdir) % self.total_devices
+            is_grad_in = bX or bW
+            is_grad_out = bX or is_head
+            
+            depend_transition = lid + 1 if is_grad_in else lid - 1
+
+            ## handle the transition buffers....
+            
+            ## makring input transition as free...
+
+            ## remove the input transition from the inbound buffer
+
+            ## no inp/out peer transitions for bW, computed immediately after bX...
+
+            ## the input transition is used doring bW which follows bX,
+            ## co can't clear it until bW is done...
+            if (not bX) and (lid > 0 or is_grad_in):
+
+                if (lid == self.total_layers):
+                    inp_idx_to_free = self.head_input_transitions_buffer.index((0, cid, depend_transition, is_grad_in))
+                    self.head_input_transitions_buffer[inp_idx_to_free] = -1
+                    first_free_idx = self.head_input_transitions_buffer.index(-1)
+                    self.head_input_transitions_empty_slot_ind = first_free_idx
+                elif (lid == self.total_layers - 1) and is_grad_in:
+                    inp_idx_to_free = self.head_output_transitions_buffer.index((0, cid, depend_transition, is_grad_in))
+                    self.head_output_transitions_buffer[inp_idx_to_free] = -1
+                    first_free_idx = self.head_output_transitions_buffer.index(-1)
+                    self.head_output_transitions_empty_slot_ind = first_free_idx
+                else:
+                    inp_idx_to_free = self.transitions_inbound_buffer.index((0, cid, depend_transition, is_grad_in))
+                    self.transitions_inbound_buffer[inp_idx_to_free] = -1
+                    ## wasteful, but keeping orderly with setting -1 to be the first free slot in linear order...
+                    ## we know there will be at least one free slot because we just set one...
+                    first_free_idx = self.transitions_inbound_buffer.index(-1)
+                    self.transitions_inbound_empty_slot_ind = first_free_idx
+            
+            ## we can clear the output transition as soon as fwd, bX, or head is done...
+            ## no output transition for bW, computed immediately after bX...
+            if not bW:
+                ## mark the output transition as completed
+                out_idx_to_update = self.transitions_outbound_buffer.index((-2, cid, lid, is_grad_out))
+                self.transitions_outbound_buffer[out_idx_to_update] = (0, cid, lid, is_grad_out)
+            
+                if peer_id != self.device_id:
+                    ## append this to the peer transfer queue
+                    self.peer_transfer_queue.append((peer_id, cid, lid, is_grad_out, activationTransitionFrames))
+            
+
+
             if is_fwd: # FWD Finished
-                act_tuple = (cid, lid)
-                save_locally_hot, save_resident = False, False
-                if lid == self.last_fwd_layer_on_device:
-                    save_locally_hot = True
 
-                if do_backward and self.activations_capacity > 0:
-                    if are_chunks_same_seq and cid >= self.total_chunks - self.activations_capacity:
-                        save_resident = True
-                    elif not are_chunks_same_seq and cid < self.activations_capacity:
-                        save_resident = True
-
-                if save_locally_hot:
-                    self.local_last_fwd_activations[act_tuple] = True
-
-                if save_resident:
-                    res_idx = self.resident_checkpoint_write_ptr
-                    if 0 <= res_idx < self.activations_capacity:
-                        self.resident_checkpoint_activations[res_idx] = act_tuple
-                        self.resident_checkpoint_write_ptr = (res_idx + 1) % self.activations_capacity
-
-                if do_backward:
-                    storage_key = (cid, lid, False)
-                    is_in_queue = any(q[0]==cid and q[1]==lid and q[2]==False for q in self.outbound_queue)
-                    if storage_key not in self.outbound_storage and not is_in_queue:
-                        self.outbound_queue.append((cid, lid, False, savedActivationsFrames))
-
-                if tdir != 0: # FWD Peer Transfer
-                    target_peer_id = (self.device_id + tdir + self.total_devices) % self.total_devices
-                    self.peer_transfer_queue.append((target_peer_id, cid, lid, False, activationTransitionFrames))
-                    if TO_PRINT:
-                        dest_type = "Head Input" if lid == self.total_layers - 1 else "Fwd Transition"
-                        print(f"      Queueing FWD Output C{cid},L{lid} -> Peer {target_peer_id} ({dest_type})")
-
-                if cid == self.total_chunks - 1: # FWD Prefetching & Reversal Logic
-                    layer_to_fetch = self.next_weight_layer_id
-                    needs_fetch = False
-                    if layer_to_fetch is not None and layer_to_fetch <= self.total_layers :
-                        storage_key_wgt = (-1, layer_to_fetch, False)
-                        in_storage = storage_key_wgt in self.outbound_storage
-                        if in_storage:
-                            is_in_buffer = (layer_to_fetch in self.cur_ready_weights)
-                            # Check if queued (but not active)
-                            is_in_queue = False
-                            for q_idx, q in enumerate(self.inbound_queue):
-                                if q[0]==-1 and q[1]==layer_to_fetch and q[5]=='weight':
-                                    if not (self.is_inbound_transferring and q_idx==0):
-                                        is_in_queue = True
-                                        break
-                            # Check if marked pending in buffer and associated with active transfer
-                            is_pending_buffer = False
-                            if self.is_inbound_transferring and len(self.inbound_queue) > 0:
-                                active_in_cid, active_in_lid, _, active_in_target_idx, _, active_in_buf_type = self.inbound_queue[0]
-                                if active_in_buf_type == 'weight' and active_in_lid == layer_to_fetch:
-                                    if 0 <= active_in_target_idx < len(self.cur_ready_weights) and self.cur_ready_weights[active_in_target_idx] == -2:
-                                        if T < (self.cur_inbound_start_time + self.cur_inbound_duration):
-                                            is_pending_buffer = True
-
-                            if not is_in_buffer and not is_in_queue and not is_pending_buffer:
-                                needs_fetch = True
-
-                    if needs_fetch:
-                        target_idx_fwd = self.cur_weight_replace_ind
-                        slot_is_pending = False
-                        # Check if target slot is pending an active transfer
-                        if self.cur_ready_weights[target_idx_fwd] == -2:
-                            if self.is_inbound_transferring and len(self.inbound_queue) > 0:
-                                active_in_cid, active_in_lid, _, active_in_target_idx, _, active_in_buf_type = self.inbound_queue[0]
-                                if active_in_buf_type == 'weight' and active_in_target_idx == target_idx_fwd:
-                                    if T < (self.cur_inbound_start_time + self.cur_inbound_duration):
-                                        slot_is_pending = True
-                        if slot_is_pending:
-                            if TO_PRINT:
-                                print(f"  FWD Prefetch: WARNING - Target weight slot {target_idx_fwd} is already pending an active transfer! Skipping L{layer_to_fetch}.")
-                        else:
-                            weight_to_evict = self.cur_ready_weights[target_idx_fwd]
-                            if weight_to_evict >= 0:
-                                evict_msg = f"L{weight_to_evict}"
-                            elif weight_to_evict == -2:
-                                evict_msg = 'Pending'
-                            else:
-                                evict_msg = 'Empty'
-
-                            if TO_PRINT:
-                                print(f"      Queueing FWD Wgt L{layer_to_fetch} -> Target Idx {target_idx_fwd} (Evicting {evict_msg})")
-                            self.inbound_queue.append((-1, layer_to_fetch, False, target_idx_fwd, layerTransferFrames, 'weight'))
-                            self.cur_ready_weights[target_idx_fwd] = -2 # Mark as pending
-                            self.cur_weight_replace_ind = (target_idx_fwd + 1) % self.layer_capacity
-
-                    next_layer_id_after_fetch = layer_to_fetch + self.total_devices if layer_to_fetch is not None else None
-                    will_reverse = do_backward and not self.has_reversed and (layer_to_fetch is None or next_layer_id_after_fetch > self.total_layers or layer_to_fetch == self.total_layers)
-
-                    if will_reverse:
-                        self.has_reversed = True
-                        self.bwd_fetched_activation_write_ptr = 0
-                        self.cur_grad_activations_write_ptr = 0
-                        self.bwd_grad_transitions_write_ptr = 0
-                        if TO_PRINT:
-                            print(f"T={T}, Dev {self.device_id}: >>> REVERSING state after FWD C{cid},L{lid}.")
-                        if layer_to_fetch == self.total_layers:
-                            self.bwd_prefetch_trigger_layer_id = self.total_layers # Trigger is the head layer itself
-                        else:
-                            self.bwd_prefetch_trigger_layer_id = self.last_fwd_layer_on_device # Trigger is the last layer computed FWD
-                        self.next_weight_layer_id = None # No more FWD weights needed
-                    elif not self.has_reversed:
-                        # Update next weight ID for FWD prefetching
-                        if next_layer_id_after_fetch is not None and next_layer_id_after_fetch <= self.total_layers:
-                            self.next_weight_layer_id = next_layer_id_after_fetch
-                        else:
-                            self.next_weight_layer_id = None
-
-            elif is_head: # Head finished
-                if tdir != 0: # Head Peer Transfer (Send Grad to Prev Device)
-                    target_peer_id = (self.device_id + tdir + self.total_devices) % self.total_devices
-                    self.peer_transfer_queue.append((target_peer_id, cid, lid, True, activationTransitionFrames))
-                    if TO_PRINT:
-                        print(f"      Queueing Head Grad C{cid},L{lid} -> Peer {target_peer_id} (Head Output)")
-
-                if cid == self.head_final_chunk_id: # Head Post-computation & BWD Trigger
-                    # Queue save of Head state/gradient
-                    storage_key = (-1, lid, True) # True for gradient/state
-                    is_in_queue = any(q[0]==-1 and q[1]==lid and q[2]==True for q in self.outbound_queue)
-                    if storage_key not in self.outbound_storage and not is_in_queue:
-                        self.outbound_queue.append((-1, lid, True, layerTransferFrames)) # Using layerTransferFrames as placeholder size
-
-                    # Trigger BWD prefetching for the *first* BWD layer on this device
-                    if do_backward and self.has_reversed:
-                         self.bwd_prefetch_trigger_layer_id = lid # Set trigger ID to the Head layer ID
-                         self.queue_bulk_bwd_prefetches(T, is_head_trigger=True)
-                    elif TO_PRINT and not self.has_reversed:
-                         print(f"T={T}, Dev {self.device_id}: WARNING - Head finished final chunk C{cid} but device has not reversed!")
-
-            elif bX: # BwdX finished
-                idx_grad = self.cur_grad_activations_write_ptr
-                grad_act_tuple = (cid, lid)
-                if 0 <= idx_grad < self.grad_activations_capacity:
-                    self.cur_ready_grad_activations[idx_grad] = grad_act_tuple
-                    self.cur_grad_activations_write_ptr = (idx_grad + 1) % self.grad_activations_capacity
-
-                if tdir != 0: # BwdX Peer Transfer (Send dL/dX to Prev Device)
-                    target_peer_id = (self.device_id + tdir + self.total_devices) % self.total_devices
-                    self.peer_transfer_queue.append((target_peer_id, cid, lid, True, activationTransitionFrames))
-                    if TO_PRINT:
-                        print(f"      Queueing Bwd Grad (dL/dX) C{cid},L{lid} -> Peer {target_peer_id} (Bwd Grad Trans)")
-
-                # Trigger BWD prefetch for the *next* layer after processing the 'critical' chunk for BWD X
-                if are_chunks_same_seq:
-                    trigger_chunk_id = 0 # Trigger after processing the *last* chunk's grad input (C0 for reversed)
+                ## now we need to save the activations in activation buffer
+                ## if at the tail end of forward computation, save the activations down!
+                if (self.cur_fwd_computation_num > self.activations_stack_cutoff_ind):
+                    self.activations_buffer[self.activations_empty_slot_ind] = (0, cid, lid)
                 else:
-                    trigger_chunk_id = self.total_chunks - 1 # Trigger after processing the *last* chunk's grad input (C_last for fwd order)
+                    ## mark as moving into home storage
+                    self.activations_buffer[self.activations_empty_slot_ind] = (-2, cid, lid)
+                    self.outbound_queue.append((cid, lid, False, savedActivationsFrames))
 
-                if cid == trigger_chunk_id and self.has_reversed: # Check if reversed state is active
-                    if TO_PRINT:
-                        print(f"T={T}, Dev {self.device_id}: BwdX C{cid},L{lid} finished critical chunk, triggering next prefetch.")
-                    self.bwd_prefetch_trigger_layer_id = lid # Set trigger to the layer just finished BWD X
-                    self.queue_bulk_bwd_prefetches(T, is_head_trigger=False)
-
-            elif bW: # BwdW finished
-                # After the BWD W pass for the *last* chunk completes, queue the weight grad save
-                if are_chunks_same_seq:
-                     last_chunk_id_for_bwdW = 0 # Last chunk processed in BWD W is C0
+                if -1 in self.activations_buffer:
+                    self.activations_empty_slot_ind = self.activations_buffer.index(-1)
                 else:
-                     last_chunk_id_for_bwdW = self.total_chunks - 1 # Last chunk is C_last
+                    self.activations_empty_slot_ind = None
 
-                if cid == last_chunk_id_for_bwdW:
-                    storage_key = (-1, lid, True) # True indicates gradient
-                    is_in_queue = any(q[0]==-1 and q[1]==lid and q[2]==True for q in self.outbound_queue)
-                    if storage_key not in self.outbound_storage and not is_in_queue:
-                        self.outbound_queue.append((-1, lid, True, layerTransferFrames))
+                ## check to see if we finished a layer and should prefetch next weights...
+                if (cid == self.total_chunks - 1) and self.next_weight_prefetch_layer_id <= self.total_layers:
+                    self.inbound_queue.append((-1, self.next_weight_prefetch_layer_id, False, False, self.cur_weight_write_ptr, layerTransferFrames))
+                    self.cur_weights[self.cur_weight_write_ptr] = (-2, self.next_weight_prefetch_layer_id)
+                    self.cur_weight_write_ptr = (self.cur_weight_write_ptr + 1) % self.layer_capacity
+                    self.next_weight_prefetch_layer_id += self.total_devices
+
+                self.cur_fwd_computation_num += 1
+            elif is_head: # Head finished                
+                if (cid == self.head_final_chunk_id):
+                    self.handle_bwd_prefetch_weight()
+            elif bX: # BwdX finished, can replace current context now
+
+                if (lid - self.total_devices >= 0):
+                    self.handle_bwd_prefetch_context(cid, lid, lid - self.total_devices)
+
+                ## if this is the last chunk, now prefetch the next required weight
+                ## which replaces the current weight
+                if cid == 0:
+                    self.handle_bwd_prefetch_weight()
+
+            elif bW: # BwdW finished, can prefetch the next required activaton
+                ## now prefetch the next required activation, which replaces the current activation
+
+                ## set current activation we just used to be -1...
+                act_idx = self.activations_buffer.index((0, cid, lid))
+                self.activations_buffer[act_idx] = -1
+                self.activations_empty_slot_ind = self.activations_buffer.index(-1)
+
+                self.handle_bwd_prefetch_fwd_act()
+
+                if (cid == 0):
+                    self.outbound_queue.append((-1, lid, True, layerTransferFrames))
 
             # Reset compute state after any task finishes
             self.is_computing = False
@@ -1458,64 +1041,67 @@ class Device:
             self.handle_computation_depends(T)
 
         return completed_tasks
+            
 
-    def handle_new_transfers(self, T): # Refactored style
+    def handle_new_transfers(self, T, all_devices):
         if not self.is_inbound_transferring and self.inbound_queue:
             item = self.inbound_queue[0]
-            cid, lid, isg, target_idx, duration, target_buffer_type = item
+            chunk_id, layer_id, is_grad, is_context, target_idx, duration = item
 
-            if cid == -1: # Weight or Head state fetch
-                 actual_storage_key = (-1, lid, isg)
+            if chunk_id == -1: # Weight or Head state fetch
+                 actual_storage_key = (-1, layer_id, is_grad)
             else: # Activation fetch
-                 actual_storage_key = (cid, lid, False)
+                 actual_storage_key = (chunk_id, layer_id, False)
 
-            is_in_storage = actual_storage_key in self.outbound_storage
+            is_in_storage = actual_storage_key in self.home_storage
             if is_in_storage:
                 self.is_inbound_transferring = True
                 self.cur_inbound_start_time = T
                 self.cur_inbound_duration = duration
 
                 edge_color = COLOR_INBOUND_DEFAULT
-                if target_buffer_type == 'weight':
-                     if lid == total_layers:
+                if chunk_id == -1:
+                     if layer_id == total_layers:
                          label_lid_str = f"Wgt:\nHead"
                      else:
-                         label_lid_str = f"Wgt:\nL{lid}"
+                         label_lid_str = f"Wgt:\nL{layer_id}"
                      self.cur_inbound_edge = label_lid_str
                      edge_color = COLOR_INBOUND_WEIGHT
-                elif target_buffer_type == 'bwd_fetched_act':
-                     self.cur_inbound_edge = f"Act:\nC{cid},L{lid}"
-                     edge_color = COLOR_INBOUND_BWD_FETCHED_ACTIVATION
                 else:
-                     self.cur_inbound_edge = f"UNKNOWN\nC{cid},L{lid}"
+                    if is_context:
+                        self.cur_inbound_edge = f"Ctx:\nC{chunk_id},L{layer_id}"
+                        edge_color = COLOR_INBOUND_BWD_FETCHED_CTX
+                    else:
+                        self.cur_inbound_edge = f"Act:\nC{chunk_id},L{layer_id}"
+                        edge_color = COLOR_INBOUND_BWD_FETCHED_ACTIVATION
+
 
                 arrow_vis, _ = edge_artists[f'in_{self.device_id}']
                 arrow_vis.set_color(edge_color)
             else:
                 if TO_PRINT:
                     print(f"T={T}, Dev {self.device_id}: ERROR - Inbound request {item} with key {actual_storage_key} not found in storage. Removing from queue.")
-                self.inbound_queue.popleft() # Remove invalid request
 
         if not self.is_outbound_transferring and self.outbound_queue:
             item = self.outbound_queue[0]
-            cid, lid, isg, duration = item
+            chunk_id, layer_id, is_grad, duration = item
             self.is_outbound_transferring = True
             self.cur_outbound_start_time = T
             self.cur_outbound_duration = duration
 
             edge_color = COLOR_OUTBOUND_DEFAULT
-            if cid >= 0: # Activation save
-                self.cur_outbound_edge = f"Act:\nC{cid},L{lid}"
+            if chunk_id >= 0: # Activation save
+                self.cur_outbound_edge = f"Act:\nC{chunk_id},L{layer_id}"
                 edge_color = COLOR_OUTBOUND_FWD_ACTIVATION
-            elif isg: # Weight Gradient save
-                if lid == total_layers:
+            elif is_grad: # Weight Gradient save
+                if layer_id == total_layers:
                      label_lid_str = f"Grad:\nHead"
                 else:
-                     label_lid_str = f"Grad:\nL{lid}"
+                     label_lid_str = f"Grad:\nL{layer_id}"
                 self.cur_outbound_edge = label_lid_str
                 edge_color = COLOR_OUTBOUND_WGT_GRAD
             else: # Weight save (shouldn't happen often unless evicting?)
-                self.cur_outbound_edge = f"Wgt:\nL{lid}"
+                self.cur_outbound_edge = f"UNKNOWN?"
                 edge_color = COLOR_OUTBOUND_DEFAULT # Or maybe a different color?
 
             arrow_vis, _ = edge_artists[f'out_{self.device_id}']
@@ -1523,29 +1109,70 @@ class Device:
 
         if not self.is_peer_transferring and self.peer_transfer_queue:
             item = self.peer_transfer_queue[0]
-            pid, cid, lid, isg, duration = item
+            peer_id, chunk_id, layer_id, is_grad_trans, duration = item
+
+            ## need to check if the peer device has room for the transfer
+            peer_dev = all_devices[peer_id]
+            
+            ## this means a graident transition coming from the head going to prior last block
+            if layer_id == self.total_layers:
+                peer_empty_slot_ind = peer_dev.head_output_transitions_empty_slot_ind
+                peer_trans_buffer = peer_dev.head_output_transitions_buffer
+            else:
+                ## this means a forward transition coming from last block to the head
+                if layer_id == self.total_layers - 1 and not is_grad_trans:
+                    peer_empty_slot_ind = peer_dev.head_input_transitions_empty_slot_ind
+                    peer_trans_buffer = peer_dev.head_input_transitions_buffer
+                else:
+                    peer_empty_slot_ind = peer_dev.transitions_inbound_empty_slot_ind
+                    peer_trans_buffer = peer_dev.transitions_inbound_buffer
+            if peer_empty_slot_ind is None:
+                if TO_PRINT:
+                    print(f"T={T}, Dev {self.device_id}: ERROR - Peer device {peer_id} has no empty slots in inbound buffer. Skipping transfer this cycle.")
+                return
+            
+            ## indicate that the peer device is receiving data
+            peer_trans_buffer[peer_empty_slot_ind] = (-2, chunk_id, layer_id, is_grad_trans)
+
+            ## get next empty slot
+            if -1 in peer_trans_buffer:
+                first_free_idx = peer_trans_buffer.index(-1)
+                if layer_id == self.total_layers:
+                    peer_dev.head_output_transitions_empty_slot_ind = first_free_idx
+                elif layer_id == self.total_layers - 1 and not is_grad_trans:
+                    peer_dev.head_input_transitions_empty_slot_ind = first_free_idx
+                else:
+                    peer_dev.transitions_inbound_empty_slot_ind = first_free_idx
+            else:
+                if layer_id == self.total_layers:
+                    peer_dev.head_output_transitions_empty_slot_ind = None
+                elif layer_id == self.total_layers - 1 and not is_grad_trans:
+                    peer_dev.head_input_transitions_empty_slot_ind = None
+                else:
+                    peer_dev.transitions_inbound_empty_slot_ind = None
+            
+
             self.is_peer_transferring = True
             self.cur_peer_transfer_start_time = T
             self.cur_peer_transfer_duration = duration
-            self.cur_peer_transfer_details = (pid, cid, lid, isg)
+            self.cur_peer_transfer_details = (peer_id, chunk_id, layer_id, is_grad_trans)
 
-            if lid == total_layers:
+            if layer_id == total_layers:
                  label_lid_str = "Head"
             else:
-                 label_lid_str = str(lid)
+                 label_lid_str = str(layer_id)
 
-            is_gradient_data = isg
-            if is_gradient_data:
+            if is_grad_trans:
                 edge_color = COLOR_RING_CW
                 connection_style_ring = f"arc3,rad=-0.2" # Negative radius for CW arc
-                if lid == total_layers:
-                    self.cur_ring_edge = f"Grad:\nC{cid},Head"
+                if layer_id == total_layers:
+                    self.cur_ring_edge = f"Grad:\nC{chunk_id},Head"
                 else:
-                    self.cur_ring_edge = f"Grad:\nC{cid},L{lid}"
+                    self.cur_ring_edge = f"Grad:\nC{chunk_id},L{layer_id}"
             else: # Forward activation/output transfer
                 edge_color = COLOR_RING_CCW
                 connection_style_ring = f"arc3,rad=0.2" # Positive radius for CCW arc
-                self.cur_ring_edge = f"Out:\nC{cid},L{lid}"
+                self.cur_ring_edge = f"Out:\nC{chunk_id},L{layer_id}"
 
             arrow_vis, _ = edge_artists[f'ring_{self.device_id}']
             arrow_vis.set_color(edge_color)
@@ -1574,8 +1201,8 @@ class Device:
             else: # item == -1
                 return '_' # Represents an empty slot
 
-        wgt_buf_str = ', '.join([format_item(w) for w in self.cur_ready_weights])
-        print(f"  Ready Wgt:                  [{wgt_buf_str}] (Next Evict Idx: {self.cur_weight_replace_ind})")
+        wgt_buf_str = ', '.join([format_item(w) for w in self.cur_weights])
+        print(f"  Ready Wgt:                  [{wgt_buf_str}] (Next Evict Idx: {self.cur_weight_write_ptr})")
         fwd_trans_buf_str = ', '.join([format_item(t) for t in self.fwd_transitions_buffer])
         print(f"  Fwd Transitions Buf:        [{fwd_trans_buf_str}] (Cap: {self.transitions_capacity}, Next Write Idx: {self.fwd_transitions_write_ptr})")
         bwd_grad_trans_buf_str = ', '.join([format_item(t) for t in self.bwd_grad_transitions_buffer])
@@ -1621,7 +1248,7 @@ def reset_simulation():
     if TO_PRINT:
         print("\n" + "="*20 + " Resetting Simulation " + "="*20)
 
-    all_devices = {i: Device(i, layer_capacity, activations_capacity, transitions_capacity,
+    all_devices = {i: Device(i, layer_capacity, activations_capacity, transitions_capacity, head_transitions_capacity,
                              N, total_layers, total_chunks)
                    for i in range(N)}
 
@@ -1772,13 +1399,13 @@ def update(frame):
     #    check dependencies for next task, handle stalls.
     newly_completed_this_cycle = 0
     for i in range(N):
-        newly_completed_this_cycle += all_devices[i].handle_computation(T, all_devices)
+        newly_completed_this_cycle += all_devices[i].handle_computation(T)
     # Update total completed tasks *after* all devices have potentially finished a task
     total_completed_tasks[T] = total_completed_tasks.get(T, 0) + newly_completed_this_cycle
 
     # 3. Start New Transfers: Initiate pending transfers if channels are free.
     for i in range(N):
-        all_devices[i].handle_new_transfers(T)
+        all_devices[i].handle_new_transfers(T, all_devices)
 
     # --- Update Visuals ---
     for i in range(N):
@@ -1806,8 +1433,8 @@ def update(frame):
             stall_label_artist.set_visible(False)
         elif device.is_stalled and device.stall_reason:
             # Show stall indicator and hide finish indicator
-            wrapped_stall_reason = textwrap.fill(device.stall_reason.replace("\n", " "), width=15)
-            stall_label_artist.set_text(wrapped_stall_reason)
+            #wrapped_stall_reason = textwrap.fill(device.stall_reason.replace("\n", " "), width=15)
+            stall_label_artist.set_text(device.stall_reason)
             stall_label_artist.set_visible(True)
             stall_node_artist.set_visible(True)
             finish_indicator_artist.set_visible(False)
