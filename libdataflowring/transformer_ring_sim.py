@@ -290,6 +290,8 @@ total_attn_flops = 0
 total_fwd_flops = 0
 total_bwd_flops = 0
 
+total_head_flops = 0
+
 
 
 head_computation_times_sec = head_flops / (hardware_max_flops * matmul_efficiency)
@@ -342,8 +344,7 @@ for i in range(total_chunks):
 
         total_chunk_flops += head_flops
 
-        total_fwd_flops += head_flops / 2
-        total_bwd_flops += head_flops / 2
+        total_head_flops += head_flops
         total_matmul_flops += head_flops
 
     total_chunk_flops += total_layers * per_layer_chunk_flops
@@ -641,6 +642,7 @@ compute_legend_text = (
     f" - FLOP Breakdown\n"     
     f"     - Total TFLOPs: {int(total_flops / 1e12)}\n"
     f"         - FWD TFLOPs: {int(total_fwd_flops / 1e12)} TFLOPs\n"
+    f"         - Head TFLOPs: {int(total_head_flops / 1e12)} TFLOPs\n"
     f"         - BWD TFLOPs: {int(total_bwd_flops / 1e12)} TFLOPs\n"
     f"         - Overall Matmul TFLOPs: {int(total_matmul_flops / 1e12)} TFLOPs\n"
     f"         - Overall Attn TFLOPs: {int(total_attn_flops / 1e12)} TFLOPs\n\n"
