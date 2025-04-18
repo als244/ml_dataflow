@@ -129,7 +129,9 @@ chunk_type = "Equal Data"
 
 chunk_size_base = math.ceil(active_experts * (hw_compute_bound * dtype_bytes * model_dim * expert_dim)) / (2 * model_dim * expert_dim - hw_compute_bound * dtype_bytes * (model_dim + expert_dim))
 
+print(f"Based on hw compute bound of {hw_compute_bound} FLOS/byte, along with FFN dims of {model_dim} x {expert_dim}, the base chunk size is {chunk_size_base}")
 if chunk_size_base < min_chunk_size:
+    print(f"Min chunk size is {min_chunk_size}, so using that instead...")
     chunk_size_base = min_chunk_size
 
 chunk_multiple = 256
@@ -448,7 +450,7 @@ if sys.platform == 'darwin':
     matplotlib.use('MacOSX')
 
 lower_bound = int(((total_matmul_flops / N) / (hardware_max_flops * matmul_efficiency) + (total_attn_flops / N) / (hardware_max_flops * attn_efficiency)) * cycles_per_second)
-max_frames = int(lower_bound * 10)
+max_frames = math.ceil(lower_bound * 1.25)
 
 
 def calculate_interval(speed_level, s_min, s_max, i_min, i_max):
@@ -503,7 +505,7 @@ COLOR_STALL_NODE_FILL = (1.0, 0.0, 0.0, stall_node_opacity)
 
 
 # --- Setup ---
-fig, ax = plt.subplots(figsize=(10, 10))
+fig, ax = plt.subplots(figsize=(12, 10))
 ax.set_aspect('equal')
 lim = total_distance + outer_node_radius + stall_node_distance_offset + stall_node_radius + 0.5
 ax.set_xlim(-lim, lim)
@@ -657,12 +659,12 @@ compute_legend_text = (
     f"     - Peer-to-Peer BW (Gb/s): {peer_bw_gbit_sec}\n\n"
     f" ----- Full Training Overview ----- \n"
     f" - FLOP Breakdown\n"     
-    f"     - Total TFLOPs: {int(total_flops / 1e12)}\n"
-    f"         - FWD TFLOPs: {int(total_fwd_flops / 1e12)} TFLOPs\n"
-    f"         - Head TFLOPs: {int(total_head_flops / 1e12)} TFLOPs\n"
-    f"         - BWD TFLOPs: {int(total_bwd_flops / 1e12)} TFLOPs\n"
-    f"         - Overall Matmul TFLOPs: {int(total_matmul_flops / 1e12)} TFLOPs\n"
-    f"         - Overall Attn TFLOPs: {int(total_attn_flops / 1e12)} TFLOPs\n\n"
+    f"     - Total TFLOPs: {total_flops:.3e}\n"
+    f"         - FWD TFLOPs: {total_fwd_flops:.3e}\n"
+    f"         - Head TFLOPs: {total_head_flops:.3e}\n"
+    f"         - BWD TFLOPs: {total_bwd_flops:.3e}\n"
+    f"         - Overall Matmul TFLOPs: {total_matmul_flops:.3e}\n"
+    f"         - Overall Attn TFLOPs: {total_attn_flops:.3e}\n\n"
     f" ----- Derived Simulation Config ----- \n"
     f" - Simulation Speed: {cycles_per_second / 1000:.3f} K cycles per second\n"
     f"   - C0 Computation: {computationFrames} Cycles\n"
@@ -2327,9 +2329,36 @@ def on_hover(event):
 
 fig.canvas.mpl_connect('motion_notify_event', on_hover)
 
-# --- Display ---
 print("Initializing display...")
 reset_simulation() # Initial setup
+
+"""
+print(f"Starting animation saving process (up to {max_frames} frames)...")
+print("This may take a significant amount of time depending on max_frames and DPI.")
+try:
+    # Reduce DPI significantly for faster saving and smaller file size
+    ani.save('32k_100pct_32b_x8_80gb_fastpeer_ring.mp4', writer='ffmpeg', dpi=150, progress_callback=lambda i, n: print(f'Saving frame {i+1}/{n}', end='\r') if (i+1)%10==0 else None)
+    print("\nAnimation saving finished successfully.")
+
+except Exception as e:
+    print("\n--- Error during animation saving ---")
+    print(f"Error Type: {type(e)}")
+    print(f"Error Representation: {repr(e)}")
+    print(f"Error String: {str(e)}")
+    # Add traceback for full context
+    import traceback
+    print("\n--- Traceback ---")
+    traceback.print_exc()
+    print("-----------------\n")
+
+
+# Explicitly close the plot to free memory - Still good practice
+plt.close(fig)
+print("Figure closed.")
+"""
+
+
+# --- Display ---
 print("Showing plot...")
 plt.show()
 print("Plot window closed.")
