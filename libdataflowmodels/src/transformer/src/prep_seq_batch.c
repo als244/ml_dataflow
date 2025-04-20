@@ -58,6 +58,9 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
     uint64_t kv_dim = (uint64_t) (block_config -> kv_dim);
     uint64_t ffn_dim = (uint64_t) (block_config -> ffn_dim);
 
+    saved_activations_offsets -> x_inp = cur_offset;
+    cur_offset += total_tokens * model_dim * dt_size;
+
     saved_activations_offsets -> attn_norm_weighted_sums = cur_offset;
     cur_offset += total_tokens * sizeof(float);
 
@@ -111,10 +114,6 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
         (saved_activations_offsets -> x_3)[0] = cur_offset;
         cur_offset += total_tokens * ffn_dim * dt_size;
 
-        (saved_activations_offsets -> x_2)[0] = cur_offset;
-        cur_offset += total_tokens * model_dim * dt_size;
-
-        saved_activations_offsets -> x_layer_out = (saved_activations_offsets -> x_2)[0];
         saved_activations_offsets -> total_size = cur_offset;
         return;
     }
@@ -147,10 +146,6 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
 
     cur_offset += 2 * max_total_local_expert_tokens * ffn_dim * dt_size;
     cur_offset += max_total_local_expert_tokens * model_dim * dt_size;
-
-    // otherwise, need to save the combination of all the experts...
-    saved_activations_offsets -> x_layer_out = cur_offset;
-    cur_offset += total_tokens * model_dim * dt_size;
 
     saved_activations_offsets -> total_size = cur_offset;
     
@@ -213,13 +208,6 @@ int init_seq_batch_offsets(Seq_Batch * seq_batch, int total_tokens, int num_seqs
         fprintf(stderr, "Error: failed to allocate x_3 for saved activations offsets...\n");
         return -1;
     }
-
-    saved_activations_offsets -> x_2 = malloc(num_local_experts * sizeof(void *));
-    if (!saved_activations_offsets -> x_2){
-        fprintf(stderr, "Error: failed to allocate x_2 for saved activations offsets...\n");
-        return -1;
-    }
-
 
     // This will only work with non-MoE for now...
     init_seq_batch_saved_activations_offsets(&(seq_batch -> saved_activations_offsets), total_tokens, block_config);
@@ -448,6 +436,7 @@ int bind_seq_batch_saved_activations_buffer(Seq_Batch * seq_batch, Seq_Batch_Sav
     saved_activations -> savedActivationsBuffer = saved_activations_buffer;
     saved_activations -> savedActivationsBufferBytes = saved_activations_buffer_size;
 
+    saved_activations -> x_inp = (void *) (saved_activations_buffer + saved_activations_offsets -> x_inp);
     saved_activations -> attn_norm_weighted_sums = (float *) (saved_activations_buffer + saved_activations_offsets -> attn_norm_weighted_sums);
     saved_activations -> attn_norm_rms_vals = (float *) (saved_activations_buffer + saved_activations_offsets -> attn_norm_rms_vals);
     saved_activations -> x_q = (void *) (saved_activations_buffer + saved_activations_offsets -> x_q);
@@ -476,12 +465,6 @@ int bind_seq_batch_saved_activations_buffer(Seq_Batch * seq_batch, Seq_Batch_Sav
         return -1;
     }
 
-    saved_activations -> x_2 = malloc(num_local_experts * sizeof(void *));
-    if (!saved_activations -> x_2){
-        fprintf(stderr, "Error: failed to allocate x_2 for saved activations...\n");
-        return -1;
-    }
-
     if (saved_activations_offsets -> num_tokens_per_expert != saved_activations_offsets -> token_to_experts_mapping){
         fprintf(stderr, "Error: cannot handle MoE for now...\n");
         return -1;
@@ -494,19 +477,13 @@ int bind_seq_batch_saved_activations_buffer(Seq_Batch * seq_batch, Seq_Batch_Sav
 
     
 
-    for (int i = 0; i < num_local_experts; i++){
+     for (int i = 0; i < num_local_experts; i++){
         (saved_activations -> x_1)[i] = (void *) (saved_activations_buffer + (saved_activations_offsets -> x_1)[i]);
     }
 
     for (int i = 0; i < num_local_experts; i++){
         (saved_activations -> x_3)[i] = (void *) (saved_activations_buffer + (saved_activations_offsets -> x_3)[i]);
     }
-
-    for (int i = 0; i < num_local_experts; i++){
-        (saved_activations -> x_2)[i] = (void *) (saved_activations_buffer + (saved_activations_offsets -> x_2)[i]);
-    }
-
-    (saved_activations -> x_layer_out) = (void *) (saved_activations_buffer + (saved_activations_offsets -> x_layer_out));
 
     return 0;
 }

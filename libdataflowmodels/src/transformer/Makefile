@@ -9,7 +9,10 @@ ALL_INCLUDES = -I${DATAFLOW_LIB_INCLUDE_DIR} -I${DATAFLOW_OP_INCLUDE_DIR} -I${DA
 
 TRANSFORMER_OBJS = objs/dataflow_transformer.o objs/prep_seq_batch.o objs/prep_transformer.o
 
-all: ${TRANSFORMER_OBJS}
+all: create_dirs ${TRANSFORMER_OBJS}
+
+create_dirs:
+	mkdir -p objs
 
 objs/dataflow_transformer.o: src/dataflow_transformer.c
 	${CC} ${CFLAGS} ${ALL_INCLUDES} -c -o $@ $<

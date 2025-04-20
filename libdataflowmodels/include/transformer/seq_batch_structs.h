@@ -30,6 +30,7 @@ typedef struct seq_batch_metadata_offsets {
 
 
 typedef struct seq_batch_saved_activations_offsets {
+	uint64_t x_inp;
 	uint64_t attn_norm_weighted_sums;
 	uint64_t attn_norm_rms_vals;
 	uint64_t x_q;
@@ -64,18 +65,11 @@ typedef struct seq_batch_saved_activations_offsets {
 	// original token batch corresponding to row 
 	// within the x_1, x_3, x_2 buffers...
 	uint64_t experts_to_tokens_mapping;
-	
 
 
-
-	// these are of length num_local_experts
-	// if non-moe, these are initialized correctly,
-	// from the first init_seq_batch_offsets call...
+	// array of length num_local_experts
 	uint64_t * x_1;
 	uint64_t * x_3;
-	uint64_t * x_2;
-	// if non-moe, takes on same value as x_2[0]...
-	uint64_t x_layer_out;
 
 	uint64_t total_size;
 } Seq_Batch_Saved_Activations_Offsets;
@@ -200,6 +194,12 @@ typedef struct seq_batch_saved_activations {
 	void * savedActivationsBuffer;
 	uint64_t savedActivationsBufferBytes;
 
+	// This buffer should be the used as destination during
+	// ring transfers, the input of each block is used during 
+	// backprop so it should get saved down with the other 
+	// activations...
+	void * x_inp;
+
 	// used during backprop
 	float * attn_norm_weighted_sums;
 	float * attn_norm_rms_vals;
@@ -234,13 +234,12 @@ typedef struct seq_batch_saved_activations {
 	// num_tokens_per_expert result determines the boundaries of each expert...
 	int * experts_to_tokens_mapping;
 
-
-
 	// of size num_local_experts
+
+	// need to save both in order to do correct
+	// backprop through swiglu...
 	void ** x_1;
-	void ** x_2;
 	void ** x_3;
-	void * x_layer_out;
 
 	uint64_t total_size;
 
@@ -326,6 +325,8 @@ typedef struct seq_batch_activation_workspace {
 	// could have more MoE specific temp buffer stuff here...
 
 	// needs to be total_q * ffn_dim
+	// used as buffer to hold the combined/activated
+	// gate for x1 and x3...
 	void * x_temp_mlp;
 
 	// workspace for attention and matmuls in block...

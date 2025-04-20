@@ -45,7 +45,6 @@ int dataflow_submit_transformer_embedding(Dataflow_Handle * dataflow_handle, int
 
 
 int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int compute_stream_id, 
-										bool to_copy_output_to_block_transition, int out_copy_stream_id, 
 								Transformer_Block_Transition * block_input, 
 								Transformer_Block * transformer_block, 
 								Transformer_Block_Activations * activations, 
@@ -61,13 +60,12 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
 						Transformer_Block_Transition * next_grad_stream);
 
 
-int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int compute_stream_id, int out_copy_stream_id,
+int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int compute_stream_id,
 								Transformer_Block * transformer_block, 
 								Transformer_Block_Transition * inp_grad_stream, 
-								Transformer_Block_Activations * activations, Transformer_Block_Transition * fwd_block_input,
+								Seq_Batch_Saved_Activations * fwd_activations, Seq_Batch_Context * fwd_context,
 								Transformer_Block_Activations * grad_activations,
-								Transformer_Block * grad_weights, // for the norm weights while using streaming grad
-								Transformer_Block_Transition * out_grad_stream);
+								Transformer_Block * grad_weights);
 
 int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int compute_stream_id,
                                 Transformer_Block_Transition * grad_stream, 
