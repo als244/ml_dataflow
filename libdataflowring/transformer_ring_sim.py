@@ -156,7 +156,8 @@ layer_size_bytes = attn_block_size_bytes + ffn_block_size_bytes
 
 ## model input, query, key, value, attn output, attn ouut output
 attn_activation_bytes = dtype_bytes * 4 * (model_dim * chunk_size) + 2 * (kv_dim * chunk_size)
-ffn_activation_bytes = dtype_bytes * (expert_dim * chunk_size * active_experts)
+## saving x1 and x3 in order to correctly backprop through swiglu...
+ffn_activation_bytes = dtype_bytes * (2 * chunk_size * expert_dim * active_experts)
 activation_size_bytes = attn_activation_bytes + ffn_activation_bytes
 
 ## Each Chunk Context Contribution....
