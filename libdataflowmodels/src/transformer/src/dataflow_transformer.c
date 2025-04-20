@@ -168,7 +168,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_FILE){
-		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/attn_norm.dat", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, "test_transformer_data/attn_norm.dat", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save attention nor file...\n");
 			return -1;
@@ -195,7 +195,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_FILE){
-		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_q.dat", working_activations -> x_q, total_q, model_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, "test_transformer_data/x_q.dat", working_activations -> x_q, total_q, model_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_q file...\n");
 			return -1;
@@ -217,7 +217,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_FILE){
-		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_k.dat", working_activations -> x_k_local, total_q, kv_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, "test_transformer_data/x_k.dat", working_activations -> x_k_local, total_q, kv_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_k file...\n");
 			return -1;
@@ -239,7 +239,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_FILE){
-		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_v.dat", working_activations -> x_v_local, total_q, kv_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, "test_transformer_data/x_v.dat", working_activations -> x_v_local, total_q, kv_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_v file...\n");
 			return -1;
@@ -266,7 +266,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_FILE){
-		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_q_rope.dat", working_activations -> x_q, total_q, model_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, "test_transformer_data/x_q_rope.dat", working_activations -> x_q, total_q, model_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_q_rope file...\n");
 			return -1;
@@ -274,7 +274,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_FILE){
-		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_k_rope.dat", working_activations -> x_k_local, total_q, kv_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, "test_transformer_data/x_k_rope.dat", working_activations -> x_k_local, total_q, kv_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_k_rope file...\n");
 			return -1;
@@ -325,7 +325,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_FILE){
-		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_attn.dat", working_activations -> x_attn_out, total_q, model_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, "test_transformer_data/x_attn.dat", working_activations -> x_attn_out, total_q, model_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_attn file...\n");
 			return -1;
@@ -351,7 +351,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_FILE){
-		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_attn_final_out.dat", working_activations -> x_o, total_q, model_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, "test_transformer_data/x_attn_final_out.dat", working_activations -> x_o, total_q, model_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_attn_final_out file...\n");
 			return -1;
@@ -373,7 +373,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_FILE){
-		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_ffn_norm_out.dat", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, "test_transformer_data/x_ffn_norm_out.dat", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_attn_final_out file...\n");
 			return -1;
@@ -398,7 +398,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_FILE){
-		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_1.dat", (working_activations -> x_1)[0], total_q, ffn_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, "test_transformer_data/x_1.dat", (working_activations -> x_1)[0], total_q, ffn_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_1 file...\n");
 			return -1;
@@ -420,7 +420,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_FILE){
-		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_3.dat", (working_activations -> x_3)[0], total_q, ffn_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, "test_transformer_data/x_3.dat", (working_activations -> x_3)[0], total_q, ffn_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_3 file...\n");
 			return -1;
@@ -442,7 +442,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_FILE){
-		ret = save_file(dataflow_handle, compute_stream_id, "data/8B/layers/0/x_swiglu.dat", activation_workspace -> x_temp_mlp, total_q, ffn_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, "test_transformer_data/x_swiglu.dat", activation_workspace -> x_temp_mlp, total_q, ffn_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_swiglu file...\n");
 			return -1;

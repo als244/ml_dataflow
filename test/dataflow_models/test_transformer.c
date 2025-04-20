@@ -2,6 +2,7 @@
 #include "dataflow_seq_batch.h"
 #include "cuda_dataflow_handle.h"
 #include "register_ops.h"
+
 int main(int argc, char * argv[]){
 
 	int ret;
@@ -173,7 +174,7 @@ int main(int argc, char * argv[]){
 	cur_host_mem += sys_embedding_table -> embedding_table_size;
 
 
-	FILE * fp = fopen("data/8B/embed/tok_embeddings.weight", "rb");
+	FILE * fp = fopen("../data/8B/embed/tok_embeddings.weight", "rb");
 	if (!fp){
 		fprintf(stderr, "Error: failed to open data/embed/tok_embedding.weight...\n");
 		return -1;
@@ -238,7 +239,7 @@ int main(int argc, char * argv[]){
 
 	printf("Binding all sys transformer blocks...\n");
 
-	char * layer_base_path = "data/8B/layers";
+	char * layer_base_path = "../data/8B/layers";
 
 	char layer_path[PATH_MAX];
 	for (int i = 0; i < n_layers; i++){
@@ -327,7 +328,7 @@ int main(int argc, char * argv[]){
 
 	cur_host_mem += combined_head_size;
 
-	fp = fopen("data/8B/head/combined_head.weight", "rb");
+	fp = fopen("../data/8B/head/combined_head.weight", "rb");
 	if (!fp){
 		fprintf(stderr, "Error: failed to open data/head/combined_head.weight...\n");
 		return -1;
@@ -428,7 +429,7 @@ int main(int argc, char * argv[]){
 
 	uint32_t * sys_token_ids = malloc(total_tokens * sizeof(uint32_t));
 
-	fp = fopen("data/token_ids_uint32.dat", "rb");
+	fp = fopen("../data/token_ids_uint32.dat", "rb");
 	if (!fp){
 		fprintf(stderr, "Error: failed to open data/token_ids_uint32.dat...\n");
 		return -1;
@@ -443,7 +444,7 @@ int main(int argc, char * argv[]){
 
 	uint32_t * sys_labels = malloc(total_tokens * sizeof(uint32_t));
 
-	fp = fopen("data/labels_uint32.dat", "rb");
+	fp = fopen("../data/labels_uint32.dat", "rb");
 	if (!fp){
 		fprintf(stderr, "Error: failed to open data/labels_uint32.dat...\n");
 		return -1;
@@ -581,7 +582,7 @@ int main(int argc, char * argv[]){
 
 	// save the block transitions...
 
-	ret = save_host_matrix("data/8B/embed/example_embed_output.dat", sys_block_transitions[0].X, total_tokens, model_dim, block_dt);
+	ret = save_host_matrix("test_transformer_data/example_embed_output.dat", sys_block_transitions[0].X, total_tokens, model_dim, block_dt);
 	if (ret){
 		fprintf(stderr, "Error: failed to save example embed output...\n");
 		return -1;
@@ -651,7 +652,6 @@ int main(int argc, char * argv[]){
 	
 
 	ret = dataflow_submit_transformer_block(&dataflow_handle, compute_stream_id, 
-										false, -1, 
 								&(block_transitions[0]), 
 								blocks[0], 
 								activations, 
@@ -693,7 +693,7 @@ int main(int argc, char * argv[]){
 
 	printf("Saving layer output...\n");
 
-	ret = save_host_matrix("data/8B/layers/0/example_layer_output.dat", sys_block_transitions[1].X, total_tokens, model_dim, block_dt);
+	ret = save_host_matrix("test_transformer_data/example_layer_output.dat", sys_block_transitions[1].X, total_tokens, model_dim, block_dt);
 	if (ret){
 		fprintf(stderr, "Error: failed to save example layer output...\n");
 		return -1;

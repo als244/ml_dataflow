@@ -42,7 +42,7 @@ max_interval = 100
 initial_speed_level = 50
 
 ## Number of Devices
-N = 8
+N = 1
 
 ## Training Info
 num_sequences = 1
@@ -54,7 +54,7 @@ num_sequences = 1
 #seqlen_thousands = 1 * (1 << 10)
 
 # 32k tokens
-seqlen_thousands = 64
+seqlen_thousands = 32
 seqlen = (1 << 10) * seqlen_thousands
 train_token_ratio = 1 / 4
 min_chunk_size = 1536
@@ -65,19 +65,19 @@ min_chunk_size = 1536
 ## Model Info
 bitwidth = 16
 dtype_bytes = bitwidth / 8
-total_layers = 64
-vocab_size = 151646
-model_dim = 5120
-kv_factor = 1 / 8
+total_layers = 32
+vocab_size = 128256
+model_dim = 4096
+kv_factor = 1 / 4
 kv_dim = int(model_dim * kv_factor)
 num_experts = 1
 active_experts = 1
-expert_dim = 27648
+expert_dim = 14336
 ## THese config params not implemented yet...
 attn_type = "Exact"
 
 
-max_device_memory_bytes = 8 * (1 << 30)
+max_device_memory_bytes = 23 * (1 << 30)
 
 
 ## hardware configs
@@ -95,7 +95,7 @@ attn_efficiency = 0.6
 
 
 ## communication configs
-home_bw_gbit_sec = 400
+home_bw_gbit_sec = 240
 peer_bw_gbit_sec = 100
 
 
@@ -1134,6 +1134,11 @@ class Device:
                 missing = []
                 if not has_weight:
                     missing.append(f"Wgt")
+                    print(f"Missing Wgt")
+                    print(f"Cur Weights: {self.cur_weights}")
+                    print(f"Cur Weight Write Ptr: {self.cur_weight_write_ptr}")
+                    print(f"Cur Inbound Queue: {self.inbound_queue}")
+                    print("\n\n\n\n\n")
                 if not has_context:
                     missing.append(f"Fwd Context")
                 if not has_upstream_grad:
@@ -1156,13 +1161,6 @@ class Device:
 
         ## ensure that there is available space in the activations buffer if during fwd pass...
         if is_fwd and self.activations_empty_slot_ind is None:
-            print(f"T={T}, Dev {self.device_id}: Stalled on Fwd Act. Buffer Full")
-            print(f"Cur Activations Buffer: {self.activations_buffer}")
-            print(f"Cur Context Buffer: {self.context_buffer}")
-            print(f"Cur Activation Empty Slot Ind: {self.activations_empty_slot_ind}")
-            print(f"Cur Activation Stack Next Ind: {self.activations_stack_next_ind}")
-            print(f"Cur Activation Stack: {self.activations_stack}")
-            sys.exit(1)
             self.stall_reason = "Congested:\nAct. Buffer Full"
             has_deps = False
 
