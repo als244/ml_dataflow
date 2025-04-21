@@ -16,20 +16,6 @@ from collections import deque # Use deque for efficient queue operations
 
 import math
 
-def round_up_to_multiple(n, m):
-  """
-  Rounds an integer n up to the nearest multiple of a positive integer m.
-
-  Args:
-    n: The integer number to round up.
-    m: The positive integer multiple to round up to.
-
-  Returns:
-    The smallest multiple of m that is greater than or equal to n.
-  """
-
-  return int(((n + m - 1) // m) * m)
-
 # --- Simulation Parameters ---
 ## making 100 microseconds equivalent to 1 cycle
 cycles_per_second = 1e4
@@ -42,7 +28,7 @@ max_interval = 100
 initial_speed_level = 50
 
 ## Number of Devices
-N = 1
+N = 8
 
 ## Training Info
 num_sequences = 1
@@ -53,10 +39,9 @@ num_sequences = 1
 # 1 million tokens
 #seqlen_thousands = 1 * (1 << 10)
 
-# 32k tokens
-seqlen_thousands = 32
+seqlen_thousands = 64
 seqlen = (1 << 10) * seqlen_thousands
-train_token_ratio = 1 / 4
+train_token_ratio = 1 / 2
 min_chunk_size = 1536
 
 
@@ -65,19 +50,19 @@ min_chunk_size = 1536
 ## Model Info
 bitwidth = 16
 dtype_bytes = bitwidth / 8
-total_layers = 32
-vocab_size = 128256
-model_dim = 4096
+total_layers = 64
+vocab_size = 151646
+model_dim = 5120
 kv_factor = 1 / 4
 kv_dim = int(model_dim * kv_factor)
 num_experts = 1
 active_experts = 1
-expert_dim = 14336
+expert_dim = 27648
 ## THese config params not implemented yet...
 attn_type = "Exact"
 
 
-max_device_memory_bytes = 23 * (1 << 30)
+max_device_memory_bytes = 8 * (1 << 30)
 
 
 ## hardware configs
@@ -95,8 +80,42 @@ attn_efficiency = 0.6
 
 
 ## communication configs
-home_bw_gbit_sec = 240
+home_bw_gbit_sec = 400
 peer_bw_gbit_sec = 100
+
+
+
+
+
+
+
+### --- EVERYTHING BELOW THIS POINT IS DERVIED FROM INPUTS ABOVE --- ###
+
+
+
+
+
+def round_up_to_multiple(n, m):
+  """
+  Rounds an integer n up to the nearest multiple of a positive integer m.
+
+  Args:
+    n: The integer number to round up.
+    m: The positive integer multiple to round up to.
+
+  Returns:
+    The smallest multiple of m that is greater than or equal to n.
+  """
+
+  return int(((n + m - 1) // m) * m)
+
+
+
+
+
+
+
+
 
 
 
@@ -141,9 +160,19 @@ chunk_size = round_up_to_multiple(chunk_size_base, chunk_multiple)
 total_chunks = math.ceil(seqlen / chunk_size)
 train_chunk_freq =  math.ceil(1/ train_token_ratio)
 print(f"train_chunk_freq: {train_chunk_freq}")
-total_train_chunks = int(total_chunks / train_chunk_freq)
-if ((total_chunks - 1) % train_chunk_freq) != 0:
+total_train_chunks = 1
+cur_train_chunk_id = train_chunk_freq
+while cur_train_chunk_id < total_chunks:
     total_train_chunks += 1
+    if cur_train_chunk_id + train_chunk_freq > total_chunks:
+        break
+    cur_train_chunk_id += train_chunk_freq
+
+if cur_train_chunk_id < total_chunks:
+    total_train_chunks += 1
+
+print(f"total_chunks: {total_chunks}")
+print(f"total_train_chunks: {total_train_chunks}")
 
 
 
@@ -326,6 +355,23 @@ total_flops = 0
 bwd_w_flops = base_flops_per_layer
 bwd_x_flops = 0
 
+total_compute_cycles = 0
+
+head_layer_size_bytes = dtype_bytes * (vocab_size * model_dim)
+head_layer_transfer_time_sec = head_layer_size_bytes / (home_bw_gbit_sec * 1e9)
+
+activation_transfer_time_sec = (activation_size_bytes * 8) / (home_bw_gbit_sec * 1e9)
+
+chunk_context_transfer_time_sec = chunk_context_size_bytes / (peer_bw_gbit_sec * 1e9)
+
+transition_transfer_time_sec = (output_size_bytes * 8) / (peer_bw_gbit_sec * 1e9)
+
+bwd_w_time_sec = bwd_w_flops / (hardware_max_flops * matmul_efficiency)
+
+
+headFrames = math.ceil(head_computation_times_sec * cycles_per_second)
+bwdWFrames = math.ceil(bwd_w_time_sec * cycles_per_second)
+
 for i in range(total_chunks):
     per_layer_chunk_flops = 0
     total_chunk_flops = 0
@@ -340,7 +386,7 @@ for i in range(total_chunks):
 
     computation_times_sec[i] = base_flops_per_layer / (hardware_max_flops * matmul_efficiency) + attn_flops / (hardware_max_flops * attn_efficiency)
     computation_times_frames[i] = math.ceil(computation_times_sec[i] * cycles_per_second)
-
+    total_compute_cycles += total_layers * computation_times_frames[i]
     per_layer_chunk_flops += layer_flops
 
     if do_backward and (((i % train_chunk_freq) == 0) or (i == total_chunks - 1)):
@@ -348,21 +394,24 @@ for i in range(total_chunks):
         bwd_x_flops = layer_flops + attn_flops
         computation_times_sec_bwd[i] = base_flops_per_layer / (hardware_max_flops * matmul_efficiency) + (2 * attn_flops) / (hardware_max_flops * attn_efficiency)
         computation_times_frames_bwd[i] = math.ceil(computation_times_sec_bwd[i] * cycles_per_second)
-
+        total_compute_cycles += total_layers * computation_times_frames_bwd[i]
         per_layer_chunk_flops += bwd_x_flops
 
         total_matmul_flops += total_layers * base_flops_per_layer
         total_attn_flops += 2 * total_layers * attn_flops
 
         per_layer_chunk_flops += bwd_w_flops
-        total_matmul_flops += total_layers * base_flops_per_layer
+        total_matmul_flops += total_layers * bwd_w_flops
 
         total_bwd_flops += total_layers * bwd_x_flops + total_layers * bwd_w_flops
+        total_compute_cycles += total_layers * bwdWFrames
 
         total_chunk_flops += head_flops
 
         total_head_flops += head_flops
         total_matmul_flops += head_flops
+
+        total_compute_cycles += headFrames
 
     total_chunk_flops += total_layers * per_layer_chunk_flops
 
@@ -372,25 +421,11 @@ for i in range(total_chunks):
 
 
 
-
-head_layer_size_bytes = dtype_bytes * (vocab_size * model_dim)
-head_layer_transfer_time_sec = head_layer_size_bytes / (home_bw_gbit_sec * 1e9)
-
-activation_transfer_time_sec = (activation_size_bytes * 8) / (home_bw_gbit_sec * 1e9)
-
-chunk_context_transfer_time_sec = chunk_context_size_bytes / (peer_bw_gbit_sec * 1e9)
-
-transition_transfer_time_sec = (output_size_bytes * 8) / (peer_bw_gbit_sec * 1e9)
-
-bwd_w_time_sec = bwd_w_flops / (hardware_max_flops * matmul_efficiency)
-
-
-
 computationFrames = computation_times_frames[0] # Cycles per compute task
 max_computationFrames = computation_times_frames[total_chunks-1]
 
-headFrames = math.ceil(head_computation_times_sec * cycles_per_second)
-bwdWFrames = math.ceil(bwd_w_time_sec * cycles_per_second)
+
+
 
 contextTransferFrames = math.ceil(chunk_context_transfer_time_sec * cycles_per_second)
 if chunk_context_transfer_time_sec * cycles_per_second < 1:
@@ -402,7 +437,14 @@ layerTransferFrames = math.ceil(layer_transfer_time_sec * cycles_per_second) # C
 headTransferFrames = math.ceil(head_layer_transfer_time_sec * cycles_per_second)
 savedActivationsFrames = math.ceil(activation_transfer_time_sec * cycles_per_second) # Cycles to transfer activations (save/fetch)
 activationTransitionFrames = math.ceil(transition_transfer_time_sec * cycles_per_second) # Cycles to transfer activations/grads between devices
-
+if (N == 1):
+    blockTransitionCyclesText = "N/A"
+    activationTransitionFrames = 0
+else:
+    if (transition_transfer_time_sec * cycles_per_second < 1):
+        blockTransitionCyclesText = "< 1 Cycle"
+    else:
+        blockTransitionCyclesText = str(math.ceil(transition_transfer_time_sec * cycles_per_second)) + " Cycles"
 
 
 
@@ -451,7 +493,7 @@ if sys.platform == 'darwin':
     matplotlib.use('MacOSX')
 
 lower_bound = int(((total_matmul_flops / N) / (hardware_max_flops * matmul_efficiency) + (total_attn_flops / N) / (hardware_max_flops * attn_efficiency)) * cycles_per_second)
-max_frames = math.ceil(lower_bound * 1.25)
+max_frames = math.ceil(lower_bound * 2)
 
 
 def calculate_interval(speed_level, s_min, s_max, i_min, i_max):
@@ -572,8 +614,12 @@ print(f"Per Home Layer Sizes: {per_home_layer_sizes}")
 
 total_activation_cnt_per_device = [int(total_train_chunks * per_home_num_blocks[i]) for i in range(N)]
 
+print(f"Total Activation Cnt Per Device: {total_activation_cnt_per_device}")
+
 dev_activation_stack = activations_capacity
 home_activation_stack = [total_activation_cnt_per_device[i] - activations_capacity for i in range(N)]
+
+print(f"Home Activation Stack: {home_activation_stack}")
 
 typical_home_activation_size = home_activation_stack[0] * activation_size_bytes
    
@@ -582,7 +628,7 @@ per_home_total_size = [home_activation_stack[i] * activation_size_bytes + home_a
 
 
 memory_legend_text = (
-    f"Memory Breakdown:\n\n\n"
+    f"Model, Training, & Memory Breakdown:\n\n\n"
     f" ----- USER INPUTS ----- \n"
     f" - Model Info:\n"
     f"     - Total Blocks (non-head): {total_layers}\n"
@@ -643,9 +689,39 @@ memory_legend_text = (
     f" *** TOTAL PER-HOME MEMORY: {per_home_total_size[0] / (1 << 30):.2f} GB ***\n\n"
 )
 
-matmul_flop_ratio = total_matmul_flops / total_flops if total_flops > 0 else 0
-attn_flop_ratio = total_attn_flops / total_flops if total_flops > 0 else 0
-practical_efficiency = matmul_efficiency * matmul_flop_ratio + attn_efficiency * attn_flop_ratio
+print("--------------------------------")
+print(f"Total Flops: {total_flops}")
+print(f"Total Matmul Flops: {total_matmul_flops}")
+print(f"Total Attn Flops: {total_attn_flops}")
+print(f"Total Compute Cycles: {total_compute_cycles}")
+matmul_pct = 100 * total_matmul_flops / total_flops
+attn_pct = 100 * total_attn_flops / total_flops
+
+fwd_pct = 100 * total_fwd_flops / total_flops
+head_pct = 100 * total_head_flops / total_flops
+bwd_pct = 100 * total_bwd_flops / total_flops
+
+print(f"Matmul Pct: {matmul_pct:.2f}%")
+print(f"Attn Pct: {attn_pct:.2f}%")
+print("--------------------------------")
+print(f"Fwd Pct: {fwd_pct:.2f}%")
+print(f"Head Pct: {head_pct:.2f}%")
+print(f"Bwd Pct: {bwd_pct:.2f}%")
+print("--------------------------------")
+
+## These are without rounding...
+practical_runtime = total_matmul_flops / (N * hardware_max_flops * matmul_efficiency) + total_attn_flops / (N * hardware_max_flops * attn_efficiency)
+throughput_upper_bound = total_flops / (N * practical_runtime)
+practical_runtime_cycles = math.ceil(practical_runtime * cycles_per_second)
+
+## Using the rounding to display bounds...
+total_compute_runtime = total_compute_cycles / cycles_per_second
+print(f"Total Compute Runtime: {total_compute_runtime / N:.4f} seconds")
+total_throughput_upper_bound = total_flops / (total_compute_runtime)
+print(f"Total Throughput Upper Bound: {total_throughput_upper_bound / 1e12:.3f} TFLOPS")
+print("--------------------------------")
+
+simulation_khz = cycles_per_second / 1000
 
 compute_legend_text = (
     f"Compute Breakdown:\n\n\n"
@@ -660,14 +736,14 @@ compute_legend_text = (
     f"     - Peer-to-Peer BW (Gb/s): {peer_bw_gbit_sec}\n\n"
     f" ----- Full Training Overview ----- \n"
     f" - FLOP Breakdown\n"     
-    f"     - Total TFLOPs: {total_flops:.3e}\n"
-    f"         - FWD TFLOPs: {total_fwd_flops:.3e}\n"
-    f"         - Head TFLOPs: {total_head_flops:.3e}\n"
-    f"         - BWD TFLOPs: {total_bwd_flops:.3e}\n"
-    f"         - Overall Matmul TFLOPs: {total_matmul_flops:.3e}\n"
-    f"         - Overall Attn TFLOPs: {total_attn_flops:.3e}\n\n"
+    f"     - Total TFLOPs: {total_flops:.2e}\n"
+    f"         - FWD TFLOPs: {total_fwd_flops:.2e} ({fwd_pct:.1f}%)\n"
+    f"         - Head TFLOPs: {total_head_flops:.2e} ({head_pct:.1f}%)\n"
+    f"         - BWD TFLOPs: {total_bwd_flops:.2e} ({bwd_pct:.1f}%)\n"
+    f"       - Overall Matmul TFLOPs: {total_matmul_flops:.2e} ({matmul_pct:.1f}%)\n"
+    f"       - Overall Attn TFLOPs: {total_attn_flops:.2e} ({attn_pct:.1f}%)\n\n"
     f" ----- Derived Simulation Config ----- \n"
-    f" - Simulation Speed: {cycles_per_second / 1000:.3f} K cycles per second\n"
+    f" - Simulation Speed: {simulation_khz:.2f} KHz\n"
     f"   - C0 Computation: {computationFrames} Cycles\n"
     f"   - C{total_chunks-1} Computation: {max_computationFrames} Cycles\n"
     f"   - Head Computation: {headFrames} Cycles\n"
@@ -676,9 +752,9 @@ compute_legend_text = (
     f"   - Head Transfer: {headTransferFrames} Cycles\n"
     f"   - Activation Transfer: {savedActivationsFrames} Cycles\n"
     f"   - Per-Chunk Context Transfer: {contextTransferCycleText}\n"
-    f"   - Block Transition: {activationTransitionFrames} Cycles\n\n"
-    f" *** RUNTIME LOWER-BOUND: {int(((total_matmul_flops / N) / (hardware_max_flops * matmul_efficiency) + (total_attn_flops / N) / (hardware_max_flops * attn_efficiency)) * cycles_per_second)} Cycles ***\n\n"
-    f" *** THROUGHPUT UPPER-BOUND: {int((hardware_max_flops * practical_efficiency) / 1e12)} TFLOPS ***\n\n"
+    f"   - Block Transition: {blockTransitionCyclesText}\n\n"
+    f" *** RUNTIME LOWER-BOUND: {math.ceil(total_compute_cycles / N)} Cycles ***\n\n"
+    f" *** THROUGHPUT UPPER-BOUND: {math.ceil(total_throughput_upper_bound / 1e12)} TFLOPS ***\n\n"
 )
 
 # Define padding from figure edges (e.g., 2% padding)
@@ -962,6 +1038,8 @@ class Device:
         total_activations = len(self.activations_stack)
         activation_ind_cutoff = total_activations - self.activations_capacity
 
+        #print(f"Device {self.device_id}\nActivation Stack: {self.activations_stack}\n# Dev Activation Stack: {len(self.activations_stack)}\n\n\n")
+
         self.activations_stack_cutoff_ind = activation_ind_cutoff
         self.activations_stack_next_ind = activation_ind_cutoff
 
@@ -974,8 +1052,10 @@ class Device:
             ## the final chunk has transitioned into the head device in which case we can 
             ## flip the direction of chunk processing
 
-            total_chunk_inbound_frames = sum([computation_times_frames[i] for i in range(0, self.total_chunks, train_chunk_freq)])
-            cutoff_chunk_id = int(total_chunk_inbound_frames / 2 / headFrames)
+            total_chunk_inbound_frames = sum([computation_times_frames[i] for i in range(0, self.total_chunks, train_chunk_freq)]) + (self.total_devices - 1) * activationTransitionFrames
+            cutoff_chunk_cnt = int(total_chunk_inbound_frames / 2 / headFrames)
+            cutoff_chunk_id = cutoff_chunk_cnt * train_chunk_freq
+            
             """
             head_diff = headFrames - computation_times_frames[0]
             if head_diff <= 0:
@@ -985,7 +1065,7 @@ class Device:
                 cutoff_chunk_id = math.ceil((total_chunk_frames / 2) / headFrames)
             """
             
-            print(f"Cutoff Chunk ID: {cutoff_chunk_id}")
+            print(f"Head Cutoff Chunk ID before Reversal: {cutoff_chunk_id}")
 
             for i in range(cutoff_chunk_id):
                 if (i % train_chunk_freq == 0) or (i == self.total_chunks - 1):
@@ -1121,26 +1201,25 @@ class Device:
             computation_type_str = "Bwd X"
             has_weight = ((0, lid) in self.cur_weights) 
             upstream_grad_key = (0, cid, lid + 1, True)
-            context_key = (0, 0, lid)
             if lid < self.total_layers - 1:
                 has_upstream_grad = upstream_grad_key in self.transitions_inbound_buffer
             else:
                 has_upstream_grad = upstream_grad_key in self.head_output_transitions_buffer
             fwd_act_key = (0, cid, lid)
             has_fwd_activation = fwd_act_key in self.activations_buffer
-            has_context = context_key in self.context_buffer
+            has_context = True
+            for i in range(cid + 1):
+                if self.context_buffer[i] != (0, i, lid):
+                    has_context = False
+                    ctx_chunk_missing = i
+                    break
             has_deps = has_weight and has_upstream_grad and has_context and has_fwd_activation
             if not has_deps:
                 missing = []
                 if not has_weight:
                     missing.append(f"Wgt")
-                    print(f"Missing Wgt")
-                    print(f"Cur Weights: {self.cur_weights}")
-                    print(f"Cur Weight Write Ptr: {self.cur_weight_write_ptr}")
-                    print(f"Cur Inbound Queue: {self.inbound_queue}")
-                    print("\n\n\n\n\n")
                 if not has_context:
-                    missing.append(f"Fwd Context")
+                    missing.append(f"Fwd Context; (Chunk {ctx_chunk_missing})")
                 if not has_upstream_grad:
                     missing.append(f"Grad Stream")
                 if not has_fwd_activation:
@@ -1214,7 +1293,30 @@ class Device:
         ## after last chunk is processed on head, replace head weight with prior weight
         #W assumes that the 
         if self.next_bwd_weight_prefetch_layer_id >= 0:
-            self.inbound_queue.append((-1, self.next_bwd_weight_prefetch_layer_id, False, False, self.cur_weight_write_ptr, layerTransferFrames))
+
+            ## determine where in the queue we want to fetch weight, might want to skip a lot of the activations,
+            ## if the weight is the nearest depedency....
+
+            ## because partial training chunks, it is not obvious about the order in which to enqueue weight fetch
+            ## because want to make full use of inbound link (i.e. refetching next activations that aren't needed until after
+            ## next weight, but whose buffer is available to replace), but also want to to prioritize depedency order...
+            weight_queue_start_ind = 0
+            ## if already doing transfer, don't mess up the queue and put wrong item at front...
+            if self.is_inbound_transferring:
+                weight_queue_start_ind = 1
+
+            ## determine first index in inbound queue where self.next_bwd_weight_prefetch_layer_id is >= the layer id corresponding to activation...
+            ## by default, put it at the end of the queue...
+            weight_queue_ind = len(self.inbound_queue)
+            for i in range(weight_queue_start_ind, len(self.inbound_queue)):
+                if self.next_bwd_weight_prefetch_layer_id >= self.inbound_queue[i][1]:
+                    weight_queue_ind = i
+                    break
+            
+            ## insert 
+            weight_item = (-1, self.next_bwd_weight_prefetch_layer_id, False, False, self.cur_weight_write_ptr, layerTransferFrames)
+
+            self.inbound_queue.insert(weight_queue_ind, weight_item)
             self.cur_weights[self.cur_weight_write_ptr] = (-2, self.next_bwd_weight_prefetch_layer_id)
             self.next_bwd_weight_prefetch_layer_id -= self.total_devices
              ## work backwards when replacing weights....
@@ -1222,27 +1324,69 @@ class Device:
         return
 
     def handle_bwd_prefetch_context(self, chunk_id, cur_layer_id, next_layer_id):
-        ## prefetch the context for the next layer
-        if self.context_buffer[chunk_id] != (0, chunk_id, cur_layer_id):
-            print("Trying to prefetch next context, but chunk id not on current layer...\n")
-            return
-        
+
         ## if activations buffer was deep enought to already contain context,
         ## then we don't need to prefetch it...
         if (0, chunk_id, next_layer_id) in self.activations_buffer:
             self.context_buffer[chunk_id] = (0, chunk_id, next_layer_id)
             return
         
+        ## prefetch the context for the next layer
+        if self.context_buffer[chunk_id] != (0, chunk_id, cur_layer_id):
+            return
+        
         ## otherwise, we need to prefetch the context...
         self.context_buffer[chunk_id] = (-2, chunk_id, next_layer_id)
-        self.inbound_queue.append((chunk_id, next_layer_id, False, True, chunk_id, contextTransferFrames))
+
+        ## determine where in the queue we want to fetch weight, might want to skip a lot of the activations,
+        ## if the weight is the nearest depedency....
+
+        ## because partial training chunks, it is not obvious about the order in which to enqueue weight fetch
+        ## because want to make full use of inbound link (i.e. refetching next activations that aren't needed until after
+        ## next weight, but whose buffer is available to replace), but also want to to prioritize depedency order...
+        ctx_queue_start_ind = 0
+        ## if already doing transfer, don't mess up the queue and put wrong item at front...
+        if self.is_inbound_transferring:
+            ctx_queue_start_ind = 1
+
+        ## determine first index in inbound queue where lid is > the layer id corresponding to activation...
+        ## by default, put it at the end of the queue...
+        ctx_queue_ind = len(self.inbound_queue)
+        for i in range(ctx_queue_start_ind, len(self.inbound_queue)):
+            if (next_layer_id > self.inbound_queue[i][1]) or (next_layer_id == self.inbound_queue[i][1] and ((chunk_id > self.inbound_queue[i][0] and self.inbound_queue[i][3]) or (chunk_id <= self.inbound_queue[i][0] and not self.inbound_queue[i][3]))):
+                ctx_queue_ind = i
+                break
+
+        ctx_queue_item = (chunk_id, next_layer_id, False, True, chunk_id, contextTransferFrames)
+        self.inbound_queue.insert(ctx_queue_ind, ctx_queue_item)
         return
 
     def handle_bwd_prefetch_fwd_act(self):
         if self.activations_stack_next_ind >= 0:
             cid, lid = self.activations_stack[self.activations_stack_next_ind]
             next_act_idx = self.activations_empty_slot_ind
-            self.inbound_queue.append((cid, lid, False, False, next_act_idx, savedActivationsFrames))
+
+            ## determine where in the queue we want to fetch weight, might want to skip a lot of the activations,
+            ## if the weight is the nearest depedency....
+
+            ## because partial training chunks, it is not obvious about the order in which to enqueue weight fetch
+            ## because want to make full use of inbound link (i.e. refetching next activations that aren't needed until after
+            ## next weight, but whose buffer is available to replace), but also want to to prioritize depedency order...
+            act_queue_start_ind = 0
+            ## if already doing transfer, don't mess up the queue and put wrong item at front...
+            if self.is_inbound_transferring:
+                act_queue_start_ind = 1
+
+            ## determine first index in inbound queue where lid is > the layer id corresponding to activation...
+            ## by default, put it at the end of the queue...
+            act_queue_ind = len(self.inbound_queue)
+            for i in range(act_queue_start_ind, len(self.inbound_queue)):
+                if lid > self.inbound_queue[i][1]:
+                    act_queue_ind = i
+                    break
+
+            act_queue_item = (cid, lid, False, False, next_act_idx, savedActivationsFrames)
+            self.inbound_queue.insert(act_queue_ind, act_queue_item)
             self.activations_buffer[next_act_idx] = (-2, cid, lid)
             if -1 in self.activations_buffer:
                 self.activations_empty_slot_ind = self.activations_buffer.index(-1)
@@ -1365,11 +1509,29 @@ class Device:
                 self.cur_fwd_computation_num += 1
             elif is_head: # Head finished                
                 if (cid == self.head_final_chunk_id):
+                    ## transfer head gradient...
+                    self.outbound_queue.append((-1, lid, True, False, headTransferFrames))
                     self.handle_bwd_prefetch_weight()
             elif bX: # BwdX finished, can replace current context now
 
                 if (lid - self.total_devices >= 0):
+                    #print(f"Prefetching context for next layer of training chunk: {cid}, Cur Layer Id: {lid}, Next Layer Id: {lid - self.total_devices}")
                     self.handle_bwd_prefetch_context(cid, lid, lid - self.total_devices)
+
+                    ## ensure to get context for non-training chunks...
+                    ## replace currently layer context with the previous layer's context
+                    ## the context between current chunk and the next training chunk is not required
+                    ## for the next training chunk (earlier in sequence, so not impacted by later context)
+                    ## meaning we can start prefetching it now...
+                    if cid > 0:
+                        if (cid == self.total_chunks - 1) and ((cid % train_chunk_freq) != 0):
+                            next_training_chunk_id = cid - (cid % train_chunk_freq)
+                        else:
+                            next_training_chunk_id = cid - train_chunk_freq
+
+                        #print(f"Prefetching context for non-training chunks: [{cid - 1}, {next_training_chunk_id}), Cur Layer Id: {lid}, Next Layer Id: {lid - self.total_devices}")
+                        for i in range(cid - 1, next_training_chunk_id, -1):
+                            self.handle_bwd_prefetch_context(i, lid, lid - self.total_devices)
 
                 ## if this is the last chunk, now prefetch the next required weight
                 ## which replaces the current weight
@@ -1525,7 +1687,9 @@ class Device:
                 else:
                     peer_dev.transitions_inbound_empty_slot_ind = None
             
-
+            if peer_id == self.device_id:
+                duration = 0
+                
             self.is_peer_transferring = True
             self.cur_peer_transfer_start_time = T
             self.cur_peer_transfer_duration = duration
@@ -1997,8 +2161,8 @@ def update(frame):
              f"% Active during Steady-State: {steady_eff:.2f}%\n\n"
              f"Compute Throughput:\n"
              f"Advertised Upper-Bound: {int(hardware_max_flops / 1e12)} TFLOPS\n"
-             f"True Upper-Bound: {int((hardware_max_flops * practical_efficiency) / 1e12)} TFLOPS\n"
-             f"Achieved Throughput: {int(((total_flops / N) / runtime_in_seconds) / 1e12) if N > 0 and runtime_in_seconds > 0 else 0} TFLOPS\n\n"
+             f"True Upper-Bound: {math.ceil(total_throughput_upper_bound / 1e12)} TFLOPS\n"
+             f"Achieved Throughput: {math.ceil(((total_flops / N) / runtime_in_seconds) / 1e12) if N > 0 and runtime_in_seconds > 0 else 0} TFLOPS\n\n"
         )
         completion_text_artist = ax.text(0.5, 0.5, completion_text, transform=ax.transAxes,
                                          ha='center', va='center', fontsize=14, color='navy', fontweight='bold',
