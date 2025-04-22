@@ -1,8 +1,11 @@
-# app.py
-from flask import Flask, render_template, request, jsonify
+# run.py (Modified for Per-User Sessions)
+from flask import Flask, render_template, request, jsonify, session # Import session
+from flask_session import Session # Import Session extension
 import time
-import threading
+# import threading # No longer needed for global lock
 import sys
+import os # For secret key
+import traceback # Keep for detailed error logging
 
 try:
     from simulation import SimulationRunner
@@ -12,11 +15,38 @@ except ImportError:
 
 app = Flask(__name__)
 
-simulation_instance = None
-simulation_lock = threading.Lock()
+# --- Session Configuration ---
+# IMPORTANT: Set a strong, random secret key in production!
+# You can generate one using: python -c 'import os; print(os.urandom(24))'
+# Store it as an environment variable (e.g., FLASK_SECRET_KEY)
+app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'dev-secret-key-replace-in-prod')
+
+# Configure session type to filesystem (stores sessions in a folder)
+app.config['SESSION_TYPE'] = 'filesystem'
+# Optional: Define where session files are stored (defaults to ./flask_session)
+app.config['SESSION_FILE_DIR'] = './.flask_session/'
+# Ensure the session directory exists
+os.makedirs(app.config['SESSION_FILE_DIR'], exist_ok=True)
+
+# Configure session cookie settings (recommended for production)
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax' # Protects against CSRF
+# Set SECURE to True if (and only if) your site is served over HTTPS
+# For local testing over HTTP, keep it False or comment it out.
+# For deployment behind Nginx with SSL termination, set to True.
+app.config['SESSION_COOKIE_SECURE'] = True # ASSUMING you are using HTTPS via Nginx/Certbot
+
+# Initialize the session extension AFTER setting configurations
+server_session = Session(app)
+# --- End Session Configuration ---
+
+
+# --- REMOVED Global Variables ---
+# simulation_instance = None
+# simulation_lock = threading.Lock()
+
 
 def parse_parameters(form_data):
-    """ Safely parses form data into simulation parameters. """
+    """ Safely parses form data into simulation parameters. (Unchanged) """
     params = {}
     params['N'] = form_data.get('N', default=8, type=int)
     params['seqlen'] = form_data.get('seqlen', default=32, type=int) # K tokens
@@ -47,98 +77,144 @@ def parse_parameters(form_data):
     # Add more validation as needed...
     return params
 
+# --- Helper Function to Load/Recreate Runner from Session ---
+# IMPORTANT: This assumes you add a method like 'load_internal_state'
+# to your SimulationRunner class in simulation.py
+def get_runner_from_session():
+    """Retrieves params and state from session, returns initialized SimulationRunner."""
+    if not session.get('simulation_active'):
+        return None # No active simulation for this session
+
+    params = session.get('simulation_params')
+    current_state_dict = session.get('simulation_state') # This is the dict returned by get_render_state()
+
+    if not params or not current_state_dict:
+        print("Error: Params or State missing from session.")
+        session.clear() # Clear corrupted session state
+        session.modified = True
+        return None
+
+    try:
+        # Recreate the runner instance with original parameters
+        runner = SimulationRunner(params)
+        # *** YOU NEED TO IMPLEMENT THIS METHOD in simulation.py ***
+        # It should take the state dictionary and set the internal attributes
+        # (like current_frame_index, animation_paused, device states, queues etc.)
+        # back to match the stored state.
+        runner.load_internal_state(current_state_dict)
+        return runner
+    except Exception as e:
+        print(f"Error recreating SimulationRunner from session state: {e}")
+        traceback.print_exc()
+        session.clear() # Clear potentially problematic state
+        session.modified = True
+        return None
+
 @app.route('/')
 def index():
     """ Serves the main HTML page. """
+    # Clear any old simulation state when loading the main page? Optional.
+    # session.clear()
+    # session.modified = True
     return render_template('index.html')
 
 @app.route('/start_simulation', methods=['POST'])
 def start_simulation():
-    """ Initializes or restarts the simulation with new parameters. """
-    global simulation_instance
-    print("Received /start_simulation request")
+    """ Initializes or restarts the simulation FOR THIS SESSION. """
+    print(f"Received /start_simulation request for session ID: {session.sid if session.sid else 'NEW'}")
     try:
         params = parse_parameters(request.form)
         print(f"Parsed parameters: {params}")
 
-        with simulation_lock:
-            # Clean up old instance if it exists
-            if simulation_instance:
-                # simulation_instance.close_figure() # REMOVED
-                simulation_instance = None
-                print("Cleaned up previous simulation instance.")
+        # Create a temporary runner just to get initial state and config
+        try:
+            temp_runner = SimulationRunner(params)
+            # temp_runner.reset_simulation_state() # Init should call this
+            initial_render_state = temp_runner.get_render_state()
+            config = {
+                'N': temp_runner.N,
+                'total_layers': temp_runner.total_layers,
+                'memory_legend': temp_runner._create_memory_legend_text(),
+                'compute_legend': temp_runner._create_compute_legend_text()
+            }
+            interval_sec = temp_runner.current_interval_sec
+            del temp_runner # Clean up temporary instance
 
-            try:
-                simulation_instance = SimulationRunner(params)
-                simulation_instance.reset_simulation_state() # Already called in init, but good for clarity
-                print("Created new SimulationRunner instance.")
-                # Get initial state for rendering
-                initial_render_state = simulation_instance.get_render_state()
-                # Include static config needed by frontend
-                config = {
-                    'N': simulation_instance.N,
-                    'total_layers': simulation_instance.total_layers,
-                    'memory_legend': simulation_instance._create_memory_legend_text(), # Send initial legends
-                    'compute_legend': simulation_instance._create_compute_legend_text()
-                }
-                return jsonify({
-                    "success": True,
-                    "state": initial_render_state, # Send full render state
-                    "config": config, # Send static config
-                    "interval_sec": simulation_instance.current_interval_sec
-                 })
-            except Exception as e:
-                 print(f"Error initializing SimulationRunner: {e}")
-                 import traceback
-                 traceback.print_exc()
-                 simulation_instance = None
-                 return jsonify({"success": False, "error": f"Error initializing simulation: {e}"}), 500
+        except Exception as e:
+            print(f"Error initializing SimulationRunner: {e}")
+            traceback.print_exc()
+            return jsonify({"success": False, "error": f"Error initializing simulation: {e}"}), 500
+
+        # --- Store state in the user's session ---
+        session['simulation_params'] = params
+        session['simulation_state'] = initial_render_state # Store the state dictionary
+        session['simulation_active'] = True
+        session.modified = True # IMPORTANT: Mark session as modified to ensure it's saved
+        print("Stored initial state in session.")
+
+        return jsonify({
+            "success": True,
+            "state": initial_render_state,
+            "config": config,
+            "interval_sec": interval_sec
+         })
 
     except ValueError as e: # Catch validation errors from parse_parameters
         print(f"Parameter validation error: {e}")
+        # Clear potentially partial session state
+        session.pop('simulation_active', None)
+        session.pop('simulation_params', None)
+        session.pop('simulation_state', None)
+        session.modified = True
         return jsonify({"success": False, "error": str(e)}), 400
     except Exception as e:
         print(f"Error in /start_simulation: {e}")
-        import traceback
         traceback.print_exc()
-        return jsonify({"success": False, "error": str(e)}), 400
+        # Clear potentially partial session state
+        session.pop('simulation_active', None)
+        session.pop('simulation_params', None)
+        session.pop('simulation_state', None)
+        session.modified = True
+        return jsonify({"success": False, "error": f"Unexpected error: {e}"}), 500
 
-# Renamed route for clarity
+
 @app.route('/get_state_update')
 def get_state_update():
-    """ Steps the simulation (if running) and returns the current render state. """
-    global simulation_instance
-    if not simulation_instance:
-        return jsonify({"success": False, "error": "Simulation not started"}), 400
+    """ Steps the session's simulation (if running) and returns the current render state. """
+    runner = get_runner_from_session() # Load runner based on session data
+    if not runner:
+        # If get_runner_from_session returned None, it means no active sim or error loading state
+        return jsonify({"success": False, "error": "Simulation not started or session expired"}), 400
 
     current_state = None
-    interval = 1.0 # Default interval
+    interval = runner.current_interval_sec # Get interval from loaded runner
     step_success = True
 
-    with simulation_lock:
-        interval = simulation_instance.current_interval_sec # Get current interval
-        should_step = not simulation_instance.animation_paused and not simulation_instance.simulation_complete
+    # No lock needed here as the 'runner' object is local to this request
+    should_step = not runner.animation_paused and not runner.simulation_complete
 
-        if should_step:
-            try:
-                keep_running = simulation_instance.step() # Advances frame index internally
-                # If step caused completion, update state reflects this
-            except Exception as e:
-                 print(f"Error during simulation step: {e}")
-                 import traceback
-                 traceback.print_exc()
-                 simulation_instance.pause() # Pause on error
-                 step_success = False
-                 # Try to get state even after error
-                 current_state = simulation_instance.get_render_state()
-                 # Add error info to the state sent to frontend
-                 if isinstance(current_state, dict): # Ensure it's a dict before modifying
-                    current_state["error_message"] = f"Error during step: {e}"
+    if should_step:
+        try:
+            keep_running = runner.step() # Advances frame index internally
+        except Exception as e:
+             print(f"Error during simulation step for session {session.sid}: {e}")
+             traceback.print_exc()
+             runner.pause() # Pause this instance
+             step_success = False
+             # Add error info to the state sent to frontend
+             current_state = runner.get_render_state() # Get state even after error
+             if isinstance(current_state, dict):
+                 current_state["error_message"] = f"Error during step: {e}"
 
-        # Get the render state AFTER potentially stepping (or if paused/complete)
-        if step_success:
-            current_state = simulation_instance.get_render_state()
-            interval = simulation_instance.current_interval_sec # Get potentially updated interval
+    # Get the render state AFTER potentially stepping (or if paused/complete)
+    if step_success: # If step succeeded or wasn't needed
+        current_state = runner.get_render_state()
+        interval = runner.current_interval_sec # Get potentially updated interval
+
+    # --- Store updated state back into session ---
+    if current_state: # Make sure we have state to save
+        session['simulation_state'] = current_state
+        session.modified = True
 
     return jsonify({
         "success": step_success,
@@ -149,63 +225,67 @@ def get_state_update():
 
 @app.route('/control', methods=['POST'])
 def control():
-    """ Handles control commands from the frontend. """
-    global simulation_instance
-    if not simulation_instance:
-        return jsonify({"success": False, "error": "Simulation not started"}), 400
+    """ Handles control commands for the session's simulation. """
+    runner = get_runner_from_session() # Load runner based on session data
+    if not runner:
+        return jsonify({"success": False, "error": "Simulation not started or session expired"}), 400
 
     command = request.json.get('command')
     value = request.json.get('value')
 
-    print(f"Received control command: {command}, value: {value}")
+    print(f"Received control command for session {session.sid}: {command}, value: {value}")
 
-    response_state_summary = {} # Return summary state for basic updates
-    interval = 1.0
+    response_state_summary = {}
+    interval = runner.current_interval_sec
     success = True
     error_msg = None
 
-    with simulation_lock:
-        try:
-            if command == 'play':
-                simulation_instance.play()
-            elif command == 'pause':
-                simulation_instance.pause()
-            elif command == 'restart':
-                # Re-use initial parameters implicitly stored in the instance
-                simulation_instance.reset_simulation_state()
-            elif command == 'set_speed':
-                if value is not None:
-                    simulation_instance.set_speed(int(value))
-                else:
-                    success = False
-                    error_msg = "Speed value missing"
-            elif command == 'run_to_cycle':
-                if value is not None:
-                    simulation_instance.set_target_cycle(int(value))
-                else:
-                     success = False
-                     error_msg = "Target cycle value missing"
+    # No lock needed, operate on the request-local 'runner' instance
+    try:
+        if command == 'play':
+            runner.play()
+        elif command == 'pause':
+            runner.pause()
+        elif command == 'restart':
+            runner.reset_simulation_state() # Reset this instance
+        elif command == 'set_speed':
+            if value is not None:
+                runner.set_speed(int(value))
             else:
                 success = False
-                error_msg = "Unknown command"
-
-            response_state_summary = simulation_instance.get_state_summary() # Get summary
-            interval = simulation_instance.current_interval_sec
-
-        except Exception as e:
-            print(f"Error executing control command '{command}': {e}")
-            import traceback
-            traceback.print_exc()
+                error_msg = "Speed value missing"
+        elif command == 'run_to_cycle':
+            if value is not None:
+                runner.set_target_cycle(int(value))
+            else:
+                 success = False
+                 error_msg = "Target cycle value missing"
+        else:
             success = False
-            error_msg = f"Error executing command: {e}"
-            try: # Try to get summary state even after error
-                 response_state_summary = simulation_instance.get_state_summary()
-                 interval = simulation_instance.current_interval_sec
-            except: pass # Ignore errors getting state after another error
+            error_msg = "Unknown command"
+
+        # Get updated states after applying command
+        response_state_summary = runner.get_state_summary()
+        updated_full_state = runner.get_render_state() # Get full state for saving
+        interval = runner.current_interval_sec
+
+        # --- Store updated full state back into session ---
+        session['simulation_state'] = updated_full_state
+        session.modified = True
+
+    except Exception as e:
+        print(f"Error executing control command '{command}' for session {session.sid}: {e}")
+        traceback.print_exc()
+        success = False
+        error_msg = f"Error executing command: {e}"
+        try: # Try to get summary state even after error
+             response_state_summary = runner.get_state_summary()
+             interval = runner.current_interval_sec
+        except: pass # Ignore errors getting state after another error
 
     response = {
         "success": success,
-        "state_summary": response_state_summary, # Send summary state
+        "state_summary": response_state_summary,
         "interval_sec": interval
     }
     if error_msg:
@@ -215,7 +295,10 @@ def control():
 
 
 if __name__ == '__main__':
-    print("Starting Flask server...")
-    # Use threaded=True for basic concurrency handling with the global instance
-    # Still NOT recommended for production with multiple users.
+    # This block is ONLY for local development using 'python run.py'
+    # It is NOT used when running with Gunicorn/WSGI.
+    # The 'threaded=True' allows the dev server to handle multiple browser
+    # requests concurrently to some extent, but session management handles
+    # the state separation, not the threads directly. Debug mode should work fine here.
+    print("Starting Flask dev server (for local testing ONLY)...")
     app.run(debug=True, host='0.0.0.0', port=5001, threaded=True)

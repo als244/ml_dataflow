@@ -1,16 +1,6 @@
 # simulation.py
 import numpy as np
-# --- Remove all Matplotlib imports ---
-# import matplotlib
-# matplotlib.use('Agg') # No longer needed
-# import matplotlib.pyplot as plt
-# import matplotlib.patches as patches
-# from matplotlib.patches import RegularPolygon, Arc
-# import matplotlib.colors as mcolors
-# from matplotlib.offsetbox import AnchoredText
-# import io
-# import base64
-# --- End Matplotlib Removal ---
+import traceback
 import sys
 import time
 import textwrap
@@ -1664,8 +1654,63 @@ class SimulationRunner:
         # Add static config only if needed (e.g., on first call) - simpler to send always?
         # state["config"] = {"N": self.N, "total_layers": self.total_layers} # Example
         return state
+    
+    def load_internal_state(self, state_dict):
+        """
+        Restores the simulation's internal state from a dictionary
+        (likely one previously returned by get_render_state).
+        """
+        print("Attempting to load state...") # Debug print
+        try:
+            # Restore basic state
+            self.current_frame_index = state_dict.get('current_frame', 0)
+            self.animation_paused = state_dict.get('is_paused', True)
+            self.simulation_complete = state_dict.get('is_complete', False)
+            self.current_speed_level = state_dict.get('speed_level', 50)
+            self.target_cycle = state_dict.get('target_cycle', None)
+            self.max_frames = state_dict.get('max_frames', 30000)
+            self.completion_stats = state_dict.get('completion_stats', {})
 
+            # Recalculate interval based on loaded speed
+            self.set_speed(self.current_speed_level) # Use existing method
 
-    # --- REMOVE close_figure ---
-    # def close_figure(self): DELETE THIS METHOD
-    #     pass # DELETE
+            # Restore device states (this is the complex part)
+            devices_state_list = state_dict.get('devices', [])
+            if len(devices_state_list) == self.N:
+                 # Need to re-initialize self.all_devices BEFORE loading state into them
+                 # Or ensure reset_simulation_state() was called just before load
+                 # Or modify Device class to have a load_state method
+
+                 # Assuming self.all_devices is already a dict of Device objects
+                 # from SimulationRunner.__init__ or reset_simulation_state
+                 for i in range(self.N):
+                     device_obj = self.all_devices.get(i)
+                     device_state_dict = devices_state_list[i] # Assuming list index matches device ID
+                     if device_obj and device_state_dict:
+                         # *** You need a way to set the internal state of a Device object ***
+                         # Example (requires adding setters or a load method to Device):
+                         device_obj.current_computation_type = device_state_dict.get('compute', {}).get('type') if device_state_dict.get('compute') else None
+                         device_obj.current_computation_layer_id = device_state_dict.get('compute', {}).get('layer', -1) if device_state_dict.get('compute') else -1
+                         # ... restore compute progress, start time etc. ...
+                         # ... restore inbound/outbound/peer transfer details (progress, start time, etc.) ...
+                         # ... restore stall status and reason ...
+                         # ... restore internal buffers/queues/pointers (MAYBE - depends if get_render_state includes them) ...
+                         # This part requires significant thought based on what 'get_render_state' returns
+                         # and what internal state the Device class actually holds.
+                         print(f"State loading for Device {i} needs full implementation!")
+                         pass # Placeholder for detailed device state loading
+            else:
+                print(f"Warning: Mismatch between N ({self.N}) and loaded devices state count ({len(devices_state_list)})")
+                # Handle error or reset devices?
+
+            # Restore any other simulation-level state (queues, pointers) if they were saved
+            # Example:
+            # self.some_internal_queue = deque(state_dict.get('internal_queue_A', []))
+
+            print(f"Loaded state up to frame {self.current_frame_index}, Paused: {self.animation_paused}")
+
+        except Exception as e:
+            print(f"ERROR during load_internal_state: {e}")
+            traceback.print_exc()
+            # Optionally reset state fully on load error
+            # self.reset_simulation_state()
