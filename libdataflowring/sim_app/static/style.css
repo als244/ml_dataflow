@@ -92,7 +92,7 @@ header h1 {
 /* Individual Legend Area Styling */
 .legend-area {
     font-family: monospace;
-    font-size: 4px;
+    font-size: 8px;
     white-space: pre-wrap;
     padding: 2px 15px 10px 15px;
     border: 1px solid #ccc;
