@@ -1578,43 +1578,57 @@ class SimulationRunner:
 
     def load_from_serializable_state(self, full_state_dict):
         """ Restores the simulation runner from a complete state dictionary. """
-        print("Loading SimulationRunner state...")
+        print(f"Attempting to load SimulationRunner state for session...")
         try:
-            # Restore basic runner state first
-            # Params should match, but maybe store/check? self.params = full_state_dict.get("params", self.params)
+            # --- Step 1: Reset state and CREATE default Device objects ---
+            # This ensures self.all_devices exists and is populated based on self.N (from params)
+            # It will temporarily reset frame index etc., but we restore them next.
+            self.reset_simulation_state()
+            print(f"  - After reset, all_devices keys: {list(self.all_devices.keys())}")
+
+            # --- Step 2: Restore basic runner attributes from the loaded state dict ---
+            # This overwrites the defaults set by reset_simulation_state
             self.current_frame_index = full_state_dict.get('current_frame_index', 0)
             self.animation_paused = full_state_dict.get('animation_paused', True)
             self.simulation_complete = full_state_dict.get('simulation_complete', False)
             self.completion_stats = full_state_dict.get('completion_stats', {})
             self.target_cycle = full_state_dict.get('target_cycle', None)
             self.current_speed_level = full_state_dict.get('current_speed_level', 50)
-            self.total_tasks = full_state_dict.get('total_tasks', 0)
-            self.total_computation_time = full_state_dict.get('total_computation_time', 0)
+            self.total_tasks = full_state_dict.get('total_tasks', self.total_tasks) # Keep recalculated if not saved
+            self.total_computation_time = full_state_dict.get('total_computation_time', self.total_computation_time) # Keep recalculated if not saved
 
             # Recalculate interval based on loaded speed
             self.set_speed(self.current_speed_level)
+            print(f"  - Runner attributes restored. Frame: {self.current_frame_index}, Paused: {self.animation_paused}")
 
-            # Restore devices
+            # --- Step 3: Restore individual device states ---
             devices_internal_state = full_state_dict.get("all_devices_state", {})
-            # Ensure self.all_devices exists and has the right Device objects
-            # It's safer to recreate devices based on params if N matches
-            # Let's assume __init__ or reset created the Device objects
             if len(devices_internal_state) == self.N:
-                for i in range(self.N):
-                    if i in self.all_devices and i in devices_internal_state:
-                        self.all_devices[i].load_from_serializable_state(devices_internal_state[i])
-                    else:
-                        print(f"Warning: Mismatch loading state for device {i}")
+                # Now self.all_devices[i] exists because reset_simulation_state created it
+                for i_str, device_state_dict in devices_internal_state.items():
+                     i = int(i_str) # Dictionary keys might be strings after JSON conversion
+                     if i in self.all_devices:
+                         # *** Assumes Device class has load_from_serializable_state ***
+                         # *** YOU MUST IMPLEMENT THIS in the Device class ***
+                         print(f"  - Loading state for device {i}...")
+                         self.all_devices[i].load_from_serializable_state(device_state_dict)
+                     else:
+                         print(f"  - Warning: Device key {i} from saved state not found in newly created self.all_devices.")
+            elif self.N > 0: # Only warn if N > 0 and counts mismatch
+                 print(f"  - Warning: Mismatch N ({self.N}) and loaded device state count ({len(devices_internal_state)}). Device states not fully loaded.")
             else:
-                 print(f"Warning: Mismatch N ({self.N}) and loaded device state count ({len(devices_internal_state)})")
-                 # Consider calling reset_simulation_state here if counts mismatch?
+                 print(f"  - N=0, no device states to load.")
 
-            print(f"Loaded state. Frame: {self.current_frame_index}, Paused: {self.animation_paused}")
+
+            print(f"LOADED STATE (End of Load). Final self.all_devices keys: {list(self.all_devices.keys())}")
+            print(f"LOADED STATE (End of Load). Is key 0 present? {0 in self.all_devices}")
+
 
         except Exception as e:
             print(f"ERROR loading SimulationRunner state: {e}")
             traceback.print_exc()
-            # Reset to initial state on error?
+            # Reset to initial state on error? Safest bet.
+            print("Resetting state due to load error.")
             self.reset_simulation_state()
 
     def step(self):
