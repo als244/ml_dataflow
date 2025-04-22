@@ -367,10 +367,12 @@ class Device:
     # --- handle_completed_transfers ---
     # Keep logic essentially the same
     def handle_completed_transfers(self, T, all_devices):
+
+        to_repeat = False
         # Inbound (Device <- Home)
         if self.is_inbound_transferring and self.inbound_queue and (self.cur_inbound_start_time + self.cur_inbound_duration <= T):
             item = self.inbound_queue.popleft()
-            chunk_id, layer_id, is_grad, is_context, target_idx, _ = item
+            chunk_id, layer_id, is_grad, is_context, target_idx, duration = item
             # print(f"T={T}, Dev {self.device_id}: Completed INBOUND {item[:4]}") # Optional log
 
             if chunk_id == -1: # Weight or Head state
@@ -389,10 +391,13 @@ class Device:
             self.is_inbound_transferring = False
             self.cur_inbound_details = None
 
+            if duration == 0:
+                to_repeat = True
+
         # Outbound (Device -> Home)
         if self.is_outbound_transferring and self.outbound_queue and (self.cur_outbound_start_time + self.cur_outbound_duration <= T):
             item = self.outbound_queue.popleft()
-            chunk_id, layer_id, is_grad, is_only_context, _ = item
+            chunk_id, layer_id, is_grad, is_only_context, duration = item
             # print(f"T={T}, Dev {self.device_id}: Completed OUTBOUND {item[:4]}") # Optional log
 
             storage_key = (chunk_id, layer_id, is_grad)
@@ -408,10 +413,13 @@ class Device:
             self.is_outbound_transferring = False
             self.cur_outbound_details = None
 
+            if duration == 0:
+                to_repeat = True
+
         # Peer-to-Peer (Device -> Peer Device)
         if self.is_peer_transferring and self.peer_transfer_queue and (self.cur_peer_transfer_start_time + self.cur_peer_transfer_duration <= T):
             item = self.peer_transfer_queue.popleft()
-            peer_id, cid, lid, is_grad, _ = item
+            peer_id, cid, lid, is_grad, duration = item
 
             if 0 <= peer_id < len(all_devices):
                 peer_dev = all_devices[peer_id]
@@ -442,6 +450,12 @@ class Device:
 
             self.is_peer_transferring = False
             self.cur_peer_transfer_details = None
+
+            if duration == 0:
+                to_repeat = True
+        
+        return to_repeat
+            
 
     # --- handle_computation_depends ---
     # Keep logic the same, but update `computing_status_text`
@@ -1054,12 +1068,12 @@ class SimulationRunner:
         safe_attn_eff = self.attn_efficiency if self.attn_efficiency > 0 else 1.0
 
         self.headTimeSec = head_flops_one_pass / (safe_flops * safe_matmul_eff)
-        self.headFrames = math.ceil(self.headTimeSec * self.cycles_per_second)
+        self.headFrames = round(self.headTimeSec * self.cycles_per_second)
 
         # BwdW time based on matmul part only
         bwdW_flops = self.base_flops_per_layer_matmul
         self.bwdWTimeSec = bwdW_flops / (safe_flops * safe_matmul_eff)
-        self.bwdWFrames = math.ceil(self.bwdWTimeSec * self.cycles_per_second)
+        self.bwdWFrames = round(self.bwdWTimeSec * self.cycles_per_second)
 
 
         prev_seq_len = 0
@@ -1076,7 +1090,7 @@ class SimulationRunner:
             matmul_time = self.base_flops_per_layer_matmul / (safe_flops * safe_matmul_eff)
             attn_time = attn_flops / (safe_flops * safe_attn_eff)
             self.computation_times_sec[i] = matmul_time + attn_time
-            self.computation_times_frames[i] = math.ceil(self.computation_times_sec[i] * self.cycles_per_second)
+            self.computation_times_frames[i] = round(self.computation_times_sec[i] * self.cycles_per_second)
             self.total_compute_cycles += self.total_layers * self.computation_times_frames[i]
 
             is_train_chunk = (i % self.train_chunk_freq == 0) or (i == self.total_chunks - 1)
@@ -1089,7 +1103,7 @@ class SimulationRunner:
 
                 bwd_x_time = matmul_time + 2 * attn_time # Bwd Attn is 2x Fwd Attn
                 self.computation_times_sec_bwd[i] = bwd_x_time
-                self.computation_times_frames_bwd[i] = math.ceil(bwd_x_time * self.cycles_per_second)
+                self.computation_times_frames_bwd[i] = round(bwd_x_time * self.cycles_per_second)
                 self.total_compute_cycles += self.total_layers * self.computation_times_frames_bwd[i]
                 self.total_compute_cycles += self.total_layers * self.bwdWFrames # Add BwdW cycles
 
@@ -1114,15 +1128,15 @@ class SimulationRunner:
         safe_peer_bw_bps = self.peer_bw_gbit_sec * 1e9 if self.peer_bw_gbit_sec > 0 else 1
 
         layer_transfer_time_sec = (self.layer_size_bytes * 8) / safe_home_bw_bps
-        self.layerTransferFrames = math.ceil(layer_transfer_time_sec * self.cycles_per_second)
+        self.layerTransferFrames = round(layer_transfer_time_sec * self.cycles_per_second)
         head_layer_transfer_time_sec = (self.head_layer_size_bytes * 8) / safe_home_bw_bps
-        self.headTransferFrames = math.ceil(head_layer_transfer_time_sec * self.cycles_per_second)
+        self.headTransferFrames = round(head_layer_transfer_time_sec * self.cycles_per_second)
         activation_transfer_time_sec = (self.activation_size_bytes * 8) / safe_home_bw_bps
-        self.savedActivationsFrames = math.ceil(activation_transfer_time_sec * self.cycles_per_second)
+        self.savedActivationsFrames = round(activation_transfer_time_sec * self.cycles_per_second)
         chunk_context_transfer_time_sec = (self.chunk_context_size_bytes * 8) / safe_home_bw_bps
-        self.contextTransferFrames = math.ceil(chunk_context_transfer_time_sec * self.cycles_per_second)
+        self.contextTransferFrames = round(chunk_context_transfer_time_sec * self.cycles_per_second)
         transition_transfer_time_sec = (self.output_size_bytes * 8) / safe_peer_bw_bps
-        self.activationTransitionFrames = math.ceil(transition_transfer_time_sec * self.cycles_per_second) if self.N > 1 else 0
+        self.activationTransitionFrames = round(transition_transfer_time_sec * self.cycles_per_second) if self.N > 1 else 0
 
         # --- Total FLOPS (Final Calculation) ---
         self.total_flops = self.total_fwd_flops + self.total_bwd_flops + self.total_head_flops
