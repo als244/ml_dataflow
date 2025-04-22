@@ -266,11 +266,11 @@ def control():
 
         # Get updated states after applying command
         response_state_summary = runner.get_state_summary()
-        updated_full_state = runner.get_render_state() # Get full state for saving
+        updated_full_state_dict = runner.get_serializable_state()
         interval = runner.current_interval_sec
 
         # --- Store updated full state back into session ---
-        session['simulation_state'] = updated_full_state
+        session['simulation_state'] = updated_full_state_dict
         session.modified = True
 
     except Exception as e:
