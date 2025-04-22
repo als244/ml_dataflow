@@ -13,12 +13,12 @@ html, body {
 }
 body {
     font-family: sans-serif;
-    display: flex;
-    flex-direction: column;
+    display: flex; /* Use flexbox for vertical layout */
+    flex-direction: column; /* Stack header and main content */
     color: #333;
     background-color: #fff;
-    /* Prevent body scroll when modal might be open, manage scroll within containers */
-    /* overflow: hidden;  <-- Consider if needed globally */
+    height: 100vh; /* Make body fill viewport height */
+    overflow: hidden; /* Prevent body scrollbars */
 }
 
 /* Header */
@@ -33,175 +33,156 @@ header h1 {
     font-size: 1.5em;
 }
 
-/* Main Layout Container - 2 Column Grid */
+/* Main Layout Container - Now Flex */
 .main-container {
-    display: grid;
-    grid-template-columns: 220px 1fr; /* Slightly wider sidebar to accommodate padding/scroll */
+    display: flex;
     flex-grow: 1;
-    /* Remove overflow: auto here; manage within children */
-    height: calc(100vh - 57px); /* Adjust 57px if header height changes */
+    min-height: 0;
+    overflow: hidden;
 }
 
-/* Sidebar Styling (Grid Item 1) */
+/* Sidebar Styling (Flex Item 1) */
 .sidebar {
-    /* Remove padding here, apply to inner content if needed */
-    /* overflow-y: auto; <-- Remove, handled by form-scroll-content */
+    flex: 0 0 10%; /* CHANGED: Basis to 10% */
     border-right: 1px solid #ccc;
     background-color: #f8f8f8;
     font-size: 0.85rem;
-    display: flex; /* Make sidebar a flex container */
-    flex-direction: column; /* Stack children vertically */
-    height: 100%; /* Make sidebar fill the grid cell height */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+    position: relative;
 }
 
 #paramsForm {
     display: flex;
     flex-direction: column;
-    flex-grow: 1; /* Allow form to grow */
-    min-height: 0; /* Prevent form from exceeding sidebar height in flex context */
-    padding: 20px; /* Add padding inside the form now */
-    padding-bottom: 0; /* Remove bottom padding, handled by footer */
+    flex-grow: 1;
+    min-height: 0;
+    padding: 20px;
+    padding-bottom: 0;
+    overflow: hidden;
 }
 
-/* New class for the scrollable part of the form */
+/* Scrollable part of the form */
 .form-scroll-content {
-    overflow-y: auto; /* Enable vertical scrolling ONLY for this part */
-    flex-grow: 1; /* Allow this section to take available space */
-    min-height: 0; /* Important for flex children that scroll */
-    /* Add some padding at the bottom so content doesn't scroll right under the sticky footer */
+    overflow-y: auto;
+    flex-grow: 1;
+    min-height: 0;
     padding-bottom: 10px;
 }
 
 #param-grid {
     display: grid;
-    grid-template-columns: 90px 1fr; /* Reduced label width slightly */
+    /* Adjust columns if needed for narrower sidebar */
+    grid-template-columns: auto 1fr; /* Let label size itself */
     gap: 8px 10px;
     align-items: center;
     margin-bottom: 15px;
 }
-/* ... (keep existing #param-grid styles like label, input, section-header) ... */
-#param-grid label { text-align: right; font-weight: bold; font-size: 0.9em; color: #555; }
+#param-grid label {
+    text-align: right;
+    font-weight: bold;
+    font-size: 0.9em;
+    color: #555;
+    padding-right: 5px; /* Add a bit of space */
+}
 #param-grid input[type="number"],
 #param-grid input[type="text"],
 #param-grid select { width: 100%; padding: 5px 8px; font-size: 0.9em; border: 1px solid #ccc; border-radius: 4px; }
 #param-grid .section-header { grid-column: 1 / -1; margin-top: 20px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid #ddd; }
-#param-grid .section-header:first-of-type { margin-top: 0; } /* Adjusted margin */
+#param-grid .section-header:first-of-type { margin-top: 0; }
 #param-grid .section-header h3 { margin: 0; font-size: 1.1em; color: #333; }
 #param-grid hr.section-separator {
-    grid-column: 1 / -1;
-    width: 80%;
-    margin: 25px auto 15px auto;
-    border: none;
-    height: 2px;
-    background-color: transparent;
-    border-top: 2px dashed #ccc;
+    grid-column: 1 / -1; width: 80%; margin: 25px auto 15px auto; border: none; height: 2px; background-color: transparent; border-top: 2px dashed #ccc;
 }
 
-/* New class for the sticky footer area */
+/* Sticky form footer */
 .form-footer {
     position: sticky;
     bottom: 0;
-    background-color: #f8f8f8; /* Match sidebar background */
-    padding: 15px 20px; /* Add padding within the footer */
-    border-top: 1px solid #ccc; /* Visual separation */
-    flex-shrink: 0; /* Prevent footer from shrinking */
-    margin-top: auto; /* Push footer down if content is short */
-    z-index: 10; /* Ensure it stays above scrolled content if needed */
+    left: 0;
+    right: 0;
+    background-color: #f8f8f8;
+    padding: 15px 20px;
+    border-top: 1px solid #ccc;
+    flex-shrink: 0;
+    z-index: 10;
 }
 
 #paramsForm button[type="submit"] {
-    /* margin-top: 20px; <-- Remove, spacing handled by footer */
-    padding: 10px 20px;
-    font-size: 1em;
-    background-color: #007bff;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-    display: block; /* Make it block level */
-    width: 100%; /* Make button fill footer width */
+    padding: 10px 20px; font-size: 1em; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; transition: background-color 0.2s; display: block; width: 100%;
 }
-#paramsForm button[type="submit"]:hover:not(:disabled) {
-    background-color: #0056b3;
-}
+#paramsForm button[type="submit"]:hover:not(:disabled) { background-color: #0056b3; }
 
 .error-message {
-    color: #dc3545;
-    font-weight: bold;
-    /* margin-top: 15px; <-- Remove */
-    margin-top: 10px; /* Add space above error message inside footer */
-    padding: 8px;
-    background-color: #f8d7da;
-    border: 1px solid #f5c6cb;
-    border-radius: 4px;
-    min-height: 1.2em; /* Keep */
-    display: none; /* Keep */
-    width: 100%; /* Make error fill width */
+    color: #dc3545; font-weight: bold; margin-top: 10px; padding: 8px; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; min-height: 1.2em; display: none; width: 100%;
 }
 .error-message.visible { display: block; }
 
 
-/* Content Area Wrapper (Grid Item 2) */
+/* Content Area Wrapper (Flex Item 2) */
 .content-area-wrapper {
+    flex: 1; /* Takes remaining space (~90%) */
     display: flex;
-    align-items: flex-start;
-    overflow: auto; /* Allow content area to scroll if needed */
+    align-items: stretch;
+    overflow: hidden;
     padding: 20px;
     gap: 20px;
-    max-height: 100%; /* Ensure it doesn't overflow grid */
+    min-width: 0;
+    min-height: 0;
 }
-
-/* ... Keep the rest of your CSS for legend-area, simulation-area, controls, etc. ... */
 
 /* Individual Legend Area Styling */
 .legend-area {
+    flex: 0 0 10%; /* CHANGED: Basis to 10% of wrapper width */
     font-family: monospace;
-    font-size: 8px;
+    font-size: 0.75rem;
     white-space: pre-wrap;
-    padding: 2px 15px 10px 15px;
+    padding: 10px 15px;
     border: 1px solid #ccc;
     background-color: #fdfdfd;
     border-radius: 5px;
-    flex: 0 0 160px;
-    overflow-y: hidden;
-    display: block;
     box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    /* Ensure legends don't prevent main content scroll */
-    max-height: calc(100% - 40px); /* Example: limit height relative to wrapper padding */
-    overflow-y: auto; /* Allow legend scrolling if content is too tall */
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    max-height: 100%;
+    min-width: 0; /* Prevent flexbox shrinking issues */
 }
 .legend-area h2 {
     margin-top: 0;
     font-size: 1.15em;
-    margin-bottom: 0px;
-    padding-bottom: 0px;
+    margin-bottom: 5px;
+    padding-bottom: 5px;
     border-bottom: 1px solid #eee;
     font-family: sans-serif;
     color: #444;
-    position: sticky; /* Keep legend titles visible */
+    position: sticky;
     top: 0;
-    background-color: #fdfdfd; /* Background for sticky title */
+    background-color: #fdfdfd;
     z-index: 1;
+    flex-shrink: 0;
 }
 .legend-area pre {
     margin: 0;
     font-size: inherit;
     color: #555;
+    flex-grow: 1;
 }
 
 /* Simulation Area Styling (Central column) */
 .simulation-area {
+    flex: 1; /* Takes space between legends */
     display: flex;
     flex-direction: column;
-    flex: 1 1 auto;
     min-height: 0;
     min-width: 0;
     padding: 0;
     border: none;
     background-color: #fff;
     position: relative;
-    overflow: hidden; /* Keep hidden */
+    overflow: hidden;
 }
 
 /* Controls and Status Area */
@@ -209,19 +190,8 @@ header h1 {
     flex-shrink: 0;
 }
 .controls {
-    margin-bottom: 15px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px 15px;
-    justify-content: center;
-    align-items: center;
-    border-bottom: 1px solid #eee;
-    padding: 10px;
-    padding-bottom: 15px;
-    background-color: #f8f8f8;
-    border-radius: 5px;
+    margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px 15px; justify-content: center; align-items: center; border-bottom: 1px solid #eee; padding: 10px; padding-bottom: 15px; background-color: #f8f8f8; border-radius: 5px;
 }
-/* Controls content styling... */
 .controls button, .controls input[type="range"], .controls input[type="number"], .controls label, .controls span { padding: 8px 12px; font-size: 0.9em; vertical-align: middle; }
 .controls label { padding-right: 2px; }
 .controls span { padding-left: 0; min-width: 25px; text-align: right; }
@@ -237,28 +207,18 @@ header h1 {
 #runToBtn:hover:not(:disabled) { background-color: #138496; }
 
 #status-area {
-    margin-bottom: 10px;
-    padding: 8px 15px;
-    font-weight: bold;
-    text-align: center;
-    font-size: 1.1em;
-    background-color: #e9ecef;
-    border-radius: 4px;
-    color: #495057;
+    margin-bottom: 10px; padding: 8px 15px; font-weight: bold; text-align: center; font-size: 1.1em; background-color: #e9ecef; border-radius: 4px; color: #495057;
 }
 
 #simulation-svg-container {
     flex-grow: 1;
     min-height: 0;
     width: 100%;
-    max-width: 100%;
     border: 1px solid #ccc;
     background-color: #fff;
     position: relative;
     overflow: hidden;
     border-radius: 4px;
-    aspect-ratio: var(--svg-aspect-ratio, 16 / 9);
-    max-height: 100%;
     display: grid;
     place-items: center;
 }
@@ -270,7 +230,7 @@ header h1 {
     max-height: 100%;
 }
 
-/* Completion Popup Styles */
+/* Completion Popup Styles - No changes */
 #completion-popup {
     position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80%; max-width: 600px; max-height: 80vh; background-color: rgba(248, 248, 248, 0.98); border: 1px solid #aaa; border-radius: 8px; box-shadow: 0 5px 20px rgba(0, 0, 0, 0.25); z-index: 1000; display: none; overflow: hidden;
 }
@@ -280,16 +240,8 @@ header h1 {
 #closeCompletionPopupBtn { position: absolute; top: 10px; right: 15px; background: none; border: none; font-size: 1.8em; line-height: 1; color: #888; cursor: pointer; padding: 0; }
 #closeCompletionPopupBtn:hover { color: #333; }
 
-/* General Styles */
+/* General Styles - No changes */
 button:disabled { background-color: #ccc !important; color: #666 !important; cursor: not-allowed !important; opacity: 0.7; }
 input:disabled, select:disabled { background-color: #e9ecef; cursor: not-allowed; opacity: 0.7; }
 h1, h2, h3 { margin-bottom: 0.75em; }
-
-/* Ensure disabled inputs look disabled */
-input:disabled {
-    background-color: #e9ecef;
-    opacity: 0.65;
-    cursor: not-allowed;
-    color: #6c757d;
-    border-color: #ced4da;
-}
+input:disabled { background-color: #e9ecef; opacity: 0.65; cursor: not-allowed; color: #6c757d; border-color: #ced4da; }
