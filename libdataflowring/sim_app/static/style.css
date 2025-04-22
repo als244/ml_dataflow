@@ -36,7 +36,7 @@ header h1 {
 /* Main Layout Container - 2 Column Grid */
 .main-container {
     display: grid;
-    grid-template-columns: 250px 1fr; /* Slightly wider sidebar to accommodate padding/scroll */
+    grid-template-columns: 220px 1fr; /* Slightly wider sidebar to accommodate padding/scroll */
     flex-grow: 1;
     /* Remove overflow: auto here; manage within children */
     height: calc(100vh - 57px); /* Adjust 57px if header height changes */
