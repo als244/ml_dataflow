@@ -26,7 +26,7 @@ except AttributeError as e:
 
 app = Flask(__name__)
 
-dashboard.config.init_from(file='./flask_dash.cfg')
+dashboard.config.init_from(file='./dataflowsim_flask.cfg')
 dashboard.bind(app)
 
 # --- Session Configuration ---
