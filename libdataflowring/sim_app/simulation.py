@@ -1026,7 +1026,7 @@ class SimulationRunner:
         self.activations_capacity = int(min(base_activations_capacity, self.max_activations_capacity))
         
         # --- Calculate Compute Times (Keep logic) ---
-        self.cycles_per_second = 1e4 # 100us per cycle
+        self.cycles_per_second = 2 * 1e3 # 500us per cycle
 
         self.flops_per_attn_chunk_mult = 2 * self.chunk_size * self.model_dim
         self.base_flops_per_layer_matmul = 2 * self.chunk_size * (
