@@ -1407,11 +1407,11 @@ class SimulationRunner:
 
         text = (
           f"--- FULL MEMORY OVERVIEW ---\n"
-          f"Model: {train_model_size / (1 << 30):.2f} GB\n"
-          f"Model Grads: {train_gradient_size / (1 << 30):.2f} GB\n"
-          f"Opt. State: {(2 * train_model_size) / (1 << 30):.2f} GB\n"
-          f"Activations: {train_activation_size / (1 << 30):.2f} GB\n"
-          f"Context (Non-Train): {train_context_size / (1 << 30):.2f} GB\n"
+          f" - Model: {train_model_size / (1 << 30):.2f} GB\n"
+          f" - Model Grads: {train_gradient_size / (1 << 30):.2f} GB\n"
+          f" - Opt. State: {(2 * train_model_size) / (1 << 30):.2f} GB\n"
+          f" - Activations: {train_activation_size / (1 << 30):.2f} GB\n"
+          f" - Ctx (Non-Train): {train_context_size / (1 << 30):.2f} GB\n"
           f"TOTAL: {aggregate_memory_size / (1 << 30):.2f} GB\n\n\n"
           f"--- DATAFLOW CONFIG ---\n"
           f"Chunk Size: {self.chunk_size}\n"
