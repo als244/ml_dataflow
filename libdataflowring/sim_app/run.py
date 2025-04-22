@@ -101,7 +101,7 @@ def get_runner_from_session():
         # It should take the state dictionary and set the internal attributes
         # (like current_frame_index, animation_paused, device states, queues etc.)
         # back to match the stored state.
-        runner.load_internal_state(current_state_dict)
+        runner.load_from_serializable_state(current_state_dict)
         return runner
     except Exception as e:
         print(f"Error recreating SimulationRunner from session state: {e}")
