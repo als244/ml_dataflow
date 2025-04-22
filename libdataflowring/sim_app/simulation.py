@@ -1420,7 +1420,7 @@ class SimulationRunner:
           f"  - Train Chunks: {self.total_train_chunks}\n"
           f"Chunk Memory (Block-Wise):\n"
           f" - Saved Act.: {(self.activation_size_bytes)/ 1e6:.2f} MB\n" 
-          f" - Ctx: {(self.chunk_context_size_bytes)/ 1e6:.2f} MB\n"
+          f" - Context: {(self.chunk_context_size_bytes)/ 1e6:.2f} MB\n"
           f" - Transition: {(self.output_size_bytes)/ 1e6:.2f} MB\n"
           f" - Workspace: {(chunk_workspace_size)/ 1e6:.2f} MB\n\n"
           f"Device Memory Partitions:\n"
@@ -1436,7 +1436,7 @@ class SimulationRunner:
           f"  - {(self.grad_context_buffer_capacity * self.per_layer_full_context_size)/ (1 << 30):.3f} GB\n"
           f" - Trans. Cap. (Inp/Out): {self.transitions_capacity}\n"
           f"  - {(2 * self.transitions_capacity * self.output_size_bytes)/ (1 << 30):.3f} GB\n\n"     
-          f"TOTAL PER-DEVICE MEMORY:\n"
+          f"*** TOTAL PER-DEVICE MEMORY ***:\n"
           f" - {typical_device_memory_size / (1 << 30):.2f} GB\n\n\n"
           f"Home Memory Partitions:\n"
           f" - Home # Act. Saved: {home_activation_stack_0}\n"
@@ -1444,7 +1444,7 @@ class SimulationRunner:
           f" - Model: {typical_home_layer_sizes / (1 << 30):.2f} GB\n"
           f" - Model Grads: {typical_home_layer_sizes / (1 << 30):.2f} GB\n"
           f" - Opt. State: {2 * typical_home_layer_sizes / (1 << 30):.2f} GB\n\n"
-          f"TOTAL PER-HOME MEMORY:\n"
+          f"*** TOTAL PER-HOME MEMORY ***:\n"
           f" - {typical_home_total_size / (1 << 30):.2f} GB\n\n"
         )
             
@@ -1501,9 +1501,9 @@ class SimulationRunner:
             f" - Saved Activations: {self.savedActivationsFrames}\n"
             f" - Per-Chunk Context: {contextTransferCycleText}\n"
             f" - Block Transfer: {blockTransitionCyclesText}\n\n\n\n"
-            f"RUNTIME LOWER-BOUND:\n"
+            f"*** RUNTIME LOWER-BOUND ***:\n"
             f" - {math.ceil(self.total_compute_cycles / self.N)} Cycles\n\n"
-            f"THROUGHPUT UPPER-BOUND:\n" 
+            f"*** THROUGHPUT UPPER-BOUND ***:\n" 
             f" - {math.ceil(self.total_flops / (self.total_compute_cycles / self.cycles_per_second) / 1e12)} TFLOPS\n\n"
         )
 
