@@ -1550,7 +1550,7 @@ class SimulationRunner:
                  # Note: _initialize_tasks_and_state is called within Device.__init__
          self.total_tasks = sum(len(d.computation_queue) for d in self.all_devices.values()) if self.N > 0 else 0
          self.total_computation_time = sum(task[-1] for i in range(self.N) for task in self.all_devices[i].computation_queue) if self.N > 0 else 0
-         print(f"Simulation reset. Total tasks: {self.total_tasks}"
+         print(f"Simulation reset. Total tasks: {self.total_tasks}")
                
     def get_serializable_state(self):
         """ Returns ALL internal state needed to resume the simulation. """
