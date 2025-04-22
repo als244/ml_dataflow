@@ -1,6 +1,7 @@
 # run.py (Corrected for Full State Serialization via Session)
 from flask import Flask, render_template, request, jsonify, session # Import session
 from flask_session import Session # Import Session extension
+import flask_monitoringdashboard as dashboard
 import time
 import sys
 import os # For secret key
@@ -24,6 +25,9 @@ except AttributeError as e:
     sys.exit(1)
 
 app = Flask(__name__)
+
+dashboard.config.init_from(file='./flask_dash.cfg')
+dashboard.bind(app)
 
 # --- Session Configuration ---
 app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'dev-secret-key-replace-in-prod-AGAIN') # CHANGE THIS KEY!
