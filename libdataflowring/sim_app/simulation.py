@@ -1275,7 +1275,7 @@ class SimulationRunner:
         self.simulation_complete = False
         self.completion_stats = {}
         self.target_cycle = None
-        self.max_frames = params.get('max_frames', 30000)
+        self.max_frames = params.get('max_frames', 1000000)
 
         # Speed/Interval control
         self.min_speed_level = 1
@@ -1878,7 +1878,7 @@ class SimulationRunner:
             self.simulation_complete = state_dict.get('is_complete', False)
             self.current_speed_level = state_dict.get('speed_level', 50)
             self.target_cycle = state_dict.get('target_cycle', None)
-            self.max_frames = state_dict.get('max_frames', 30000)
+            self.max_frames = state_dict.get('max_frames', 1000000)
             self.completion_stats = state_dict.get('completion_stats', {})
 
             # Recalculate interval based on loaded speed
