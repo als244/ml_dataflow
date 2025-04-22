@@ -34,7 +34,7 @@ header h1 {
 /* Main Layout Container - 2 Column Grid */
 .main-container {
     display: grid;
-    grid-template-columns: 350px 1fr; /* Fixed Sidebar, Flexible Content */
+    grid-template-columns: 300px 1fr; /* Fixed Sidebar, Flexible Content */
     flex-grow: 1;
     overflow: hidden; /* Keep hidden */
     height: calc(100vh - 57px); /* Adjust 57px if header height changes */
