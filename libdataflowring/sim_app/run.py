@@ -111,6 +111,8 @@ def get_state_update():
     if not simulation_instance:
         return jsonify({"success": False, "error": "Simulation not started"}), 400
 
+    start_time = time.perf_counter()
+
     current_state = None
     interval = 1.0 # Default interval
     step_success = True
@@ -140,6 +142,10 @@ def get_state_update():
             current_state = simulation_instance.get_render_state()
             interval = simulation_instance.current_interval_sec # Get potentially updated interval
 
+    end_time = time.perf_counter() # End timer
+    processing_time_ms = (end_time - start_time) * 1000
+    print(f"[/get_state_update] Processing time: {processing_time_ms:.2f} ms") # Log tim
+    
     return jsonify({
         "success": step_success,
         "state": current_state,
