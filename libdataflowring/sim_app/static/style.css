@@ -43,8 +43,8 @@ header h1 {
 
 /* Sidebar Styling */
 .sidebar {
-    flex: 0 1 auto; /* CHANGED: Grow 0, Shrink 1, Basis auto */
-    min-width: 200px; /* ADDED: Prevent sidebar from becoming too narrow */
+    flex: 0 0 20%;
+    max-width: 220px;
     border-right: 1px solid #ccc;
     background-color: #f8f8f8;
     font-size: 0.85rem;
@@ -76,13 +76,13 @@ header h1 {
 #param-grid {
     display: grid;
     /* Adjusted columns for better auto-sizing potential */
-    grid-template-columns: auto 1fr;
+    grid-template-columns: 90px 1fr;
     gap: 8px 10px;
     align-items: center;
     margin-bottom: 15px;
 }
 #param-grid label {
-    text-align: right; font-weight: bold; font-size: 0.9em; color: #555; padding-right: 5px; white-space: nowrap; /* Prevent labels breaking */
+    text-align: right; font-weight: bold; font-size: 0.9em; color: #555; padding-right: 5px;
 }
 #param-grid input[type="number"],
 #param-grid input[type="text"],
