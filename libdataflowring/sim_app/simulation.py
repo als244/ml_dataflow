@@ -912,6 +912,142 @@ class Device:
                 self.cur_peer_transfer_details = (peer_id, cid, lid, is_grad_trans)
 
 
+    def get_serializable_state(self):
+        # Return a dictionary containing all internal state needed to resume
+        # Convert deques to lists for JSON compatibility
+        return {
+            "device_id": self.device_id,
+            "device_has_started": self.device_has_started,
+            "device_start_time": self.device_start_time,
+            "device_has_finished": self.device_has_finished,
+            "device_finish_time": self.device_finish_time,
+            # Buffers (save their content directly)
+            "cur_weights": list(self.cur_weights), # Save list copy
+            "activations_buffer": list(self.activations_buffer),
+            "transitions_inbound_buffer": list(self.transitions_inbound_buffer),
+            "transitions_outbound_buffer": list(self.transitions_outbound_buffer),
+            "head_input_transitions_buffer": list(self.head_input_transitions_buffer) if self.head_input_transitions_buffer is not None else None,
+            "head_output_transitions_buffer": list(self.head_output_transitions_buffer) if self.head_output_transitions_buffer is not None else None,
+            "context_buffer": list(self.context_buffer),
+            # Pointers and indices
+            "cur_weight_write_ptr": self.cur_weight_write_ptr,
+            "activations_write_ptr": self.activations_write_ptr,
+            "activations_empty_slot_ind": self.activations_empty_slot_ind,
+            "transitions_inbound_empty_slot_ind": self.transitions_inbound_empty_slot_ind,
+            "transitions_outbound_empty_slot_ind": self.transitions_outbound_empty_slot_ind,
+            "head_input_transitions_empty_slot_ind": self.head_input_transitions_empty_slot_ind,
+            "head_output_transitions_empty_slot_ind": self.head_output_transitions_empty_slot_ind,
+            # Queues (convert deques to lists)
+            "computation_queue": list(self.computation_queue),
+            "outbound_queue": list(self.outbound_queue),
+            "inbound_queue": list(self.inbound_queue),
+            "peer_transfer_queue": list(self.peer_transfer_queue),
+            # Activity state
+            "is_computing": self.is_computing,
+            "is_stalled": self.is_stalled,
+            "stall_start_time": self.stall_start_time,
+            "cur_computation_start_time": self.cur_computation_start_time,
+            "cur_computation_duration": self.cur_computation_duration,
+            "current_computation_type": self.current_computation_type,
+            "current_computation_layer_id": self.current_computation_layer_id,
+            "current_computation_chunk_id": self.current_computation_chunk_id,
+            "is_outbound_transferring": self.is_outbound_transferring,
+            "cur_outbound_start_time": self.cur_outbound_start_time,
+            "cur_outbound_duration": self.cur_outbound_duration,
+            "cur_outbound_details": self.cur_outbound_details,
+            "is_inbound_transferring": self.is_inbound_transferring,
+            "cur_inbound_start_time": self.cur_inbound_start_time,
+            "cur_inbound_duration": self.cur_inbound_duration,
+            "cur_inbound_details": self.cur_inbound_details,
+            "is_peer_transferring": self.is_peer_transferring,
+            "cur_peer_transfer_start_time": self.cur_peer_transfer_start_time,
+            "cur_peer_transfer_duration": self.cur_peer_transfer_duration,
+            "cur_peer_transfer_details": self.cur_peer_transfer_details,
+            # Other state
+            "computing_status_text": self.computing_status_text,
+            "stall_reason": self.stall_reason,
+            "cur_fwd_computation_num": self.cur_fwd_computation_num,
+            "activations_stack": list(self.activations_stack), # Save stack
+            "activations_stack_cutoff_ind": self.activations_stack_cutoff_ind,
+            "activations_stack_next_ind": self.activations_stack_next_ind,
+            "next_weight_prefetch_layer_id": self.next_weight_prefetch_layer_id,
+            "next_bwd_weight_prefetch_layer_id": self.next_bwd_weight_prefetch_layer_id,
+            "head_final_chunk_id": self.head_final_chunk_id,
+            # Note: home_storage is rebuilt in _initialize_tasks_and_state, maybe no need to save/load explicitly
+        }
+
+    def load_from_serializable_state(self, dev_state):
+        # Load state from dictionary, restoring internal attributes
+        # Be careful with types and default values if keys are missing
+        # This needs careful implementation matching get_serializable_state
+        self.device_id = dev_state.get("device_id", self.device_id) # ID shouldn't change
+        self.device_has_started = dev_state.get("device_has_started", False)
+        self.device_start_time = dev_state.get("device_start_time", 0)
+        self.device_has_finished = dev_state.get("device_has_finished", False)
+        self.device_finish_time = dev_state.get("device_finish_time", 0)
+        # Buffers (restore lists)
+        self.cur_weights = list(dev_state.get("cur_weights", [-1] * self.layer_capacity))
+        self.activations_buffer = list(dev_state.get("activations_buffer", [-1] * self.activations_capacity))
+        self.transitions_inbound_buffer = list(dev_state.get("transitions_inbound_buffer", [-1] * self.transitions_capacity))
+        self.transitions_outbound_buffer = list(dev_state.get("transitions_outbound_buffer", [-1] * self.transitions_capacity))
+        self.head_input_transitions_buffer = list(dev_state.get("head_input_transitions_buffer")) if dev_state.get("head_input_transitions_buffer") is not None else None
+        self.head_output_transitions_buffer = list(dev_state.get("head_output_transitions_buffer")) if dev_state.get("head_output_transitions_buffer") is not None else None
+        self.context_buffer = list(dev_state.get("context_buffer", [-1] * self.total_chunks))
+        # Pointers and indices
+        self.cur_weight_write_ptr = dev_state.get("cur_weight_write_ptr", 0)
+        self.activations_write_ptr = dev_state.get("activations_write_ptr", 0)
+        self.activations_empty_slot_ind = dev_state.get("activations_empty_slot_ind", 0 if self.activations_capacity > 0 else None)
+        self.transitions_inbound_empty_slot_ind = dev_state.get("transitions_inbound_empty_slot_ind", 0 if self.transitions_capacity > 0 else None)
+        self.transitions_outbound_empty_slot_ind = dev_state.get("transitions_outbound_empty_slot_ind", 0 if self.transitions_capacity > 0 else None)
+        self.head_input_transitions_empty_slot_ind = dev_state.get("head_input_transitions_empty_slot_ind", 0 if self.head_input_transitions_buffer is not None else None)
+        self.head_output_transitions_empty_slot_ind = dev_state.get("head_output_transitions_empty_slot_ind", 0 if self.head_output_transitions_buffer is not None else None)
+        # Queues (restore deques from lists)
+        self.computation_queue = deque(dev_state.get("computation_queue", []))
+        self.outbound_queue = deque(dev_state.get("outbound_queue", []))
+        self.inbound_queue = deque(dev_state.get("inbound_queue", []))
+        self.peer_transfer_queue = deque(dev_state.get("peer_transfer_queue", []))
+        # Activity state
+        self.is_computing = dev_state.get("is_computing", False)
+        self.is_stalled = dev_state.get("is_stalled", False)
+        self.stall_start_time = dev_state.get("stall_start_time", 0)
+        self.cur_computation_start_time = dev_state.get("cur_computation_start_time", 0)
+        self.cur_computation_duration = dev_state.get("cur_computation_duration", 0)
+        self.current_computation_type = dev_state.get("current_computation_type", None)
+        self.current_computation_layer_id = dev_state.get("current_computation_layer_id", -1)
+        self.current_computation_chunk_id = dev_state.get("current_computation_chunk_id", -1)
+        self.is_outbound_transferring = dev_state.get("is_outbound_transferring", False)
+        self.cur_outbound_start_time = dev_state.get("cur_outbound_start_time", 0)
+        self.cur_outbound_duration = dev_state.get("cur_outbound_duration", 0)
+        self.cur_outbound_details = dev_state.get("cur_outbound_details", None)
+        self.is_inbound_transferring = dev_state.get("is_inbound_transferring", False)
+        self.cur_inbound_start_time = dev_state.get("cur_inbound_start_time", 0)
+        self.cur_inbound_duration = dev_state.get("cur_inbound_duration", 0)
+        self.cur_inbound_details = dev_state.get("cur_inbound_details", None)
+        self.is_peer_transferring = dev_state.get("is_peer_transferring", False)
+        self.cur_peer_transfer_start_time = dev_state.get("cur_peer_transfer_start_time", 0)
+        self.cur_peer_transfer_duration = dev_state.get("cur_peer_transfer_duration", 0)
+        self.cur_peer_transfer_details = dev_state.get("cur_peer_transfer_details", None)
+        # Other state
+        self.computing_status_text = dev_state.get("computing_status_text", "Idle")
+        self.stall_reason = dev_state.get("stall_reason", "")
+        self.cur_fwd_computation_num = dev_state.get("cur_fwd_computation_num", 0)
+        self.activations_stack = list(dev_state.get("activations_stack", [])) # Restore list
+        self.activations_stack_cutoff_ind = dev_state.get("activations_stack_cutoff_ind", -1)
+        self.activations_stack_next_ind = dev_state.get("activations_stack_next_ind", -1)
+        self.next_weight_prefetch_layer_id = dev_state.get("next_weight_prefetch_layer_id", -1)
+        self.next_bwd_weight_prefetch_layer_id = dev_state.get("next_bwd_weight_prefetch_layer_id", -1)
+        self.head_final_chunk_id = dev_state.get("head_final_chunk_id", -1)
+        # Ensure buffer empty slot indices are recalculated based on loaded buffers
+        self._recalculate_empty_slot_indices()
+
+    def _recalculate_empty_slot_indices(self):
+        """ Helper to find first empty slot after loading buffers """
+        self.activations_empty_slot_ind = self._find_first_free_idx(self.activations_buffer)
+        self.transitions_inbound_empty_slot_ind = self._find_first_free_idx(self.transitions_inbound_buffer)
+        self.transitions_outbound_empty_slot_ind = self._find_first_free_idx(self.transitions_outbound_buffer)
+        self.head_input_transitions_empty_slot_ind = self._find_first_free_idx(self.head_input_transitions_buffer) if self.head_input_transitions_buffer is not None else None
+        self.head_output_transitions_empty_slot_ind = self._find_first_free_idx(self.head_output_transitions_buffer) if self.head_output_transitions_buffer is not None else None
+
 # --- Simulation Runner Class ---
 class SimulationRunner:
     def __init__(self, params):
@@ -1152,15 +1288,6 @@ class SimulationRunner:
             self.min_interval_ms, self.max_interval_ms
         )
 
-        # --- REMOVE Matplotlib Figure Setup ---
-        # self._setup_figure() # DELETE
-
-        # --- Initialize Devices ---
-        self.reset_simulation_state() # Call reset to initialize devices
-
-    # --- REMOVE Matplotlib Figure Setup Method ---
-    # def _setup_figure(self): DELETE THIS ENTIRE METHOD
-    #     pass # DELETE
 
     # --- Legend Text Creation (Keep for stats calculation, text can be sent to frontend) ---
     def _create_memory_legend_text(self):
@@ -1384,43 +1511,111 @@ class SimulationRunner:
 
 
     def reset_simulation_state(self):
-        """ Resets the simulation state and device objects. """
-        self.current_frame_index = 0
-        self.animation_paused = True
-        self.simulation_complete = False
-        self.completion_stats = {}
-        self.target_cycle = None
-        self.all_devices = {}
+         """ Resets the simulation state and creates/resets device objects. """
+         self.current_frame_index = 0
+         self.animation_paused = True
+         self.simulation_complete = False
+         self.completion_stats = {}
+         self.target_cycle = None
+         # Don't reset speed/interval here, keep user setting
+         # self.current_speed_level = 50
+         # self.current_interval_sec = calculate_interval(...)
 
+         self.all_devices = {} # Clear or create dict
+
+         if self.N > 0:
+             for i in range(self.N):
+                 # Create NEW Device instances on reset
+                 self.all_devices[i] = Device(
+                     device_id=i,
+                     # ... pass all necessary params ...
+                     layer_capacity=self.layer_capacity,
+                     activations_capacity=self.activations_capacity,
+                     transitions_capacity=self.transitions_capacity,
+                     head_transitions_capacity=self.head_transitions_capacity,
+                     total_devices=self.N,
+                     total_layers=self.total_layers, # Pass total including head
+                     total_chunks=self.total_chunks,
+                     computation_times_frames=self.computation_times_frames,
+                     computation_times_frames_bwd=self.computation_times_frames_bwd,
+                     headFrames=self.headFrames,
+                     bwdWFrames=self.bwdWFrames,
+                     train_chunk_freq=self.train_chunk_freq,
+                     layerTransferFrames=self.layerTransferFrames,
+                     headTransferFrames=self.headTransferFrames,
+                     savedActivationsFrames=self.savedActivationsFrames,
+                     activationTransitionFrames=self.activationTransitionFrames,
+                     contextTransferFrames=self.contextTransferFrames
+                 )
+                 # Note: _initialize_tasks_and_state is called within Device.__init__
+         self.total_tasks = sum(len(d.computation_queue) for d in self.all_devices.values()) if self.N > 0 else 0
+         self.total_computation_time = sum(task[-1] for i in range(self.N) for task in self.all_devices[i].computation_queue) if self.N > 0 else 0
+         print(f"Simulation reset. Total tasks: {self.total_tasks}"
+               
+    def get_serializable_state(self):
+        """ Returns ALL internal state needed to resume the simulation. """
+        # Serialize runner's own state
+        runner_state = {
+            "params": self.params, # Include original params
+            "current_frame_index": self.current_frame_index,
+            "animation_paused": self.animation_paused,
+            "simulation_complete": self.simulation_complete,
+            "completion_stats": self.completion_stats,
+            "target_cycle": self.target_cycle,
+            "current_speed_level": self.current_speed_level,
+            # current_interval_sec is derived from speed_level, no need to save
+            "total_tasks": self.total_tasks, # Save calculated totals maybe?
+            "total_computation_time": self.total_computation_time,
+        }
+        # Serialize state of each device
+        devices_internal_state = {}
         if self.N > 0:
-            for i in range(self.N):
-                self.all_devices[i] = Device(
-                    device_id=i,
-                    layer_capacity=self.layer_capacity,
-                    activations_capacity=self.activations_capacity,
-                    transitions_capacity=self.transitions_capacity,
-                    head_transitions_capacity=self.head_transitions_capacity,
-                    total_devices=self.N,
-                    total_layers=self.total_layers, # Pass total including head
-                    total_chunks=self.total_chunks,
-                    computation_times_frames=self.computation_times_frames,
-                    computation_times_frames_bwd=self.computation_times_frames_bwd,
-                    headFrames=self.headFrames,
-                    bwdWFrames=self.bwdWFrames,
-                    train_chunk_freq=self.train_chunk_freq,
-                    layerTransferFrames=self.layerTransferFrames,
-                    headTransferFrames=self.headTransferFrames,
-                    savedActivationsFrames=self.savedActivationsFrames,
-                    activationTransitionFrames=self.activationTransitionFrames,
-                    contextTransferFrames=self.contextTransferFrames
-                )
-        self.total_tasks = sum(len(d.computation_queue) for d in self.all_devices.values()) if self.N > 0 else 0
-        self.total_computation_time = sum(task[-1] for i in range(self.N) for task in self.all_devices[i].computation_queue) if self.N > 0 else 0
-        print(f"Simulation reset. Total tasks: {self.total_tasks}")
+            for i, device in self.all_devices.items():
+                devices_internal_state[i] = device.get_serializable_state()
 
-    # --- REMOVE Matplotlib Update Method ---
-    # def update_figure_for_frame(self, frame_index): DELETE THIS ENTIRE METHOD
-    #     pass # DELETE
+        runner_state["all_devices_state"] = devices_internal_state
+        return runner_state
+
+    def load_from_serializable_state(self, full_state_dict):
+        """ Restores the simulation runner from a complete state dictionary. """
+        print("Loading SimulationRunner state...")
+        try:
+            # Restore basic runner state first
+            # Params should match, but maybe store/check? self.params = full_state_dict.get("params", self.params)
+            self.current_frame_index = full_state_dict.get('current_frame_index', 0)
+            self.animation_paused = full_state_dict.get('animation_paused', True)
+            self.simulation_complete = full_state_dict.get('simulation_complete', False)
+            self.completion_stats = full_state_dict.get('completion_stats', {})
+            self.target_cycle = full_state_dict.get('target_cycle', None)
+            self.current_speed_level = full_state_dict.get('current_speed_level', 50)
+            self.total_tasks = full_state_dict.get('total_tasks', 0)
+            self.total_computation_time = full_state_dict.get('total_computation_time', 0)
+
+            # Recalculate interval based on loaded speed
+            self.set_speed(self.current_speed_level)
+
+            # Restore devices
+            devices_internal_state = full_state_dict.get("all_devices_state", {})
+            # Ensure self.all_devices exists and has the right Device objects
+            # It's safer to recreate devices based on params if N matches
+            # Let's assume __init__ or reset created the Device objects
+            if len(devices_internal_state) == self.N:
+                for i in range(self.N):
+                    if i in self.all_devices and i in devices_internal_state:
+                        self.all_devices[i].load_from_serializable_state(devices_internal_state[i])
+                    else:
+                        print(f"Warning: Mismatch loading state for device {i}")
+            else:
+                 print(f"Warning: Mismatch N ({self.N}) and loaded device state count ({len(devices_internal_state)})")
+                 # Consider calling reset_simulation_state here if counts mismatch?
+
+            print(f"Loaded state. Frame: {self.current_frame_index}, Paused: {self.animation_paused}")
+
+        except Exception as e:
+            print(f"ERROR loading SimulationRunner state: {e}")
+            traceback.print_exc()
+            # Reset to initial state on error?
+            self.reset_simulation_state()
 
     def step(self):
         """ Advances the simulation by one time step (frame). Returns True if simulation should continue."""
