@@ -17,6 +17,8 @@ body {
     flex-direction: column;
     color: #333;
     background-color: #fff;
+    /* Prevent body scroll when modal might be open, manage scroll within containers */
+    /* overflow: hidden;  <-- Consider if needed globally */
 }
 
 /* Header */
@@ -24,7 +26,7 @@ header {
     background-color: #f0f0f0;
     padding: 10px 20px;
     border-bottom: 1px solid #ccc;
-    flex-shrink: 0;
+    flex-shrink: 0; /* Prevent header from shrinking */
 }
 header h1 {
     margin: 0;
@@ -34,38 +36,57 @@ header h1 {
 /* Main Layout Container - 2 Column Grid */
 .main-container {
     display: grid;
-    grid-template-columns: 220px 1fr; /* Fixed Sidebar, Flexible Content */
+    grid-template-columns: 250px 1fr; /* Slightly wider sidebar to accommodate padding/scroll */
     flex-grow: 1;
-    overflow: auto; /* Keep hidden */
+    /* Remove overflow: auto here; manage within children */
     height: calc(100vh - 57px); /* Adjust 57px if header height changes */
 }
 
 /* Sidebar Styling (Grid Item 1) */
 .sidebar {
-    padding: 20px;
-    overflow-y: auto;
+    /* Remove padding here, apply to inner content if needed */
+    /* overflow-y: auto; <-- Remove, handled by form-scroll-content */
     border-right: 1px solid #ccc;
     background-color: #f8f8f8;
     font-size: 0.85rem;
+    display: flex; /* Make sidebar a flex container */
+    flex-direction: column; /* Stack children vertically */
+    height: 100%; /* Make sidebar fill the grid cell height */
 }
-.sidebar h2 {
-    margin-top: 0;
+
+#paramsForm {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1; /* Allow form to grow */
+    min-height: 0; /* Prevent form from exceeding sidebar height in flex context */
+    padding: 20px; /* Add padding inside the form now */
+    padding-bottom: 0; /* Remove bottom padding, handled by footer */
+}
+
+/* New class for the scrollable part of the form */
+.form-scroll-content {
+    overflow-y: auto; /* Enable vertical scrolling ONLY for this part */
+    flex-grow: 1; /* Allow this section to take available space */
+    min-height: 0; /* Important for flex children that scroll */
+    /* Add some padding at the bottom so content doesn't scroll right under the sticky footer */
+    padding-bottom: 10px;
+}
+
+#param-grid {
+    display: grid;
+    grid-template-columns: 90px 1fr; /* Reduced label width slightly */
+    gap: 8px 10px;
+    align-items: center;
     margin-bottom: 15px;
-    font-size: 1.3em;
-    color: #0056b3;
 }
-#paramsForm { display: flex; flex-direction: column; }
-#param-grid { display: grid; grid-template-columns: 90px 1fr; gap: 8px 10px; align-items: center; margin-bottom: 15px; }
+/* ... (keep existing #param-grid styles like label, input, section-header) ... */
 #param-grid label { text-align: right; font-weight: bold; font-size: 0.9em; color: #555; }
 #param-grid input[type="number"],
 #param-grid input[type="text"],
-#param-grid select { width: 100%; /* box-sizing: border-box; /* Now handled globally */ padding: 5px 8px; font-size: 0.9em; border: 1px solid #ccc; border-radius: 4px; }
+#param-grid select { width: 100%; padding: 5px 8px; font-size: 0.9em; border: 1px solid #ccc; border-radius: 4px; }
 #param-grid .section-header { grid-column: 1 / -1; margin-top: 20px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid #ddd; }
-#param-grid .section-header:first-of-type { margin-top: 10px; }
+#param-grid .section-header:first-of-type { margin-top: 0; } /* Adjusted margin */
 #param-grid .section-header h3 { margin: 0; font-size: 1.1em; color: #333; }
-#paramsForm button[type="submit"] { margin-top: 20px; padding: 10px 20px; font-size: 1em; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; transition: background-color 0.2s; }
-#paramsForm button[type="submit"]:hover:not(:disabled) { background-color: #0056b3; }
-
 #param-grid hr.section-separator {
     grid-column: 1 / -1;
     width: 80%;
@@ -76,18 +97,62 @@ header h1 {
     border-top: 2px dashed #ccc;
 }
 
-.error-message { color: #dc3545; font-weight: bold; margin-top: 15px; padding: 8px; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; min-height: 1.2em; display: none; }
+/* New class for the sticky footer area */
+.form-footer {
+    position: sticky;
+    bottom: 0;
+    background-color: #f8f8f8; /* Match sidebar background */
+    padding: 15px 20px; /* Add padding within the footer */
+    border-top: 1px solid #ccc; /* Visual separation */
+    flex-shrink: 0; /* Prevent footer from shrinking */
+    margin-top: auto; /* Push footer down if content is short */
+    z-index: 10; /* Ensure it stays above scrolled content if needed */
+}
+
+#paramsForm button[type="submit"] {
+    /* margin-top: 20px; <-- Remove, spacing handled by footer */
+    padding: 10px 20px;
+    font-size: 1em;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    display: block; /* Make it block level */
+    width: 100%; /* Make button fill footer width */
+}
+#paramsForm button[type="submit"]:hover:not(:disabled) {
+    background-color: #0056b3;
+}
+
+.error-message {
+    color: #dc3545;
+    font-weight: bold;
+    /* margin-top: 15px; <-- Remove */
+    margin-top: 10px; /* Add space above error message inside footer */
+    padding: 8px;
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+    min-height: 1.2em; /* Keep */
+    display: none; /* Keep */
+    width: 100%; /* Make error fill width */
+}
 .error-message.visible { display: block; }
+
 
 /* Content Area Wrapper (Grid Item 2) */
 .content-area-wrapper {
     display: flex;
     align-items: flex-start;
-    overflow: auto;
+    overflow: auto; /* Allow content area to scroll if needed */
     padding: 20px;
     gap: 20px;
-    max-height: 100%;
+    max-height: 100%; /* Ensure it doesn't overflow grid */
 }
+
+/* ... Keep the rest of your CSS for legend-area, simulation-area, controls, etc. ... */
 
 /* Individual Legend Area Styling */
 .legend-area {
@@ -102,6 +167,9 @@ header h1 {
     overflow-y: hidden;
     display: block;
     box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    /* Ensure legends don't prevent main content scroll */
+    max-height: calc(100% - 40px); /* Example: limit height relative to wrapper padding */
+    overflow-y: auto; /* Allow legend scrolling if content is too tall */
 }
 .legend-area h2 {
     margin-top: 0;
@@ -111,6 +179,10 @@ header h1 {
     border-bottom: 1px solid #eee;
     font-family: sans-serif;
     color: #444;
+    position: sticky; /* Keep legend titles visible */
+    top: 0;
+    background-color: #fdfdfd; /* Background for sticky title */
+    z-index: 1;
 }
 .legend-area pre {
     margin: 0;
@@ -176,25 +248,17 @@ header h1 {
 }
 
 #simulation-svg-container {
-    flex-grow: 1;         /* Still allow it to take available vertical space */
-    min-height: 0;        /* CHANGE from 200px - rely on aspect ratio */
+    flex-grow: 1;
+    min-height: 0;
     width: 100%;
-    max-width: 100%;      /* Prevent horizontal overflow */
+    max-width: 100%;
     border: 1px solid #ccc;
     background-color: #fff;
     position: relative;
-    overflow: hidden;     /* Keep hidden */
+    overflow: hidden;
     border-radius: 4px;
-
-    /* *** NEW: Use aspect-ratio set from JS *** */
-    /* Use a fallback in case the variable isn't set */
-    aspect-ratio: var(--svg-aspect-ratio, 16 / 9); /* Default fallback e.g. 16/9 or 1/1 */
-
-    /* *** IMPORTANT: Limit max height to prevent vertical overflow *** */
-    /* This ensures the aspect-ratio box doesn't push content vertically */
+    aspect-ratio: var(--svg-aspect-ratio, 16 / 9);
     max-height: 100%;
-
-    /* Use Grid to center the potentially smaller SVG inside */
     display: grid;
     place-items: center;
 }
@@ -202,15 +266,8 @@ header h1 {
 /* SVG Styling */
 #simulation-svg {
     display: block;
-    /* Let the container's aspect-ratio and max-size dictate SVG size */
-    /* Remove explicit width/height: 100% */
-    /* width: 100%; */
-    /* height: 100%; */
-
-    /* *** NEW: Set max size to fit within the centered grid cell *** */
     max-width: 100%;
     max-height: 100%;
-    /* viewBox and preserveAspectRatio in HTML handle the actual scaling */
 }
 
 /* Completion Popup Styles */
