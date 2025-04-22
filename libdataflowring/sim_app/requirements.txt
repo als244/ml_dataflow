@@ -1,0 +1,3 @@
+Flask>=2.0
+matplotlib>=3.5 # Ensure a reasonably recent version
+numpy>=1.20

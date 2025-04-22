@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pipeline Simulation</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Hardware Pipeline Simulation</h1>
+    </header>
+
+    <div class="main-container">
+
+        <aside class="sidebar">
+            <h2>User Input</h2>
+            <form id="paramsForm">
+                <div id="param-grid">
+
+                    <div class="section-header"><h3>Training Spec</h3></div>
+                    <label for="N">Num Devices:</label>
+                    <input type="number" id="N" name="N" value="8" min="1" required>
+                    <label for="max_device_memory_gb">Max Per-Device Memory (GB):</label>
+                    <input type="number" id="max_device_memory_gb" name="max_device_memory_gb" value="80" step="0.1" min="1" required>
+                    <label for="seqlen">Sequence Length (K):</label>
+                    <input type="number" id="seqlen" name="seqlen" value="32" min="1" required>
+                    <label for="train_token_ratio">Train Token Ratio:</label>
+                    <input type="number" id="train_token_ratio" name="train_token_ratio" value="1.0" step="0.001" min="0.001" max="1.0" required>
+                    <label for="min_chunk_size">Min Chunk Size:</label>
+                    <input type="number" id="min_chunk_size" name="min_chunk_size" value="1536" min="1" required disabled>
+                    <label for="chunk_type">Chunk Type:</label>
+                    <input type="text" id="chunk_type" name="chunk_type" value="Equal Data" disabled>
+                    <div class="section-header"><h3>Model Spec</h3></div>
+                    <label for="bitwidth">Bitwidth:</label>
+                    <input type="number" id="bitwidth" name="bitwidth" value="16" min="1" step="1" required>
+                    <label for="total_layers">Total Blocks:</label>
+                    <input type="number" id="total_layers" name="total_layers" value="64" min="1" required>
+                    <label for="vocab_size">Vocab Size:</label>
+                    <input type="number" id="vocab_size" name="vocab_size" value="151646" min="1" required>
+                    <label for="model_dim">Model Dim:</label>
+                    <input type="number" id="model_dim" name="model_dim" value="5120" min="1" step="1" required>
+                    <label for="kv_dim">KV Dim:</label>
+                    <input type="number" id="kv_dim" name="kv_dim" value="640" step="1" min="1" required>
+                    <label for="num_experts">Num Experts:</label>
+                    <input type="number" id="num_experts" name="num_experts" value="1" min="1" step="1" max="65536" required>
+                    <label for="active_experts">Active Experts:</label>
+                    <input type="number" id="active_experts" name="active_experts" value="1" min="1" step="1" max="65536" required>
+                    <label for="expert_dim">Expert Dim:</label>
+                    <input type="number" id="expert_dim" name="expert_dim" value="27648" min="1" step="1" required>
+                    <label for="attn_type">Attention Type:</label>
+                    <input type="text" id="attn_type" name="attn_type" value="Exact" disabled>
+                </div>
+
+                <button type="submit">Prepare Simulation</button>
+
+                <div id="param-grid">
+                    <hr class="section-separator">
+                    <div class="section-header"><h3>Hardware Specs</h3><h4>Discovered by System In Practice</h4></div>
+                    <label for="hardware_max_tflops">Hardware Max (BF16 TFLOPS):</label>
+                    <input type="number" id="hardware_max_tflops" name="hardware_max_tflops" value="989" step="0.1" min="0.1" required>
+                    <label for="hardware_mem_bw_gbs">Hardware Mem BW (GB/s):</label>
+                    <input type="number" id="hardware_mem_bw_gbs" name="hardware_mem_bw_gbs" value="3350" step="1" min="1" required>
+                    <label for="matmul_efficiency">Matmul Efficiency:</label>
+                    <input type="number" id="matmul_efficiency" name="matmul_efficiency" value="0.7" step="0.01" min="0" max="1" required>
+                    <label for="attn_efficiency">Attention Efficiency:</label>
+                    <input type="number" id="attn_efficiency" name="attn_efficiency" value="0.55" step="0.01" min="0" max="1" required>
+                    <label for="home_bw_gbit_sec">Home BW (Gbps):</label>
+                    <input type="number" id="home_bw_gbit_sec" name="home_bw_gbit_sec" value="400" min="1" required>
+                    <label for="peer_bw_gbit_sec">Peer BW (Gbps):</label>
+                    <input type="number" id="peer_bw_gbit_sec" name="peer_bw_gbit_sec" value="100" min="1" required>
+                </div>
+
+            </form>
+            <div id="error-message" class="error-message"></div>
+        </aside>
+
+        <div class="content-area-wrapper">
+
+            <div id="memory-legend-area" class="legend-area" >
+                <h2>Memory Legend</h2>
+                <pre></pre>
+            </div>
+
+            <main class="simulation-area">
+                <div class="controls">
+                    <button id="playBtn" disabled>Play</button>
+                    <button id="pauseBtn" disabled>Pause</button>
+                    <label for="speedSlider">Speed:</label>
+                    <input type="range" id="speedSlider" min="1" max="100" value="50" disabled>
+                    <span id="speedValue">50</span>
+                    <label for="runToCycleInput">Run to Cycle:</label>
+                    <input type="number" id="runToCycleInput" min="0" value="0" style="width: 80px;" disabled>
+                    <button id="runToBtn" disabled>Run</button>
+                </div>
+                <div id="status-area">Status: Idle | Cycle: 0</div>
+                <div id="simulation-svg-container">
+                     <svg id="simulation-svg"
+                          preserveAspectRatio="xMidYMid meet"
+                          width="100%"
+                          height="100%">
+                     </svg>
+                     </div>
+
+                <div id="completion-popup" style="display: none;">
+                    <div class="popup-content">
+                        <h2>Completion Details</h2>
+                        <button id="closeCompletionPopupBtn" class="close-btn">&times;</button>
+                        <div id="completion-area"></div>
+                    </div>
+                </div>
+            </main>
+
+            <div id="compute-legend-area" class="legend-area" >
+                 <h2>Compute Legend</h2>
+                 <pre></pre>
+            </div>
+
+            </div>
+        </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
