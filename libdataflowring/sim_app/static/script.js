@@ -324,83 +324,88 @@ document.addEventListener('DOMContentLoaded', () => {
     async function sendControlCommand(command, value = null) {
         displayError('');
         console.log(`Sending command: ${command}`, value !== null ? `Value: ${value}` : '');
-        const wasPaused = simulationState.is_paused;
-        stopAnimationLoop();
+
+        // --- Stop any ongoing/pending updates ---
+        stopAnimationLoop(); // Clear setTimeout for fetchUpdate
+        simulationActive = false; // Tentatively mark inactive - fetchFullState will confirm final state
+                                  // Guard in updateSVG handles lingering requestAnimationFrames
+
         hideCompletionPopup();
-    
+
         try {
             const body = { command }; if (value !== null) { body.value = value; }
-            const response = await fetch('/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            const response = await fetch('/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            // data includes {success: bool, state_summary: {...}, interval_sec: float}
+            // We will largely ignore state_summary now and rely on a subsequent fetch
             const data = await response.json();
-    
+
             if (response.ok && data.success) {
-                 console.log(`Command '${command}' successful.`);
-                simulationState = { ...simulationState, ...data.state_summary };
-                currentIntervalSec = data.interval_sec;
-    
-                if (command === 'play') {
-                    simulationActive = true;
-                    console.log("Control Play: Simulation marked active.");
-                } else if (command === 'pause') {
-                    simulationActive = false;
-                    console.log("Control Pause: Simulation marked inactive.");
-                } else if (command === 'restart') {
-                    console.log("Control Restart: Handling backend restart.");
-    
-                    // --- FIX: Clear SVG directly, DO NOT call setupSVG ---
+                console.log(`Command '${command}' successful on backend.`);
+
+                // --- Backend command succeeded, now fetch the definitive resulting state ---
+                console.log(`Workspaceing full state after '${command}' command.`);
+                if (command === 'restart') {
+                    // Special handling for restart: clear SVG immediately, then fetch state 0
                     console.log("[sendControlCommand/restart] Clearing SVG content directly.");
-                    if (svg) {
-                        svg.innerHTML = ''; // Just clear the SVG content
-                        console.log("[sendControlCommand/restart] svg.innerHTML = '' executed.");
-                    } else {
-                        console.error("[sendControlCommand/restart] svg element reference is null!");
-                    }
-                    // REMOVED: setupSVG(simulationConfig); // DO NOT REBUILD STRUCTURE HERE during reset
-    
-                    // Fetch the reset state (cycle 0, paused) to update status text & controls
+                    if (svg) { svg.innerHTML = ''; }
+                    else { console.error("[sendControlCommand/restart] svg element reference is null!"); }
+
+                    // Fetches state 0, updates local state, updates UI (status/controls), NO updateSVG
                     await fetchInitialStateAfterReset();
-                    // Note: simulationActive remains false because state is paused
-    
-                } else if (command === 'run_to_cycle') {
-                     simulationActive = !simulationState.is_paused && !simulationState.is_complete;
-                     console.log(`Control RunToCycle: Simulation marked ${simulationActive ? 'active' : 'inactive'}.`);
+
+                     // Reset specific frontend flags AFTER state is confirmed reset
+                     setFormEnabled(true);
+                     simulationInitialized = false;
+                     console.log("Frontend reset complete after backend restart confirmed.");
+                } else {
+                    // For Play, Pause, RunTo, SetSpeed: Fetch the resulting full state
+                    // This fetches state, updates local state, interval, status, controls, AND schedules updateSVG
+                    await fetchFullStateAfterCommand();
                 }
-                // set_speed doesn't change active state directly
-    
-                // Update UI based on potentially modified state (especially after fetchInitialStateAfterReset)
-                updateStatusDisplay(simulationState);
-                updateControls(simulationState);
-                runToCycleInput.value = simulationState.current_frame;
-    
-                 // Decide whether to start/continue fetching updates
-                 if (simulationActive && !simulationState.is_paused && !simulationState.is_complete) {
-                     console.log("Control resulted in active state, starting/continuing fetch loop.");
-                     fetchUpdate();
-                 } else if (simulationState.is_complete) {
-                      simulationActive = false;
-                      await fetchFullStateAfterCommand(); // Get final details for completion stats
-                      displayCompletionStats(simulationState.completion_stats);
-                      console.log("Control resulted in complete state.");
-                 } else if (simulationState.is_paused) {
-                     // Pause command OR Restart command end here.
-                     // If it was a pause, fetch the full state. Restart already did via fetchInitialStateAfterReset.
-                     if (command !== 'restart') {
-                        await fetchFullStateAfterCommand();
-                     }
-                     console.log("Control resulted in paused state.");
-                     // simulationActive is already false or was set to false
-                 } else {
-                      // Handle other cases or just log
-                      console.log("Control action complete, simulation remains inactive or command doesn't start loop.");
-                 }
-    
+
+                // --- Logic based on the definitive simulationState updated by fetch functions ---
+                const newState = simulationState; // Use the state updated by fetch functions
+
+                // Determine if the simulation loop should run based on the fetched state
+                simulationActive = !newState.is_paused && !newState.is_complete;
+
+                if (simulationActive) {
+                    console.log(`Command '${command}' resulted in active state. Ensuring fetch loop is running.`);
+                    fetchUpdate(); // Start or continue the loop
+                } else if (newState.is_complete) {
+                    console.log(`Command '${command}' resulted in complete state.`);
+                    displayCompletionStats(newState.completion_stats); // Ensure popup shows if completed via command
+                    simulationActive = false; // Ensure inactive
+                } else if (newState.is_paused) {
+                    console.log(`Command '${command}' resulted in paused state.`);
+                    simulationActive = false; // Ensure inactive
+                } else {
+                    console.log(`Command '${command}' resulted in inactive state (reason unknown/edge case).`);
+                    simulationActive = false;
+                }
+
+                // Update the run-to cycle input field value based on the fetched state
+                if (runToCycleInput) { runToCycleInput.value = newState.current_frame; }
+
             } else {
-                handleApiError(data.error || response.statusText, `sending command '${command}'`);
+                // Backend command failed
+                handleApiError(data.error || response.statusText || `Backend error for command '${command}'`, `sending command '${command}'`);
                 simulationActive = false; // Stop on error
+                // Attempt to fetch current state to sync UI, might show error state
+                console.log("Attempting to fetch state after command failure to sync UI.");
+                await fetchFullStateAfterCommand();
             }
         } catch (error) {
+            // Network error
             handleApiError(error.message, `sending command '${command}' (network error)`);
             simulationActive = false; // Stop on error
+            // Optionally try to resync UI after network error
+            // console.log("Attempting to fetch state after network error to sync UI.");
+            // await fetchFullStateAfterCommand();
         }
     }
 
