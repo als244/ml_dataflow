@@ -129,7 +129,7 @@ def start_simulation():
         # Create a temporary runner just to get initial state and config
         try:
             temp_runner = SimulationRunner(params)
-            # temp_runner.reset_simulation_state() # Init should call this
+            temp_runner.reset_simulation_state()
             initial_render_state = temp_runner.get_render_state()
             config = {
                 'N': temp_runner.N,
