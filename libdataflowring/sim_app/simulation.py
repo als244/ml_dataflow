@@ -1488,6 +1488,10 @@ class SimulationRunner:
 
         completion_text = (
             f"Simulation Complete!\nFinal Cycle Count: {T}\nRuntime: {runtime_in_seconds:.3f} seconds\n\n"
+            f"*** COMPUTE THROUGHPUT ***\n"
+            f"  Ideal Upper-Bound: {math.ceil(total_throughput_upper_bound_tflops / self.N)} TFLOPS\n"
+            f"  Achieved Throughput: {math.ceil(achieved_throughput_tflops / self.N)} TFLOPS\n\n\n"
+            f"--- PIPELINE STATS --- \n"
             f"Problem:\nTotal Tasks: {self.total_tasks}\n"
             f"Total Task Comp Cycles: {self.total_computation_time}\n"
             f"Total Device Cycles: {total_dev_time}\n\n"
@@ -1496,9 +1500,6 @@ class SimulationRunner:
             f"Steady-State Cycles: {steady_time}\n\n"
             f"Pipeline Efficiency:\n% Active Overall: {overall_eff:.2f}%\n"
             f"% Active during Steady-State: {steady_eff:.2f}%\n\n\n"
-            f"COMPUTE THROUGHPUT:\n"
-            f"  Ideal Upper-Bound: {math.ceil(total_throughput_upper_bound_tflops / self.N)} TFLOPS\n"
-            f"  Achieved Throughput: {math.ceil(achieved_throughput_tflops / self.N)} TFLOPS\n"
         )
         return {
             "text": completion_text, "final_cycle": T, "runtime_sec": runtime_in_seconds,
