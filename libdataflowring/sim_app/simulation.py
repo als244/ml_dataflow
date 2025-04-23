@@ -1742,7 +1742,7 @@ class SimulationRunner:
             f"Pipeline:\nFill Cycles: {start_bubble}\n"
             f"Flush Cycles: {stop_bubble}\n\n\n"
             f"EFFICIENCY:\nOverall % Active: {overall_eff:.2f}%\n"
-            f"Post-Fill/Pre-Flush % Active: {steady_eff:.2f}%\n\n"
+            f"Steady-State % Active: {steady_eff:.2f}%\n\n"
         )
         return {
             "text": completion_text, "final_cycle": T, "runtime_sec": runtime_in_seconds,
