@@ -1314,7 +1314,7 @@ class SimulationRunner:
         self.min_speed_level = 1
         self.max_speed_level = 100
         self.min_interval_ms = 1
-        self.max_interval_ms = 500
+        self.max_interval_ms = 250
         self.current_speed_level = 80
         self.current_interval_sec = calculate_interval(
             self.current_speed_level, self.min_speed_level, self.max_speed_level,
