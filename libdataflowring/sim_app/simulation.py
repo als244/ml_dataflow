@@ -1739,8 +1739,8 @@ class SimulationRunner:
             f"  Ideal Upper-Bound: {math.ceil(total_throughput_upper_bound_tflops / self.N)} TFLOPS\n"
             f"  Achieved Throughput: {math.ceil(achieved_throughput_tflops / self.N)} TFLOPS\n\n\n"
             f"--- PIPELINE STATS --- \n\n"
-            f"Pipeline:\nFill Cycles: {start_bubble}\n"
-            f"Flush Cycles: {stop_bubble}\n\n\n"
+            f"Pipeline:\nFill Bubble: {start_bubble} Agg. Cycles\n"
+            f"Flush Bubble: {stop_bubble} Agg. Cycles\n\n\n"
             f"EFFICIENCY:\nOverall % Active: {overall_eff:.2f}%\n"
             f"Steady-State % Active: {steady_eff:.2f}%\n\n"
         )
