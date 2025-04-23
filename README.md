@@ -12,28 +12,22 @@ The current ecosystem lies at the extremes; optimizing for performance by means 
 
 -----
 
-##### Author's Remarks
-
-As the world becomes increasingly depedent upon AI, it is vital to maximize hardware throughput; our most precious resources, *time* & *energy consumption*, are on the line...
-
------
-
 | Library Structure Flow   |
 | :----------------------: |
 | **libdataflowring** |
 | &#11015;                 |
 | **libdataflowmodels** |
 | &#11015;                 |
-| **libdataflowops** & **backends/lib_register_default_ops** |
+| **backends/lib_register_default_ops** => **libdataflowops** |
 | &#11015;                 |
-| **libdataflow** & **backends/lib_handle** |
+| **backends/lib_handle** => **libdataflow** |
 
 
-### libdataflow & libdataflowops
+## libdataflow & libdataflowops
 
 Some of the basic components:
 
-#### Dataflow Handle
+### Dataflow Handle
 
 The core data-structure is a `Dataflow_Handle` (subject to change as this repo reaches maturity). Hardware backends are responsible for supplying an implementation for the API functions contained within this struct. This object is resposible for hardware abstraction, giving a foundation for higher level development.
 
@@ -47,7 +41,7 @@ It is the heart this whole repo. The API functions expose 4 fundamental function
 - Dataflow Handle API: `libdataflow/include/dataflow_handle.h`
 - Example Implementation (for Nvidia Devices): `backends/nvidia/src/handle/cuda_dataflow_handle.c`
 
-#### Ops 
+### Ops 
 
 To be of any use, users will need to register operations with this backend. Operations can be registered as either:
 - Native
@@ -63,7 +57,7 @@ Upon `submit_op()` the backend should either directly call its own mechanism for
 ***For reference see***:
 - Op Structure: `libdataflow/include/dataflow_op_structs.h`
 
-#### Op Registration & Submission
+### Op Registration & Submission
 
 <small>*Note: The registration aspect is currently very clunkly and is likely to be re-factored in the future. The reliance on setting Op_Skeleton's is ugly, the extra config library for native ops is annoying,  and generally the whole setup requires too many specific path names / symbol names (and is awkward to manage). The plans are to simplify this component to make it easier for higher level development to interact with.*</small>
 
@@ -107,3 +101,8 @@ TLDR: If you are only working with default transformer ops and don't want to spe
 
 
 
+-----
+
+##### Author's Remarks
+
+As the world becomes increasingly depedent upon AI, it is vital to maximize hardware throughput; our most precious resources, *time* & *energy consumption*, are on the line...
