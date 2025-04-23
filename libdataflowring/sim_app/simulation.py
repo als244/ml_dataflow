@@ -1388,6 +1388,8 @@ class SimulationRunner:
         head_params = self.model_dim + self.model_dim * self.vocab_size
         total_model_params = embed_params + self.total_layers * (attn_block_params + ffn_block_params) + head_params
 
+        ffn_active_params =  self.model_dim + 3 * self.active_experts * (self.model_dim * self.expert_dim)
+        total_active_params = embed_params + self.total_layers * (attn_block_params + ffn_active_params) + head_params
         # includes the user inputs, but these are saved to the left sidepanel and locked
         # so don't need to show and running out of vertical space....
         """
@@ -1455,6 +1457,7 @@ class SimulationRunner:
 
         text = (
           f"# Model Parameters: {total_model_params / (1e9):0.2f} B\n\n"
+          f"   - # Active: {total_active_params / (1e9):0.2f} B\n\n"
           f"--- FULL MEMORY OVERVIEW ---\n\n"
           f" - Model: {train_model_size / (1 << 30):.2f} GB\n"
           f" - Model Grads: {train_gradient_size / (1 << 30):.2f} GB\n"
