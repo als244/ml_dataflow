@@ -6,23 +6,6 @@ import sys
 import os # For secret key
 import traceback # Keep for detailed error logging
 
-try:
-    # Ensure these methods exist in SimulationRunner now!
-    from simulation import SimulationRunner
-    # Check if methods exist (optional defensive check)
-    if not hasattr(SimulationRunner, 'get_serializable_state') or \
-       not hasattr(SimulationRunner, 'load_from_serializable_state') or \
-       not hasattr(SimulationRunner, 'get_render_state'):
-           raise AttributeError("SimulationRunner missing required state methods.")
-
-except ImportError:
-    print("Error: simulation.py not found or contains import errors.")
-    sys.exit(1)
-except AttributeError as e:
-    print(f"Error: {e}")
-    print("Please ensure get_serializable_state, load_from_serializable_state, and get_render_state methods are defined in SimulationRunner class in simulation.py.")
-    sys.exit(1)
-
 app = Flask(__name__)
 
 # --- Session Configuration ---
