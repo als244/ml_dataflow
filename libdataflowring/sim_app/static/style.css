@@ -234,7 +234,7 @@ header h1 {
 
 /* Completion Popup Styles - No changes */
 #completion-popup {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width:90%; max-height: 90vh; background-color: rgba(248, 248, 248, 0.98); border: 1px solid #aaa; border-radius: 8px; box-shadow: 0 5px 20px rgba(0, 0, 0, 0.25); z-index: 1000; display: none; overflow: hidden;
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width:90%; max-height: 90vh; background-color: rgba(248, 248, 248, 0.98); border: 1px solid #aaa; border-radius: 8px; box-shadow: 0 5px 20px rgba(0, 0, 0, 0.25); z-index: 1000; display: none; overflow: hidden;
 }
 .popup-content { padding: 20px 25px 25px 25px; position: relative; max-height: calc(80vh - 40px); overflow-y: scroll; }
 .popup-content h2 { margin-top: 0; margin-bottom: 15px; color: #333; text-align: center; font-size: 1.4em; }

@@ -1739,7 +1739,7 @@ class SimulationRunner:
             f"  Ideal Upper-Bound: {math.ceil(total_throughput_upper_bound_tflops / self.N)} TFLOPS\n"
             f"  Achieved Throughput: {math.ceil(achieved_throughput_tflops / self.N)} TFLOPS\n\n\n"
             f"--- PIPELINE STATS --- \n\n"
-            f"Raw Compute Cycles: {self.total_compute_cycles}\n"
+            f"Raw Task Compute Cycles: {self.total_compute_cycles}\n"
             f"Total Occupied Cycles: {self.N * T}\n\n"
             f"Fill Bubble: {start_bubble} Total Cycles\n"
             f"Flush Bubble: {stop_bubble} Total Cycles\n\n\n"
