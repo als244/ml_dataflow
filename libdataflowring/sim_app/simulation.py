@@ -1448,7 +1448,7 @@ class SimulationRunner:
         """
 
         text = (
-          f"Model Parameter Count: {total_model_params / (1e9):0.2f} Billion\n\n"
+          f"Model Parameter Count: {total_model_params / (1e9):0.2f}B\n\n"
           f"--- FULL MEMORY OVERVIEW ---\n\n"
           f" - Model: {train_model_size / (1 << 30):.2f} GB\n"
           f" - Model Grads: {train_gradient_size / (1 << 30):.2f} GB\n"
