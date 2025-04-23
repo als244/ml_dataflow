@@ -788,7 +788,7 @@ class Device:
             # 4. Trigger Prefetches / Gradient Saves (Keep Logic)
             if is_fwd: # FWD Finished
                 ## check to see if we finished a layer and should prefetch next weights...
-                if (cid == self.total_chunks - 1) and self.next_weight_prefetch_layer_id <= self.total_layers:
+                if (cid == self.total_chunks - 1) and self.next_weight_prefetch_layer_id >= 0 and self.next_weight_prefetch_layer_id <= self.total_layers:
                     layer_transfer_time = self.layerTransferFrames
                     if self.next_weight_prefetch_layer_id == self.total_layers:
                         layer_transfer_time = self.headTransferFrames
