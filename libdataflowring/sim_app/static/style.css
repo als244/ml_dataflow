@@ -103,7 +103,32 @@ header h1 {
 #paramsForm button[type="submit"]:hover:not(:disabled) { background-color: #0056b3; }
 
 .error-message {
-    color: #dc3545; font-weight: bold; white-space: pre-wrap; font-family: monospace; margin-top: 10px; padding: 8px; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; min-height: 1.2em; display: none; width: 100%;
+    /* Core Appearance Styles (Keep or adjust as needed) */
+    color: #dc3545;
+    font-weight: bold;
+    font-family: monospace;   /* Consider sans-serif if preferred */
+    padding: 12px 20px;       /* Maybe slightly more padding */
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    border-radius: 5px;
+    min-height: 1.2em;
+    white-space: pre-wrap;    /* Good for multi-line errors */
+    text-align: center;       /* Center the text within the message */
+    display: none;            /* Still hidden by default */
+    box-shadow: 0 3px 8px rgba(0,0,0,0.15); /* Optional: subtle shadow */
+
+    /* New Positioning Styles */
+    position: absolute;       /* Position relative to .simulation-area */
+    top: 15px;                /* Space from the top */
+    left: 50%;                /* Center horizontally */
+    transform: translateX(-50%); /* Fine-tune horizontal centering */
+    width: 90%;               /* Make it wide, but not full width */
+    max-width: 750px;         /* Set a max-width */
+    z-index: 50;              /* Ensure it's above controls/status, below popups */
+
+    /* Remove styles that were relevant in the footer */
+    /* margin-top: 10px; */    /* No longer needed */
+    /* width: 100%; */       /* Overridden by new width/max-width */
 }
 .error-message.visible { display: block; }
 
