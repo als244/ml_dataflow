@@ -1198,7 +1198,7 @@ class SimulationRunner:
         ## and becomes issue over network, working with 50-100 micros is good locally,
         ## (where it is smoother and can much faster without dealing with net latency)
         ## but using longer to look better for other clients
-        self.micros_per_cycle = 250
+        self.micros_per_cycle = 200
         self.cycles_per_second = 1e6 / self.micros_per_cycle
 
         self.flops_per_attn_chunk_mult = 2 * self.chunk_size * self.model_dim
