@@ -18,8 +18,11 @@ As the world becomes increasingly depedent upon AI, it is vital to maximize hard
 
 -----
 
-| Library Structure Flow   | | :----------------------: | | **libdataflowring** |
-| &#11015;                 | | **libdataflowmodels** |
+| Library Structure Flow   |
+| :----------------------: |
+| **libdataflowring** |
+| &#11015;                 |
+| **libdataflowmodels** |
 | &#11015;                 |
 | **libdataflowops** & **backends/lib_register_default_ops** |
 | &#11015;                 |
