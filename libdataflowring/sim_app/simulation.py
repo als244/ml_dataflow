@@ -1741,8 +1741,8 @@ class SimulationRunner:
             f"Total Tasks: {self.total_tasks}\n"
             f"Raw Task Compute Cycles: {self.total_computation_time}\n"
             f"Total Utilized Device Cycles: {total_dev_time}\n\n"
-            f"Pipeline:\nFill Cycles (Sum over Devices' Start Times): {start_bubble}\n"
-            f"Flush Cycles (Sum over Final Time - Devices' Finish Times): {stop_bubble}\n\n\n"
+            f"Pipeline:\nFill Cycles: {start_bubble}\n"
+            f"Flush Cycles: {stop_bubble}\n\n\n"
             f"EFFICIENCY:\n% Active Overall: {overall_eff:.2f}%\n"
             f"% Active during Steady-State (Post-Fill/Pre-Flush): {steady_eff:.2f}%\n\n"
         )
