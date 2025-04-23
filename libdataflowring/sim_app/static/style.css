@@ -50,7 +50,7 @@ header h1 {
     font-size: 0.85rem;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow: scroll;
     min-height: 0;
     position: relative;
 }
@@ -115,7 +115,7 @@ header h1 {
     flex: 1; /* Takes remaining space */
     display: flex;
     align-items: stretch;
-    overflow: hidden;
+    overflow: scroll;
     padding: 20px;
     gap: 20px;
     min-width: 0;
