@@ -1193,7 +1193,12 @@ class SimulationRunner:
         self.activations_capacity = int(min(base_activations_capacity, self.max_activations_capacity))
         
         # --- Calculate Compute Times (Keep logic) ---
-        self.micros_per_cycle = 100
+        
+        ## smaller looks smoother and is more accurate, but takes longer to watch
+        ## and becomes issue over network, working with 50-100 micros is good locally,
+        ## (where it is smoother and can much faster without dealing with net latency)
+        ## but using longer to look better for other clients
+        self.micros_per_cycle = 250
         self.cycles_per_second = 1e6 / self.micros_per_cycle
 
         self.flops_per_attn_chunk_mult = 2 * self.chunk_size * self.model_dim
