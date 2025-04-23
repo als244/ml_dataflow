@@ -160,7 +160,7 @@ header h1 {
 }
 .legend-area pre {
     margin: 0;
-    padding-top: 0;
+    padding-top: 5px;
     font-family: monospace; /* Set font-family here */
     font-size: 0.75rem; /* Restore specific font size for pre (was inherited) */
     color: #555;
