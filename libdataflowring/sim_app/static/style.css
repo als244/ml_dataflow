@@ -128,9 +128,10 @@ header h1 {
     /* Consider adding min/max width if needed: */
     /* min-width: 150px; */
     /* max-width: 300px; */
-    font-family: monospace;
-    font-size: 0.75rem;
-    white-space: pre-wrap;
+    /* font-family: monospace; */ /* Moved font-family to pre for better control */
+    /* font-size: 0.75rem; */ /* Set font-size to 0 to collapse whitespace */
+    font-size: 0; /* Collapse whitespace nodes between child elements */
+    white-space: pre-wrap; /* This might be unnecessary now */
     padding: 10px 15px;
     border: 1px solid #ccc;
     background-color: #fdfdfd;
@@ -144,7 +145,7 @@ header h1 {
 }
 .legend-area h2 {
     margin-top: 0;
-    font-size: 1.15em;
+    font-size: 1.15em; /* Restore font size for h2 */
     margin-bottom: 0px;
     padding-bottom: 0px;
     border-bottom: 1px solid #eee;
@@ -160,7 +161,8 @@ header h1 {
 .legend-area pre {
     margin: 0;
     padding-top: 0;
-    font-size: inherit;
+    font-family: monospace; /* Set font-family here */
+    font-size: 0.75rem; /* Restore specific font size for pre (was inherited) */
     color: #555;
     flex-grow: 1;
     white-space: pre;
