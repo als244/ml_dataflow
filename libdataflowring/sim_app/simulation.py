@@ -1192,6 +1192,7 @@ class SimulationRunner:
 
         self.activations_capacity = int(min(base_activations_capacity, self.max_activations_capacity))
         
+        remain_dev_mem -= self.activations_capacity * self.activation_size_bytes
         # --- Calculate Compute Times (Keep logic) ---
         
         ## smaller looks smoother and is more accurate, but takes longer to watch
@@ -1337,7 +1338,7 @@ class SimulationRunner:
         context_buffer_allocation = (self.context_buffer_capacity * self.per_layer_full_context_size)
         grad_context_buffer_allocation = (self.grad_context_buffer_capacity * self.per_layer_full_context_size)
         activation_allocation = (self.activations_capacity * self.activation_size_bytes)
-        transition_allocation = (2 * self.head_transitions_capacity * self.output_size_bytes) # Use head cap estimate
+        transition_allocation = (2 * self.transitions_capacity * self.output_size_bytes) # Use head cap estimate
         typical_device_memory_size = (layer_allocation + grad_layer_allocation +
                                       context_buffer_allocation + grad_context_buffer_allocation +
                                       activation_allocation + transition_allocation)
@@ -1454,7 +1455,7 @@ class SimulationRunner:
           f"*** TOTAL PER-HOME MEMORY ***\n"
           f" - {typical_home_total_size / (1 << 30):.2f} GB\n\n\n\n"
           f"--- MEMORY PARTITIONS ---\n\n"
-          f"Device Partitions:\n"
+          f"Device Partitions (Typical):\n"
           f" - Activation Cap.: {self.activations_capacity}\n"
           f"   {(self.activations_capacity * self.activation_size_bytes)/ (1 << 30):.3f} GB\n"
           f" - Layer Cap.: {self.layer_capacity}\n"
@@ -1467,7 +1468,7 @@ class SimulationRunner:
           f"   {(self.grad_context_buffer_capacity * self.per_layer_full_context_size)/ (1 << 30):.3f} GB\n"
           f" - Trans. Cap. (Inp/Out): {self.transitions_capacity}\n"
           f"   {(2 * self.transitions_capacity * self.output_size_bytes)/ (1 << 30):.3f} GB\n\n"     
-          f"Home Partitions:\n"
+          f"Home Partitions (Typical):\n"
           f" - Home # Act. Saved: {home_activation_stack_0}\n"
           f"    {typical_home_activation_size / (1 << 30):.2f} GB\n"
           f" - Model: {typical_home_layer_sizes / (1 << 30):.2f} GB\n"
@@ -1505,7 +1506,7 @@ class SimulationRunner:
         text = (
             f"--- DISCOVERED CONSTANTS ---\n\n"
             f"Compute Constants:\n"
-            f" - Theo. MAX: {int(self.hardware_max_flops / 1e12)} TFLOPs\n"
+            f" - Theo. Compute: {int(self.hardware_max_flops / 1e12)} TFLOPs\n"
             f" - Memory BW: {int(self.hardware_mem_bw_bytes_sec / (1 << 30))} GB/s\n"
             f" - Peak Matmul Eff: {self.matmul_efficiency}\n"
             f" - Peak Attn Eff: {self.attn_efficiency}\n\n"
@@ -1528,16 +1529,16 @@ class SimulationRunner:
             f"Sim Speed:\n"
             f" - {1e6/self.cycles_per_second:.1f} us/cycle\n\n"
             f"Compute Times (Cycles):\n"
-            f" - C0: {self.computation_times_frames.get(0,0)}\n"
-            f" - C{self.total_chunks-1}: {self.computation_times_frames.get(self.total_chunks-1,0)}\n"
+            f" - C0 (Tokens: [0, {self.chunk_size}): {self.computation_times_frames.get(0,0)}\n"
+            f" - C{self.total_chunks-1} (Tokens: [{self.total_chunks-1} * {self.chunk_size}, {self.total_chunks * self.chunk_size}): {self.computation_times_frames.get(self.total_chunks-1,0)}\n"
             f" - Head: {self.headFrames}\n"
-            f" - BwdW: {self.bwdWFrames}\n\n"
+            f" - Bwd W: {self.bwdWFrames}\n\n"
             f"Transfer Times (Cycles):\n"
             f" - Layers\n"
             f"   - Block: {self.layerTransferFrames}\n"
             f"   - Head: {self.headTransferFrames}\n"
             f" - Chunk Info\n"
-            f"   - Activation Saving: {self.savedActivationsFrames}\n"
+            f"   - Activation Save/Fetch: {self.savedActivationsFrames}\n"
             f"   - Block Transitions: {blockTransitionCyclesText}\n"
             f"   - Context Transfers: {contextTransferCycleText}"
         )
