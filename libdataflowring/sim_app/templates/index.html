@@ -18,9 +18,6 @@
                 <div class="form-scroll-content">
                     <div id="param-grid">
                         <div class="section-header"><h3>Training Spec</h3></div>
-                        <label for="N">Num Devices:</label>
-                        <input type="number" id="N" name="N" value="8" min="1" required>
-                        <label for="max_device_memory_gb">Max Device Memory (GB):</label>
                         <input type="number" id="max_device_memory_gb" name="max_device_memory_gb" value="20" step="0.1" min="1" required>
                         <label for="seqlen">Sequence Length (K):</label>
                         <input type="number" id="seqlen" name="seqlen" value="32" min="1" required>
@@ -30,6 +27,14 @@
                         <input type="number" id="min_chunk_size" name="min_chunk_size" value="1536" min="1" required disabled>
                         <label for="chunk_type">Chunk Type:</label>
                         <input type="text" id="chunk_type" name="chunk_type" value="Equal Data" disabled>
+                    </div>
+
+                    <div id="param-grid">
+                        <div class="section-header"><h3>Training Environment</h3></div>
+                        <label for="N">Num Devices:</label>
+                        <input type="number" id="N" name="N" value="8" min="1" required>
+                        <label for="max_device_memory_gb">Max Device Memory (GB):</label>
+                        <input type="number" id="max_device_memory_gb" name="max_device_memory_gb" value="20" step="0.1" min="1" required>
                     </div>
 
                     <div id="param-grid">
