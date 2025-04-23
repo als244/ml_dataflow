@@ -103,34 +103,38 @@ header h1 {
 #paramsForm button[type="submit"]:hover:not(:disabled) { background-color: #0056b3; }
 
 .error-message {
-    /* Core Appearance Styles (Keep or adjust as needed) */
+    /* Core Appearance Styles (Keep or adjust) */
     color: #dc3545;
     font-weight: bold;
-    font-family: monospace;   /* Consider sans-serif if preferred */
-    padding: 12px 20px;       /* Maybe slightly more padding */
+    font-family: monospace;
+    padding: 15px 25px;       /* Adjust padding as needed */
     background-color: #f8d7da;
     border: 1px solid #f5c6cb;
     border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     min-height: 1.2em;
-    white-space: pre-wrap;    /* Good for multi-line errors */
-    text-align: center;       /* Center the text within the message */
-    display: none;            /* Still hidden by default */
-    box-shadow: 0 3px 8px rgba(0,0,0,0.15); /* Optional: subtle shadow */
+    text-align: center;
+    white-space: pre-wrap;
+    display: none;            /* Hidden by default */
 
-    /* New Positioning Styles */
-    position: absolute;       /* Position relative to .simulation-area */
-    top: 15px;                /* Space from the top */
-    left: 50%;                /* Center horizontally */
-    transform: translateX(-50%); /* Fine-tune horizontal centering */
-    width: 90%;               /* Make it wide, but not full width */
-    max-width: 750px;         /* Set a max-width */
-    z-index: 50;              /* Ensure it's above controls/status, below popups */
+    /* Sizing */
+    width: auto;              /* Let content and padding define width */
+    max-width: 90%;           /* Limit width within the container */
+    box-sizing: border-box;
 
-    /* Remove styles that were relevant in the footer */
-    /* margin-top: 10px; */    /* No longer needed */
-    /* width: 100%; */       /* Overridden by new width/max-width */
+    /* REMOVE Absolute Positioning Styles */
+    /* position: absolute; */
+    /* top: 15px; */
+    /* left: 50%; */
+    /* transform: translateX(-50%); */
+    /* z-index: 50; */
+    /* width: 90%; */         /* Replaced by auto/max-width */
 }
 .error-message.visible { display: block; }
+
+.error-message.visible + #simulation-svg {
+    display: none;
+}
 
 
 /* Content Area Wrapper */
@@ -246,6 +250,8 @@ header h1 {
     border-radius: 4px;
     display: grid;
     place-items: center;
+    padding: 10px;
+    box-sizing: border-box;
 }
 
 /* SVG Styling */
