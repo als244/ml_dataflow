@@ -1733,7 +1733,7 @@ class SimulationRunner:
         achieved_throughput_tflops = (self.total_flops / runtime_in_seconds / 1e12) if runtime_in_seconds > 0 else 0
 
         completion_text = (
-            f"Simulation Complete!\nFinal Cycle Count: {T}\nRuntime: {runtime_in_seconds:.3f} seconds\n\n"
+            f"Simulation Complete!\n\nFinal Cycle Count: {T}\nRuntime: {runtime_in_seconds:.3f} seconds\n\n"
             f"*** COMPUTE THROUGHPUT ***\n"
             f"  Ideal Upper-Bound: {math.ceil(total_throughput_upper_bound_tflops / self.N)} TFLOPS\n"
             f"  Achieved Throughput: {math.ceil(achieved_throughput_tflops / self.N)} TFLOPS\n\n\n"
