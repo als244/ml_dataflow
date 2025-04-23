@@ -145,7 +145,7 @@ header h1 {
 }
 .legend-area h2 {
     margin-top: 0;
-    font-size: 1.15em; /* Restore font size for h2 */
+    font-size: 1.15rem; /* Restore font size for h2 */
     margin-bottom: 0px;
     padding-bottom: 0px;
     border-bottom: 1px solid #eee;
