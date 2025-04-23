@@ -1375,6 +1375,12 @@ class SimulationRunner:
 
         gb = (1 << 30)
         mb = (1 << 20)
+        
+        embed_params = self.model_dim * self.vocab_size
+        attn_block_params = self.model_dim + 2 * (self.model_dim * self.model_dim) + (self.model_dim * self.kv_dim)
+        ffn_block_params = self.model_dim + 3 * self.num_experts * (self.model_dim * self.expert_dim)
+        head_params = self.model_dim + self.model_dim * self.vocab_size
+        total_model_params = embed_params + self.total_layers * (attn_block_params + ffn_block_params) + head_params
 
         # includes the user inputs, but these are saved to the left sidepanel and locked
         # so don't need to show and running out of vertical space....
@@ -1442,6 +1448,7 @@ class SimulationRunner:
         """
 
         text = (
+          f"Model Parameter Count: {total_model_params / (1e9):.3f} B\n\n"
           f"--- FULL MEMORY OVERVIEW ---\n\n"
           f" - Model: {train_model_size / (1 << 30):.2f} GB\n"
           f" - Model Grads: {train_gradient_size / (1 << 30):.2f} GB\n"
