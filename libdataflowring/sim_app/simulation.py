@@ -1530,7 +1530,7 @@ class SimulationRunner:
             f" - {1e6/self.cycles_per_second:.1f} us/cycle\n\n"
             f"Compute Times (Cycles):\n"
             f" - C0 (Tokens: [0, {self.chunk_size}): {self.computation_times_frames.get(0,0)}\n"
-            f" - C{self.total_chunks-1} (Tokens: [{self.total_chunks-1} * {self.chunk_size}, {self.total_chunks * self.chunk_size}): {self.computation_times_frames.get(self.total_chunks-1,0)}\n"
+            f" - C{self.total_chunks-1} (Tokens: [{(self.total_chunks-1) * self.chunk_size}, {self.seqlen}): {self.computation_times_frames.get(self.total_chunks-1,0)}\n"
             f" - Head: {self.headFrames}\n"
             f" - Bwd W: {self.bwdWFrames}\n\n"
             f"Transfer Times (Cycles):\n"
