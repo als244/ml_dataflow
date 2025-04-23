@@ -1161,37 +1161,39 @@ class SimulationRunner:
         context_dev_mem = (self.context_buffer_capacity) * self.per_layer_full_context_size
         grad_context_dev_mem = (self.grad_context_buffer_capacity) * self.per_layer_full_context_size
         min_activations_dev_mem = 2 * self.activation_size_bytes
+
+        error_string = f"Currently only supports:\n\nLayer (& Grad) Capacity = 2 ({(model_dev_mem + model_grad_dev_mem) / (1 << 30):.3f} GB)\n\nContext Buffer (& Grad) Capacity = 1 ({(context_dev_mem + grad_context_dev_mem) / (1 << 30):.3f} GB)\n\nTransition Capacity = Num Devices ({(transition_dev_mem) / (1 << 30):.3f} GB)\n\nActivation Capacity >= 2 ({(min_activations_dev_mem) / (1 << 30):.3f} GB)\n\n\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\nMore generality coming soon...\n\nTry a Smaller Model or a Shorter Sequence (if Large Context Buffer).\n\n\n\nCannot run simulation with current configuration :("
         
         remain_dev_mem = self.max_device_memory_bytes
         remain_dev_mem -= model_dev_mem
         if remain_dev_mem < 0: 
-            raise ValueError(f"\n\nError: 1st/6 Dev Mem Check.\nNot enough Dev Memory to hold Model Layers.\n\nCurrently only supports:\n\nLayer (+ Grad) Capacities = 2 ({(model_dev_mem + model_grad_dev_mem) / (1 << 30):.3f} GB)\n\nContext Buffer (+ Grad) Capacities = 1 ({(context_dev_mem + grad_context_dev_mem) / (1 << 30):.3f} GB)\n\nTransition Capacity = Num Devices ({(transition_dev_mem) / (1 << 30):.3f} GB)\n\nActivation Capacity >= 2 ({(min_activations_dev_mem) / (1 << 30):.3f} GB)\n\n\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nTry a Smaller Model or a Shorter Sequence (if large Context Buffer).\n\n\n\nCannot run simulation with current configuration :(")
+            raise ValueError(f"\n\nError: 1st/6 Dev Mem Check.\nNot enough Dev Memory to hold Model Layers.\n\n\n{error_string}")
 
 
         remain_dev_mem -= model_grad_dev_mem
         if remain_dev_mem < 0: 
-            raise ValueError(f"\n\nError: 2nd/6 Dev Mem Check.\nNot enough Dev Memory to hold Model Gradients.\n\nCurrently only supports:\n\nLayer (+ Grad) Capacities = 2 ({(model_dev_mem + model_grad_dev_mem) / (1 << 30):.3f} GB)\n\nContext Buffer (+ Grad) Capacities = 1 ({(context_dev_mem + grad_context_dev_mem) / (1 << 30):.3f} GB)\n\nTransition Capacity = Num Devices ({(transition_dev_mem) / (1 << 30):.3f} GB)\n\nActivation Capacity >= 2 ({(min_activations_dev_mem) / (1 << 30):.3f} GB)\n\n\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nTry a Smaller Model or a Shorter Sequence (if large Context Buffer).\n\n\n\nCannot run simulation with current configuration :(")
+            raise ValueError(f"\n\nError: 2nd/6 Dev Mem Check.\nNot enough Dev Memory to hold Model Gradients.\n\n\n{error_string}")
 
 
         
         remain_dev_mem -= context_dev_mem
         if remain_dev_mem < 0: 
-            raise ValueError(f"\n\nError: 3rd/6 Dev Mem Check.\nNot enough Dev Memory to hold Context Buffer.\n\nCurrently only supports:\n\nLayer (+ Grad) Capacities = 1 or 2 ({(model_dev_mem + model_grad_dev_mem) / (1 << 30):.3f} GB)\n\nContext Buffer (+ Grad) Capacities = 1 ({(context_dev_mem + grad_context_dev_mem) / (1 << 30):.3f} GB)\n\nTransition Capacity = Num Devices ({(transition_dev_mem) / (1 << 30):.3f} GB)\n\nActivation Capacity >= 2 ({(min_activations_dev_mem) / (1 << 30):.3f} GB)\n\n\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nTry a Smaller Model or a Shorter Sequence (if large Context Buffer).\n\n\n\nCannot run simulation with current configuration :(")
+            raise ValueError(f"\n\nError: 3rd/6 Dev Mem Check.\nNot enough Dev Memory to hold Context Buffer.\n\n\n{error_string}")
 
         
         remain_dev_mem -= grad_context_dev_mem
         if remain_dev_mem < 0: 
-            raise ValueError(f"\n\nError: 4th/6 Dev Mem Check.\nNot enough Dev Memory to hold Grad Context Buffer.\n\nCurrently only supports:\n\nLayer (+ Grad) Capacities = 1 or 2 ({(model_dev_mem + model_grad_dev_mem) / (1 << 30):.3f} GB)\n\nContext Buffer (+ Grad) Capacities = 1 ({(context_dev_mem + grad_context_dev_mem) / (1 << 30):.3f} GB)\n\nTransition Capacity = Num Devices ({(transition_dev_mem) / (1 << 30):.3f} GB)\n\nActivation Capacity >= 2 ({(min_activations_dev_mem) / (1 << 30):.3f} GB)\n\n\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nTry a Smaller Model or a Shorter Sequence (if large Context Buffer).\n\n\n\nCannot run simulation with current configuration :(")
+            raise ValueError(f"\n\nError: 4th/6 Dev Mem Check.\nNot enough Dev Memory to hold Grad Context Buffer.\n\n\n{error_string}")
 
         remain_dev_mem -= transition_dev_mem
         if remain_dev_mem < 0: 
-            raise ValueError(f"\n\nError: 5th/6 Dev Mem Check.\nNot enough Dev Memory to hold Transitions.\n\nCurrently only supports:\n\nLayer (+ Grad) Capacities = 1 or 2 ({(model_dev_mem + model_grad_dev_mem) / (1 << 30):.3f} GB)\n\nContext Buffer (+ Grad) Capacities = 1 ({(context_dev_mem + grad_context_dev_mem) / (1 << 30):.3f} GB)\n\nTransition Capacity = Num Devices ({(transition_dev_mem) / (1 << 30):.3f} GB)\n\nActivation Capacity >= 2 ({(min_activations_dev_mem) / (1 << 30):.3f} GB)\n\n\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nTry a Smaller Model or a Shorter Sequence (if large Context Buffer).\n\n\n\nCannot run simulation with current configuration :(")
+            raise ValueError(f"\n\nError: 5th/6 Dev Mem Check.\nNot enough Dev Memory to hold Transitions.\n\n\n{error_string}")
 
 
         base_activations_capacity = int(remain_dev_mem // self.activation_size_bytes) if self.activation_size_bytes > 0 else 0
         
         if base_activations_capacity < 2:
-            raise ValueError(f"\n\nError: 6th/6 Dev Mem Check.\n\nNot enough Dev Memory to hold >= 2 Activations.\n\nCurrently only supports:\n\nLayer (+ Grad) Capacities = 1 or 2 ({(model_dev_mem + model_grad_dev_mem) / (1 << 30):.3f} GB)\n\nContext Buffer (+ Grad) Capacities = 1 ({(context_dev_mem + grad_context_dev_mem) / (1 << 30):.3f} GB)\n\nTransition Capacity = Num Devices ({(transition_dev_mem) / (1 << 30):.3f} GB)\n\nActivation Capacity >= 2 ({(min_activations_dev_mem) / (1 << 30):.3f} GB)\n\n\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nTry a Smaller Model or a Shorter Sequence (if large Context Buffer).\n\n\n\nCannot run simulation with current configuration :(")
+            raise ValueError(f"\n\nError: 6th/6 Dev Mem Check.\nNot enough Dev Memory to hold >= 2 Activations.\n\n\n{error_string}")
 
         ## max home layers is
         # 
