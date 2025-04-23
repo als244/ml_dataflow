@@ -27,11 +27,23 @@ header {
     padding: 10px 20px;
     border-bottom: 1px solid #ccc;
     flex-shrink: 0;
+    justify-content: space-between;
+    display: flex; 
+    align-items: center;
 }
 header h1 {
     margin: 0;
     font-size: 1.5em;
 }
+
+header h2 {
+    margin: 0; /* Remove default margins */
+    font-size: 1.2rem; /* Make font smaller (adjust value as needed) */
+    /* You can add other styles like color, font-weight etc. */
+    color: #569bdb;
+    font-weight: normal;
+}
+
 
 /* Main Layout Container - Flex */
 .main-container {
