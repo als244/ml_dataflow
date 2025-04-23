@@ -35,7 +35,7 @@ Some of the basic components:
 
 #### Dataflow Handle
 
-The core data-structure is a `Dataflow_Handle`, subject to change as this repo reaches maturity). Hardware backends are responsible for supplying an implementation for the API functions contained within this struct. This object is resposible for hardware abstraction, giving a foundation for higher level development.
+The core data-structure is a `Dataflow_Handle` (subject to change as this repo reaches maturity). Hardware backends are responsible for supplying an implementation for the API functions contained within this struct. This object is resposible for hardware abstraction, giving a foundation for higher level development.
 
 It is the heart this whole repo. The API functions expose 4 fundamental functionalities:
 - Computation Loading/Dispatching
