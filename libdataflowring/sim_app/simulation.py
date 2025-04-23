@@ -1125,6 +1125,17 @@ class SimulationRunner:
 
         self.per_layer_full_context_size = self.total_chunks * self.chunk_context_size_bytes
 
+           # Estimate transition/head buffer sizes based on chunks/N
+        self.transitions_capacity = max(1, self.N if self.N > 0 else 1) # Simplified base capacity
+        # Head needs potentially more space for inputs/outputs across chunks
+        # Use max of N and total_train_chunks as a heuristic? Needs careful thought.
+        self.head_transitions_capacity = max(self.transitions_capacity, self.total_train_chunks)
+
+        transition_dev_mem = 2 * self.transitions_capacity * self.output_size_bytes # Use larger head capacity estimate
+
+        ## head transitions capacity applies to device holding last layer and head
+        special_transition_dev_mem = (self.head_transitions_capacity + self.transitions_capacity) * self.output_size_bytes
+
         # --- Determine Capacities (Keep simplified logic) ---
         self.layer_capacity = 2 if self.N < self.total_layers else 1 # Base on non-head layers
         self.grad_layer_capacity = 2 if self.N < self.total_layers else 1
@@ -1163,17 +1174,6 @@ class SimulationRunner:
         if remain_dev_mem < 0: 
             raise ValueError(f"Error: 4th/6 Dev Mem Check. Not enough dev memory to hold grad context buffer. Currently only supports layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, grad context buffer capacity of 1, transition capacity = total_chunks - num_devices ({self.total_chunks - self.N}), & activation capacity >= 2.\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration...\n")
         
-       
-        # Estimate transition/head buffer sizes based on chunks/N
-        self.transitions_capacity = max(1, self.N if self.N > 0 else 1) # Simplified base capacity
-        # Head needs potentially more space for inputs/outputs across chunks
-        # Use max of N and total_train_chunks as a heuristic? Needs careful thought.
-        self.head_transitions_capacity = max(self.transitions_capacity, self.total_train_chunks)
-
-        transition_dev_mem = 2 * self.transitions_capacity * self.output_size_bytes # Use larger head capacity estimate
-
-        ## head transitions capacity applies to device holding last layer and head
-        special_transition_dev_mem = (self.head_transitions_capacity + self.transitions_capacity) * self.output_size_bytes
 
         remain_dev_mem -= transition_dev_mem
         if remain_dev_mem < 0: 
