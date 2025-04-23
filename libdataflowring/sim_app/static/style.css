@@ -105,7 +105,7 @@ header h1 {
 #paramsForm button[type="submit"]:hover:not(:disabled) { background-color: #0056b3; }
 
 .error-message {
-    color: #dc3545; font-weight: bold; margin-top: 10px; padding: 8px; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; min-height: 1.2em; display: none; width: 100%;
+    color: #dc3545; font-weight: bold; white-space: pre-wrap; font-family: monospace; margin-top: 10px; padding: 8px; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; min-height: 1.2em; display: none; width: 100%;
 }
 .error-message.visible { display: block; }
 
