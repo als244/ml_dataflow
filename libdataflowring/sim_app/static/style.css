@@ -43,14 +43,12 @@ header h1 {
 
 /* Sidebar Styling */
 .sidebar {
-    flex: 0 0 20%;
-    max-width: 220px;
+    flex: 0 0 240px;
     border-right: 1px solid #ccc;
     background-color: #f8f8f8;
     font-size: 0.85rem;
     display: flex;
     flex-direction: column;
-    overflow: scroll;
     min-height: 0;
     position: relative;
 }
