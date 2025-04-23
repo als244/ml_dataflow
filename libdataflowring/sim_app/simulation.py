@@ -1155,35 +1155,35 @@ class SimulationRunner:
         remain_dev_mem = self.max_device_memory_bytes
         remain_dev_mem -= model_dev_mem
         if remain_dev_mem < 0: 
-            raise ValueError(f"Error: 1st/6 Dev Mem Check. Not enough dev memory to hold model layers. Currently only supports layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, grad context buffer capacity of 1, transition capacity = total_chunks - num_devices ({self.total_chunks - self.N}), & activation capacity >= 2.\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration...\n")
+            raise ValueError(f"Error: 1st/6 Dev Mem Check. Not enough dev memory to hold model layers. Currently only supports layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, grad context buffer capacity of 1, transition capacity = num_devices, & activation capacity >= 2.\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration...\n")
         
 
         model_grad_dev_mem = self.grad_layer_capacity * self.layer_size_bytes
         remain_dev_mem -= model_grad_dev_mem
         if remain_dev_mem < 0: 
-            raise ValueError(f"Error: 2nd/6 Dev Mem Check. Not enough dev memory to hold model gradients. Currently only supports layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, grad context buffer capacity of 1, transition capacity = total_chunks - num_devices ({self.total_chunks - self.N}), & activation capacity >= 2.\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration...\n")
+            raise ValueError(f"Error: 2nd/6 Dev Mem Check. Not enough dev memory to hold model gradients. Currently only supports layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, grad context buffer capacity of 1, transition capacity = num_devices, & activation capacity >= 2.\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration...\n")
 
 
         context_dev_mem = (self.context_buffer_capacity) * self.per_layer_full_context_size
         remain_dev_mem -= context_dev_mem
         if remain_dev_mem < 0: 
-            raise ValueError(f"Error: 3rd/6 Dev Mem Check. Not enough dev memory to hold context buffer. Currently only supports layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, grad context buffer capacity of 1, transition capacity = total_chunks - num_devices ({self.total_chunks - self.N}), & activation capacity >= 2.\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration...\n")
+            raise ValueError(f"Error: 3rd/6 Dev Mem Check. Not enough dev memory to hold context buffer. Currently only supports layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, grad context buffer capacity of 1, transition capacity = num_devices, & activation capacity >= 2.\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration...\n")
 
         grad_context_dev_mem = (self.grad_context_buffer_capacity) * self.per_layer_full_context_size
         remain_dev_mem -= grad_context_dev_mem
         if remain_dev_mem < 0: 
-            raise ValueError(f"Error: 4th/6 Dev Mem Check. Not enough dev memory to hold grad context buffer. Currently only supports layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, grad context buffer capacity of 1, transition capacity = total_chunks - num_devices ({self.total_chunks - self.N}), & activation capacity >= 2.\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration...\n")
+            raise ValueError(f"Error: 4th/6 Dev Mem Check. Not enough dev memory to hold grad context buffer. Currently only supports layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, grad context buffer capacity of 1, transition capacity = num_devices, & activation capacity >= 2.\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration...\n")
         
 
         remain_dev_mem -= transition_dev_mem
         if remain_dev_mem < 0: 
-            raise ValueError(f"Error: 5th/6 Dev Mem Check. Not enough dev memory to hold transitions. Currently only supports layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, grad context buffer capacity of 1, transition capacity = total_chunks - num_devices ({self.total_chunks - self.N}), & activation capacity >= 2.\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration...\n")
+            raise ValueError(f"Error: 5th/6 Dev Mem Check. Not enough dev memory to hold transitions. Currently only supports layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, grad context buffer capacity of 1, transition capacity = num_devices, & activation capacity >= 2.\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration...\n")
 
 
         base_activations_capacity = int(remain_dev_mem // self.activation_size_bytes) if self.activation_size_bytes > 0 else 0
         
         if base_activations_capacity < 2:
-            raise ValueError(f"Error: 6th/6 Dev Mem Check. Not enough dev memory to hold >= 2 activations. Currently only supports layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, grad context buffer capacity of 1, transition capacity = total_chunks - num_devices ({self.total_chunks - self.N}), & activation capacity >= 2.\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration...\n")
+            raise ValueError(f"Error: 6th/6 Dev Mem Check. Not enough dev memory to hold >= 2 activations. Currently only supports layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, grad context buffer capacity of 1, transition capacity = num_devices, & activation capacity >= 2.\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration...\n")
 
         ## max home layers is
         # 
