@@ -1,26 +1,24 @@
-# Dataflow Libraries to enable Portable & Efficient Machine Leaerning
+# Dataflow Libraries for *Portable* & *Efficient* Machine Learning
 
 *Currently a work in-progress -- keep watch for updates.* 
 
------
 -----
 
 ## Purpose
 
 This repo is structured as a collection of libraries to help foster a robust, transparent, & performant ecosystem for machine learning and other accelertor-centric workloads. The transition to heterogeneous computer systems (CPUs + GPUs/TPUs/FPGAs/etc.) has posed challenges for portability and efficency. Concurrency and stream-based processing are fundamental to all hetergeneous workloads, yet we lack a quality way of expressing these types of programs. 
 
-The current ecosystem lies at the extremes; optimizing for performance by means of custom-built solutions that target a specific backend (which lacks portability and has high development cost), or optimizing for convenicence through high-level frameworks such as PyTorch or JAX (which lack mechanisms for fine-grained control and customization). The goal of these libraries is to bridge this gap.
+The current ecosystem lies at the extremes; optimizing for performance by means of custom-built solutions that target a specific backend (which lacks portability and has high development cost), or optimizing for convenience through high-level frameworks such as PyTorch or JAX (which lack mechanisms for fine-grained control and customization). The goal of these libraries is to bridge this gap.
 
 -----
 
-###### Author's Remarks
+##### Author's Remarks
 
 As the world becomes increasingly depedent upon AI, it is vital to maximize hardware throughput; our most precious resources, *time* & *energy consumption*, are on the line...
 
 -----
------
 
-### Library Structure
+## Library Structure
 
 <div style="text-align: center;">
 **libdataflowring**<br>
@@ -32,54 +30,59 @@ As the world becomes increasingly depedent upon AI, it is vital to maximize hard
 **libdataflow** & **backends/lib_handle**
 </div>
 
------
------
 
-#### libdataflow & libdataflowops
+### libdataflow & libdataflowops
 
-Basic components:
+Some of the basic components:
 
-##### Dataflow Handle
+#### Dataflow Handle
 
-The core data-structure is a `Dataflow_Handle` (which lives within `libdataflow/include/dataflow_handle.h`, subject to change as this repo reaches maturity). Hardware backends are responsible for supplying an implementation for the API functions contained within this struct. This object is resposible for hardware abstraction, giving a foundation for higher level development.
+The core data-structure is a `Dataflow_Handle`, subject to change as this repo reaches maturity). Hardware backends are responsible for supplying an implementation for the API functions contained within this struct. This object is resposible for hardware abstraction, giving a foundation for higher level development.
 
-See `backends/nvidia/src/handle/cuda_dataflow_handle.c` as a reference. 
+It is the heart this whole repo. The API functions expose 4 fundamental functionalities:
+- Computation Loading/Dispatching
+- Handling Depdendencies & Synchronization
+- Memory Management
+- Data Transfers
 
------
+***For reference see***:
+- Dataflow Handle API: `libdataflow/include/dataflow_handle.h`
+- Example Implementation (for Nvidia Devices): `backends/nvidia/src/handle/cuda_dataflow_handle.c`
 
-##### Ops 
+#### Ops 
 
 To be of any use, users will need to register operations with this backend. Operations can be registered as either:
-    - Native
-        - Where backend can register and load this representation directly (e.g binary or source code if backend supports JIT)
-            - Each native op should be tied to a host function which is responsible for setting the launch configuration at runtime (i.e. can based upon argument values). 
-    - External
-        - Where the operation is defined as a wrapper for a thirdparty function responsible for computation dispatching.
+- Native
+    - Where backend can register and load this representation directly (e.g binary or source code if backend supports JIT)
+        - Each native op should be tied to a host function which is responsible for setting the launch configuration at runtime (i.e. can based upon argument values). 
+- External
+    - Where the operation is defined as a wrapper for a thirdparty function responsible for computation dispatching.
 
 Each operation can supply an intialization function that can handle setting an operation's attributes or creating/saving any data that might be required during dispatching.
 
 Upon `submit_op()` the backend should either directly call its own mechanism for launching ops or call the external function.
 
-For reference see:  `libdataflow/include/dataflow_op_structs.h`
+***For reference see***:
+- Op Structure: `libdataflow/include/dataflow_op_structs.h`
 
-###### Op Registration & Submission
+#### Op Registration & Submission
 
- <small>*Note: The registration aspect is currently very clunkly and is likely to be re-factored in the future. The reliance on setting Op_Skeleton's is ugly, the extra config library for native ops is annoying,  and generally the whole setup requires too many specific path names / symbol names (and is awkward to manage). The plans are to simplify this component to make it easier for higher level development to interact with.*</small>
+<small>*Note: The registration aspect is currently very clunkly and is likely to be re-factored in the future. The reliance on setting Op_Skeleton's is ugly, the extra config library for native ops is annoying,  and generally the whole setup requires too many specific path names / symbol names (and is awkward to manage). The plans are to simplify this component to make it easier for higher level development to interact with.*</small>
 
 Every `Op` must have a corresponding `Op_Skeleton`. This defines:
-    -  Nickname for the operation
-    -  Number of arguments
-    -  Datatypes of arguments
+- Nickname for the operation
+- Number of arguments
+- Datatypes of arguments
 
 This `Op_Skeleton` should be fingerprinted to create a unique identfier. Now this identifer will be used a key into the handle's Op Table. The value within the Op Table is defined by the backend and will be created during one of the register API calls. The combined Op_Skeleton => 'Op Reference' pair is inserted into the Op Table such that the backend can look up this reference and correctly dispatch upon a `submit_op()` call. 
 
 As a parameter to `submit_op()`, the user passes in a Op struct that has a fully constructed skeleton (this should match the one passed in during registration). Additionally the Op contains an args array that is populated with references (i.e. host memory address where the argument value lives) for each argument.  
 
-For reference see: 
-    - Example of backend-defined Op Refernce: `backends/nvidia/include/cuda_dataflow_handle.h`. The `Cuda_Function` struct is created for every Op and is the value within the Op Table for Nvidia backend. 
-    - A helper library defines default op interfaces (backend-agnostic) for commonly used machine learning operations: `libdataflowops`
-        - This library provides functions for setting the Op Skeletons, which need to be done both at registration time and submission time
-        - It also provides functions for interfacing with the `submit_op()` API allowing for a typical looking mechanism for calling functions
+***For reference see***: 
+- Example of backend-defined Op Refernce: `backends/nvidia/include/cuda_dataflow_handle.h`. The `Cuda_Function` struct is created for every Op and is the value within the Op Table for Nvidia backend. 
+- A helper library defines default op interfaces (backend-agnostic) for commonly used machine learning operations: `libdataflowops`
+- This library provides functions for setting the Op Skeletons, which need to be done both at registration time and submission time
+- It also provides functions for interfacing with the `submit_op()` API allowing for a typical looking mechanism for calling functions
     - Example of Registering Ops: `backends/nvidia/src/ops/src/register_ops/register_ops.c`
         - Relies upon `libdataflowops` for doing the skeleton setting at registration time. 
         - Relies upon a default implmentation of both native and external ops
