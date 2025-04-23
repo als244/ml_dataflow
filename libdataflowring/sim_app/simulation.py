@@ -103,7 +103,7 @@ class Device:
         self.activations_write_ptr = 0
         self.activations_empty_slot_ind = 0
         self.activations_stack = []
-        self.cur_saved_activations_num = 0
+        self.cur_train_fwd_activation_ind = 0
 
         # Adjust transitions capacity for special devices (Keep logic)
         is_head_device = (self.device_id == (self.total_layers % self.total_devices if self.total_devices > 0 else 0))
@@ -160,8 +160,8 @@ class Device:
         self.computing_status_text = "Idle" # Renamed for clarity vs is_computing flag
         self.stall_reason = ""
         self.cur_fwd_computation_num = 0
-        self.activations_stack_cutoff_ind = -1
-        self.activations_stack_next_ind = -1
+        self.activations_stack_cutoff_ind = 0
+        self.activations_stack_next_ind = 0
         self.next_weight_prefetch_layer_id = -1
         self.next_bwd_weight_prefetch_layer_id = -1
         self.head_final_chunk_id = -1
@@ -183,7 +183,7 @@ class Device:
         self.activations_write_ptr = 0
         self.activations_empty_slot_ind = 0
         self.activations_stack = []
-        self.cur_saved_activations_num = 0
+        self.cur_train_fwd_activation_ind = 0
 
         is_head_device = (self.device_id == (self.total_layers % self.total_devices if self.total_devices > 0 else 0))
         is_last_block_device = (self.device_id == ((self.total_layers - 1) % self.total_devices if self.total_devices > 0 else 0))
@@ -289,10 +289,14 @@ class Device:
 
         # Activation Stack Cutoff
         total_activations = len(self.activations_stack)
-        activation_ind_cutoff = total_activations - self.activations_capacity
+
+        ## the index (within activations_stack) of the first activation that we will be saving (not sending back)
+        ## in activations_buffer (preparing for turn-around)
+        ## leaving 1 extra space for working activation...
+        activation_ind_cutoff = max(0, (total_activations - self.activations_capacity) + 1)
 
         self.activations_stack_cutoff_ind = activation_ind_cutoff
-        self.activations_stack_next_ind = activation_ind_cutoff - 1
+        self.activations_stack_next_ind = activation_ind_cutoff
 
         # Head Task (if applicable)
         if self.device_id == head_device_id:
@@ -300,8 +304,6 @@ class Device:
             total_chunk_inbound_frames = sum([self.computation_times_frames[i] for i in range(0, self.total_chunks, self.train_chunk_freq)]) + (self.total_devices - 1) * self.activationTransitionFrames
             cutoff_chunk_cnt = int(total_chunk_inbound_frames / 2 / self.headFrames)
             cutoff_chunk_id = cutoff_chunk_cnt * self.train_chunk_freq
-
-            print(f"Head Cutoff Chunk ID before Reversal: {cutoff_chunk_id}")
 
             transfer_direction = -1 if self.total_devices > 1 else 0
             # Simple Head processing order: all training chunks sequentially
@@ -362,21 +364,27 @@ class Device:
         # Inbound (Device <- Home)
         if self.is_inbound_transferring and self.inbound_queue and (self.cur_inbound_start_time + self.cur_inbound_duration <= T):
             item = self.inbound_queue.popleft()
-            chunk_id, layer_id, is_grad, is_context, target_idx, duration = item
+            chunk_id, layer_id, is_grad, is_only_context, target_idx, duration = item
             # print(f"T={T}, Dev {self.device_id}: Completed INBOUND {item[:4]}") # Optional log
 
             if chunk_id == -1: # Weight or Head state
                 if 0 <= target_idx < len(self.cur_weights):
                     self.cur_weights[target_idx] = (0, layer_id) # Mark as ready
-                else: pass # print(f"T={T}, Dev {self.device_id}: ERROR - Invalid target index {target_idx} for weight inbound.")
-            elif is_context: # Context
-                if 0 <= target_idx < len(self.context_buffer):
-                    self.context_buffer[target_idx] = (0, chunk_id, layer_id)
-                else: pass # print(f"T={T}, Dev {self.device_id}: ERROR - Invalid target index {target_idx} for context inbound.")
+                else: 
+                    # print(f"T={T}, Dev {self.device_id}: ERROR - Invalid target index {target_idx} for weight inbound.")
+                    # print(f"Cur weights: {self.cur_weights}")
+                    # sys.exit(1)
+                    pass
+            elif is_only_context: # Context
+                self.context_buffer[target_idx] = (0, chunk_id, layer_id)
             else: # Activation
                 if 0 <= target_idx < len(self.activations_buffer):
                     self.activations_buffer[target_idx] = (0, chunk_id, layer_id)
-                else: pass # print(f"T={T}, Dev {self.device_id}: ERROR - Invalid target index {target_idx} for activation inbound.")
+                else: 
+                    # print(f"T={T}, Dev {self.device_id}: ERROR - Invalid target index {target_idx} for activation inbound.")
+                    # print(f"Activations buffer: {self.activations_buffer}")
+                    # sys.exit(1)
+                    pass
 
             self.is_inbound_transferring = False
             self.cur_inbound_details = None
@@ -391,6 +399,7 @@ class Device:
             # print(f"T={T}, Dev {self.device_id}: Completed OUTBOUND {item[:4]}") # Optional log
 
             storage_key = (chunk_id, layer_id, is_grad)
+            
             self.home_storage.add(storage_key)
 
             if chunk_id >= 0 and not is_only_context: # Activation saved
@@ -491,20 +500,15 @@ class Device:
         if bX or bW:
             fwd_act_key = (0, cid, lid)
             has_fwd_activation = fwd_act_key in self.activations_buffer
-
+                
         has_context = True
         missing_ctx_chunk = -1
         if bX: # Simplified context check: assumes context for *this* layer `lid` is needed
-             if self.context_buffer[cid] != (0, cid, lid):
-                # Attempt to find *any* context for this chunk to indicate progress
-                found_any_ctx = False
-                for item in self.context_buffer:
-                    if isinstance(item, tuple) and len(item) == 3 and item[1] == cid:
-                        found_any_ctx = True
-                        break
-                if not found_any_ctx: # Only truly stalled if no context for this chunk exists yet
-                   has_context = False
-                   missing_ctx_chunk = cid # Simplification: assume current chunk is missing
+            for i in range(cid + 1):
+                if self.context_buffer[i] != (0, i, lid):
+                    has_context = False
+                    missing_ctx_chunk = i
+                    break
 
         needs_act_buffer_space = is_fwd
         has_act_buffer_space = True
@@ -613,7 +617,7 @@ class Device:
 
             prefetch_key = (-1, self.next_bwd_weight_prefetch_layer_id, False)
             if prefetch_key not in self.home_storage:
-                # print(f"Dev {self.device_id}: ERROR - Cannot prefetch BWD weight L{self.next_bwd_weight_prefetch_layer_id}, not found.")
+                print(f"Dev {self.device_id}: ERROR - Cannot prefetch BWD weight L{self.next_bwd_weight_prefetch_layer_id}, not found.")
                 self.next_bwd_weight_prefetch_layer_id = -1
                 return
 
@@ -641,10 +645,16 @@ class Device:
     def handle_bwd_prefetch_context(self, chunk_id, cur_layer_id, next_layer_id):
         if self.context_buffer[chunk_id] == (0, chunk_id, next_layer_id): return # Already available
         if self.context_buffer[chunk_id] == (-2, chunk_id, next_layer_id): return # Already fetching
+        
+        if (0, chunk_id, next_layer_id) in self.activations_buffer:
+            self.context_buffer[chunk_id] = (0, chunk_id, next_layer_id)
+            return
+        
+        if (-2, chunk_id, next_layer_id) in self.activations_buffer:
+            self.context_buffer[chunk_id] = (-2, chunk_id, next_layer_id)
+            return
+        
         context_key = (chunk_id, next_layer_id, False)
-        if context_key not in self.home_storage:
-             # print(f"Dev {self.device_id}: ERROR - Cannot prefetch BWD context C{chunk_id} L{next_layer_id}, not in home.")
-             return
 
         ctx_item = (chunk_id, next_layer_id, False, True, chunk_id, self.contextTransferFrames)
 
@@ -652,9 +662,12 @@ class Device:
         if self.is_inbound_transferring: insert_idx = 1
         while insert_idx < len(self.inbound_queue):
             q_cid, q_lid, _, q_is_ctx, _, _ = self.inbound_queue[insert_idx]
-            if q_lid != -1 and next_layer_id < q_lid: break
-            if q_lid == next_layer_id and q_cid != -1 and chunk_id < q_cid: break
-            if q_lid == next_layer_id and q_cid == chunk_id and not q_is_ctx: break
+            if next_layer_id < q_lid: 
+                break
+            if q_lid == next_layer_id and q_cid != -1 and chunk_id > q_cid: 
+                break
+            if q_lid == next_layer_id and q_cid <= chunk_id and not q_is_ctx: 
+                break
             insert_idx += 1
         self.inbound_queue.insert(insert_idx, ctx_item)
 
@@ -722,8 +735,10 @@ class Device:
                  input_trans_buffer_to_free = self.head_input_transitions_buffer
             elif bX:
                  input_trans_consumed_key = (-2, cid, lid + 1, True)
-                 if lid == self.total_layers - 1: input_trans_buffer_to_free = self.head_output_transitions_buffer
-                 else: input_trans_buffer_to_free = self.transitions_inbound_buffer
+                 if lid == self.total_layers - 1: 
+                     input_trans_buffer_to_free = self.head_output_transitions_buffer
+                 else: 
+                     input_trans_buffer_to_free = self.transitions_inbound_buffer
 
             if input_trans_consumed_key and input_trans_buffer_to_free:
                 try:
@@ -732,22 +747,31 @@ class Device:
                     if input_trans_buffer_to_free is self.transitions_inbound_buffer: self.transitions_inbound_empty_slot_ind = self._find_first_free_idx(self.transitions_inbound_buffer)
                     elif input_trans_buffer_to_free is self.head_input_transitions_buffer: self.head_input_transitions_empty_slot_ind = self._find_first_free_idx(self.head_input_transitions_buffer)
                     elif input_trans_buffer_to_free is self.head_output_transitions_buffer: self.head_output_transitions_empty_slot_ind = self._find_first_free_idx(self.head_output_transitions_buffer)
-                except ValueError: pass # print(f"T={T} Dev {self.device_id} WARN: Couldn't find consumed input {input_trans_consumed_key} to free.")
+                except ValueError: 
+                    # print(f"T={T} Dev {self.device_id} WARN: Couldn't find consumed input {input_trans_consumed_key} to free.")
+                    # print(f"Transitions inbound buffer: {self.transitions_inbound_buffer}")
+                    # print(f"Head input transitions buffer: {self.head_input_transitions_buffer}")
+                    # print(f"Head output transitions buffer: {self.head_output_transitions_buffer}")
+                    # sys.exit(1)
+                    pass
 
             # 2. Handle Output Activation/Context Saving (FWD)
             is_train_chunk = (cid % self.train_chunk_freq == 0) or (cid == self.total_chunks - 1)
             if is_fwd:
                 if is_train_chunk:
-                    should_keep_in_buffer = self.cur_saved_activations_num >= self.activations_stack_cutoff_ind
+                    should_keep_in_buffer = self.cur_train_fwd_activation_ind >= self.activations_stack_cutoff_ind
                     act_dest_idx = self.activations_empty_slot_ind
                     if should_keep_in_buffer:
                          self.activations_buffer[act_dest_idx] = (0, cid, lid)
                     else:
                          self.activations_buffer[act_dest_idx] = (-2, cid, lid)
                          self.outbound_queue.append((cid, lid, False, False, self.savedActivationsFrames))
-                         self.cur_saved_activations_num += 1
+                    
                     self.activations_empty_slot_ind = self._find_first_free_idx(self.activations_buffer)
+                    self.cur_train_fwd_activation_ind += 1
                 else: # Not training chunk, save context only
+                    print(f"T={T}, Adding context for chunk {cid} layer {lid} to outbound queue")
+                    self.context_buffer[cid] = (-2, cid, lid)
                     self.outbound_queue.append((cid, lid, False, True, self.contextTransferFrames))
 
             # 3. Handle Output Peer Transition
@@ -970,10 +994,11 @@ class Device:
             "activations_stack": list(self.activations_stack), # Save stack
             "activations_stack_cutoff_ind": self.activations_stack_cutoff_ind,
             "activations_stack_next_ind": self.activations_stack_next_ind,
+            "cur_train_fwd_activation_ind": self.cur_train_fwd_activation_ind,
             "next_weight_prefetch_layer_id": self.next_weight_prefetch_layer_id,
             "next_bwd_weight_prefetch_layer_id": self.next_bwd_weight_prefetch_layer_id,
             "head_final_chunk_id": self.head_final_chunk_id,
-            # Note: home_storage is rebuilt in _initialize_tasks_and_state, maybe no need to save/load explicitly
+            "home_storage": self.home_storage
         }
 
     def load_from_serializable_state(self, dev_state):
@@ -1032,11 +1057,13 @@ class Device:
         self.stall_reason = dev_state.get("stall_reason", "")
         self.cur_fwd_computation_num = dev_state.get("cur_fwd_computation_num", 0)
         self.activations_stack = list(dev_state.get("activations_stack", [])) # Restore list
-        self.activations_stack_cutoff_ind = dev_state.get("activations_stack_cutoff_ind", -1)
-        self.activations_stack_next_ind = dev_state.get("activations_stack_next_ind", -1)
+        self.activations_stack_cutoff_ind = dev_state.get("activations_stack_cutoff_ind", 0)
+        self.activations_stack_next_ind = dev_state.get("activations_stack_next_ind", 0)
+        self.cur_train_fwd_activation_ind = dev_state.get("cur_train_fwd_activation_ind", 0)
         self.next_weight_prefetch_layer_id = dev_state.get("next_weight_prefetch_layer_id", -1)
         self.next_bwd_weight_prefetch_layer_id = dev_state.get("next_bwd_weight_prefetch_layer_id", -1)
         self.head_final_chunk_id = dev_state.get("head_final_chunk_id", -1)
+        self.home_storage = set(dev_state.get("home_storage", []))
         # Ensure buffer empty slot indices are recalculated based on loaded buffers
         self._recalculate_empty_slot_indices()
 
@@ -1160,13 +1187,13 @@ class SimulationRunner:
         ## max home layers is
         # 
         max_per_home_layers_base = math.ceil(self.total_layers / self.N)
-        self.max_activations_capacity = max_per_home_layers_base * self.total_train_chunks
+        self.max_activations_capacity = (max_per_home_layers_base * self.total_train_chunks) + 1
         
 
         self.activations_capacity = int(min(base_activations_capacity, self.max_activations_capacity))
         
         # --- Calculate Compute Times (Keep logic) ---
-        self.micros_per_cycle = 250
+        self.micros_per_cycle = 100
         self.cycles_per_second = 1e6 / self.micros_per_cycle
 
         self.flops_per_attn_chunk_mult = 2 * self.chunk_size * self.model_dim
@@ -1281,7 +1308,7 @@ class SimulationRunner:
         self.min_speed_level = 1
         self.max_speed_level = 100
         self.min_interval_ms = 1
-        self.max_interval_ms = 60
+        self.max_interval_ms = 100
         self.current_speed_level = 50
         self.current_interval_sec = calculate_interval(
             self.current_speed_level, self.min_speed_level, self.max_speed_level,
@@ -1553,7 +1580,6 @@ class SimulationRunner:
                  # Note: _initialize_tasks_and_state is called within Device.__init__
          self.total_tasks = sum(len(d.computation_queue) for d in self.all_devices.values()) if self.N > 0 else 0
          self.total_computation_time = sum(task[-1] for i in range(self.N) for task in self.all_devices[i].computation_queue) if self.N > 0 else 0
-         print(f"Simulation reset. Total tasks: {self.total_tasks}")
                
     def get_serializable_state(self):
         """ Returns ALL internal state needed to resume the simulation. """
@@ -1581,13 +1607,11 @@ class SimulationRunner:
 
     def load_from_serializable_state(self, full_state_dict):
         """ Restores the simulation runner from a complete state dictionary. """
-        print(f"Attempting to load SimulationRunner state for session...")
         try:
             # --- Step 1: Reset state and CREATE default Device objects ---
             # This ensures self.all_devices exists and is populated based on self.N (from params)
             # It will temporarily reset frame index etc., but we restore them next.
             self.reset_simulation_state()
-            print(f"  - After reset, all_devices keys: {list(self.all_devices.keys())}")
 
             # --- Step 2: Restore basic runner attributes from the loaded state dict ---
             # This overwrites the defaults set by reset_simulation_state
@@ -1602,7 +1626,7 @@ class SimulationRunner:
 
             # Recalculate interval based on loaded speed
             self.set_speed(self.current_speed_level)
-            print(f"  - Runner attributes restored. Frame: {self.current_frame_index}, Paused: {self.animation_paused}")
+
 
             # --- Step 3: Restore individual device states ---
             devices_internal_state = full_state_dict.get("all_devices_state", {})
@@ -1611,9 +1635,6 @@ class SimulationRunner:
                 for i_str, device_state_dict in devices_internal_state.items():
                      i = int(i_str) # Dictionary keys might be strings after JSON conversion
                      if i in self.all_devices:
-                         # *** Assumes Device class has load_from_serializable_state ***
-                         # *** YOU MUST IMPLEMENT THIS in the Device class ***
-                         print(f"  - Loading state for device {i}...")
                          self.all_devices[i].load_from_serializable_state(device_state_dict)
                      else:
                          print(f"  - Warning: Device key {i} from saved state not found in newly created self.all_devices.")
@@ -1621,10 +1642,6 @@ class SimulationRunner:
                  print(f"  - Warning: Mismatch N ({self.N}) and loaded device state count ({len(devices_internal_state)}). Device states not fully loaded.")
             else:
                  print(f"  - N=0, no device states to load.")
-
-
-            print(f"LOADED STATE (End of Load). Final self.all_devices keys: {list(self.all_devices.keys())}")
-            print(f"LOADED STATE (End of Load). Is key 0 present? {0 in self.all_devices}")
 
 
         except Exception as e:
@@ -1643,7 +1660,6 @@ class SimulationRunner:
         T = self.current_frame_index
 
         if self.target_cycle is not None and T == self.target_cycle:
-            print(f"Reached target cycle {T}, pausing.")
             self.animation_paused = True
             self.target_cycle = None
             return False # Stop stepping
@@ -1751,7 +1767,6 @@ class SimulationRunner:
             self.current_speed_level, self.min_speed_level, self.max_speed_level,
             self.min_interval_ms, self.max_interval_ms
         )
-        print(f"Simulation speed set to {self.current_speed_level}, interval {self.current_interval_sec:.3f}s")
 
     def set_target_cycle(self, cycle):
         if cycle < 0: return
@@ -1866,63 +1881,3 @@ class SimulationRunner:
         # Add static config only if needed (e.g., on first call) - simpler to send always?
         # state["config"] = {"N": self.N, "total_layers": self.total_layers} # Example
         return state
-    
-    def load_internal_state(self, state_dict):
-        """
-        Restores the simulation's internal state from a dictionary
-        (likely one previously returned by get_render_state).
-        """
-        print("Attempting to load state...") # Debug print
-        try:
-            # Restore basic state
-            self.current_frame_index = state_dict.get('current_frame', 0)
-            self.animation_paused = state_dict.get('is_paused', True)
-            self.simulation_complete = state_dict.get('is_complete', False)
-            self.current_speed_level = state_dict.get('speed_level', 50)
-            self.target_cycle = state_dict.get('target_cycle', None)
-            self.max_frames = state_dict.get('max_frames', 1000000)
-            self.completion_stats = state_dict.get('completion_stats', {})
-
-            # Recalculate interval based on loaded speed
-            self.set_speed(self.current_speed_level) # Use existing method
-
-            # Restore device states (this is the complex part)
-            devices_state_list = state_dict.get('devices', [])
-            if len(devices_state_list) == self.N:
-                 # Need to re-initialize self.all_devices BEFORE loading state into them
-                 # Or ensure reset_simulation_state() was called just before load
-                 # Or modify Device class to have a load_state method
-
-                 # Assuming self.all_devices is already a dict of Device objects
-                 # from SimulationRunner.__init__ or reset_simulation_state
-                 for i in range(self.N):
-                     device_obj = self.all_devices.get(i)
-                     device_state_dict = devices_state_list[i] # Assuming list index matches device ID
-                     if device_obj and device_state_dict:
-                         # *** You need a way to set the internal state of a Device object ***
-                         # Example (requires adding setters or a load method to Device):
-                         device_obj.current_computation_type = device_state_dict.get('compute', {}).get('type') if device_state_dict.get('compute') else None
-                         device_obj.current_computation_layer_id = device_state_dict.get('compute', {}).get('layer', -1) if device_state_dict.get('compute') else -1
-                         # ... restore compute progress, start time etc. ...
-                         # ... restore inbound/outbound/peer transfer details (progress, start time, etc.) ...
-                         # ... restore stall status and reason ...
-                         # ... restore internal buffers/queues/pointers (MAYBE - depends if get_render_state includes them) ...
-                         # This part requires significant thought based on what 'get_render_state' returns
-                         # and what internal state the Device class actually holds.
-                         print(f"State loading for Device {i} needs full implementation!")
-                         pass # Placeholder for detailed device state loading
-            else:
-                print(f"Warning: Mismatch between N ({self.N}) and loaded devices state count ({len(devices_state_list)})")
-                # Handle error or reset devices?
-
-            # Restore any other simulation-level state (queues, pointers) if they were saved
-            # Example:
-            # self.some_internal_queue = deque(state_dict.get('internal_queue_A', []))
-
-            print(f"Loaded state up to frame {self.current_frame_index}, Paused: {self.animation_paused}")
-
-        except Exception as e:
-            print(f"ERROR during load_internal_state: {e}")
-            traceback.print_exc()
-            # Optionally reset state fully on load error
-            # self.reset_simulation_state()
