@@ -41,7 +41,7 @@ header h1 {
     overflow: hidden;
 }
 
-/* Sidebar Styling */
+/* --- MODIFIED Sidebar Styling --- */
 .sidebar {
     flex: 0 0 20%;
     max-width: 220px;
@@ -50,10 +50,12 @@ header h1 {
     font-size: 0.85rem;
     display: flex;
     flex-direction: column;
-    overflow: scroll;
+    /* Changed from 'scroll' to 'hidden' -> let inner content scroll */
+    overflow: hidden;
     min-height: 0;
     position: relative;
 }
+/* --- END MODIFIED Sidebar Styling --- */
 
 #paramsForm {
     display: flex;
@@ -62,16 +64,18 @@ header h1 {
     min-height: 0;
     padding: 20px;
     padding-bottom: 0;
-    overflow: hidden;
+    overflow: hidden; /* Keep hidden as form-scroll-content handles scroll */
 }
 
-/* Scrollable part of the form */
+/* --- Scrollable part of the form --- */
+/* Keep overflow-y: scroll here */
 .form-scroll-content {
     overflow-y: scroll;
     flex-grow: 1;
     min-height: 0;
     padding-bottom: 10px; /* Space above footer */
 }
+/* --- END Scrollable part of the form --- */
 
 #param-grid {
     display: grid;
@@ -110,28 +114,25 @@ header h1 {
 .error-message.visible { display: block; }
 
 
-/* Content Area Wrapper */
+/* --- MODIFIED Content Area Wrapper --- */
 .content-area-wrapper {
     flex: 1; /* Takes remaining space */
     display: flex;
-    align-items: stretch;
-    overflow: scroll;
+    align-items: stretch; /* This makes children (legends, sim area) try to fill height */
+    /* Changed from 'scroll' to 'hidden' -> let legends scroll themselves */
+    overflow: hidden;
     padding: 20px;
     gap: 20px;
     min-width: 0;
     min-height: 0;
 }
+/* --- END MODIFIED Content Area Wrapper --- */
 
-/* Individual Legend Area Styling */
+/* --- MODIFIED Individual Legend Area Styling --- */
 .legend-area {
     flex: 0 1 auto; /* Grow 0, Shrink 1, Basis auto */
-    /* Consider adding min/max width if needed: */
-    /* min-width: 150px; */
-    /* max-width: 300px; */
-    /* font-family: monospace; */ /* Moved font-family to pre for better control */
-    /* font-size: 0.75rem; */ /* Set font-size to 0 to collapse whitespace */
     font-size: 0; /* Collapse whitespace nodes between child elements */
-    white-space: pre-wrap; /* This might be unnecessary now */
+    white-space: pre-wrap;
     padding: 10px 15px;
     border: 1px solid #ccc;
     background-color: #fdfdfd;
@@ -139,22 +140,27 @@ header h1 {
     box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     display: flex;
     flex-direction: column;
-    overflow-y: scroll;
+    overflow-y: scroll; /* Keep this */
     overflow-x: hidden;
-    max-height: 100%;
-    align-self: flex-start;
+    max-height: 100%;   /* Keep this - relies on parent having constrained height */
+    /* Removed align-self: flex-start; to allow stretching */
+    /* align-self: flex-start; */
+    position: relative;
 }
+/* --- END MODIFIED Individual Legend Area Styling --- */
+
 .legend-area h2 {
     margin-top: 0;
     font-size: 1.15rem; /* Restore font size for h2 */
     margin-bottom: 0px;
-    padding-bottom: 0px;
+    padding-top: 5px; /* Added padding */
+    padding-bottom: 5px; /* Added padding */
     border-bottom: 1px solid #eee;
     font-family: sans-serif;
     color: #444;
     position: sticky;
     top: 0;
-    background-color: #fdfdfd;
+    background-color: #fdfdfd; /* Match legend background */
     z-index: 1;
     flex-shrink: 0;
     text-align: center;
@@ -166,9 +172,10 @@ header h1 {
     font-family: monospace; /* Set font-family here */
     font-size: 0.75rem; /* Restore specific font size for pre (was inherited) */
     color: #555;
-    flex-grow: 1;
+    flex-grow: 1; /* Allow pre to take available space */
     white-space: pre;
-    overflow-x: auto;
+    overflow-x: auto; /* Allow horizontal scroll only if pre content is too wide */
+    min-height: 0; /* Important for flex-grow in column layout */
 }
 
 /* Simulation Area Styling */
@@ -182,7 +189,7 @@ header h1 {
     border: none;
     background-color: #fff;
     position: relative;
-    overflow: hidden;
+    overflow: hidden; /* Keep hidden */
 }
 
 /* Controls and Status Area */
@@ -219,7 +226,7 @@ header h1 {
     border: 1px solid #ccc;
     background-color: #fff;
     position: relative;
-    overflow: hidden;
+    overflow: hidden; /* Keep hidden */
     border-radius: 4px;
     display: grid;
     place-items: center;
@@ -232,12 +239,33 @@ header h1 {
     max-height: 100%;
 }
 
-/* Completion Popup Styles - No changes */
+/* --- MODIFIED Completion Popup Styles --- */
+/* Corrected width/height and overflow */
 #completion-popup {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width:120%; max-height: 120vh; background-color: rgba(248, 248, 248, 0.98); border: 1px solid #aaa; border-radius: 8px; box-shadow: 0 5px 20px rgba(0, 0, 0, 0.25); z-index: 1000; display: none; overflow: hidden;
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 80%; /* Keep reasonable width */
+    max-height: 80vh; /* Keep reasonable height */
+    background-color: rgba(248, 248, 248, 0.98);
+    border: 1px solid #aaa;
+    border-radius: 8px;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.25);
+    z-index: 1000;
+    display: none;
+    overflow: hidden; /* Popup itself shouldn't scroll */
+    display: flex; /* Use flex for content */
+    flex-direction: column;
 }
-.popup-content { padding: 20px 25px 25px 25px; position: relative; max-height: calc(80vh - 40px); overflow-y: scroll; }
-.popup-content h2 { margin-top: 0; margin-bottom: 15px; color: #333; text-align: center; font-size: 1.4em; }
+.popup-content {
+    padding: 20px 25px 25px 25px;
+    position: relative;
+    /* max-height: calc(80vh - 40px); /* Let flex handle height */
+    overflow-y: scroll; /* Make THIS scrollable */
+    flex-grow: 1; /* Allow content to take space */
+    min-height: 0; /* Needed for flex scroll */
+}
+/* --- END MODIFIED Completion Popup Styles --- */
+
+.popup-content h2 { margin-top: 0; margin-bottom: 15px; color: #333; text-align: center; font-size: 1.4em; flex-shrink: 0; } /* Added shrink */
 #completion-area { font-size: 1.4em; line-height: 1.4; font-family: monospace; text-align: center; font-weight: bold; padding: 15px; border: 1px solid #b0c4de; background-color: rgba(150,250,150,0.3); color: #333; white-space: pre; border-radius: 4px; }
 #closeCompletionPopupBtn { position: absolute; top: 10px; right: 15px; background: none; border: none; font-size: 1.8em; line-height: 1; color: #888; cursor: pointer; padding: 0; }
 #closeCompletionPopupBtn:hover { color: #333; }
@@ -247,3 +275,41 @@ button:disabled { background-color: #ccc !important; color: #666 !important; cur
 input:disabled, select:disabled { background-color: #e9ecef; cursor: not-allowed; opacity: 0.7; }
 h1, h2, h3 { margin-bottom: 0.75em; }
 input:disabled { background-color: #e9ecef; opacity: 0.65; cursor: not-allowed; color: #6c757d; border-color: #ced4da; }
+
+/* Optional: Custom Scrollbar Styling (Example for Webkit browsers like Chrome/Safari/Edge) */
+/* Applies to sidebar content and legends */
+.form-scroll-content::-webkit-scrollbar,
+.legend-area::-webkit-scrollbar,
+.popup-content::-webkit-scrollbar { /* Added popup content */
+  width: 8px; /* Width of the entire scrollbar */
+}
+
+.form-scroll-content::-webkit-scrollbar-track,
+.legend-area::-webkit-scrollbar-track,
+.popup-content::-webkit-scrollbar-track { /* Added popup content */
+  background: #f1f1f1; /* Color of the tracking area */
+  border-radius: 4px;
+}
+
+.form-scroll-content::-webkit-scrollbar-thumb,
+.legend-area::-webkit-scrollbar-thumb,
+.popup-content::-webkit-scrollbar-thumb { /* Added popup content */
+  background-color: #ccc; /* Color of the scroll thumb */
+  border-radius: 4px; /* Roundness of the scroll thumb */
+  border: 2px solid #f1f1f1; /* Creates padding around scroll thumb */
+}
+
+.form-scroll-content::-webkit-scrollbar-thumb:hover,
+.legend-area::-webkit-scrollbar-thumb:hover,
+.popup-content::-webkit-scrollbar-thumb:hover { /* Added popup content */
+  background: #aaa; /* Darker color when hovering */
+}
+
+/* Optional: Custom Scrollbar Styling (Example for Firefox) */
+/* Note: Firefox scrollbar styling is less customizable than Webkit */
+.form-scroll-content,
+.legend-area,
+.popup-content { /* Added popup content */
+  scrollbar-width: thin; /* "auto" or "thin" */
+  scrollbar-color: #ccc #f1f1f1; /* thumb color track color */
+}
