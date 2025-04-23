@@ -373,7 +373,6 @@ class Device:
                 else: 
                     # print(f"T={T}, Dev {self.device_id}: ERROR - Invalid target index {target_idx} for weight inbound.")
                     # print(f"Cur weights: {self.cur_weights}")
-                    # sys.exit(1)
                     pass
             elif is_only_context: # Context
                 self.context_buffer[target_idx] = (0, chunk_id, layer_id)
@@ -383,7 +382,6 @@ class Device:
                 else: 
                     # print(f"T={T}, Dev {self.device_id}: ERROR - Invalid target index {target_idx} for activation inbound.")
                     # print(f"Activations buffer: {self.activations_buffer}")
-                    # sys.exit(1)
                     pass
 
             self.is_inbound_transferring = False
@@ -749,10 +747,6 @@ class Device:
                     elif input_trans_buffer_to_free is self.head_output_transitions_buffer: self.head_output_transitions_empty_slot_ind = self._find_first_free_idx(self.head_output_transitions_buffer)
                 except ValueError: 
                     # print(f"T={T} Dev {self.device_id} WARN: Couldn't find consumed input {input_trans_consumed_key} to free.")
-                    # print(f"Transitions inbound buffer: {self.transitions_inbound_buffer}")
-                    # print(f"Head input transitions buffer: {self.head_input_transitions_buffer}")
-                    # print(f"Head output transitions buffer: {self.head_output_transitions_buffer}")
-                    # sys.exit(1)
                     pass
 
             # 2. Handle Output Activation/Context Saving (FWD)
@@ -1135,34 +1129,37 @@ class SimulationRunner:
         self.context_buffer_capacity = 1 # Keep simple
         self.grad_context_buffer_capacity = 1
 
+        base_dev_mem = self.layer_capacity * self.layer_size_bytes
+        base_dev_mem += self.grad_layer_capacity * self.layer_size_bytes
+        base_dev_mem += self.context_buffer_capacity * self.per_layer_full_context_size
+        base_dev_mem += self.grad_context_buffer_capacity * self.per_layer_full_context_size
+        base_dev_mem += 2 * self.transitions_capacity * self.output_size_bytes
+        base_dev_mem += 2 * self.activation_size_bytes
+
         self.per_layer_full_context_size = self.total_chunks * self.chunk_context_size_bytes
         model_dev_mem = self.layer_capacity * self.layer_size_bytes
         
         remain_dev_mem = self.max_device_memory_bytes
         remain_dev_mem -= model_dev_mem
         if remain_dev_mem < 0: 
-            print(f"Error: Not enough devmemory to hold model layers. Currently only supports activation capacity >= 1 {self.activation_size_bytes}, transition capacity = total_chunks - num_devices {self.total_chunks - self.N}, layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, and grad context buffer capacity of 1.\nThis requires {(base_dev_mem + transition_dev_mem + self.activation_size_bytes) / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration\n")
-            sys.exit(1)
+            raise ValueError(f"Error: 1st/6 Dev Mem Check. Not enough dev memory to hold model layers. Currently only supports layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, grad context buffer capacity of 1, transition capacity = total_chunks - num_devices ({self.total_chunks - self.N}), & activation capacity >= 2.\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration...\n")
         
 
         model_grad_dev_mem = self.grad_layer_capacity * self.layer_size_bytes
         remain_dev_mem -= model_grad_dev_mem
         if remain_dev_mem < 0: 
-            print(f"Error: Not enough dev memory to hold model gradients. Currently only supports activation capacity >= 1 {self.activation_size_bytes}, transition capacity = total_chunks - num_devices {self.total_chunks - self.N}, layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, and grad context buffer capacity of 1.\nThis requires {(base_dev_mem + transition_dev_mem + self.activation_size_bytes) / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration\n")
-            sys.exit(1)
+            raise ValueError(f"Error: 2nd/6 Dev Mem Check. Not enough dev memory to hold model gradients. Currently only supports layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, grad context buffer capacity of 1, transition capacity = total_chunks - num_devices ({self.total_chunks - self.N}), & activation capacity >= 2.\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration...\n")
 
 
         context_dev_mem = (self.context_buffer_capacity) * self.per_layer_full_context_size
         remain_dev_mem -= context_dev_mem
         if remain_dev_mem < 0: 
-            print(f"Error: Not enough dev memory to hold context buffer. Currently only supports activation capacity >= 1 {self.activation_size_bytes}, transition capacity = total_chunks - num_devices {self.total_chunks - self.N}, layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, and grad context buffer capacity of 1.\nThis requires {(base_dev_mem + transition_dev_mem + self.activation_size_bytes) / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration\n")
-            sys.exit(1)
+            raise ValueError(f"Error: 3rd/6 Dev Mem Check. Not enough dev memory to hold context buffer. Currently only supports layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, grad context buffer capacity of 1, transition capacity = total_chunks - num_devices ({self.total_chunks - self.N}), & activation capacity >= 2.\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration...\n")
 
         grad_context_dev_mem = (self.grad_context_buffer_capacity) * self.per_layer_full_context_size
         remain_dev_mem -= grad_context_dev_mem
         if remain_dev_mem < 0: 
-            print(f"Error: Not enough dev memory to hold grad context buffer. Currently only supports activation capacity >= 1 {self.activation_size_bytes}, transition capacity = total_chunks - num_devices {self.total_chunks - self.N}, layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, and grad context buffer capacity of 1.\nThis requires {(base_dev_mem + transition_dev_mem + self.activation_size_bytes) / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration\n")
-            sys.exit(1)
+            raise ValueError(f"Error: 4th/6 Dev Mem Check. Not enough dev memory to hold grad context buffer. Currently only supports layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, grad context buffer capacity of 1, transition capacity = total_chunks - num_devices ({self.total_chunks - self.N}), & activation capacity >= 2.\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration...\n")
         
        
         # Estimate transition/head buffer sizes based on chunks/N
@@ -1178,12 +1175,14 @@ class SimulationRunner:
 
         remain_dev_mem -= transition_dev_mem
         if remain_dev_mem < 0: 
-            print(f"Error: Not enough memory to hold transitions. Currently only supports activation capacity >= 1 {self.activation_size_bytes}, transition capacity = total_chunks - num_devices {self.total_chunks - self.N}, layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, and grad context buffer capacity of 1.\nThis requires {(base_dev_mem + transition_dev_mem + self.activation_size_bytes) / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration\n")
-            sys.exit(1)
+            raise ValueError(f"Error: 5th/6 Dev Mem Check. Not enough dev memory to hold transitions. Currently only supports layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, grad context buffer capacity of 1, transition capacity = total_chunks - num_devices ({self.total_chunks - self.N}), & activation capacity >= 2.\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration...\n")
 
 
         base_activations_capacity = int(remain_dev_mem // self.activation_size_bytes) if self.activation_size_bytes > 0 else 0
         
+        if base_activations_capacity < 2:
+            raise ValueError(f"Error: 6th/6 Dev Mem Check. Not enough dev memory to hold >= 2 activations. Currently only supports layer capacity of 2, grad layer capacity of 2, context buffer capacity of 1, grad context buffer capacity of 1, transition capacity = total_chunks - num_devices ({self.total_chunks - self.N}), & activation capacity >= 2.\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\n\nCannot run simulation with current configuration...\n")
+
         ## max home layers is
         # 
         max_per_home_layers_base = math.ceil(self.total_layers / self.N)
