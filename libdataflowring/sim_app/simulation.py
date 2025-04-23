@@ -108,18 +108,21 @@ class Device:
         # Adjust transitions capacity for special devices (Keep logic)
         is_head_device = (self.device_id == (self.total_layers % self.total_devices if self.total_devices > 0 else 0))
         is_last_block_device = (self.device_id == ((self.total_layers - 1) % self.total_devices if self.total_devices > 0 else 0))
-        current_transitions_capacity = self.transitions_capacity
+        inp_transition_capacity = self.transitions_capacity
+        out_transition_capacity = self.transitions_capacity
         current_head_input_transitions_capacity = 0
         current_head_output_transitions_capacity = 0
         if is_head_device:
              current_head_input_transitions_capacity = self.head_transitions_capacity
+             inp_transition_capacity = current_head_input_transitions_capacity
         if is_last_block_device:
              current_head_output_transitions_capacity = self.head_transitions_capacity
+             out_transition_capacity = current_head_output_transitions_capacity
 
-        self.transitions_inbound_buffer = [-1 for _ in range(current_transitions_capacity)]
-        self.transitions_outbound_buffer = [-1 for _ in range(current_transitions_capacity)]
-        self.transitions_inbound_empty_slot_ind = 0 if current_transitions_capacity > 0 else None
-        self.transitions_outbound_empty_slot_ind = 0 if current_transitions_capacity > 0 else None
+        self.transitions_inbound_buffer = [-1 for _ in range(inp_transition_capacity)]
+        self.transitions_outbound_buffer = [-1 for _ in range(out_transition_capacity)]
+        self.transitions_inbound_empty_slot_ind = 0 if inp_transition_capacity > 0 else None
+        self.transitions_outbound_empty_slot_ind = 0 if out_transition_capacity > 0 else None
         self.head_input_transitions_buffer = [-1 for _ in range(current_head_input_transitions_capacity)] if current_head_input_transitions_capacity > 0 else None
         self.head_input_transitions_empty_slot_ind = 0 if current_head_input_transitions_capacity > 0 else None
         self.head_output_transitions_buffer = [-1 for _ in range(current_head_output_transitions_capacity)] if current_head_output_transitions_capacity > 0 else None
@@ -187,18 +190,21 @@ class Device:
 
         is_head_device = (self.device_id == (self.total_layers % self.total_devices if self.total_devices > 0 else 0))
         is_last_block_device = (self.device_id == ((self.total_layers - 1) % self.total_devices if self.total_devices > 0 else 0))
-        current_transitions_capacity = self.transitions_capacity
+        inp_transition_capacity = self.transitions_capacity
+        out_transition_capacity = self.transitions_capacity
         current_head_input_transitions_capacity = 0
         current_head_output_transitions_capacity = 0
         if is_head_device:
              current_head_input_transitions_capacity = self.head_transitions_capacity
+             inp_transition_capacity = current_head_input_transitions_capacity
         if is_last_block_device:
              current_head_output_transitions_capacity = self.head_transitions_capacity
+             out_transition_capacity = current_head_output_transitions_capacity
 
-        self.transitions_inbound_buffer = [-1 for _ in range(current_transitions_capacity)]
-        self.transitions_outbound_buffer = [-1 for _ in range(current_transitions_capacity)]
-        self.transitions_inbound_empty_slot_ind = 0 if current_transitions_capacity > 0 else None
-        self.transitions_outbound_empty_slot_ind = 0 if current_transitions_capacity > 0 else None
+        self.transitions_inbound_buffer = [-1 for _ in range(inp_transition_capacity)]
+        self.transitions_outbound_buffer = [-1 for _ in range(out_transition_capacity)]
+        self.transitions_inbound_empty_slot_ind = 0 if inp_transition_capacity > 0 else None
+        self.transitions_outbound_empty_slot_ind = 0 if out_transition_capacity > 0 else None
         self.head_input_transitions_buffer = [-1 for _ in range(current_head_input_transitions_capacity)] if current_head_input_transitions_capacity > 0 else None
         self.head_input_transitions_empty_slot_ind = 0 if current_head_input_transitions_capacity > 0 else None
         self.head_output_transitions_buffer = [-1 for _ in range(current_head_output_transitions_capacity)] if current_head_output_transitions_capacity > 0 else None
