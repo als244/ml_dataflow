@@ -287,27 +287,30 @@ input:disabled { background-color: #e9ecef; opacity: 0.65; cursor: not-allowed; 
 .form-scroll-content::-webkit-scrollbar-track,
 .legend-area::-webkit-scrollbar-track,
 .popup-content::-webkit-scrollbar-track {
-  background: #e0e0e0; /* MODIFIED: Was #f1f1f1 - Made track slightly darker */
+  background: #959595; /* MODIFIED: Was #e0e0e0 - Made track slightly darker */
   border-radius: 4px;
 }
 
 .form-scroll-content::-webkit-scrollbar-thumb,
 .legend-area::-webkit-scrollbar-thumb,
 .popup-content::-webkit-scrollbar-thumb {
-  background-color: #bbb; /* MODIFIED: Was #ccc - Made thumb slightly darker */
+  background-color: #bbb; /* Kept thumb color */
   border-radius: 4px;
-  border: 2px solid #e0e0e0; /* MODIFIED: Border matches new track color */
+  border: 2px solid #959595; /* MODIFIED: Border matches new track color */
 }
 
 .form-scroll-content::-webkit-scrollbar-thumb:hover,
 .legend-area::-webkit-scrollbar-thumb:hover,
 .popup-content::-webkit-scrollbar-thumb:hover {
-  background: #999; /* MODIFIED: Was #aaa - Made hover darker */
+  background: #999; /* Kept hover color */
 }
+/* --- END MODIFIED Webkit Scrollbar Styling --- */
 
+
+/* --- MODIFIED Optional: Custom Scrollbar Styling (Example for Firefox) --- */
 .form-scroll-content,
 .legend-area,
 .popup-content {
   scrollbar-width: thin;
-  scrollbar-color: #bbb #e0e0e0; /* MODIFIED: thumb color track color */
+  scrollbar-color: #bbb #959595; /* MODIFIED: thumb color track color (new track) */
 }
