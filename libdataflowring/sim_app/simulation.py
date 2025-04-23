@@ -1123,6 +1123,8 @@ class SimulationRunner:
         self.output_size_bytes = self.dtype_bytes * (self.model_dim * self.chunk_size)
         self.head_layer_size_bytes = self.dtype_bytes * (self.vocab_size * self.model_dim)
 
+        self.per_layer_full_context_size = self.total_chunks * self.chunk_context_size_bytes
+
         # --- Determine Capacities (Keep simplified logic) ---
         self.layer_capacity = 2 if self.N < self.total_layers else 1 # Base on non-head layers
         self.grad_layer_capacity = 2 if self.N < self.total_layers else 1
@@ -1136,7 +1138,7 @@ class SimulationRunner:
         base_dev_mem += 2 * self.transitions_capacity * self.output_size_bytes
         base_dev_mem += 2 * self.activation_size_bytes
 
-        self.per_layer_full_context_size = self.total_chunks * self.chunk_context_size_bytes
+        
         model_dev_mem = self.layer_capacity * self.layer_size_bytes
         
         remain_dev_mem = self.max_device_memory_bytes
