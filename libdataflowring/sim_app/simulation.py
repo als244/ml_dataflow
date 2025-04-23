@@ -1478,7 +1478,7 @@ class SimulationRunner:
           f" - Saved Act.: {(self.activation_size_bytes)/ 1e6:.2f} MB\n" 
           f" - Context: {(self.chunk_context_size_bytes)/ 1e6:.2f} MB\n"
           f" - Transition: {(self.output_size_bytes)/ 1e6:.2f} MB\n"
-          f" - Workspace: {(chunk_workspace_size)/ 1e6:.2f} MB\n"
+          f" - Workspace: {(chunk_workspace_size)/ 1e6:.2f} MB"
         )
             
         return textwrap.dedent(text)
@@ -1547,7 +1547,7 @@ class SimulationRunner:
             f"Chunk Info\n"
             f" - Activation Save/Fetch: {self.savedActivationsFrames}\n"
             f" - Block Transitions: {blockTransitionCyclesText}\n"
-            f" - Context Transfers: {contextTransferCycleText}\n"
+            f" - Context Transfers: {contextTransferCycleText}"
         )
 
         return textwrap.dedent(text)
