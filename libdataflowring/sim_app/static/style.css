@@ -159,6 +159,7 @@ header h1 {
 }
 .legend-area pre {
     margin: 0;
+    padding-top: 0;
     font-size: inherit;
     color: #555;
     flex-grow: 1;
