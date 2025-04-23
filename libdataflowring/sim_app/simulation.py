@@ -1096,7 +1096,7 @@ class SimulationRunner:
         self.active_experts = params.get('active_experts', 1)
         self.expert_dim = params.get('expert_dim', 27648)
         self.attn_type = params.get('attn_type', "Exact")
-        self.max_device_memory_bytes = params.get('max_device_memory_bytes', 80 * (1 << 30))
+        self.max_device_memory_bytes = params.get('max_device_memory_bytes', 20 * (1 << 30))
         self.hardware_max_flops = params.get('hardware_max_flops', 989 * 1e12)
         if self.bitwidth > 0 and self.bitwidth != 16:
              bitwidth_factor = 16.0 / self.bitwidth
