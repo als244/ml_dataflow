@@ -5,6 +5,7 @@ import time
 import sys
 import os # For secret key
 import traceback # Keep for detailed error logging
+from simulation import SimulationRunner
 
 app = Flask(__name__)
 
