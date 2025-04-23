@@ -234,11 +234,11 @@ header h1 {
 
 /* Completion Popup Styles - No changes */
 #completion-popup {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80%; max-height: 80vh; background-color: rgba(248, 248, 248, 0.98); border: 1px solid #aaa; border-radius: 8px; box-shadow: 0 5px 20px rgba(0, 0, 0, 0.25); z-index: 1000; display: none; overflow: hidden;
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width:120%; max-height: 120vh; background-color: rgba(248, 248, 248, 0.98); border: 1px solid #aaa; border-radius: 8px; box-shadow: 0 5px 20px rgba(0, 0, 0, 0.25); z-index: 1000; display: none; overflow: hidden;
 }
 .popup-content { padding: 20px 25px 25px 25px; position: relative; max-height: calc(80vh - 40px); overflow-y: scroll; }
 .popup-content h2 { margin-top: 0; margin-bottom: 15px; color: #333; text-align: center; font-size: 1.4em; }
-#completion-area { font-size: 1.3em; line-height: 1.4; font-family: monospace; text-align: center; font-weight: bold; padding: 15px; border: 1px solid #b0c4de; background-color: rgba(150,250,150,0.3); color: #333; white-space: pre; border-radius: 4px; }
+#completion-area { font-size: 1.4em; line-height: 1.4; font-family: monospace; text-align: center; font-weight: bold; padding: 15px; border: 1px solid #b0c4de; background-color: rgba(150,250,150,0.3); color: #333; white-space: pre; border-radius: 4px; }
 #closeCompletionPopupBtn { position: absolute; top: 10px; right: 15px; background: none; border: none; font-size: 1.8em; line-height: 1; color: #888; cursor: pointer; padding: 0; }
 #closeCompletionPopupBtn:hover { color: #333; }
 
