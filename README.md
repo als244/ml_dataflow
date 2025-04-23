@@ -18,17 +18,12 @@ As the world becomes increasingly depedent upon AI, it is vital to maximize hard
 
 -----
 
-## Library Structure
-
-<div style="text-align: center;">
-**libdataflowring**<br>
-&#11015;<br>
-**libdataflowmodels**<br>
-&#11015;<br>
-**libdataflowops** & **backends/lib_register_default_ops**<br>
-&#11015;<br>
-**libdataflow** & **backends/lib_handle**
-</div>
+| Library Structure Flow   | | :----------------------: | | **libdataflowring** |
+| &#11015;                 | | **libdataflowmodels** |
+| &#11015;                 |
+| **libdataflowops** & **backends/lib_register_default_ops** |
+| &#11015;                 |
+| **libdataflow** & **backends/lib_handle** |
 
 
 ### libdataflow & libdataflowops
