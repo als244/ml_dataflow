@@ -1739,13 +1739,10 @@ class SimulationRunner:
             f"  Ideal Upper-Bound: {math.ceil(total_throughput_upper_bound_tflops / self.N)} TFLOPS\n"
             f"  Achieved Throughput: {math.ceil(achieved_throughput_tflops / self.N)} TFLOPS\n\n\n"
             f"--- PIPELINE STATS --- \n\n"
-            f"Total Tasks: {self.total_tasks}\n"
-            f"Raw Task Compute Cycles: {self.total_computation_time}\n"
-            f"Total Utilized Device Cycles: {total_dev_time}\n\n"
             f"Pipeline:\nFill Cycles: {start_bubble}\n"
             f"Flush Cycles: {stop_bubble}\n\n\n"
-            f"EFFICIENCY:\n% Active Overall: {overall_eff:.2f}%\n"
-            f"% Active during Steady-State (Post-Fill/Pre-Flush): {steady_eff:.2f}%\n\n"
+            f"EFFICIENCY:\nOverall % Active: {overall_eff:.2f}%\n"
+            f"Post-Fill/Pre-Flush % Active: {steady_eff:.2f}%\n\n"
         )
         return {
             "text": completion_text, "final_cycle": T, "runtime_sec": runtime_in_seconds,
