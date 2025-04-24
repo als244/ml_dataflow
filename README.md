@@ -18,8 +18,8 @@ The current ecosystem lies at the extremes:
     - Large codebases that are diffcult to trace how/when/why system resources are utilized
         - Deeply embedded depedencies on third-party libraries can cause frustration to remove, swap, or update
     - Autodiff is a complex stack: specifying when computations occur, where gradients/optimizer state are housed, & how they are transferred is not easily controllable. 
-        - Packages built on top (such as DDP, ZeRO, FSDP) manage this complexity (making edits to 'contexts' within computation graph), but they are limited in expressivity
-            - Meanwhile, even more haziness is added to the system regarding underlying resource usage.
+        - Packages built on top (such as DDP, ZeRO, FSDP) manage this complexity (making edits to 'contexts' within computation graph), but they too are complex and limited in expressivity
+            - Meanwhile, more haziness is added to the system regarding underlying resource usage.
     
 
 The objective is to offer the best of both worlds. 
