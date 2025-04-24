@@ -35,7 +35,7 @@ The intial emphasis is for training; after this is working properly, focus will 
 
 ----
 
-- The goal is for streams/command queues to be a first-class citizen. This is the major distinction between this 'framework' and others. 
+- ***The goal is for streams/command queues to be a first-class citizen***. This is the major distinction between this 'framework' and others. 
     - While streams can be employed through PyTorch, the actual mechanisms for doing so are mostly opaque and handled via a non-intuitive Python context; expressing desired behavior is challenging, and it is even unclear if the program is actually behaving in inteded manner. 
     - Instead of having streams be an additional 'add-on', they are fundamental to this framework and explicity required for every operation or data-transfer.
 
