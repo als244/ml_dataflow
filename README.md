@@ -10,11 +10,16 @@ This repo is structured as a collection of libraries to help foster a robust, tr
 
 The current ecosystem lies at the extremes; choosing to optimize for performance by means of custom-built solutions that target a specific backend (which lacks portability and has high development cost), or choosing to optimize for convenience through high-level frameworks such as PyTorch or JAX (which lack mechanisms for precise control over asynchrony and data-movement). The goal of these libraries is to bridge this gap.
 
+
 -----
 
 ## Usage
 
 ***Not ready yet, soon!***
+
+You can try out a [simulator](https://dataflowsim.sunshein.net) for what this repo aims to implement. 
+
+Moreover, the goal is for customization is a first-class citizen, so any new research innovations (whether it be new operations or compositions, improved kernels, novel hardware backends, different communication schemes, etc.) can be integrated at its corresponding level of the stack.
 
 ----
 
