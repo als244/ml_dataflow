@@ -71,10 +71,10 @@ It is the heart this whole repo. The API functions expose 4 fundamental function
 ### Ops 
 
 To be of any use, users will need to register operations with this backend. Operations can be registered as either:
-- Native
+- *Native*
     - Where backend can register and load this representation directly (e.g binary or source code if backend supports JIT)
         - Each native op should be tied to a host function which is responsible for setting the launch configuration at runtime (i.e. can based upon argument values). 
-- External
+- *External*
     - Where the operation is defined as a wrapper for a thirdparty function responsible for computation dispatching.
 
 Each operation can supply an intialization function that can handle setting an operation's attributes or creating/saving any data that might be required during dispatching.
