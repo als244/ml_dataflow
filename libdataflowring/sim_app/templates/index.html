@@ -24,14 +24,14 @@
                         <label for="train_token_ratio">Train Token Ratio:</label>
                         <input type="number" id="train_token_ratio" name="train_token_ratio" value="1.0" step="0.05" min="0.05" max="1.0" required>
                         <label for="train_chunk_distribution">Train Chunk Distribution:</label>
-                        <select id="train_chunk_distribution" name="train_chunk_distribution" disabled>
+                        <select id="train_chunk_distribution" name="train_chunk_distribution" required disabled>
                             <option value="Uniform" selected>Uniform</option>
                             <option value="Suffix">Suffix</option>
                         </select>
                         <label for="min_chunk_size">Min Chunk Size:</label>
                         <input type="number" id="min_chunk_size" name="min_chunk_size" value="1536" min="1" required disabled>
                         <label for="chunk_type">Chunk Type:</label>
-                        <select id="chunk_type" name="chunk_type" disabled>
+                        <select id="chunk_type" name="chunk_type" required disabled>
                             <option value="Equal Data" selected>Equal Data</option>
                             <option value="Equal Computation">Equal Computation</option>
                         </select>
@@ -64,7 +64,7 @@
                         <label for="expert_dim">Expert Dim:</label>
                         <input type="number" id="expert_dim" name="expert_dim" value="27648" min="1" step="1" required>
                         <label for="attn_type">Attention Type:</label>
-                        <select id="attn_type" name="attn_type" disabled>
+                        <select id="attn_type" name="attn_type" required disabled>
                             <option value="Exact" selected>Exact</option>
                             <option value="Approximate">Approximate</option>
                             <option value="Hierarchical">Hierarchical</option>
