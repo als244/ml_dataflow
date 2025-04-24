@@ -17,11 +17,11 @@ The current ecosystem lies at the extremes; choosing to optimize for performance
 
 ***Not ready yet, soon!***
 
-You can try out a [simulator](https://dataflowsim.sunshein.net) for what this repo aims to implement. 
-
-Moreover, the goal is for customization is a first-class citizen, so any new research innovations (whether it be new operations or compositions, improved kernels, novel hardware backends, different communication schemes, etc.) can be integrated at its corresponding level of the stack.
+You can try out a [simulator](https://dataflowsim.sunshein.net) for what this repo aims to make possible. 
 
 ----
+
+The goal is for customization is a first-class citizen. Any new research innovations (whether it be new operations or compositions, improved kernel efficiency, novel hardware backends, different communication schemes, etc.) can be integrated at its corresponding level of the stack.
 
 ## Under the Hood
 
