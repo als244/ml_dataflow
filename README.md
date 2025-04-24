@@ -16,7 +16,7 @@ The current ecosystem lies at the extremes:
     - Lack mechanisms for precise, asynchronous control over memory, data-movement
         - Painful to manage multiple threads and sync primitives within Python frameworks
     - Autodiff is a complex stack
-        - Specifying when computations occur and where gradients and optimizer state are housed/transferred is opaque and not easily controllable 
+        - Specifying when computations occur and where gradients/optimizer state are housed & transferred is not easily controllable. Additionally libraries (such as DDP, ZeRO, FSDP) take care of controlling this complexity, but they are limited in expressivity and add make the system even more opaque. 
     - Large codebase that is diffcult to trace and modify how/when system resources are utilized
         - Deeply embedded depedencies on third-party libraries (for operations & communications) causing frustration to remove, swap, or update
     
