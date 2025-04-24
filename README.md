@@ -28,7 +28,9 @@ The objective is to offer the best of both worlds.
 
 You can try out a [simulator](https://dataflowsim.sunshein.net) for what this repo aims to accomplish.
 
-Plan is to build a robust core of C libraries and create user-friendly Python bindings (at the various layers of stack) for convenient interfacing. Typical usage will have a similar API to most other training frameworks and only need to use the top-level bindings. The first emphasis will be on training and after this is working properly, focus will shift to inference. 
+Plan is to build a robust core of C libraries and create user-friendly Python bindings (at the various layers of stack) for convenient interfacing. Typical usage will have a similar API to most other training frameworks and only need to use the top-level bindings. 
+
+The intial emphasis is for training; after this is working properly, focus will shift to inference. 
 
 ----
 
