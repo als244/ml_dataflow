@@ -1160,8 +1160,8 @@ class SimulationRunner:
         special_transition_dev_mem = (self.head_transitions_capacity + self.transitions_capacity) * self.output_size_bytes
 
         # --- Determine Capacities (Keep simplified logic) ---
-        self.layer_capacity = 2 if self.N < self.total_layers else 1 # Base on non-head layers
-        self.grad_layer_capacity = 2 if self.N < self.total_layers else 1
+        self.layer_capacity = 2 if self.N <= self.total_layers else 1 # Base on non-head layers
+        self.grad_layer_capacity = 2 if self.N <= self.total_layers else 1
         self.context_buffer_capacity = 1 # Keep simple
         self.grad_context_buffer_capacity = 1
 
