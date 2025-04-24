@@ -14,7 +14,6 @@ The current ecosystem lies at the extremes:
     - High development cost
 - Choosing to optimize for convenience through high-level frameworks such as PyTorch or JAX
     - Lack mechanisms for precise control over asynchrony and data-movement
-    - Difficult to customize
     - Large codebase with many depdendenices and versioning annoyances
     
 
