@@ -309,8 +309,8 @@ class Device:
         # Head Task (if applicable)
         if self.device_id == head_device_id:
 
-            total_chunk_inbound_frames = sum([self.computation_times_frames[i] for i in range(0, self.total_chunks, self.train_chunk_freq)]) + (self.total_devices - 1) * self.activationTransitionFrames
-            cutoff_chunk_cnt = int(total_chunk_inbound_frames / self.headFrames)
+            total_chunk_inbound_frames = sum([self.computation_times_frames[i] for i in range(0, self.total_chunks, self.train_chunk_freq)]) + self.computation_times_frames[self.total_chunks - 1]
+            cutoff_chunk_cnt = int(total_chunk_inbound_frames / 2 / self.headFrames)
             cutoff_chunk_id = cutoff_chunk_cnt * self.train_chunk_freq
 
             transfer_direction = -1
