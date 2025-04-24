@@ -1115,9 +1115,6 @@ class SimulationRunner:
         self.attn_type = params.get('attn_type', "Exact")
         self.max_device_memory_bytes = params.get('max_device_memory_bytes', 20 * (1 << 30))
         self.hardware_max_flops = params.get('hardware_max_flops', 989 * 1e12)
-        if self.bitwidth > 0 and self.bitwidth != 16:
-             bitwidth_factor = 16.0 / self.bitwidth
-             self.hardware_max_flops *= bitwidth_factor
         self.hardware_mem_bw_bytes_sec = params.get('hardware_mem_bw_bytes_sec', 3.35 * (1 << 40)) # Typo fixed TB/s -> GB/s -> B/s
         self.matmul_efficiency = params.get('matmul_efficiency', 0.7)
         self.attn_efficiency = params.get('attn_efficiency', 0.55)
