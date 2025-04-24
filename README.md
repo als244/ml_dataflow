@@ -39,13 +39,13 @@ The goal is for customization is a first-class citizen. Any new research innovat
 | Library Structure Flow   |
 | :----------------------: |
 | :----------------------: |
-| Communication Manager: **libdataflowring** |
+| Orchestration & Communication Manager: **libdataflowring** |
 | &#11015;                 |
-| Default Models (compositions of operations): **libdataflowmodels** |
+| Default Models (compositions of default operations): **libdataflowmodels** |
 | &#11015;                 |
-| Default Operations (intefaces & impplementions): **backends/lib_register_default_ops** => **libdataflowops** |
+| Set of Default Operations (interfaces): **libdataflowops** |
 | &#11015;                 |
-| Hardware Interface: **backends/lib_handle** => **libdataflow** |
+| Hardware Abstraction: **libdataflow** |
 
 
 ## libdataflow & libdataflowops
