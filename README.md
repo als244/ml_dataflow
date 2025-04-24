@@ -15,7 +15,7 @@ The current ecosystem lies at the extremes:
 - Choosing to optimize for convenience through high-level frameworks such as PyTorch or JAX
     - Lack mechanisms for precise control over memory management, asynchrony and data-movement
     - Large codebase that is diffcult to trace and modify how/when system resources are utilized
-    - Depedencies on other kernel and communication libraries
+    - Depedencies on thirdparty kernel and communication libraries that may be slow to update or tweak
     
 
 The objective is to offer the best of both worlds. 
