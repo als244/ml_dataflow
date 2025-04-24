@@ -15,11 +15,12 @@ The current ecosystem lies at the extremes:
 - ***Optimizing for convenience***: High-Level autodiff frameworks such as PyTorch or JAX
     - Lack mechanisms for precise control over memory, data-movement
         - Painful to manage multiple threads and sync primitives within Python frameworks
-    - Large codebase that is diffcult to trace and modify how/when system resources are utilized
+    - Large codebases that are diffcult to trace and modify how/when system resources are utilized
         - Deeply embedded depedencies on third-party libraries (for operations & communications) can cause frustration to remove, swap, or update
-    - Autodiff is a complex stack
+    - Autodiff is a complex stack... but how much do we really need it?
         - Specifying when computations occur and where gradients/optimizer state are housed & transferred is not easily controllable. 
-            - Packages built on top (such as DDP, ZeRO, FSDP) handle this complexity (making edits to 'contexts' within computation graph), but they are limited in expressivity. Morevoer, even more haziness is added to the system regarding underlying resource usage.
+            - Packages built on top (such as DDP, ZeRO, FSDP) manage this complexity (making edits to 'contexts' within computation graph), but they are limited in expressivity
+                - Meanwhile, even more haziness is added to the system regarding underlying resource usage.
     
 
 The objective is to offer the best of both worlds. 
