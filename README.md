@@ -1,6 +1,6 @@
 # *Portable* & *Efficient* Machine Learning
 
-<sub><sup><em>Currently a work in-progress --- keep watch for updates.</em><sub><sup>
+<sup><em>Currently a work in-progress --- keep watch for updates.</em><sup>
 
 -----
 
