@@ -38,9 +38,9 @@ The intial emphasis is for training; after this is working properly, focus will 
 
 ----
 
-- ***The goal is for streams/command queues to be a first-class citizen***. This is the major distinction between this 'framework' and others. 
-    - While streams can be employed through PyTorch, the actual mechanism for doing so is via a non-intuitive Python context (`with stream(): ...`); expressing desired behavior is challenging, and it is even unclear if the program is actually behaving in inteded manner (especially when employing libraries to help with distributed workloads). 
-    - Instead of having streams be an additional 'add-on', they are fundamental to this framework and explicity required for every operation and data-transfer.
+- ***The goal is for streams/command queues to be a first-class citizen***. This is the major distinction between this 'scaffolding' and others. 
+    - While streams can be employed through PyTorch, the actual mechanism for doing so is via a non-intuitive Python context (`with stream(): ...`); expressing desired behavior is challenging, and it is even unclear if the program is actually behaving in inteded manner (especially when employing addtional frameworks on top of base framework). 
+    - Instead of treating streams as an addition feature, the bottom level library (`libdataflow`) explicity requires stream identifiers for every operation and data-transfer.
         - Particularly relevant for managing compute & communication overlap along with fine-grained synchronization
 
 - There will be an initial collection of default functionality (backend implementions, operation interfaces, backend operation implementations, model definitions, & orchestration management). 
