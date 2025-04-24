@@ -1,6 +1,6 @@
-# Dataflow Libraries for *Portable* & *Efficient* Machine Learning
+# *Portable* & *Efficient* Machine Learning
 
-*Currently a work in-progress -- keep watch for updates.* 
+<sub><sup><em>Currently a work in-progress --- keep watch for updates.</em><sub><sup>
 
 -----
 
@@ -86,7 +86,7 @@ Upon `submit_op()` the backend should either directly call its own mechanism for
 
 ### Op Registration & Submission
 
-<small>*Note: The registration aspect is currently very clunkly and is likely to be re-factored in the future. The reliance on setting Op_Skeleton's is ugly, the extra config library for native ops is annoying,  and generally the whole setup requires too many specific path names / symbol names (and is awkward to manage). The plans are to simplify this component to make it easier for higher level development to interact with.*</small>
+<sub><sup><em> Note: The registration aspect is currently very clunkly and is likely to be re-factored in the future. The reliance on setting Op_Skeleton's is ugly, the extra config library for native ops is annoying,  and generally the whole setup requires too many specific path names / symbol names (and is awkward to manage). The plans are to simplify this component to make it easier for higher level development to interact with.<sub><sup><em>
 
 Every `Op` must have a corresponding `Op_Skeleton`. This defines:
 - Nickname for the operation
