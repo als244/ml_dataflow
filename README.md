@@ -13,7 +13,8 @@ The current ecosystem lies at the extremes:
     - Lacks portability
     - High development cost
 - ***Optimizing for convenience***: High-level frameworks such as PyTorch or JAX
-    - Lack mechanisms for precise control over memory management, asynchrony and data-movement
+    - Lack mechanisms for precise, asynchronous control over memory, data-movement
+        - Painful to manage multiple threads and sync primitives within Python frameworks
     - Large codebase that is diffcult to trace and modify how/when system resources are utilized
         - Deeply embedded depedencies on third-party libraries (for operations & communications) causing frustration to remove, swap, or update
     
