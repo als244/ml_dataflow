@@ -28,6 +28,8 @@ The objective is to offer the best of both worlds.
 
 You can try out a [simulator](https://dataflowsim.sunshein.net) for what this repo aims to accomplish.
 
+Plan is to build a robust core of C libraries and create Python bindings for convenient interfacing. 
+
 ----
 
 The goal is for customization is a first-class citizen. Any new research innovations (whether it be new operations or compositions, improved kernel efficiency, novel hardware backends, different communication schemes, etc.) can be integrated at its corresponding level of the stack.
