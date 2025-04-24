@@ -9,10 +9,10 @@
 This repo is structured as a collection of libraries to help foster a robust, transparent, & performant ecosystem for machine learning and other accelertor-centric workloads. The transition to heterogeneous computing environments (CPUs + GPUs/TPUs/FPGAs/etc.) has posed challenges for portability and efficency. Dataflow processing, consistenting of concurrent streams and asynchronous data-movement, is fundamental to all AI workloads, yet we lack a quality way of expressing these types of programs. 
 
 The current ecosystem lies at the extremes:
-- Choosing to optimize for performance by means of custom-built solutions that target a specific computing environment (known # of acccelerators, specific architectures, known bandwdiths, memory capacities, etc)
+- *Optimize for performance*: Custom-built solutions targeting a specific computing environment (specific architectures, known # of acccelerators, bandwdiths, memory capacities, etc)
     - Lacks portability
     - High development cost
-- Choosing to optimize for convenience through high-level frameworks such as PyTorch or JAX
+- *Optimizing for convenience*: High-level frameworks such as PyTorch or JAX
     - Lack mechanisms for precise control over memory management, asynchrony and data-movement
     - Large codebase that is diffcult to trace and modify how/when system resources are utilized
     - Depedencies on thirdparty kernel and communication libraries that may be slow to update or tweak
