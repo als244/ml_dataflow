@@ -263,7 +263,7 @@ class Device:
         # Forward Pass (Non-Head Layers)
         cur_layer_id = self.device_id
         while cur_layer_id < self.total_layers:
-            transfer_direction = 1 if self.total_devices > 1 else 0
+            transfer_direction = 1
             for i in range(self.total_chunks):
                  comp_time = self.computation_times_frames.get(i, 0)
                  is_train_chunk = (i % self.train_chunk_freq == 0) or (i == self.total_chunks - 1)
@@ -285,6 +285,8 @@ class Device:
         while temp_layer < self.total_layers:
             last_layer_on_device = temp_layer
             temp_layer += self.total_devices
+
+        self.last_block_layer_id = last_layer_on_device
         if last_layer_on_device != -1:
              for i in range(self.total_chunks):
                  # Mark context as 'available' ONLY for the last layer computed
@@ -311,7 +313,7 @@ class Device:
             cutoff_chunk_cnt = int(total_chunk_inbound_frames / 2 / self.headFrames)
             cutoff_chunk_id = cutoff_chunk_cnt * self.train_chunk_freq
 
-            transfer_direction = -1 if self.total_devices > 1 else 0
+            transfer_direction = -1
             # Simple Head processing order: all training chunks sequentially
             # More complex logic (like reversal) could be added if needed
             for i in range(cutoff_chunk_id):
@@ -340,7 +342,7 @@ class Device:
                  cur_layer_id = last_layer_on_device # Head not in list (shouldn't happen if head device)
 
         while cur_layer_id >= 0 :
-            transfer_direction = -1 if self.total_devices > 1 else 0
+            transfer_direction = -1
             if cur_layer_id == 0:
                 transfer_direction = 0
 
@@ -550,6 +552,17 @@ class Device:
             if not has_fwd_activation: missing_items.append("Fwd Act.")
             if not has_context: missing_items.append(f"Ctx (Chunk: {missing_ctx_chunk})")
             if not has_outbound_trans_space: missing_items.append("Congested (Trans)")
+
+            if not has_context:
+                print(f"T={T}, Dev {self.device_id}: WARN - Bwd X C{cid},L{lid} has no context.")
+                print(f"Context buffer: {self.context_buffer}")
+                print(f"Missing context chunk: {missing_ctx_chunk}")
+                print(f"Input transition key: {input_transition_key}")
+                print(f"Input buffer: {input_buffer_to_check}")
+                print(f"Outbound transition buffer: {self.transitions_outbound_buffer}")
+                print(f"Activations buffer: {self.activations_buffer}")
+                sys.exit(1)
+                
         elif bW:
             computation_type_str = "Bwd W"
             has_deps = has_fwd_activation # Simplest dependency
@@ -673,6 +686,8 @@ class Device:
             if q_lid == next_layer_id and q_cid <= chunk_id and not q_is_ctx: 
                 break
             insert_idx += 1
+
+        print(f"Inserting context item of {ctx_item} into inbound queue at index {insert_idx}")
         self.inbound_queue.insert(insert_idx, ctx_item)
 
         self.context_buffer[chunk_id] = (-2, chunk_id, next_layer_id)
@@ -770,9 +785,9 @@ class Device:
                     self.activations_empty_slot_ind = self._find_first_free_idx(self.activations_buffer)
                     self.cur_train_fwd_activation_ind += 1
                 else: # Not training chunk, save context only
-                    print(f"T={T}, Adding context for chunk {cid} layer {lid} to outbound queue")
-                    self.context_buffer[cid] = (-2, cid, lid)
-                    self.outbound_queue.append((cid, lid, False, True, self.contextTransferFrames))
+                    ## don't add context for last block on device...
+                    if lid < self.last_block_layer_id:
+                        self.outbound_queue.append((cid, lid, False, True, self.contextTransferFrames))
 
             # 3. Handle Output Peer Transition
             needs_outbound_trans = (tdir != 0)
@@ -832,10 +847,10 @@ class Device:
                         else:
                             next_training_chunk_id = cid - self.train_chunk_freq
 
-                        #print(f"Prefetching context for non-training chunks: [{cid - 1}, {next_training_chunk_id}), Cur Layer Id: {lid}, Next Layer Id: {lid - self.total_devices}")
                         for i in range(cid - 1, next_training_chunk_id, -1):
                             self.handle_bwd_prefetch_context(i, lid, lid - self.total_devices)
 
+                
                 ## if this is the last chunk, now prefetch the next required weight
                 ## which replaces the current weight
                 if cid == 0:
@@ -997,6 +1012,7 @@ class Device:
             "cur_train_fwd_activation_ind": self.cur_train_fwd_activation_ind,
             "next_weight_prefetch_layer_id": self.next_weight_prefetch_layer_id,
             "next_bwd_weight_prefetch_layer_id": self.next_bwd_weight_prefetch_layer_id,
+            "last_block_layer_id": self.last_block_layer_id,
             "head_final_chunk_id": self.head_final_chunk_id,
             "home_storage": self.home_storage
         }
@@ -1063,6 +1079,7 @@ class Device:
         self.next_weight_prefetch_layer_id = dev_state.get("next_weight_prefetch_layer_id", -1)
         self.next_bwd_weight_prefetch_layer_id = dev_state.get("next_bwd_weight_prefetch_layer_id", -1)
         self.head_final_chunk_id = dev_state.get("head_final_chunk_id", -1)
+        self.last_block_layer_id = dev_state.get("last_block_layer_id", -1)
         self.home_storage = set(dev_state.get("home_storage", []))
         # Ensure buffer empty slot indices are recalculated based on loaded buffers
         self._recalculate_empty_slot_indices()
@@ -1219,9 +1236,6 @@ class SimulationRunner:
              + (2 * self.model_dim * self.kv_dim) # KV specific? Assume covered in QKVO for simplicity now
              + self.active_experts * (3 * self.model_dim * self.expert_dim) # FFN
          )
-        # Head FLOPS: fwd + bwd (assuming bwd similar to fwd)
-        head_flops_one_pass = 2 * self.chunk_size * self.model_dim * self.vocab_size
-        head_flops_total_train = head_flops_one_pass * 2 * self.total_train_chunks # Fwd+Bwd for each train chunk
 
         self.computation_times_sec = {}
         self.computation_times_frames = {}
@@ -1229,7 +1243,7 @@ class SimulationRunner:
         self.computation_times_frames_bwd = {}
         self.total_fwd_flops = 0
         self.total_bwd_flops = 0
-        self.total_head_flops = head_flops_total_train # Assign calculated total
+        self.total_head_flops = 0
         self.total_attn_flops = 0
         self.total_matmul_flops = 0
         self.total_compute_cycles = 0
@@ -1237,8 +1251,12 @@ class SimulationRunner:
         safe_flops = self.hardware_max_flops if self.hardware_max_flops > 0 else 1.0
         safe_matmul_eff = self.matmul_efficiency if self.matmul_efficiency > 0 else 1.0
         safe_attn_eff = self.attn_efficiency if self.attn_efficiency > 0 else 1.0
+        
+          # Head FLOPS: fwd + bwd (assuming bwd similar to fwd)
+        head_flops = 2 * (2 * self.chunk_size * self.model_dim * self.vocab_size)
 
-        self.headTimeSec = head_flops_one_pass / (safe_flops * safe_matmul_eff)
+        self.headTimeSec = head_flops / (safe_flops * safe_matmul_eff)
+        
         self.headFrames = round(self.headTimeSec * self.cycles_per_second)
 
         # BwdW time based on matmul part only
@@ -1285,7 +1303,9 @@ class SimulationRunner:
 
                 # Add Head compute cycles only once per training chunk
                 self.total_compute_cycles += self.headFrames
-                self.total_matmul_flops += head_flops_one_pass * 2 # Add Fwd + Bwd head matmul flops
+                self.total_matmul_flops += head_flops
+
+                self.total_head_flops += head_flops
 
             else:
                 self.computation_times_sec_bwd[i] = 0
