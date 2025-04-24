@@ -41,9 +41,9 @@ The goal is for customization is a first-class citizen. Any new research innovat
 | :----------------------: |
 | Communication Manager: **libdataflowring** |
 | &#11015;                 |
-| Model Definitions (compositions of operations): **libdataflowmodels** |
+| Default Models: **libdataflowmodels** |
 | &#11015;                 |
-| Operation Interfaces & Implementions: **backends/lib_register_default_ops** => **libdataflowops** |
+| Default Operations: **backends/lib_register_default_ops** => **libdataflowops** |
 | &#11015;                 |
 | Hardware Interface: **backends/lib_handle** => **libdataflow** |
 
