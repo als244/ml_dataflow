@@ -40,7 +40,7 @@ The intial emphasis is for training; after this is working properly, focus will 
         - Particularly relevant for managing compute & communication overlap along with fine-grained synchronization
 
 - There will be an initial collection of default functionality (backend implementions, operation interfaces, backend operation implementations, model definitions, & orchestration management). 
-    - However, the intentition is to allow for plug-and-play customizations to the base set of functionality. Any new research innovations (whether it be new operations or compositions, improved backend kernels, novel hardware backends, different communication schemes, etc.) can be integrated at its corresponding level of the stack while keeping the other components fixed. 
+    - However, the design allows for plug-and-play customizations to the base set of functionality (additions or replacement). Any new research innovations (whether it be new operations or compositions, improved backend kernels, novel hardware backends, different communication schemes, etc.) can be integrated at its corresponding level of the stack while keeping the other components fixed. 
 
 ## Under the Hood
 
