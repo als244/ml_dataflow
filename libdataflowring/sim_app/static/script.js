@@ -759,7 +759,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- Handle Form Parameter Inputs ---
         Array.from(paramsForm.elements).forEach(el => {
             // Example: Keep certain form elements always disabled in prepare state if needed
-            if (isEnabled && (el.id === 'attn_type' || el.id == 'chunk_type' || el.id === 'min_chunk_size')) {
+            if (isEnabled && (el.id == 'train_chunk_distribution' || el.id === 'attn_type' || el.id == 'chunk_type' || el.id === 'min_chunk_size')) {
                  el.disabled = true;
             } else if (el !== submitButton) { // Don't disable the submit/reset button itself here
                 // Disable form inputs when simulation is active (!isEnabled)
