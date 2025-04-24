@@ -12,9 +12,11 @@ The current ecosystem lies at the extremes:
 - ***Optimizing for performance***: Custom-built solutions targeting a specific computing environment (accounting for known: architectures, # of acccelerators, bandwidths, memory capacities, etc.)
     - Lacks portability
     - High development cost
-- ***Optimizing for convenience***: High-level frameworks such as PyTorch or JAX
+- ***Optimizing for convenience***: High-Level autodiff frameworks such as PyTorch or JAX
     - Lack mechanisms for precise, asynchronous control over memory, data-movement
         - Painful to manage multiple threads and sync primitives within Python frameworks
+    - Autodiff is a complex stack
+        - Specifying when computations occur and where gradients and optimizer state are housed/transferred is opaque and not easily controllable 
     - Large codebase that is diffcult to trace and modify how/when system resources are utilized
         - Deeply embedded depedencies on third-party libraries (for operations & communications) causing frustration to remove, swap, or update
     
@@ -36,7 +38,7 @@ The intial emphasis is for training; after this is working properly, focus will 
 ----
 
 - ***The goal is for streams/command queues to be a first-class citizen***. This is the major distinction between this 'framework' and others. 
-    - While streams can be employed through PyTorch, the actual mechanisms for doing so are handled via a non-intuitive Python context and is opaque; expressing desired behavior is challenging, and it is even unclear if the program is actually behaving in inteded manner. Instead of having streams be an additional 'add-on', they are fundamental to this framework and explicity required for every operation and data-transfer.
+    - While streams can be employed through PyTorch, the actual mechanism for doing so is via a non-intuitive Python context (`with stream(): ...`); expressing desired behavior is challenging, and it is even unclear if the program is actually behaving in inteded manner. Instead of having streams be an additional 'add-on', they are fundamental to this framework and explicity required for every operation and data-transfer.
         - Particularly relevant for managing compute & communication overlap along with fine-grained synchronization
 
 - There will be an initial collection of default functionality (backend implementions, operation interfaces, backend operation implementations, model definitions, & orchestration management). 
