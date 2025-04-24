@@ -25,7 +25,7 @@ The objective is to offer the best of both worlds.
 
 ***Not ready yet, soon!***
 
-You can try out a [simulator](https://dataflowsim.sunshein.net) for what this repo aims to make possible. 
+You can try out a [simulator](https://dataflowsim.sunshein.net) for what this repo aims to accomplish.
 
 ----
 
