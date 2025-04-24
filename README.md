@@ -11,10 +11,12 @@ This repo is structured as a collection of libraries to help foster a robust, tr
 The current ecosystem lies at the extremes:
 - Choosing to optimize for performance by means of custom-built solutions that target a specific backend
     - Lacks portability
-    - High development cost)
+    - High development cost
 - Choosing to optimize for convenience through high-level frameworks such as PyTorch or JAX
     - Lack mechanisms for precise control over asynchrony and data-movement
-    - Large, slow-moving codebase and difficult to customize
+    - Difficult to customize
+    - Large codebase with many depdendenices and versioning annoyances
+    
 
 The objective is to offer the best of both worlds. 
 
