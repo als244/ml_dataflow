@@ -37,13 +37,13 @@ The goal is for customization is a first-class citizen. Any new research innovat
 | Library Structure Flow   |
 | :----------------------: |
 | :----------------------: |
-| **libdataflowring** |
+| Distributed Workloads: (**libdataflowring**, for training & **libdataflowmesh**, for inference) |
 | &#11015;                 |
-| **libdataflowmodels** |
+| Model Definitions (compositions of operations): **libdataflowmodels** |
 | &#11015;                 |
-| **backends/lib_register_default_ops** => **libdataflowops** |
+| Operation Interfaces & Implementions: **backends/lib_register_default_ops** => **libdataflowops** |
 | &#11015;                 |
-| **backends/lib_handle** => **libdataflow** |
+| Hardware Interface: **backends/lib_handle** => **libdataflow** |
 
 
 ## libdataflow & libdataflowops
