@@ -39,7 +39,7 @@ The goal is for customization is a first-class citizen. Any new research innovat
 | Library Structure Flow   |
 | :----------------------: |
 | :----------------------: |
-| Communication Managers: (**libdataflowring**, for training & **libdataflowmesh**, for inference) |
+| Communication Manager: (**libdataflowring**) |
 | &#11015;                 |
 | Model Definitions (compositions of operations): **libdataflowmodels** |
 | &#11015;                 |
