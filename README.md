@@ -86,7 +86,7 @@ Upon `submit_op()` the backend should either directly call its own mechanism for
 
 ### Op Registration & Submission
 
-<sup><em> Note: The registration aspect is currently clunkly will be re-factored in the future. The the extra config library for native ops is annoying handling external ops is awkward, and generally the whole setup requires too many specific path names / symbol names. The plans are to simplify this component to make it simpler for higher level bindings.</sup><em>
+<sup><em> Note: The registration aspect is currently clunkly will be re-factored in the future. The the extra config library for native ops is annoying handling external ops is awkward, and generally the whole setup requires too many specific path names / symbol names. The plans are to simplify this component to make it simpler for higher level bindings.</em></sup>
 
 Every `Op` must have a corresponding `Op_Skeleton`. This defines:
 - Nickname for the operation
@@ -134,4 +134,4 @@ If you are only working with default transformer ops and don't want to specify y
 
 ###### Author's Remarks
 
-As the world becomes increasingly dependent upon AI, it is essential to maximize hardware throughput; our most precious resources --- *time* & *energy consumption* --- are on the line...
+<sup><bold><em> As the world becomes increasingly dependent upon AI, it is essential to maximize hardware throughput; our most precious resources --- *time* & *energy consumption* --- are on the line...</em></bold></sup>
