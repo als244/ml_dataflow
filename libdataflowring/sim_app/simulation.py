@@ -1493,7 +1493,7 @@ class SimulationRunner:
           f"  - Train Chunks: {self.total_train_chunks}\n\n"
           f"* TOTAL PER-DEVICE MEMORY *\n"
           f" - {typical_device_memory_size / (1 << 30):.2f} GB\n\n\n"
-          f"* TOTAL PER-HOME MEMORY *\n"
+          f"* TOTAL PER-HOME SPACE *\n"
           f" - {typical_home_total_size / (1 << 30):.2f} GB\n\n\n\n"
           f"--- MEMORY PARTITIONS ---\n\n"
           f"Device Partitions (Typical):\n"
