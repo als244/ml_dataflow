@@ -41,8 +41,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const totalDistance           = effectiveCenterY * 0.98;
     const innerRadius             = effectiveCenterY * 0.35;
     const innerNodeRadius         = effectiveCenterY * 0.12;
-    const outerNodeRadius         = effectiveCenterY * 0.12;
-    const stallNodeRadius         = outerNodeRadius * 1.2;
+    const outerNodeRadius         = effectiveCenterY * 0.15;
+    const stallNodeRadius         = outerNodeRadius * 1.3;
     const desiredStallGap         = viewBoxWidth * 0.03;
     const stallNodeCenterOffset   = outerNodeRadius + desiredStallGap + stallNodeRadius;
     const computeArcRadiusScale   = 1.15;
@@ -759,7 +759,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- Handle Form Parameter Inputs ---
         Array.from(paramsForm.elements).forEach(el => {
             // Example: Keep certain form elements always disabled in prepare state if needed
-            if (isEnabled && (el.id == 'train_chunk_distribution' || el.id === 'attn_type' || el.id == 'chunk_type' || el.id === 'min_chunk_size')) {
+            if (isEnabled && (el.id === 'attn_type' || el.id == 'chunk_type' || el.id === 'min_chunk_size')) {
                  el.disabled = true;
             } else if (el !== submitButton) { // Don't disable the submit/reset button itself here
                 // Disable form inputs when simulation is active (!isEnabled)

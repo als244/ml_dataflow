@@ -29,6 +29,7 @@ def parse_parameters(form_data):
     params['train_token_ratio'] = form_data.get('train_token_ratio', default=1, type=float)
     params['min_chunk_size'] = form_data.get('min_chunk_size', default=1536, type=int)
     params['chunk_type'] = form_data.get('chunk_type', default="Equal Data", type=str)
+    params['train_chunk_distribution'] = form_data.get('train_chunk_distribution', default="Uniform", type=str)
     params['bitwidth'] = form_data.get('bitwidth', default=16, type=int)
     params['total_layers'] = form_data.get('total_layers', default=64, type=int) # Non-head
     params['vocab_size'] = form_data.get('vocab_size', default=151646, type=int)
@@ -88,6 +89,7 @@ def index():
 def start_simulation():
     """ Initializes or restarts the simulation FOR THIS SESSION using full state. """
     print(f"Received /start_simulation request for session ID: {session.sid if session.sid else 'NEW'}")
+
     try:
         params = parse_parameters(request.form)
         print(f"Parsed parameters: {params}")
