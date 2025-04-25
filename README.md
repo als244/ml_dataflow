@@ -144,4 +144,4 @@ If you are only working with default transformer ops and don't want to specify y
 
 ###### Author's Remarks
 
-<sup><em> As the world becomes increasingly dependent upon AI, it is essential to maximize hardware throughput; our most precious resources --- <b> time </b> & <b>energy consumption</b> --- are on the line...</em></b></sup>
+<sup><em> As the world becomes increasingly dependent upon AI, it is essential to maximize hardware throughput; our most precious resources --- <b> time </b> & <b>natural energy</b> --- are on the line...</em></b></sup>
