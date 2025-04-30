@@ -30,7 +30,8 @@ all: create_dirs ${EXECS}
 
 create_dirs:
 	i=0; while [ $$i -le 31 ]; do \
-        	mkdir -p test_transformer_data/layers/$$i; \
+        	mkdir -p test_transformer_data/layers_fwd/$$i; \
+		mkdir -p test_transformer_data/layers_bwd/$$i; \
         	i=$$(($$i + 1)); \
     	done
 

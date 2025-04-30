@@ -218,7 +218,7 @@ int main(int argc, char * argv[]){
 	}
 	
 	for (int i = 0; i < n_layers; i++){
-		sys_blocks[i] = init_transformer_block(block_dt, compute_dt,
+		sys_blocks[i] = init_transformer_block(i, block_dt, compute_dt,
 														norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
 														eps, theta,
 														num_q_heads, num_kv_heads, head_dim,
@@ -262,7 +262,7 @@ int main(int argc, char * argv[]){
 		cur_host_mem += aligned_size;
 	}
 
-	int num_dev_blocks = 2;
+	int num_dev_blocks = n_layers;
 
 	Transformer_Block ** blocks = malloc(num_dev_blocks * sizeof(Transformer_Block *));
 	if (!blocks){
@@ -271,7 +271,7 @@ int main(int argc, char * argv[]){
 	}
 	
 	for (int i = 0; i < num_dev_blocks; i++){
-		blocks[i] = init_transformer_block(block_dt, compute_dt,
+		blocks[i] = init_transformer_block(i, block_dt, compute_dt,
 														norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
 														eps, theta,
 														num_q_heads, num_kv_heads, head_dim,
@@ -378,11 +378,6 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 	*/
-
-
-
-
-
 
 	// Now we can prepare seq batch...
 
@@ -557,44 +552,12 @@ int main(int argc, char * argv[]){
 		cur_dev_mem += block_transition_size;
 	}
 
-	ret = dataflow_submit_transformer_embedding(&dataflow_handle, compute_stream_id,
-											model_input,
-											embedding_table,
-											&(block_transitions[0]));
-	if (ret){
-		fprintf(stderr, "Error: failed to submit transformer embedding...\n");
-		return -1;
-	}
-
-	// now save the block transition, first ensure sync with compute stream...
-
-	ret = dataflow_handle.sync_stream(&dataflow_handle, compute_stream_id);
-	if (ret){
-		fprintf(stderr, "Error: failed to sync compute stream...\n");
-		return -1;
-	}
-
-	ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, outbound_stream_id, sys_block_transitions[0].X, block_transitions[0].X, block_transition_size);
-	if (ret){
-		fprintf(stderr, "Error: failed to submit outbound transfer for block transition...\n");
-		return -1;
-	}
-
-	// save the block transitions...
-
-	ret = save_host_matrix("test_transformer_data/example_embed_output.dat", sys_block_transitions[0].X, total_tokens, model_dim, block_dt);
-	if (ret){
-		fprintf(stderr, "Error: failed to save example embed output...\n");
-		return -1;
-	}
-
-	printf("Successfully saved example embed output...!!!\n\n");
-
-
 
 	// TODO:
 
 	// need to save and bind activations...
+
+	// IGNORING SENDING BACK SAVED ACTIVATIONS FOR NOW...
 
 	int num_saved_activation_buffers = 2;
 	Seq_Batch_Saved_Activations * saved_activations = malloc(num_saved_activation_buffers * sizeof(Seq_Batch_Saved_Activations));
@@ -636,6 +599,9 @@ int main(int argc, char * argv[]){
 	void * kernelWorkspace = cur_dev_mem;
 	cur_dev_mem += kernelWorkspaceBytes;
 
+	// FOR NOW ONLY USING A SINGLE ACTIVATIONS STRUCT, BUT IN REALITY WILL HAVE A STACK OF THESE AND THEY
+	// WILL GET SENT BACK TO HOST...
+
 	Transformer_Block_Activations * activations = malloc(sizeof(Transformer_Block_Activations));
 	if (!activations){
 		fprintf(stderr, "Error: failed to allocate activations...\n");
@@ -647,18 +613,123 @@ int main(int argc, char * argv[]){
 	activation_workspace -> kernelWorkspace = kernelWorkspace;
 	activation_workspace -> kernelWorkspaceBytes = kernelWorkspaceBytes;
 	activations -> activation_workspace = activation_workspace;
-	
-	printf("Submitting transformer block...!\n\n");
+
+
+	// PREPARING SPECIAL HEAD ACTIVATIONS STRUCT...
+
+	Transformer_Head_Activations * head_activations = malloc(sizeof(Transformer_Head_Activations));
+	if (!head_activations){
+		fprintf(stderr, "Error: failed to allocate head_activations...\n");
+		return -1;
+	}
+
+	head_activations -> num_tokens = total_tokens;
+	head_activations -> buffer = cur_dev_mem;
+	head_activations -> head_norm_out = head_activations -> buffer;
+	uint64_t head_norm_out_size = (uint64_t) total_tokens * (uint64_t) model_dim * (uint64_t) block_dt_size;
+	cur_dev_mem += head_norm_out_size;
+	head_activations -> head_norm_weighted_sums = cur_dev_mem;
+	uint64_t head_norm_weighted_sums_size = (uint64_t) total_tokens * (uint64_t) sizeof(float);
+	cur_dev_mem += head_norm_weighted_sums_size;
+	head_activations -> head_norm_rms_vals = cur_dev_mem;
+	uint64_t head_norm_rms_vals_size = (uint64_t) total_tokens * (uint64_t) sizeof(float);
+	cur_dev_mem += head_norm_rms_vals_size;
+	head_activations -> head_out = cur_dev_mem;
+	uint64_t head_out_size = (uint64_t) total_tokens * (uint64_t) vocab_size * (uint64_t) block_dt_size;
+	cur_dev_mem += head_out_size;
+	head_activations -> kernelWorkspace = kernelWorkspace;
+	head_activations -> kernelWorkspaceBytes = kernelWorkspaceBytes;
 	
 
-	ret = dataflow_submit_transformer_block(&dataflow_handle, compute_stream_id, 
-								&(block_transitions[0]), 
-								blocks[0], 
+	// PREPARING SPECIAL MODEL OUTPUT STRUCT...
+
+
+	uint64_t logits_size = (uint64_t) total_tokens * (uint64_t) vocab_size * (uint64_t) sizeof(float);
+	void * sys_logits = cur_host_mem;
+	cur_host_mem += logits_size;
+
+	Transformer_Model_Output * model_output = malloc(sizeof(Transformer_Model_Output));
+	if (!model_output){
+		fprintf(stderr, "Error: failed to allocate model_output...\n");
+		return -1;
+	}
+
+	model_output -> seq_batch = seq_batch;
+	model_output -> logits = cur_dev_mem;
+	cur_dev_mem += logits_size;
+
+
+
+	// 1.) DOING EMBEDDDING....
+
+	ret = dataflow_submit_transformer_embedding(&dataflow_handle, compute_stream_id,
+											model_input,
+											embedding_table,
+											&(block_transitions[0]));
+	if (ret){
+		fprintf(stderr, "Error: failed to submit transformer embedding...\n");
+		return -1;
+	}
+
+	// now save the block transition, first ensure sync with compute stream...
+
+	ret = dataflow_handle.sync_stream(&dataflow_handle, compute_stream_id);
+	if (ret){
+		fprintf(stderr, "Error: failed to sync compute stream...\n");
+		return -1;
+	}
+
+	ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, outbound_stream_id, sys_block_transitions[0].X, block_transitions[0].X, block_transition_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit outbound transfer for block transition...\n");
+		return -1;
+	}
+
+	// save the block transitions...
+
+	ret = save_host_matrix("test_transformer_data/example_embed_output.dat", sys_block_transitions[0].X, total_tokens, model_dim, block_dt);
+	if (ret){
+		fprintf(stderr, "Error: failed to save example embed output...\n");
+		return -1;
+	}
+
+	printf("Successfully saved example embed output...!!!\n\n");
+
+	// 2.) DOING BLOCKS...
+
+	for (int i = 0; i < n_layers; i++){
+		printf("Submitting transformer block #%d...!\n\n", i);
+	
+
+		ret = dataflow_submit_transformer_block(&dataflow_handle, compute_stream_id, 
+								&(block_transitions[i % 2]), 
+								blocks[i], 
 								activations, 
-								&(block_transitions[1]));
+								&(block_transitions[(i + 1) % 2]));
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit transformer block...\n");
+			return -1;
+		}
+	}
+
+
+
+	Transformer_Block_Transition * final_block_output_transition = &(block_transitions[n_layers % 2]);
+
+	// 3.) DOING HEAD...
+
+	ret = dataflow_submit_transformer_head(&dataflow_handle, compute_stream_id,
+                        final_block_output_transition, head,
+                        head_activations, 
+                        model_output,
+						// during interference these would be NULL
+						NULL,
+						NULL);
+
 
 	if (ret){
-		fprintf(stderr, "Error: failed to submit transformer block...\n");
+		fprintf(stderr, "Error: failed to submit transformer head...\n");
 		return -1;
 	}
 
@@ -674,14 +745,16 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
-	ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, outbound_stream_id, sys_block_transitions[1].X, block_transitions[1].X, block_transition_size);
+
+
+	ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, outbound_stream_id, sys_logits, model_output -> logits, logits_size);
 	if (ret){
-		fprintf(stderr, "Error: failed to submit outbound transfer for block transition...\n");
+		fprintf(stderr, "Error: failed to submit outbound transfer for logits...\n");
 		return -1;
 	}
 
 
-	printf("Ensuring block transition arrives before saving layer output...\n");
+	printf("Ensuring outbound transfer arrives before saving logits...\n");
 
 	ret = dataflow_handle.sync_stream(&dataflow_handle, outbound_stream_id);
 	if (ret){
@@ -691,15 +764,15 @@ int main(int argc, char * argv[]){
 
 	// save the block transitions...
 
-	printf("Saving layer output...\n");
+	printf("Saving logits...\n");
 
-	ret = save_host_matrix("test_transformer_data/example_layer_output.dat", sys_block_transitions[1].X, total_tokens, model_dim, block_dt);
+	ret = save_host_matrix("test_transformer_data/example_logits.dat", sys_logits, total_tokens, vocab_size, block_dt);
 	if (ret){
-		fprintf(stderr, "Error: failed to save example layer output...\n");
+		fprintf(stderr, "Error: failed to save example logits...\n");
 		return -1;
 	}
 
-	printf("Successfully saved example layer output...!!!\n\n");
+	printf("Successfully saved example logits...!!!\n\n");
 
 	return 0;
 }
