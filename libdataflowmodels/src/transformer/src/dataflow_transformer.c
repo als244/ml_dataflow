@@ -17,7 +17,7 @@
 // i.e. if executable is run from <proj_root>/test/dataflow_models, then this should be "test_transformer_data/layers"
 // to save into <proj_root>/test/dataflow_models/test_transformer_data/layers
 
-#define DATA_SAVE_DIR "test_transformer_data/layers"
+#define DATA_SAVE_DIR "test_transformer_data"
 
 static int save_file(Dataflow_Handle * dataflow_handle, int stream_id, int layer_id, bool is_bwd, char * filename, void * dev_ptr, int M, int N, DataflowDatatype dt){
 
