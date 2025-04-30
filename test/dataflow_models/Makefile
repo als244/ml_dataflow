@@ -33,7 +33,9 @@ create_dirs:
         	mkdir -p test_transformer_data/layers_fwd/$$i; \
 		mkdir -p test_transformer_data/layers_bwd/$$i; \
         	i=$$(($$i + 1)); \
-    	done
+    	done; \
+	mkdir -p test_transformer_data/head_fwd; \
+	mkdir -p test_transformer_data/head_bwd; 
 
 test_transformer: test_transformer.c
 	${CC} ${CFLAGS} ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
