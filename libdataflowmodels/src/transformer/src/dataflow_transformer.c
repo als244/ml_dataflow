@@ -4,7 +4,7 @@
 #define TO_SAVE_DATA 1
 
 // if 0, then no layers will be saved
-#define TO_SAVE_LAYER 0
+#define TO_SAVE_LAYER 1
 // if save layer is 1, then layer id specifies which layer to save
 // if -1, then all layers will be saved
 #define LAYER_ID_TO_SAVE -1
@@ -193,6 +193,15 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 
 	int to_transa = 1;
 	int to_transb = 0;
+
+
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, false, "x_act_stream.dat", block_input -> X, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_act_stream file...\n");
+			return -1;
+		}
+	}
 
 
 	printf("Submitting Attention RMS Norm...!\n");
@@ -522,6 +531,14 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	if (ret){
 		fprintf(stderr, "Error: failed to submit w2 matmul proj...\n");
 		return -1;
+	}
+
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, false, "x_act_stream_out.dat", block_output -> X, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_act_stream file...\n");
+			return -1;
+		}
 	}
 
 	// copy to output
