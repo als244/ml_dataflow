@@ -472,7 +472,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 }
 
 
-int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_stream_id, int out_copy_stream_id,
+int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_stream_id, int out_copy_stream_id,
                         Transformer_Block_Transition * block_input, Transformer_Head * transformer_head,
                         Transformer_Head_Activations * head_activations, 
                         Transformer_Model_Output * model_output,
@@ -547,11 +547,16 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
         return ret;
     }
 
-
+	// IF ONLY FOR FORWARD PASS, THEN RETURN HERE...
 	if (!grad_transformer_head){
 		return 0;
 	}
-	
+
+	// DOING BACKWARDS PASS OF HEAD HERE!!!
+	// Getting the grad stream to pass back to the last block...
+
+
+
 	Seq_Batch * seq_batch = block_input -> seq_batch;
 
 	if (seq_batch -> loss_config.num_tokens_to_predict == 0){
@@ -721,7 +726,7 @@ int submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_strea
 
 
 
-int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int compute_stream_id,
+int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int compute_stream_id,
 								Transformer_Block * transformer_block, 
 								Transformer_Block_Transition * inp_grad_stream, 
 								Seq_Batch_Saved_Activations * fwd_activations, Seq_Batch_Context * fwd_context,
@@ -1049,7 +1054,7 @@ int submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int comput
 	return 0;
 }
 
-int submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int compute_stream_id,
+int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int compute_stream_id,
                                 Transformer_Block_Transition * grad_stream,
                                 Seq_Batch_Saved_Activations * fwd_activations, 
                                 Transformer_Block_Activations * grad_activations, 
