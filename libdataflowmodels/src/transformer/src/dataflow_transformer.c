@@ -61,7 +61,8 @@ static int save_file(Dataflow_Handle * dataflow_handle, int stream_id, int layer
 
 	FILE * fp = fopen(full_filename, "wb");
 	if (!fp){
-		fprintf(stderr, "Error: failed to open file...\n");
+		free(host_ptr);
+		fprintf(stderr, "Error: failed to save %s, because couldn't open file: %s...\n", filename, full_filename);
 		return -1;
 	}
 
@@ -69,7 +70,8 @@ static int save_file(Dataflow_Handle * dataflow_handle, int stream_id, int layer
 
 	size_t num_written = fwrite(host_ptr, el_size, num_els, fp);
 	if (num_written != num_els){
-		fprintf(stderr, "Error: failed to write to file, wrote %zu elements instead of %zu\n", num_written, num_els);
+		free(host_ptr);
+		fprintf(stderr, "Error: failed to write to file %s, wrote %zu elements instead of %zu\n", filename, num_written, num_els);
 		return -1;
 	}
 
