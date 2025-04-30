@@ -1,10 +1,21 @@
 #include "dataflow_transformer.h"
 
-#define TO_SAVE_DATA 0
+// toggle required to be set to 1 to save any data
+#define TO_SAVE_DATA 1
 
+// if 0, then no layers will be saved
 #define TO_SAVE_LAYER 0
+// if save layer is 1, then layer id specifies which layer to save
+// if -1, then all layers will be saved
 #define LAYER_ID_TO_SAVE -1
+
+// toggle required to be set to 1 to save any head data
 #define TO_SAVE_HEAD 1
+
+// directory to save data to
+// NOTE: this should be set to path relative to directory in which executable is run from
+// i.e. if executable is run from <proj_root>/test/dataflow_models, then this should be "test_transformer_data/layers"
+// to save into <proj_root>/test/dataflow_models/test_transformer_data/layers
 
 #define DATA_SAVE_DIR "test_transformer_data/layers"
 
