@@ -316,17 +316,18 @@ int main(int argc, char * argv[]){
 	}
 	
 	sys_head -> fwd_dt = block_dt;
-	sys_head -> bwd_dt = block_dt;
+	sys_head -> bwd_dt = block_dt_bwd;
 	sys_head -> compute_dt = compute_dt;
 	sys_head -> eps = eps;
 	sys_head -> embedding_config = embedding_config;
 
 	sys_head -> buffer = cur_host_mem;
 	sys_head -> w_head_norm = sys_head -> buffer;
-	sys_head -> w_head = sys_head -> w_head_norm + model_dim * block_dt_size;
+	sys_head -> w_head = sys_head -> w_head_norm + (uint64_t) model_dim * (uint64_t) block_dt_size;
 
-	
-	uint64_t combined_head_size = (uint64_t) model_dim * block_dt_size + (uint64_t) model_dim * (uint64_t) vocab_size * block_dt_size;
+	// model dim els for norm + model dim * vocab size els for head projection
+	uint64_t combined_head_els = (uint64_t) model_dim * ((uint64_t) 1 + (uint64_t) vocab_size);
+	uint64_t combined_head_size = combined_head_els * block_dt_size;
 
 	cur_host_mem += combined_head_size;
 
@@ -336,9 +337,9 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
-	read_els = fread(sys_head -> buffer, block_dt_size, (uint64_t) model_dim * (uint64_t) vocab_size, fp);
-	if (read_els != (uint64_t) model_dim * (uint64_t) vocab_size){
-		fprintf(stderr, "Error: failed to read combined_head.weight, read_els: %zu, expected: %lu\n", read_els, (uint64_t) model_dim * (uint64_t) vocab_size);
+	read_els = fread(sys_head -> buffer, block_dt_size, combined_head_els, fp);
+	if (read_els != combined_head_els) {
+		fprintf(stderr, "Error: failed to read combined_head.weight, read_els: %zu, expected: %lu\n", read_els, combined_head_els);
 		return -1;
 	}
 
@@ -358,7 +359,7 @@ int main(int argc, char * argv[]){
 	head -> embedding_config = embedding_config;
 	head -> buffer = cur_dev_mem;
 	head -> w_head_norm = head -> buffer;
-	head -> w_head = head -> w_head_norm + model_dim * block_dt_size;
+	head -> w_head = head -> w_head_norm + (uint64_t) model_dim * (uint64_t) block_dt_size;
 
 	cur_dev_mem += combined_head_size;
 
@@ -439,6 +440,21 @@ int main(int argc, char * argv[]){
 	}
 	fclose(fp);
 
+	FILE * f_token_ids = fopen("test_transformer_data/token_ids_uint32.dat", "wb");
+	if (!f_token_ids){
+		fprintf(stderr, "Error: failed to open token_ids_uint32.dat...\n");
+		return -1;
+	}
+	
+	size_t wrote_els = fwrite(sys_token_ids, sizeof(uint32_t), total_tokens, f_token_ids);
+	if (wrote_els != total_tokens){
+		fprintf(stderr, "Error: failed to write token_ids_uint32.dat, sys_wrote_els: %zu, expected: %d\n", wrote_els, total_tokens);
+		return -1;
+	}
+	fclose(f_token_ids);
+	
+	
+
 	uint32_t * sys_labels = malloc(total_tokens * sizeof(uint32_t));
 
 	fp = fopen("../data/labels_uint32.dat", "rb");
@@ -453,6 +469,19 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 	fclose(fp);
+
+	FILE * f_labels = fopen("test_transformer_data/labels_uint32.dat", "wb");
+	if (!f_labels){
+		fprintf(stderr, "Error: failed to open labels_uint32.dat...\n");
+		return -1;
+	}
+	
+	wrote_els = fwrite(sys_labels, sizeof(uint32_t), total_tokens, f_labels);
+	if (wrote_els != total_tokens){
+		fprintf(stderr, "Error: failed to write labels_uint32.dat, sys_wrote_els: %zu, expected: %d\n", wrote_els, total_tokens);
+		return -1;
+	}
+	fclose(f_labels);
 
 	int * sys_seq_positions = malloc(total_tokens * sizeof(int));
 
@@ -637,7 +666,7 @@ int main(int argc, char * argv[]){
 	uint64_t head_norm_rms_vals_size = (uint64_t) total_tokens * (uint64_t) sizeof(float);
 	cur_dev_mem += head_norm_rms_vals_size;
 	head_activations -> head_out = cur_dev_mem;
-	uint64_t head_out_size = (uint64_t) total_tokens * (uint64_t) vocab_size * (uint64_t) block_dt_bwd_size;
+	uint64_t head_out_size = (uint64_t) total_tokens * (uint64_t) vocab_size * (uint64_t) block_dt_size;
 	cur_dev_mem += head_out_size;
 	head_activations -> kernelWorkspace = kernelWorkspace;
 	head_activations -> kernelWorkspaceBytes = kernelWorkspaceBytes;
@@ -764,7 +793,7 @@ int main(int argc, char * argv[]){
 	}
 
 
-	printf("Ensuring outbound transfer arrives before saving logits...\n");
+	printf("Ensuring outbound transfer arrives before saving logits...\n\n");
 
 	ret = dataflow_handle.sync_stream(&dataflow_handle, outbound_stream_id);
 	if (ret){
@@ -774,15 +803,13 @@ int main(int argc, char * argv[]){
 
 	// save the block transitions...
 
-	printf("Saving logits...\n");
-
 	ret = save_host_matrix("test_transformer_data/example_logits.dat", sys_logits, total_tokens, vocab_size, block_dt);
 	if (ret){
 		fprintf(stderr, "Error: failed to save example logits...\n");
 		return -1;
 	}
 
-	printf("Successfully saved example logits...!!!\n\n");
+	printf("Successfully saved logits!\n\nForward pass complete!!!\n\n");
 
 	return 0;
 }
