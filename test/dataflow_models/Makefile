@@ -43,3 +43,6 @@ test_transformer: test_transformer.c
 clean:
 	rm -f ${EXECS}
 
+clean_data:
+	rm -rf test_transformer_data/
+
