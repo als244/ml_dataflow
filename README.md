@@ -1,18 +1,18 @@
 # *Portable* & *Efficient* Machine Learning
 
-<sup><em>Currently a work in-progress --- keep watch for updates.</em></sup>
+<sup><em>Currently a work in-progress... </em></sup>
 
 -----
 
 ## Purpose
 
-This repo is structured as a collection of libraries to help foster a robust, transparent, & performant ecosystem for machine learning and other accelertor-centric workloads. The transition to heterogeneous computing environments (CPUs + GPUs/TPUs/FPGAs/etc.) has posed challenges for portability and efficency. Dataflow processing, consistenting of concurrent streams and asynchronous data-movement, is fundamental to all AI workloads, yet we lack a quality way of expressing these types of programs. 
+This repo is structured as a collection of libraries to help foster a robust, transparent, & performant ecosystem for machine learning and other accelertor-centric workloads. The transition to heterogeneous computing environments (CPUs + GPUs/TPUs/FPGAs/etc.) has posed challenges for portability and efficency. Dataflow processing, encompassing concurrent streams and asynchronous data-movement, is fundamental to all AI workloads, yet we lack a quality way of expressing these types of programs. 
 
 The current ecosystem lies at the extremes:
 - ***Optimizing for performance***: Custom-built solutions targeting a specific computing environment (accounting for known: architectures, # of acccelerators, bandwidths, memory capacities, etc.)
     - Lacks portability
     - High development cost
-- ***Optimizing for convenience***: High-Level Auto-grad frameworks such as PyTorch or JAX
+- ***Optimizing for convenience***: High-level auto-grad frameworks such as PyTorch or JAX
     - Lack mechanisms for precise control over memory, data-movement
         - Painful to manage multiple threads and sync primitives within Python frameworks
     - Large codebases that are diffcult to trace how/when/why system resources are utilized
