@@ -1,7 +1,11 @@
 #include "dataflow_transformer.h"
 
-// toggle required to be set to 1 to save any data
-#define TO_SAVE_DATA 1
+// meta-toggle required to be set to 1 to save any data
+// when set to 0, nothing will be saved
+#define TO_SAVE_DATA 0
+
+
+// DETERMINES WHAT DATA TO SAVE...
 
 // if 0, then no layers will be saved
 #define TO_SAVE_LAYER 1
