@@ -6,7 +6,7 @@
 
 ## Purpose
 
-This repo is structured as a collection of libraries to help foster a robust, transparent, & performant ecosystem for machine learning and other accelertor-centric workloads. The transition to heterogeneous computing environments (CPUs + GPUs/TPUs/FPGAs/etc.) has posed challenges for portability and efficency. Dataflow processing, encompassing concurrent streams and asynchronous data-movement, is fundamental to all AI workloads, yet we lack a quality way of expressing these types of programs. 
+This repo is structured as a collection of libraries to help foster a robust, transparent, & performant ecosystem for machine learning and other accelertor-centric workloads. The transition to heterogeneous computing environments (CPUs + GPUs/TPUs/FPGAs/etc.) has posed challenges for portability and efficency. Dataflow processing, encompassing concurrent streams and asynchronous data-movement, is fundamental to all AI workloads. Yet, we lack a quality way of expressing these types of programs. 
 
 The current ecosystem lies at the extremes:
 - ***Optimizing for performance***: Custom-built solutions targeting a specific computing environment (accounting for known: architectures, # of acccelerators, bandwidths, memory capacities, etc.)
@@ -40,7 +40,7 @@ The intial emphasis is for training; after this is working properly, focus will 
 
 - ***The goal is for streams/command queues to be a first-class citizen***. This is the major distinction between this 'scaffolding' and others. 
     - While streams can be employed through PyTorch, the actual mechanism for doing so is via a non-intuitive Python context (`with stream(): ...`); expressing desired behavior is challenging, and it is even unclear if the program is actually behaving in inteded manner (especially when employing addtional frameworks on top of base framework). 
-    - Instead of treating streams as an addition feature, the bottom level library (`libdataflow`) explicity requires stream identifiers for every operation and data-transfer.
+    - Instead of treating streams as an add-on feature, the bottom level library (`libdataflow`) explicity requires stream identifiers for every operation and data-transfer.
         - Particularly relevant for managing compute & communication overlap along with fine-grained synchronization
 
 - There will be an initial collection of default functionality (backend implementions, operation interfaces, backend operation implementations, model definitions, & orchestration management). 
