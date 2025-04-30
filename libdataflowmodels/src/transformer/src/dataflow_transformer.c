@@ -65,6 +65,8 @@ static int save_file(Dataflow_Handle * dataflow_handle, int stream_id, int layer
 		return -1;
 	}
 
+	printf("\n[Saving] %s (%lu bytes)\n", filename, num_els * el_size);
+
 	size_t num_written = fwrite(host_ptr, el_size, num_els, fp);
 	if (num_written != num_els){
 		fprintf(stderr, "Error: failed to write to file, wrote %zu elements instead of %zu\n", num_written, num_els);
