@@ -162,7 +162,7 @@ static int set_transformer_block_weight_offsets(Transformer_Block_Config * confi
 }
 
 
-Transformer_Block * init_transformer_block(DataflowDatatype block_dt, DataflowDatatype compute_dt,
+Transformer_Block * init_transformer_block(int layer_id, DataflowDatatype block_dt, DataflowDatatype compute_dt,
 						   DataflowNormalizationType normalization_type, 
 						   DataflowPositionEmbeddingType position_embedding_type,
 						   DataflowAttentionType attention_type,
@@ -182,6 +182,9 @@ Transformer_Block * init_transformer_block(DataflowDatatype block_dt, DataflowDa
 		return NULL;
 	}
 	memset(block, 0, sizeof(Transformer_Block));
+
+	block -> layer_id = layer_id;
+
 
 	(block -> config).block_dt = block_dt;
 	(block -> config).compute_dt = compute_dt;

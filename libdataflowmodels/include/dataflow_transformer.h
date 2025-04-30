@@ -7,7 +7,7 @@
 #include "transformer/transformer_structs.h"
 
 
-Transformer_Block * init_transformer_block(DataflowDatatype block_dt, DataflowDatatype compute_dt,
+Transformer_Block * init_transformer_block(int layer_id, DataflowDatatype block_dt, DataflowDatatype compute_dt,
 						   DataflowNormalizationType normalization_type, 
 						   DataflowPositionEmbeddingType position_embedding_type,
 						   DataflowAttentionType attention_type,
@@ -50,14 +50,13 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 								Transformer_Block_Activations * activations, 
 								Transformer_Block_Transition * block_output);
 
-int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_stream_id, int out_copy_stream_id,
+int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_stream_id,
                         Transformer_Block_Transition * block_input, Transformer_Head * transformer_head,
                         Transformer_Head_Activations * head_activations, 
                         Transformer_Model_Output * model_output,
 						// during interference these would be NULL
 						Transformer_Head * grad_transformer_head,
-						Transformer_Block_Transition * grad_stream,
-						Transformer_Block_Transition * next_grad_stream);
+						Transformer_Block_Transition * grad_stream);
 
 
 int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int compute_stream_id,

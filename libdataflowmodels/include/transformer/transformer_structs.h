@@ -70,6 +70,7 @@ typedef struct transformer_block_config {
 
 typedef struct transformer_block {
 	Transformer_Block_Config config;
+	int layer_id;
 	void * buffer;
 	// offsets into buffer, based upon
 	// config.weight_offsets
