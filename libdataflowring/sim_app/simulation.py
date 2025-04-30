@@ -327,6 +327,7 @@ class Device:
             cutoff_chunk_cnt = round(total_chunk_inbound_frames / self.headFrames)
             chunk_num_cnt = 0
             
+            cutoff_chunk_id = self.total_chunks - 1
             for i in range(self.total_chunks):
                 if self.is_train_chunks[i]:
                     chunk_num_cnt += 1

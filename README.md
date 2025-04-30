@@ -12,12 +12,12 @@ The current ecosystem lies at the extremes:
 - ***Optimizing for performance***: Custom-built solutions targeting a specific computing environment (accounting for known: architectures, # of acccelerators, bandwidths, memory capacities, etc.)
     - Lacks portability
     - High development cost
-- ***Optimizing for convenience***: High-Level autodiff frameworks such as PyTorch or JAX
+- ***Optimizing for convenience***: High-Level Auto-grad frameworks such as PyTorch or JAX
     - Lack mechanisms for precise control over memory, data-movement
         - Painful to manage multiple threads and sync primitives within Python frameworks
     - Large codebases that are diffcult to trace how/when/why system resources are utilized
         - Deeply embedded depedencies on third-party libraries can cause frustration to remove, swap, or update
-    - Autodiff is a complex stack: specifying when computations occur, where gradients/optimizer state are housed, & how they are transferred is not easily controllable. 
+    - Auto-differentiation is a complex stack: specifying when computations occur, where gradients/optimizer state are housed, & how they are transferred is not easily controllable. 
         - Packages built on top (such as DDP, ZeRO, FSDP) manage this complexity (making edits to 'contexts' within computation graph), but they too are complex and limited in expressivity
             - Meanwhile, more haziness is added to the system regarding underlying resource usage.
     
