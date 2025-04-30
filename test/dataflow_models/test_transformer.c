@@ -70,8 +70,8 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
-	// 16 GB...	
-	size_t dev_size_bytes = 1UL << 34;
+	// 22 GB...	
+	size_t dev_size_bytes = 22 * (1UL << 30);
 
 	int dev_alignment = 256;
 
@@ -91,8 +91,10 @@ int main(int argc, char * argv[]){
 	// Preparing model...
 
 	DataflowDatatype block_dt = DATAFLOW_BF16;
+	DataflowDatatype block_dt_bwd = DATAFLOW_BF16;
 
 	size_t block_dt_size = dataflow_sizeof_element(block_dt);
+	size_t block_dt_bwd_size = dataflow_sizeof_element(block_dt_bwd);
 
 	// for matmul accumulations...
 	// on Geforce using FP16 gets double perf,
@@ -635,7 +637,7 @@ int main(int argc, char * argv[]){
 	uint64_t head_norm_rms_vals_size = (uint64_t) total_tokens * (uint64_t) sizeof(float);
 	cur_dev_mem += head_norm_rms_vals_size;
 	head_activations -> head_out = cur_dev_mem;
-	uint64_t head_out_size = (uint64_t) total_tokens * (uint64_t) vocab_size * (uint64_t) block_dt_size;
+	uint64_t head_out_size = (uint64_t) total_tokens * (uint64_t) vocab_size * (uint64_t) block_dt_bwd_size;
 	cur_dev_mem += head_out_size;
 	head_activations -> kernelWorkspace = kernelWorkspace;
 	head_activations -> kernelWorkspaceBytes = kernelWorkspaceBytes;
@@ -644,7 +646,7 @@ int main(int argc, char * argv[]){
 	// PREPARING SPECIAL MODEL OUTPUT STRUCT...
 
 
-	uint64_t logits_size = (uint64_t) total_tokens * (uint64_t) vocab_size * (uint64_t) sizeof(float);
+	uint64_t logits_size = (uint64_t) total_tokens * (uint64_t) vocab_size * block_dt_bwd_size;
 	void * sys_logits = cur_host_mem;
 	cur_host_mem += logits_size;
 
@@ -661,6 +663,8 @@ int main(int argc, char * argv[]){
 
 
 	// 1.) DOING EMBEDDDING....
+
+	printf("\n\nSubmitting embedding...\n\n");
 
 	ret = dataflow_submit_transformer_embedding(&dataflow_handle, compute_stream_id,
 											model_input,
@@ -685,6 +689,12 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
+	ret = dataflow_handle.sync_stream(&dataflow_handle, outbound_stream_id);
+	if (ret){
+		fprintf(stderr, "Error: failed to sync outbound stream...\n");
+		return -1;
+	}
+
 	// save the block transitions...
 
 	ret = save_host_matrix("test_transformer_data/example_embed_output.dat", sys_block_transitions[0].X, total_tokens, model_dim, block_dt);
@@ -693,12 +703,10 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
-	printf("Successfully saved example embed output...!!!\n\n");
-
 	// 2.) DOING BLOCKS...
 
 	for (int i = 0; i < n_layers; i++){
-		printf("Submitting transformer block #%d...!\n\n", i);
+		printf("\n\nSubmitting transformer block #%d...!\n\n", i);
 	
 
 		ret = dataflow_submit_transformer_block(&dataflow_handle, compute_stream_id, 
@@ -718,6 +726,8 @@ int main(int argc, char * argv[]){
 	Transformer_Block_Transition * final_block_output_transition = &(block_transitions[n_layers % 2]);
 
 	// 3.) DOING HEAD...
+
+	printf("\n\nSubmitting head...\n\n");
 
 	ret = dataflow_submit_transformer_head(&dataflow_handle, compute_stream_id,
                         final_block_output_transition, head,
