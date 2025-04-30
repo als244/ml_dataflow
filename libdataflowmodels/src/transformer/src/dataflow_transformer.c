@@ -614,8 +614,8 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
                        transformer_head -> fwd_dt,
                        transformer_head -> compute_dt,
                        1, 0,  // transa=1 for row-major input, transb=0 for col-major weights
-                       embedding_size,    // m = embedding_size (due to transa=1)
                        vocab_size,        // n = vocab_size
+					   embedding_size,    // m = embedding_size (due to transa=1)
                        head_activations -> num_tokens,  // k = num_tokens (due to transa=1)
                        1.0, 0.0,
                        transformer_head -> w_head,       // Changed from w_out to w_head
@@ -704,6 +704,14 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
         return ret;
     }
 
+	if (TO_SAVE_DATA && TO_SAVE_HEAD){
+		ret = save_file(dataflow_handle, compute_stream_id, -1, true, "x_logits_loss", model_output -> logits, total_tokens, vocab_size, bwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save head x_logits_loss file...\n");
+			return -1;
+		}
+	}
+
 	// Now backpropagate through the output projection
     // Input logits is in row-major format after cross entropy
     // Weights w_head are in col-major format
@@ -772,6 +780,14 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
         return ret;
     }
 
+	if (TO_SAVE_DATA && TO_SAVE_HEAD){
+		ret = save_file(dataflow_handle, compute_stream_id, -1, true, "x_head_proj_inp", model_output -> logits, total_tokens, vocab_size, bwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save head x_head_proj_inp file...\n");
+			return -1;
+		}
+	}
+
 	
 	printf("Submitting Bwd X for RMS Norm to get Gradient Stream...\n");
 
@@ -792,6 +808,14 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
         fprintf(stderr, "Error: Failed to submit bwd x rms norm in transformer head...\n");
         return ret;
     }
+
+	if (TO_SAVE_DATA && TO_SAVE_HEAD){
+		ret = save_file(dataflow_handle, compute_stream_id, -1, true, "x_head_norm_inp", grad_stream -> X, total_tokens, embedding_size, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save head x_head_norm_inp file...\n");
+			return -1;
+		}
+	}
 
 	printf("Submitting Bwd W for RMS Norm to update Head Norm...\n");
 
