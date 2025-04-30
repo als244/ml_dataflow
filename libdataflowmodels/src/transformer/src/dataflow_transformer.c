@@ -515,6 +515,8 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
     int vocab_size = (transformer_head -> embedding_config) -> vocab_size;
     int embedding_size = (transformer_head -> embedding_config) -> embedding_size;
 
+	printf("Submitting Head RMS Norm...\n");
+
     // RMS Normalization
     ret = dataflow_submit_default_rms_norm(dataflow_handle, compute_stream_id,
                          transformer_head -> fwd_dt,
@@ -529,6 +531,8 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
         fprintf(stderr, "Error: Failed to submit RMS normalization in transformer head...\n");
         return ret;
     }
+
+	printf("Submitting Head Output Projection...\n");
 
     // Output projection
     // Input x_temp is in row-major format
@@ -555,6 +559,8 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
         fprintf(stderr, "Error: Failed to submit output projection in transformer head...\n");
         return ret;
     }
+
+	printf("Submitting Head Softmax to Determine Final Logits...\n");
 
     // Apply softmax over vocabulary dimension
     // Each row (corresponding to a token) should sum to 1
@@ -592,7 +598,7 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 	}
 
 
-
+	printf("Submitting Head Cross Entropy Loss...\n");
 
 	// STARTING BACKPROP HERE!
 
@@ -623,9 +629,9 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
     // K = fwd_N = vocab_size
     // N = fwd_M = num_tokens
 
-	// 
+	// Now backpropagate through the output projection
 
-
+	printf("Submitting Output Projection Weight Gradients...\n");
 
 	float grad_avg_scale = 1.0f / ((float)head_activations -> num_tokens);
 
@@ -659,6 +665,8 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 
 	// Now repurpose head_activation -> head_norm_out as the derivative of the norm
 
+	printf("Submitting Bwd X Head Matmul...\n");
+
     ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
                        transformer_head -> bwd_dt,
                        transformer_head -> bwd_dt,
@@ -681,6 +689,7 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
     }
 
 	
+	printf("Submitting Bwd X for RMS Norm to get Gradient Stream...\n");
 
 	// Finally backpropagate through RMS normalization
     ret = dataflow_submit_default_rms_norm_bwd_x(dataflow_handle, compute_stream_id,
@@ -699,6 +708,8 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
         fprintf(stderr, "Error: Failed to submit bwd x rms norm in transformer head...\n");
         return ret;
     }
+
+	printf("Submitting Bwd W for RMS Norm to update Head Norm...\n");
 
 	ret = dataflow_submit_default_rms_norm_bwd_w(dataflow_handle, compute_stream_id,
                                grad_transformer_head -> fwd_dt,
