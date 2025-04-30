@@ -1,23 +1,23 @@
 # *Portable* & *Efficient* Machine Learning
 
-<sup><em>Currently a work in-progress --- keep watch for updates.</em></sup>
+<sup><em>Currently a work in-progress... </em></sup>
 
 -----
 
 ## Purpose
 
-This repo is structured as a collection of libraries to help foster a robust, transparent, & performant ecosystem for machine learning and other accelertor-centric workloads. The transition to heterogeneous computing environments (CPUs + GPUs/TPUs/FPGAs/etc.) has posed challenges for portability and efficency. Dataflow processing, consistenting of concurrent streams and asynchronous data-movement, is fundamental to all AI workloads, yet we lack a quality way of expressing these types of programs. 
+This repo is structured as a collection of libraries to help foster a robust, transparent, & performant ecosystem for machine learning and other accelertor-centric workloads. The transition to heterogeneous computing environments (CPUs + GPUs/TPUs/FPGAs/etc.) has posed challenges for portability and efficency. Dataflow processing, encompassing concurrent streams and asynchronous data-movement, is fundamental to all AI workloads. Yet, we lack a quality way of expressing these types of programs. 
 
 The current ecosystem lies at the extremes:
 - ***Optimizing for performance***: Custom-built solutions targeting a specific computing environment (accounting for known: architectures, # of acccelerators, bandwidths, memory capacities, etc.)
     - Lacks portability
     - High development cost
-- ***Optimizing for convenience***: High-Level autodiff frameworks such as PyTorch or JAX
+- ***Optimizing for convenience***: High-level auto-grad frameworks such as PyTorch or JAX
     - Lack mechanisms for precise control over memory, data-movement
         - Painful to manage multiple threads and sync primitives within Python frameworks
     - Large codebases that are diffcult to trace how/when/why system resources are utilized
         - Deeply embedded depedencies on third-party libraries can cause frustration to remove, swap, or update
-    - Autodiff is a complex stack: specifying when computations occur, where gradients/optimizer state are housed, & how they are transferred is not easily controllable. 
+    - Auto-differentiation is a complex stack: specifying when computations occur, where gradients/optimizer state are housed, & how they are transferred is not easily controllable. 
         - Packages built on top (such as DDP, ZeRO, FSDP) manage this complexity (making edits to 'contexts' within computation graph), but they too are complex and limited in expressivity
             - Meanwhile, more haziness is added to the system regarding underlying resource usage.
     
@@ -40,7 +40,7 @@ The intial emphasis is for training; after this is working properly, focus will 
 
 - ***The goal is for streams/command queues to be a first-class citizen***. This is the major distinction between this 'scaffolding' and others. 
     - While streams can be employed through PyTorch, the actual mechanism for doing so is via a non-intuitive Python context (`with stream(): ...`); expressing desired behavior is challenging, and it is even unclear if the program is actually behaving in inteded manner (especially when employing addtional frameworks on top of base framework). 
-    - Instead of treating streams as an addition feature, the bottom level library (`libdataflow`) explicity requires stream identifiers for every operation and data-transfer.
+    - Instead of treating streams as an add-on feature, the bottom level library (`libdataflow`) explicity requires stream identifiers for every operation and data-transfer.
         - Particularly relevant for managing compute & communication overlap along with fine-grained synchronization
 
 - There will be an initial collection of default functionality (backend implementions, operation interfaces, backend operation implementations, model definitions, & orchestration management). 
@@ -110,19 +110,18 @@ As a parameter to `submit_op()`, the user passes in a Op struct that has a fully
 ***For reference see***: 
 - Example of backend-defined Op Refernce: `backends/nvidia/include/cuda_dataflow_handle.h`. The `Cuda_Function` struct is created for every Op and is the value within the Op Table for Nvidia backend. 
 - A helper library defines default op interfaces (backend-agnostic) for commonly used machine learning operations: `libdataflowops`
-- This library provides functions for setting the Op Skeletons, which need to be done both at registration time and submission time
-- It also provides functions for interfacing with the `submit_op()` API allowing for a typical looking mechanism for calling functions
-    - Example of Registering Ops: `backends/nvidia/src/ops/src/register_ops/register_ops.c`
-        - Relies upon `libdataflowops` for doing the skeleton setting at registration time. 
-        - Relies upon a default implmentation of both native and external ops
-            - ***External Ops***: The compute-bound operations. Performance critical.
-                - **Matmul**: Lives within `backends/nvidia/src/ops/src/external/src/matmul_helper/matmul_helper.c` and is integrated into the register APIs via the `libmatmulhelper` shared library. The matmul helper relies upon `libcublasLt`. This example demonstrates creating and saving data (the cublas handle) at init time, which is later accessed during runtime dispatching. It also demonstrates that an external function can call an external library. 
-                - **Attention**: Lives within `backends/nvidia/src/ops/src/external/src/attention_helper/attention_helper.c` and is integrated into the register APIs via the `libattentionhelper` shared library. The attention helper relies upon source code cloned from the [Flash Attention](https://github.com/Dao-AILab/flash-attention) repository. This C++ repo is then extended with an "extern" function and built into a shared library, `libflash3` (that then attention helper can call). This example demonstrates how to wrap C++ functions that are tightly coupled with backend kernels into an External Op. 
-            - ***Native Ops***: The memory-bound operations. Easier to implement well.
-                - I've provided a default set of kernels for the Nvidia backend that are sufficient for Transformers. The many different kernels live within `backends/nvidia/src/ops/src/native/src/*.cu`. Each kernel family also has a corresponding config file in order to set the correct launch spec (and a couple have init functions for setting shared memory attributes). All of these kernels get built into single module `cuda_kernels.cubin` and all of the config functions get built itno a single shared library `cuda_kernels_config.so` that can be passed together the register APIs call. 
-        - Now the `register_ops.c` file utilizes these implementations to actually perform registration. This is then built into an shared library, contained in the top level `backend/nvidia/lib` directory that is meant for consumers to link with, and exposes one main functino for each `Dataflow_Handle` to obtain access to the default set of operations, `dataflow_register_default_ops()`
+    - This library provides functions for setting the Op Skeletons, which need to be done both at registration time and submission time
+    - It also provides functions for interfacing with the `submit_op()` API allowing for a typical looking mechanism for calling functions
+- Example of Registering Ops: `backends/nvidia/src/ops/src/register_ops/register_ops.c`
+    - Relies upon `libdataflowops` for doing the skeleton setting at registration time. 
+    - Relies upon a default implmentation of both native and external ops
+        - ***External Ops***: The compute-bound operations. Performance critical.
+            - **Matmul**: Lives within `backends/nvidia/src/ops/src/external/src/matmul_helper/matmul_helper.c` and is integrated into the register APIs via the `libmatmulhelper` shared library. The matmul helper relies upon `libcublasLt`. This example demonstrates creating and saving data (the cublas handle) at init time, which is later accessed during runtime dispatching. It also demonstrates that an external function can call an external library. 
+            - **Attention**: Lives within `backends/nvidia/src/ops/src/external/src/attention_helper/attention_helper.c` and is integrated into the register APIs via the `libattentionhelper` shared library. The attention helper relies upon source code cloned from the [Flash Attention](https://github.com/Dao-AILab/flash-attention) repository. This C++ repo is then extended with an "extern" function and built into a shared library, `libflash3` (that then attention helper can call). This example demonstrates how to wrap C++ functions that are tightly coupled with backend kernels into an External Op. 
+        - ***Native Ops***: The memory-bound operations. Easier to implement well.
+            - I've provided a default set of kernels for the Nvidia backend that are sufficient for Transformers. The many different kernels live within `backends/nvidia/src/ops/src/native/src/*.cu`. Each kernel family also has a corresponding config file in order to set the correct launch spec (and a couple have init functions for setting shared memory attributes). All of these kernels get built into single module `cuda_kernels.cubin` and all of the config functions get built itno a single shared library `cuda_kernels_config.so` that can be passed together the register APIs call. 
+    - Now the `register_ops.c` file utilizes these implementations to actually perform registration. This is then built into an shared library, contained in the top level `backend/nvidia/lib` directory that is meant for consumers to link with, and exposes one main functino for each `Dataflow_Handle` to obtain access to the default set of operations, `dataflow_register_default_ops()`
     
-
 ### TLDR; Registration & Submission
 
 If you are only working with default transformer ops and don't want to specify your own kernel implementations then you do not need to worry about Op Registration and Submission if you link with the helper library `libdataflowops` along with top-level `backend/<type>/lib<backend_register_default_ops`. Once you call `dataflow_register_default_ops()` all of the default ops will be registered. Now you can use the functions defined in defined in `libdataflowops/include/dataflow_ops.h` to actually submit these operations in a normal function-call like manner.
