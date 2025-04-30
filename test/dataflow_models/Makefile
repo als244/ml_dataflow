@@ -29,7 +29,10 @@ EXECS = test_transformer
 all: create_dirs ${EXECS}
 
 create_dirs:
-	mkdir -p test_transformer_data
+	i=0; while [ $$i -le 31 ]; do \
+        	mkdir -p test_transformer_data/layers/$$i; \
+        	i=$$(($$i + 1)); \
+    	done
 
 test_transformer: test_transformer.c
 	${CC} ${CFLAGS} ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
