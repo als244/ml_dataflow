@@ -26,16 +26,21 @@ ALL_LIBS = -L${DATAFLOW_LIB_DIR} -L${CUDA_DATAFLOW_BACKEND_LIB_DIR} -L${DATAFLOW
 
 EXECS = test_transformer
 
-all: create_dirs ${EXECS}
+all: create_data_dirs ${EXECS}
 
-create_dirs:
+create_data_dirs:
 	i=0; while [ $$i -le 31 ]; do \
         	mkdir -p test_transformer_data/layers_fwd/$$i; \
 		mkdir -p test_transformer_data/layers_bwd/$$i; \
+		mkdir -p correct_transformer_data/layers_fwd/$$i; \
+		mkdir -p correct_transformer_data/layers_bwd/$$i; \
         	i=$$(($$i + 1)); \
     	done; \
 	mkdir -p test_transformer_data/head_fwd; \
-	mkdir -p test_transformer_data/head_bwd; 
+	mkdir -p test_transformer_data/head_bwd; \
+	mkdir -p correct_transformer_data/head_fwd; \
+	mkdir -p correct_transformer_data/head_bwd;
+
 
 test_transformer: test_transformer.c
 	${CC} ${CFLAGS} ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
@@ -44,5 +49,11 @@ clean:
 	rm -f ${EXECS}
 
 clean_data:
-	rm -rf test_transformer_data/
+	rm -rf test_transformer_data/ && rm -rf correct_transformer_data && make create_data_dirs
+
+clean_test_data:
+	rm -rf test_transformer_data/ && make create_data_dirs
+
+clean_correct_data:
+	rm -rf correct_transformer_data/ && make create_data_dirs
 

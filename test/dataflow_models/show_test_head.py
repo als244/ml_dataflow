@@ -27,6 +27,17 @@ t_norm = torch.from_numpy(np_norm).view(torch.bfloat16)
 t_head_out = torch.from_numpy(np_head_out).view(torch.bfloat16)
 t_logits = torch.from_numpy(np_logits).view(torch.bfloat16)
 
+t_max_token_probs, t_max_token_inds = torch.max(t_logits, dim=1)
+
+orig_tokens_path = f"test_transformer_data/token_ids_uint32.dat"
+labels_path = f"test_transformer_data/labels_uint32.dat"
+
+np_orig_tokens = np.fromfile(orig_tokens_path, dtype=np.uint32)
+np_labels = np.fromfile(labels_path, dtype=np.uint32)
+
+t_orig_tokens = torch.from_numpy(np_orig_tokens)
+t_labels = torch.from_numpy(np_labels)
+
 print("HEAD")
 print("-----INPUT-----")
 print(t_inp)
@@ -40,6 +51,18 @@ print("\n")
 print("-----LOGITS-----")
 print(t_logits)
 print("\n")
-
+print("-----ORIGINAL TOKENS-----")
+print(t_orig_tokens)
+print("\n")
+print("-----PREDICTIONS-----")
+print("Max Next Token Probs:")
+print(t_max_token_probs)
+print("\n")
+print("Next Token IDs:")
+print(t_max_token_inds)
+print("\n")
+print("----TRUE NEXT TOKENS-----")
+print(t_labels)
+print("\n")
 
 
