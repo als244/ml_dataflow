@@ -409,6 +409,8 @@ class Device:
             else: # Activation
                 if 0 <= target_idx < len(self.activations_buffer):
                     self.activations_buffer[target_idx] = (0, chunk_id, layer_id)
+                    if self.context_buffer[chunk_id] == (-2, chunk_id, layer_id):
+                        self.context_buffer[chunk_id] = (0, chunk_id, layer_id)
                 else: 
                     # print(f"T={T}, Dev {self.device_id}: ERROR - Invalid target index {target_idx} for activation inbound.")
                     # print(f"Activations buffer: {self.activations_buffer}")
@@ -574,7 +576,6 @@ class Device:
             if not has_fwd_activation: missing_items.append("Fwd Act.")
             if not has_context: missing_items.append(f"Ctx (Chunk: {missing_ctx_chunk})")
             if not has_outbound_trans_space: missing_items.append("Congested (Trans)")
-                
         elif bW:
             computation_type_str = "Bwd W"
             has_deps = has_fwd_activation # Simplest dependency
@@ -673,12 +674,15 @@ class Device:
             self.cur_weight_write_ptr = (self.cur_weight_write_ptr - 1 + self.layer_capacity) % self.layer_capacity
 
     def handle_bwd_prefetch_context(self, chunk_id, cur_layer_id, next_layer_id):
-        if self.context_buffer[chunk_id] == (0, chunk_id, next_layer_id): return # Already available
-        if self.context_buffer[chunk_id] == (-2, chunk_id, next_layer_id): return # Already fetching
-        
+        if self.context_buffer[chunk_id] == (0, chunk_id, next_layer_id): 
+            return # Already available
+
         if (0, chunk_id, next_layer_id) in self.activations_buffer:
             self.context_buffer[chunk_id] = (0, chunk_id, next_layer_id)
             return
+        
+        if self.context_buffer[chunk_id] == (-2, chunk_id, next_layer_id): 
+            return # Already fetching
         
         if (-2, chunk_id, next_layer_id) in self.activations_buffer:
             self.context_buffer[chunk_id] = (-2, chunk_id, next_layer_id)
@@ -1131,7 +1135,7 @@ class SimulationRunner:
         self.active_experts = params.get('active_experts', 1)
         self.expert_dim = params.get('expert_dim', 27648)
         self.attn_type = params.get('attn_type', "Exact")
-        self.max_device_memory_bytes = params.get('max_device_memory_bytes', 16 * (1 << 30))
+        self.max_device_memory_bytes = params.get('max_device_memory_bytes', 8 * (1 << 30))
         self.hardware_max_flops = params.get('hardware_max_flops', 989 * 1e12)
         self.hardware_mem_bw_bytes_sec = params.get('hardware_mem_bw_bytes_sec', 3.35 * (1 << 40)) # Typo fixed TB/s -> GB/s -> B/s
         self.matmul_efficiency = params.get('matmul_efficiency', 0.7)
@@ -1458,70 +1462,6 @@ class SimulationRunner:
 
         ffn_active_params =  self.model_dim + 3 * self.active_experts * (self.model_dim * self.expert_dim)
         total_active_params = embed_params + self.total_layers * (attn_block_params + ffn_active_params) + head_params
-        # includes the user inputs, but these are saved to the left sidepanel and locked
-        # so don't need to show and running out of vertical space....
-        """
-        text = (
-          f"--- USER INPUTS ---\n"
-          f"Training Spec:\n"
-          f" - # Devices: {self.N}\n"
-          f" - Max Dev Mem: {self.max_device_memory_bytes/gb:.1f} GB\n"
-          f" - Seq. Len: {self.seqlen}\n"
-          f" - Train Token %: {self.train_token_ratio:.3f}\n"
-          f" - Min Chunk Size: {self.min_chunk_size}\n"
-          f" - Chunk Type: {self.chunk_type}\n\n"
-          f"Model Spec:\n"
-          f" - Bitwidth: {self.bitwidth}\n"
-          f" - # Blocks: {self.total_layers}\n"
-          f" - Vocab Size: {self.vocab_size}\n"
-          f" - Model Dim: {self.model_dim}\n"
-          f" - KV Dim: {self.kv_dim}\n"
-          f" - Expert Dim: {self.expert_dim}\n"
-          f" - Num Experts: {self.num_experts}\n"
-          f" - Activated Experts: {self.active_experts}\n"
-          f" - Attention Type: {self.attn_type}\n\n\n"
-          f"--- FULL TRAINING OVERVIEW ---\n"
-          f"Memory Requirements:\n"
-          f"- Model: {train_model_size / (1 << 30):.2f} GB\n"
-          f"- Model Grads: {train_gradient_size / (1 << 30):.2f} GB\n"
-          f"- Opt. State: {(2 * train_model_size) / (1 << 30):.2f} GB\n"
-          f"- Activations: {train_activation_size / (1 << 30):.2f} GB\n"
-          f"- Ctx (Non-Train): {train_context_size / (1 << 30):.2f} GB\n"
-          f"TOTAL: {aggregate_memory_size / (1 << 30):.2f} GB\n\n\n"
-          f"--- DERIVED DATAFLOW CONFIG ---\n"
-          
-          f"Chunk Size: {self.chunk_size}\n"
-          f" - Total Chunks: {self.total_chunks}\n"
-          f"  - Train Chunks: {self.total_train_chunks}\n"
-          f"Chunk Mem. Info (Layer-Wise):\n"
-          f" - Activation Size: {(self.activation_size_bytes)/ 1e6:.2f} MB\n" 
-          f" - Context Size: {(self.chunk_context_size_bytes)/ 1e6:.2f} MB\n"
-          f" - Output Size: {(self.output_size_bytes)/ 1e6:.2f} MB\n"
-          f" - Workspace Size: {(chunk_workspace_size)/ 1e6:.2f} MB\n\n"
-          f"Device Memory Partitions:\n"
-          f" - Activation Cap.: {self.activations_capacity}\n"
-          f"  - {(self.activations_capacity * self.activation_size_bytes)/ (1 << 30):.3f} GB\n"
-          f" - Layer Cap.: {self.layer_capacity}\n"
-          f"  - {(self.layer_capacity * self.layer_size_bytes)/ (1 << 30):.3f} GB\n"
-          f" - Grad Layer Cap.: {self.grad_layer_capacity}\n"
-          f"  - {(self.grad_layer_capacity * self.layer_size_bytes)/ (1 << 30):.3f} GB\n"
-          f" - Ctx Buffer Cap.: {self.context_buffer_capacity}\n"
-          f"  - {(self.context_buffer_capacity * self.per_layer_full_context_size)/ (1 << 30):.3f} GB\n"
-          f" - Grad Ctx Buffer Cap.: {self.grad_context_buffer_capacity}\n"
-          f"  - {(self.grad_context_buffer_capacity * self.per_layer_full_context_size)/ (1 << 30):.3f} GB\n"
-          f" - Trans. Cap. (Inp/Out): {self.transitions_capacity}\n"
-          f"  - {(2 * self.transitions_capacity * self.output_size_bytes)/ (1 << 30):.3f} GB\n\n"     
-          
-          f"Home Memory Partitions:\n"
-          f" - Home # Act. Saved: {home_activation_stack_0}\n"
-          f"    - {typical_home_activation_size / (1 << 30):.2f} GB\n"
-          f" - Model: {typical_home_layer_sizes / (1 << 30):.2f} GB\n"
-          f" - Model Grads: {typical_home_layer_sizes / (1 << 30):.2f} GB\n"
-          f" - Opt. State: {2 * typical_home_layer_sizes / (1 << 30):.2f} GB\n\n"
-          f"TOTAL PER-HOME MEMORY:\n"
-          f" - {typical_home_total_size / (1 << 30):.2f} GB\n\n"
-        )
-        """
 
         text = (
           f"# Model Parameters: {total_model_params / (1e9):0.2f} B\n"
@@ -1590,6 +1530,11 @@ class SimulationRunner:
         contextTransferCycleText = f"{self.contextTransferFrames}" if self.contextTransferFrames >= 1 else "< 1"
         blockTransitionCyclesText = f"{self.activationTransitionFrames}" if self.activationTransitionFrames >= 1 else "< 1"
 
+        first_train_chunk_str = f""
+
+        if self.first_train_chunk != 0:
+            first_train_chunk_str = f"C{self.first_train_chunk} => Tokens: [{self.first_train_chunk * self.chunk_size}, {(self.first_train_chunk + 1) * self.chunk_size})\n"
+
         text = (
             f"--- DISCOVERED CONSTANTS ---\n\n"
             f"Compute Constants:\n"
@@ -1616,6 +1561,7 @@ class SimulationRunner:
             f" - {math.ceil(self.total_flops / (self.total_compute_cycles / self.cycles_per_second) / 1e12)} TFLOPS\n\n\n\n"
             f"--- COMPUTE CYCLES ---\n\n"
             f"C0 => Tokens: [0, {self.chunk_size})\n"
+            f"{first_train_chunk_str}"
             f"C{self.total_chunks-1} => Tokens: [{(self.total_chunks-1) * self.chunk_size}, {self.seqlen})\n\n"
             f"Fwd:\n"
             f" - C0: {self.computation_times_frames.get(0,0)}\n"
