@@ -326,7 +326,7 @@ class Device:
         if self.device_id == head_device_id:
 
             total_chunk_depend_frames = 0
-            last_block_chunk_id_when_id_ready = max(0, self.total_chunks - self.total_devices)
+            last_block_chunk_id_when_id_ready = max(0, self.total_chunks - self.total_devices - 1)
             for i in range(last_block_chunk_id_when_id_ready, self.total_chunks):
                 total_chunk_depend_frames += self.computation_times_frames_last_block[i]
 
@@ -335,7 +335,10 @@ class Device:
             for i in range(self.total_chunks):
                 if self.is_train_chunks[i]:
                     if cur_head_frame_cnt + self.headFrames > total_chunk_depend_frames:
-                        cutoff_chunk_id = i
+                        if i < self.total_chunks - 1 and (cur_head_frame_cnt + self.headFrames - total_chunk_depend_frames) < self.headFrames / 2:
+                            cutoff_chunk_id = i + 1
+                        else:
+                            cutoff_chunk_id = i
                         break
                     cur_head_frame_cnt += self.headFrames
 
