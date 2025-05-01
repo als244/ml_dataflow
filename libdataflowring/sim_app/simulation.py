@@ -72,7 +72,7 @@ def calculate_interval(speed_level, s_min, s_max, i_min_ms, i_max_ms):
 class Device:
     # --- __init__ ---
     # Keep __init__ mostly the same, ensure no plotting refs
-    def __init__(self, device_id, layer_capacity, activations_capacity, transitions_capacity, head_transitions_capacity, total_devices, total_layers, total_chunks, total_train_chunks, is_train_chunks, prev_train_chunks, computation_times_frames, computation_times_frames_bwd, headFrames, bwdWFrames, layerTransferFrames, headTransferFrames, savedActivationsFrames, activationTransitionFrames, contextTransferFrames):
+    def __init__(self, device_id, layer_capacity, activations_capacity, transitions_capacity, head_transitions_capacity, total_devices, total_layers, total_chunks, total_train_chunks, is_train_chunks, prev_train_chunks, computation_times_frames, computation_times_frames_last_block, computation_times_frames_bwd, headFrames, bwdWFrames, layerTransferFrames, headTransferFrames, savedActivationsFrames, activationTransitionFrames, contextTransferFrames):
         self.device_id = device_id
         self.device_has_started = False
         self.device_start_time = 0
@@ -89,6 +89,7 @@ class Device:
         self.prev_train_chunks = prev_train_chunks
         self.computation_times_frames = computation_times_frames
         self.computation_times_frames_bwd = computation_times_frames_bwd
+        self.computation_times_frames_last_block = computation_times_frames_last_block
         self.headFrames = headFrames
         self.bwdWFrames = bwdWFrames
         self.layerTransferFrames = layerTransferFrames
@@ -119,7 +120,7 @@ class Device:
              inp_transition_capacity = current_head_input_transitions_capacity
         if is_last_block_device:
              current_head_output_transitions_capacity = self.head_transitions_capacity
-             out_transition_capacity = current_head_output_transitions_capacity
+             inp_transition_capacity = current_head_output_transitions_capacity
 
         self.transitions_inbound_buffer = [-1 for _ in range(inp_transition_capacity)]
         self.transitions_outbound_buffer = [-1 for _ in range(out_transition_capacity)]
@@ -199,8 +200,10 @@ class Device:
         if is_head_device:
              current_head_input_transitions_capacity = self.head_transitions_capacity
              inp_transition_capacity = current_head_input_transitions_capacity
+             out_transition_capacity = current_head_input_transitions_capacity
         if is_last_block_device:
              current_head_output_transitions_capacity = self.head_transitions_capacity
+             inp_transition_capacity = current_head_output_transitions_capacity
              out_transition_capacity = current_head_output_transitions_capacity
 
         self.transitions_inbound_buffer = [-1 for _ in range(inp_transition_capacity)]
@@ -283,7 +286,10 @@ class Device:
                      self.computation_queue.append((i, cur_layer_id, False, False, transfer_direction, comp_time))
                  ## if non-training chunk on the last layer, no need to pass output to the next device
                  else:
-                     self.computation_queue.append((i, cur_layer_id, False, False, 0, comp_time))
+                     if cur_layer_id == self.total_layers - 1:
+                         self.computation_queue.append((i, cur_layer_id, False, False, 0, self.computation_times_frames_last_block[i]))
+                     else:
+                         self.computation_queue.append((i, cur_layer_id, False, False, 0, comp_time))
                  
                  if is_train_chunk:
                     self.activations_stack.append((i, cur_layer_id))
@@ -319,21 +325,19 @@ class Device:
         # Head Task (if applicable)
         if self.device_id == head_device_id:
 
-            total_chunk_inbound_frames = 0
-            for i in range(self.total_chunks):
-                if self.is_train_chunks[i]:
-                    total_chunk_inbound_frames += self.computation_times_frames[i]
+            total_chunk_depend_frames = 0
+            last_block_chunk_id_when_id_ready = max(0, self.total_chunks - self.total_devices - 1)
+            for i in range(last_block_chunk_id_when_id_ready, self.total_chunks):
+                total_chunk_depend_frames += self.computation_times_frames_last_block[i]
 
-            cutoff_chunk_cnt = int(total_chunk_inbound_frames / self.headFrames)
-            chunk_num_cnt = 0
-            
+            cur_head_frame_cnt = 0
             cutoff_chunk_id = self.total_chunks - 1
             for i in range(self.total_chunks):
                 if self.is_train_chunks[i]:
-                    chunk_num_cnt += 1
-                if chunk_num_cnt == cutoff_chunk_cnt:
-                    cutoff_chunk_id = i
-                    break
+                    if cur_head_frame_cnt + self.headFrames > total_chunk_depend_frames:
+                        cutoff_chunk_id = i
+                        break
+                    cur_head_frame_cnt += self.headFrames
 
             transfer_direction = -1
             # Simple Head processing order: all training chunks sequentially
@@ -560,14 +564,14 @@ class Device:
             has_deps = has_weight and has_input_transition and has_act_buffer_space and has_outbound_trans_space
             if not has_weight: missing_items.append("Weight")
             if not has_input_transition: missing_items.append("Act. Stream")
-            if not has_act_buffer_space: missing_items.append("Congested (Act)")
-            if not has_outbound_trans_space: missing_items.append("Congested (Trans)")
+            if not has_act_buffer_space: missing_items.append("Congested (Act.)")
+            if not has_outbound_trans_space: missing_items.append("Congested Trans.)")
         elif is_head:
             computation_type_str = "Head"
             has_deps = has_weight and has_input_transition and has_outbound_trans_space
             if not has_weight: missing_items.append("Weight")
             if not has_input_transition: missing_items.append("Act. Stream")
-            if not has_outbound_trans_space: missing_items.append("Congested (Trans)")
+            if not has_outbound_trans_space: missing_items.append("Congested (Trans.)")
         elif bX:
             computation_type_str = "Bwd X"
             has_deps = has_weight and has_input_transition and has_fwd_activation and has_context and has_outbound_trans_space
@@ -575,7 +579,7 @@ class Device:
             if not has_input_transition: missing_items.append("Grad. Stream")
             if not has_fwd_activation: missing_items.append("Fwd Act.")
             if not has_context: missing_items.append(f"Ctx (Chunk: {missing_ctx_chunk})")
-            if not has_outbound_trans_space: missing_items.append("Congested (Trans)")
+            if not has_outbound_trans_space: missing_items.append("Congested (Trans.)")
         elif bW:
             computation_type_str = "Bwd W"
             has_deps = has_fwd_activation # Simplest dependency
@@ -1288,6 +1292,7 @@ class SimulationRunner:
         self.computation_times_frames = {}
         self.computation_times_sec_bwd = {}
         self.computation_times_frames_bwd = {}
+        self.computation_times_frames_last_block = {}
         self.total_fwd_flops = 0
         self.total_bwd_flops = 0
         self.total_head_flops = 0
@@ -1318,18 +1323,33 @@ class SimulationRunner:
             attn_flops = self.flops_per_attn_chunk_mult * cur_seq_len
 
             self.total_attn_flops += self.total_layers * attn_flops
-            self.total_matmul_flops += self.total_layers * self.base_flops_per_layer_matmul
+           
 
             layer_flops_fwd = self.base_flops_per_layer_matmul + attn_flops
-            self.total_fwd_flops += self.total_layers * layer_flops_fwd
+
+            is_train_chunk = self.is_train_chunks[i]
+
+            ## non-train chuns don't need last FFN
+            if is_train_chunk:
+                self.total_matmul_flops += self.total_layers * self.base_flops_per_layer_matmul
+                self.total_fwd_flops += self.total_layers * layer_flops_fwd
+            else:
+                self.total_matmul_flops += (self.total_layers - 1) * self.base_flops_per_layer_matmul
+                self.total_fwd_flops += self.total_layers * layer_flops_fwd - self.base_flops_per_layer_matmul
 
             matmul_time = self.base_flops_per_layer_matmul / (safe_flops * safe_matmul_eff)
             attn_time = attn_flops / (safe_flops * safe_attn_eff)
             self.computation_times_sec[i] = matmul_time + attn_time
             self.computation_times_frames[i] = round(self.computation_times_sec[i] * self.cycles_per_second)
-            self.total_compute_cycles += self.total_layers * self.computation_times_frames[i]
+            
+            if is_train_chunk:
+                self.computation_times_frames_last_block[i] = self.computation_times_frames[i]
+                self.total_compute_cycles += self.total_layers * self.computation_times_frames[i]
+            else:
+                self.computation_times_frames_last_block[i] = round(attn_time * self.cycles_per_second)
+                self.total_compute_cycles += (self.total_layers - 1) * self.computation_times_frames[i] + self.computation_times_frames_last_block[i]
 
-            is_train_chunk = self.is_train_chunks[i]
+            
             if is_train_chunk:
                 # BwdX FLOPS = Fwd Matmul + 2 * Fwd Attn
                 bwd_x_flops = self.base_flops_per_layer_matmul + 2.5 * attn_flops
@@ -1376,6 +1396,7 @@ class SimulationRunner:
         self.trueContextTransferCycles = chunk_context_transfer_time_sec * self.cycles_per_second
         transition_transfer_time_sec = (self.output_size_bytes * 8) / safe_peer_bw_bps
         self.activationTransitionFrames = max(1, round(transition_transfer_time_sec * self.cycles_per_second)) if self.N > 1 else 0
+        self.trueActivationTransitionCycles = transition_transfer_time_sec * self.cycles_per_second if self.N > 1 else 0
 
         # --- Total FLOPS (Final Calculation) ---
         self.total_flops = self.total_fwd_flops + self.total_bwd_flops + self.total_head_flops
@@ -1525,8 +1546,8 @@ class SimulationRunner:
         tflops = 1e12
         gbps = 1e9
         gb = (1 << 30)
-        contextTransferCycleText = f"{self.contextTransferFrames}" if self.trueContextTransferCycles >= 1 else "< 1"
-        blockTransitionCyclesText = f"{self.activationTransitionFrames}" if self.activationTransitionFrames >= 1 else "< 1"
+        contextTransferCycleText = f"{self.contextTransferFrames}" if self.trueContextTransferCycles >= 1 else f"{self.trueContextTransferCycles:.1f}; set to 1"
+        blockTransitionCyclesText = f"{self.activationTransitionFrames}" if self.activationTransitionFrames >= 1 else f"{self.trueActivationTransitionCycles:.1f}; set to 1"
 
         if self.N == 1:
             blockTransitionCyclesText = f"0"
@@ -1617,6 +1638,7 @@ class SimulationRunner:
                      is_train_chunks=self.is_train_chunks,
                      prev_train_chunks=self.prev_train_chunks,
                      computation_times_frames=self.computation_times_frames,
+                     computation_times_frames_last_block=self.computation_times_frames_last_block,
                      computation_times_frames_bwd=self.computation_times_frames_bwd,
                      headFrames=self.headFrames,
                      bwdWFrames=self.bwdWFrames,
