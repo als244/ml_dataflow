@@ -1026,7 +1026,8 @@ class Device:
             "home_storage": self.home_storage,
             "total_train_chunks": self.total_train_chunks,
             "is_train_chunks": self.is_train_chunks,
-            "prev_train_chunks": self.prev_train_chunks
+            "prev_train_chunks": self.prev_train_chunks,
+            "first_train_chunk": self.first_train_chunk
         }
 
     def load_from_serializable_state(self, dev_state):
@@ -1096,6 +1097,7 @@ class Device:
         self.total_train_chunks = dev_state.get("total_train_chunks", 0)
         self.is_train_chunks = dev_state.get("is_train_chunks", [])
         self.prev_train_chunks = dev_state.get("prev_train_chunks", [])
+        self.first_train_chunk = dev_state.get("first_train_chunk", -1)
         # Ensure buffer empty slot indices are recalculated based on loaded buffers
         self._recalculate_empty_slot_indices()
 
