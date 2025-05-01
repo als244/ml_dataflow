@@ -875,7 +875,7 @@ class Device:
 
                 self.handle_bwd_prefetch_fwd_act()
 
-                if (cid == 0):
+                if (cid == self.first_train_chunk):
                     self.outbound_queue.append((-1, lid, True, False, self.layerTransferFrames))
 
             # --- Reset Compute State & Check Next Task ---
