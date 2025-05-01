@@ -1602,7 +1602,7 @@ class SimulationRunner:
             f"Chunk Info\n"
             f" - Activation Save/Fetch: {self.savedActivationsFrames}\n"
             f" - Block Transitions: {blockTransitionCyclesText}\n"
-            f" - Context Transfers: {contextTransferCycleText}"
+            f" - Ctx Updates: {contextTransferCycleText}"
         )
 
         return textwrap.dedent(text)
