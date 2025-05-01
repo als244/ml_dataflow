@@ -39,7 +39,7 @@ def parse_parameters(form_data):
     params['active_experts'] = form_data.get('active_experts', default=1, type=int)
     params['expert_dim'] = form_data.get('expert_dim', default=27648, type=int)
     params['attn_type'] = form_data.get('attn_type', default="Exact", type=str)
-    params['max_device_memory_bytes'] = form_data.get('max_device_memory_gb', default=20, type=float) * (1 << 30)
+    params['max_device_memory_bytes'] = form_data.get('max_device_memory_gb', default=16, type=float) * (1 << 30)
     params['hardware_max_flops'] = form_data.get('hardware_max_tflops', default=989, type=float) * 1e12
     params['hardware_mem_bw_bytes_sec'] = form_data.get('hardware_mem_bw_gbs', default=3350, type=float) * (1 << 30) # Input GB/s
     params['matmul_efficiency'] = form_data.get('matmul_efficiency', default=0.7, type=float)
