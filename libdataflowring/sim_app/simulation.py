@@ -1326,19 +1326,19 @@ class SimulationRunner:
             is_train_chunk = self.is_train_chunks[i]
             if is_train_chunk:
                 # BwdX FLOPS = Fwd Matmul + 2 * Fwd Attn
-                bwd_x_flops = self.base_flops_per_layer_matmul + 2 * attn_flops
+                bwd_x_flops = self.base_flops_per_layer_matmul + 2.5 * attn_flops
                 bwd_w_flops = self.base_flops_per_layer_matmul # Re-calc for clarity
 
                 self.total_bwd_flops += self.total_layers * (bwd_x_flops + bwd_w_flops)
 
-                bwd_x_time = matmul_time + 2 * attn_time # Bwd Attn is 2x Fwd Attn
+                bwd_x_time = matmul_time + 2.5 * attn_time # Bwd Attn is 2x Fwd Attn
                 self.computation_times_sec_bwd[i] = bwd_x_time
                 self.computation_times_frames_bwd[i] = round(bwd_x_time * self.cycles_per_second)
                 self.total_compute_cycles += self.total_layers * self.computation_times_frames_bwd[i]
                 self.total_compute_cycles += self.total_layers * self.bwdWFrames # Add BwdW cycles
 
                 # Accumulate FLOP types for BWD
-                self.total_attn_flops += self.total_layers * 2 * attn_flops # For BwdX
+                self.total_attn_flops += self.total_layers * 2.5 * attn_flops # For BwdX
                 self.total_matmul_flops += self.total_layers * (self.base_flops_per_layer_matmul) # For BwdX Matmul part
                 self.total_matmul_flops += self.total_layers * bwd_w_flops # For BwdW
 
@@ -1448,7 +1448,7 @@ class SimulationRunner:
         mb = (1 << 20)
         
         embed_params = self.model_dim * self.vocab_size
-        attn_block_params = self.model_dim + 2 * (self.model_dim * self.model_dim) + (self.model_dim * self.kv_dim)
+        attn_block_params = self.model_dim + 2 * (self.model_dim * self.model_dim) + 2 * (self.model_dim * self.kv_dim)
         ffn_block_params = self.model_dim + 3 * self.num_experts * (self.model_dim * self.expert_dim)
         head_params = self.model_dim + self.model_dim * self.vocab_size
         total_model_params = embed_params + self.total_layers * (attn_block_params + ffn_block_params) + head_params
