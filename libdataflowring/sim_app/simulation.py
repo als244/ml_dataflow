@@ -326,7 +326,7 @@ class Device:
         if self.device_id == head_device_id:
 
             total_chunk_depend_frames = 0
-            last_block_chunk_id_when_id_ready = max(0, self.total_chunks - self.total_devices - 1)
+            last_block_chunk_id_when_id_ready = max(0, self.total_chunks - self.total_devices)
             for i in range(last_block_chunk_id_when_id_ready, self.total_chunks):
                 total_chunk_depend_frames += self.computation_times_frames_last_block[i]
 
