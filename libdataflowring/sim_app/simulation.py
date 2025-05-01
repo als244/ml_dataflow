@@ -1555,7 +1555,7 @@ class SimulationRunner:
         first_train_chunk_str = f""
 
         if self.first_train_chunk != 0:
-            first_train_chunk_str = f"C{self.first_train_chunk} => Tokens: [{self.first_train_chunk * self.chunk_size}, {(self.first_train_chunk + 1) * self.chunk_size})\n"
+            first_train_chunk_str = f"C{self.first_train_chunk} => [{self.first_train_chunk * self.chunk_size}, {(self.first_train_chunk + 1) * self.chunk_size})\n"
 
         text = (
             f"--- DISCOVERED CONSTANTS ---\n\n"
@@ -1584,7 +1584,7 @@ class SimulationRunner:
             f"--- COMPUTE CYCLES ---\n\n"
             f"C0 => Tokens: [0, {self.chunk_size})\n"
             f"{first_train_chunk_str}"
-            f"C{self.total_chunks-1} => Tokens: [{(self.total_chunks-1) * self.chunk_size}, {self.seqlen})\n\n"
+            f"C{self.total_chunks-1} => [{(self.total_chunks-1) * self.chunk_size}, {self.seqlen})\n\n"
             f"Fwd:\n"
             f" - C0: {self.computation_times_frames.get(0,0)}\n"
             f" - C{self.total_chunks-1}: {self.computation_times_frames.get(self.total_chunks-1,0)}\n"
