@@ -51,7 +51,7 @@ def parse_parameters(form_data):
     params = {}
     # ... (keep existing parsing logic - ensure it matches SimulationRunner needs) ...
     params['N'] = form_data.get('N', default=8, type=int)
-    params['seqlen'] = form_data.get('seqlen', default=32, type=int) # K tokens
+    params['seqlen'] = form_data.get('seqlen', default=64, type=int) # K tokens
     params['train_token_ratio'] = form_data.get('train_token_ratio', default=1, type=float)
     params['train_chunk_distribution'] = form_data.get('train_chunk_distribution', default="Uniform", type=str)
     params['min_chunk_size'] = form_data.get('min_chunk_size', default=1024, type=int)

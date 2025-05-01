@@ -1125,7 +1125,7 @@ class SimulationRunner:
 
         # --- Extract and Calculate Parameters (Keep logic) ---
         self.N = params.get('N', 8)
-        self.seqlen = params.get('seqlen', 32) * (1 << 10)
+        self.seqlen = params.get('seqlen', 64) * (1 << 10)
         self.train_token_ratio = params.get('train_token_ratio', 1)
         self.min_chunk_size = params.get('min_chunk_size', 1024)
         self.train_chunk_distribution = params.get('train_chunk_distribution', "Uniform")
