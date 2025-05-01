@@ -1179,7 +1179,8 @@ class SimulationRunner:
         self.ffn_block_size_bytes = self.dtype_bytes * (3 * self.model_dim * self.expert_dim * self.num_experts)
         self.layer_size_bytes = self.attn_block_size_bytes + self.ffn_block_size_bytes
 
-        self.attn_activation_bytes = self.dtype_bytes * (2 * (self.model_dim * self.chunk_size) + 2 * (self.kv_dim * self.chunk_size))
+        # 4 * for input/query/attn output/proj_output, 2 * for keys/values
+        self.attn_activation_bytes = self.dtype_bytes * (4 * (self.model_dim * self.chunk_size) + 2 * (self.kv_dim * self.chunk_size))
         self.ffn_activation_bytes = self.dtype_bytes * self.active_experts * (2 * self.chunk_size * self.expert_dim)
         self.activation_size_bytes = self.attn_activation_bytes + self.ffn_activation_bytes
 
