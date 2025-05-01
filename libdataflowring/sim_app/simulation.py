@@ -1127,7 +1127,6 @@ class SimulationRunner:
         self.train_chunk_distribution = params.get('train_chunk_distribution', "Uniform")
         self.bitwidth = params.get('bitwidth', 16)
         self.total_layers = params.get('total_layers', 64) # Store non-head count
-        self.total_layers = self.total_layers
         self.vocab_size = params.get('vocab_size', 151646)
         self.model_dim = params.get('model_dim', 5120)
         self.kv_dim = params.get('kv_dim', 640) # Recalculate kv_dim based on this
@@ -1374,6 +1373,7 @@ class SimulationRunner:
         self.savedActivationsFrames = round(activation_transfer_time_sec * self.cycles_per_second)
         chunk_context_transfer_time_sec = (self.chunk_context_size_bytes * 8) / safe_home_bw_bps
         self.contextTransferFrames = max(1, round(chunk_context_transfer_time_sec * self.cycles_per_second))
+        self.trueContextTransferCycles = chunk_context_transfer_time_sec * self.cycles_per_second
         transition_transfer_time_sec = (self.output_size_bytes * 8) / safe_peer_bw_bps
         self.activationTransitionFrames = max(1, round(transition_transfer_time_sec * self.cycles_per_second)) if self.N > 1 else 0
 
@@ -1404,8 +1404,6 @@ class SimulationRunner:
     # --- Legend Text Creation (Keep for stats calculation, text can be sent to frontend) ---
     def _create_memory_legend_text(self):
         # Keep calculation logic, return the text string
-
-        print(f"Total train chunks: {self.total_train_chunks}")
         train_model_size = (self.layer_size_bytes * self.total_layers + self.head_layer_size_bytes)
         train_activation_size = (self.total_train_chunks * self.activation_size_bytes * self.total_layers) # Based on non-head layers
         train_context_size = ((self.total_chunks - self.total_train_chunks) * self.chunk_context_size_bytes * self.total_layers)
@@ -1527,8 +1525,11 @@ class SimulationRunner:
         tflops = 1e12
         gbps = 1e9
         gb = (1 << 30)
-        contextTransferCycleText = f"{self.contextTransferFrames}" if self.contextTransferFrames >= 1 else "< 1"
+        contextTransferCycleText = f"{self.contextTransferFrames}" if self.trueContextTransferCycles >= 1 else "< 1"
         blockTransitionCyclesText = f"{self.activationTransitionFrames}" if self.activationTransitionFrames >= 1 else "< 1"
+
+        if self.N == 1:
+            blockTransitionCyclesText = f"0"
 
         first_train_chunk_str = f""
 
@@ -1729,7 +1730,7 @@ class SimulationRunner:
             self.simulation_complete = True
             self.animation_paused = True
             self.completion_stats = self._calculate_completion_stats(T)
-            print(f"Simulation Complete at Cycle {T}")
+            #print(f"Simulation Complete at Cycle {T}")
             # print(self.completion_stats.get("text", "")) # Optional server log
             return False # Simulation just completed, stop stepping for now
 
@@ -1737,7 +1738,7 @@ class SimulationRunner:
         if not self.animation_paused:
             self.current_frame_index += 1
             if self.current_frame_index >= self.max_frames:
-                print(f"Max frames ({self.max_frames}) reached, stopping.")
+                #print(f"Max frames ({self.max_frames}) reached, stopping.")
                 self.animation_paused = True
                 self.simulation_complete = True
                 if not self.completion_stats:
