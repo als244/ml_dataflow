@@ -1175,11 +1175,11 @@ class SimulationRunner:
                 self.prev_train_chunks[i] = i - 1
                 self.total_train_chunks += 1
                 
-        self.attn_block_size_bytes = self.dtype_bytes * (2 * self.model_dim * self.model_dim + 4 * self.model_dim * self.kv_dim)
+        self.attn_block_size_bytes = self.dtype_bytes * (2 * self.model_dim * self.model_dim + 2 * self.model_dim * self.kv_dim)
         self.ffn_block_size_bytes = self.dtype_bytes * (3 * self.model_dim * self.expert_dim * self.num_experts)
         self.layer_size_bytes = self.attn_block_size_bytes + self.ffn_block_size_bytes
 
-        self.attn_activation_bytes = self.dtype_bytes * (4 * (self.model_dim * self.chunk_size) + 2 * (self.kv_dim * self.chunk_size))
+        self.attn_activation_bytes = self.dtype_bytes * (2 * (self.model_dim * self.chunk_size) + 2 * (self.kv_dim * self.chunk_size))
         self.ffn_activation_bytes = self.dtype_bytes * (2 * self.chunk_size * self.expert_dim * self.active_experts)
         self.activation_size_bytes = self.attn_activation_bytes + self.ffn_activation_bytes
 
