@@ -830,7 +830,7 @@ int main(int argc, char * argv[]){
 	for (int i = num_chunks - 1; i >= 0; i--){
 		printf("\n\nSubmitting head for chunk #%d...\n\n", i);
 
-		final_block_output_transition = &(block_transitions[2 * i + ((n_layers + 1) % 2)]);
+		final_block_output_transition = &(block_transitions[2 * i + (n_layers % 2)]);
 
 		model_output -> seq_batch = seq_batches[i];
 		head_activations -> num_tokens = seq_batches[i] -> total_tokens;
