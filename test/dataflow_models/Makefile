@@ -41,8 +41,8 @@ create_data_dirs:
 	mkdir -p test_transformer_data/embedding_fwd; \
 	mkdir -p test_transformer_data/embedding_bwd; \
 	mkdir -p correct_transformer_data/head_fwd; \
-	mkdir -p correct_transformer_data/head_bwd;
-
+	mkdir -p correct_transformer_data/head_bwd; \
+	mkdir -p profiling
 
 test_transformer_full_fwd: test_transformer_full_fwd.c
 	${CC} ${CFLAGS} ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
