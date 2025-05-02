@@ -368,7 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // *** NEW: Draw and show the Torus plot ***
                 // Hardcode parameters for now - replace with values derived
                 // from formData or simulationConfig later if needed.
-                const modelStages = 16; // Example value from screenshot
+                const modelStages = simulationConfig.N; // Example value from screenshot
                 const dataParallelismFactor = 8; // Example value from screenshot
                 drawTorusPlot(modelStages, dataParallelismFactor);
                 showTorusPlot();
