@@ -1,4 +1,6 @@
+
 #include "dataflow_transformer.h"
+#define TO_PRINT 0
 
 // meta-toggle required to be set to 1 to save any data
 // when set to 0, nothing will be saved
@@ -79,7 +81,9 @@ static int save_file(Dataflow_Handle * dataflow_handle, int stream_id, int layer
 		return -1;
 	}
 
-	printf("\n[Saving] %s (%lu bytes)\n", filename, num_els * el_size);
+	if (TO_PRINT){
+		printf("\n[Saving] %s (%lu bytes)\n", filename, num_els * el_size);
+	}
 
 	size_t num_written = fwrite(host_ptr, el_size, num_els, fp);
 	if (num_written != num_els){
@@ -235,7 +239,9 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 
-	printf("Submitting Attention RMS Norm...!\n");
+	if (TO_PRINT){
+		printf("Submitting Attention RMS Norm...!\n");
+	}
 
 	ret = dataflow_submit_default_rms_norm(dataflow_handle, compute_stream_id, 
 						fwd_dt, 
@@ -258,7 +264,9 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 
 
 
-	printf("Submitting Q, K, V matmuls...!\n");
+	if (TO_PRINT){
+		printf("Submitting Q, K, V matmuls...!\n");
+	}
 
 	// Q Proj
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
@@ -328,7 +336,9 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 
-	printf("Submitting RoPE...!\n");
+	if (TO_PRINT){
+		printf("Submitting RoPE...!\n");
+	}
 
 	int num_q_heads = (transformer_block -> config).num_q_heads;
 	int num_kv_heads = (transformer_block -> config).num_kv_heads;
@@ -363,7 +373,9 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 
-	printf("Submitting Attention...!\n");
+	if (TO_PRINT){
+		printf("Submitting Attention...!\n");
+	}
 
 	// ensure workspace is zerod out beforehand....
 
@@ -459,7 +471,9 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 
-	printf("Submitting Attention Output Matmul...!\n");
+	if (TO_PRINT){
+		printf("Submitting Attention Output Matmul...!\n");
+	}
 
 
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
@@ -485,7 +499,9 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 
-	printf("Submitting FFN RMS Norm...!\n");
+	if (TO_PRINT){
+		printf("Submitting FFN RMS Norm...!\n");
+	}
 
 	ret = dataflow_submit_default_rms_norm(dataflow_handle, compute_stream_id, 
 						fwd_dt, 
@@ -506,8 +522,9 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 		}
 	}
 
-
-	printf("Submitting FFN w1 and w3 matmuls...!\n");
+	if (TO_PRINT){
+		printf("Submitting FFN w1 and w3 matmuls...!\n");
+	}
 
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
 					fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
@@ -554,7 +571,9 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 
-	printf("Submitting SwiGLU Activation...!\n");
+	if (TO_PRINT){
+		printf("Submitting SwiGLU Activation...!\n");
+	}
 
 
 	ret = dataflow_submit_default_swiglu(dataflow_handle, compute_stream_id, 
@@ -576,7 +595,9 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 
-	printf("Submitting FFN w2 matmul...!\n");
+	if (TO_PRINT){
+		printf("Submitting FFN w2 matmul...!\n");
+	}
 
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
 					fwd_dt, fwd_dt, fwd_dt, fwd_dt,
@@ -639,7 +660,9 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 		}
 	}
 
-	printf("Submitting Head RMS Norm...\n");
+	if (TO_PRINT){
+		printf("Submitting Head RMS Norm...\n");
+	}
 
     // RMS Normalization
     ret = dataflow_submit_default_rms_norm(dataflow_handle, compute_stream_id,
@@ -664,7 +687,9 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 		}
 	}
 
-	printf("Submitting Head Output Projection...\n");
+	if (TO_PRINT){
+		printf("Submitting Head Output Projection...\n");
+	}
 
     // Output projection
     // Input x_temp is in row-major format
@@ -700,7 +725,9 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 		}
 	}
 
-	printf("Submitting Head Softmax to Determine Final Logits...\n");
+	if (TO_PRINT){
+		printf("Submitting Head Softmax to Determine Final Logits...\n");
+	}
 
     // Apply softmax over vocabulary dimension
     // Each row (corresponding to a token) should sum to 1
@@ -745,8 +772,9 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 		return 0;
 	}
 
-
-	printf("Submitting Head Cross Entropy Loss...\n");
+	if (TO_PRINT){	
+		printf("Submitting Head Cross Entropy Loss...\n");
+	}
 
 	// STARTING BACKPROP HERE!
 
@@ -787,7 +815,9 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 
 	// Now backpropagate through the output projection
 
-	printf("Submitting Output Projection Weight Gradients...\n");
+	if (TO_PRINT){
+		printf("Submitting Output Projection Weight Gradients...\n");
+	}
 
 	float grad_avg_scale = 1.0f / ((float)head_activations -> num_tokens);
 
@@ -821,7 +851,9 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 
 	// Now repurpose head_activation -> head_norm_out as the derivative of the norm
 
-	printf("Submitting Bwd X Head Matmul...\n");
+	if (TO_PRINT){
+		printf("Submitting Bwd X Head Matmul...\n");
+	}
 
     ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
                        transformer_head -> bwd_dt,
@@ -853,7 +885,9 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 	}
 
 	
-	printf("Submitting Bwd X for RMS Norm to get Gradient Stream...\n");
+	if (TO_PRINT){
+		printf("Submitting Bwd X for RMS Norm to get Gradient Stream...\n");
+	}
 
 	// Finally backpropagate through RMS normalization
     ret = dataflow_submit_default_rms_norm_bwd_x(dataflow_handle, compute_stream_id,
@@ -881,7 +915,9 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 		}
 	}
 
-	printf("Submitting Bwd W for RMS Norm to update Head Norm...\n");
+	if (TO_PRINT){
+		printf("Submitting Bwd W for RMS Norm to update Head Norm...\n");
+	}
 
 	ret = dataflow_submit_default_rms_norm_bwd_w(dataflow_handle, compute_stream_id,
                                grad_transformer_head -> fwd_dt,
