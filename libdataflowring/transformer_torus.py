@@ -60,7 +60,7 @@ for j in range(M_nodes_per_slice):
     # Plot wires
     wire_points = np.vstack([nodes_for_this_j, nodes_for_this_j[0]])
     ax.plot(wire_points[:, 0], wire_points[:, 1], wire_points[:, 2],
-            color=node_color, linewidth=1.5)
+            color=node_color, linewidth=1.5, label=f"Seq. {j}")
 
 # --- **NEW**: Add Labels to the Center of Each Face ---
 for k in range(N_slices):
@@ -106,10 +106,15 @@ ax.set_zlim(mid_z - max_range, mid_z + max_range)
 
 
 # Optional: Background and grid
+
+ax.legend(title="Data Parallelism")
+
 ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
 ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
 ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
-ax.grid(True)
+
+ax.axis('off')
+ax.grid(False)
 
 # --- Show or Save Plot ---
 plt.show()
