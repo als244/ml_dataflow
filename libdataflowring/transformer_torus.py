@@ -8,11 +8,15 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
+if len(sys.argv) != 3:
+    print("Error:Usage: python transformer_torus.py <model_stages> <data_parallelism_factor>")
+    sys.exit(1)
+
 # --- Parameters ---
 R_major = 4.0
 r_minor = 1.0
-N_slices = 16 # Keep this number moderate for label visibility, e.g., 12-24
-M_nodes_per_slice = 8
+N_slices = int(sys.argv[1])
+M_nodes_per_slice = int(sys.argv[2])
 twist_factor = 1 # <--- NEW: Integer twist factor (alpha). Use 1 for the simplest correction.
 
 # --- Calculate Angles ---
