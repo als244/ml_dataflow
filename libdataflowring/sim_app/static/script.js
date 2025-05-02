@@ -75,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const innerLabelFontSize    = viewBoxWidth * 0.024;
     const stallLabelFontSize    = viewBoxWidth * 0.020;
     const transferLabelFontSize = viewBoxWidth * 0.022;
-    const deviceOpacity           = 0.6;
+    const deviceOpacity           = 0.55;
     const innerNodeOpacity        = 0.8;
     const stallNodeOpacity        = 0.9;
     let svgElements = {};
@@ -369,7 +369,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Hardcode parameters for now - replace with values derived
                 // from formData or simulationConfig later if needed.
                 const modelStages = simulationConfig.N; // Example value from screenshot
-                const dataParallelismFactor = 8; // Example value from screenshot
+                const dataParallelismFactor = 4; // Example value from screenshot
                 drawTorusPlot(modelStages, dataParallelismFactor);
                 showTorusPlot();
                 torusPlotInitialized = true;
