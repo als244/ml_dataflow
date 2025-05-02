@@ -510,11 +510,11 @@ class PyvisDependencyGraphVisualizer:
 
 ## USAGE!!!!
 
-num_layers = 8
+num_layers = 16
 
 
 ## deal with different sequence chunks proceeding through computation...
-num_seq_chunks = 32
+num_seq_chunks = 8
 
 
 graph_viz = PyvisDependencyGraphVisualizer(

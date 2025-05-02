@@ -28,20 +28,18 @@ max_interval = 100
 initial_speed_level = 50
 
 ## Number of Devices
-N = 8
+N = 64
 
-## Training Info
-num_sequences = 1
 
 # 30 million tokens
-#seqlen_thousands = 30 * (1 << 10)
+#seqlen_thousands = 7 * (1 << 10)
 
 # 1 million tokens
 #seqlen_thousands = 1 * (1 << 10)
 
-seqlen_thousands = 64
-seqlen = (1 << 10) * seqlen_thousands
-train_token_ratio = 1 / 2
+#seqlen_thousands = 64
+seqlen = 512
+train_token_ratio = 1 / 32
 min_chunk_size = 1536
 
 
@@ -62,7 +60,7 @@ expert_dim = 27648
 attn_type = "Exact"
 
 
-max_device_memory_bytes = 8 * (1 << 30)
+max_device_memory_bytes = 80 * (1 << 30)
 
 
 ## hardware configs
@@ -91,7 +89,8 @@ peer_bw_gbit_sec = 100
 
 ### --- EVERYTHING BELOW THIS POINT IS DERVIED FROM INPUTS ABOVE --- ###
 
-
+## Training Info
+num_sequences = 1
 
 
 
@@ -768,7 +767,7 @@ at_memory = AnchoredText(
     memory_legend_text,
     loc='upper left',                     # Anchor point is the upper left of the text box
     bbox_to_anchor=(left_pad, top_pad),   # Position: slightly inset from top-left figure corner
-    prop=dict(size=6),                    # Slightly larger text? Adjust as needed.
+    prop=dict(size=5.5),                    # Slightly larger text? Adjust as needed.
     frameon=True,
     pad=0.4,
     borderpad=0.5,
@@ -784,7 +783,7 @@ at_compute = AnchoredText(
     compute_legend_text,
     loc='upper right',                    # Anchor point is the upper right of the text box
     bbox_to_anchor=(right_pad, top_pad),  # Position: slightly inset from top-right figure corner
-    prop=dict(size=6),                    # Slightly larger text? Adjust as needed.
+    prop=dict(size=7),                    # Slightly larger text? Adjust as needed.
     frameon=True,
     pad=0.4,
     borderpad=0.5,
