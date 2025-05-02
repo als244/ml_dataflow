@@ -69,7 +69,7 @@ for j in range(M_nodes_per_slice):
     nodes_for_this_j = nodes[:, j, :] # Get all nodes for color j across all slices
     # Plot nodes
     ax.scatter(nodes_for_this_j[:, 0], nodes_for_this_j[:, 1], nodes_for_this_j[:, 2],
-               color=node_color, s=75, depthshade=True)
+               color=node_color, s=75, depthshade=True, edgecolors='k', linewidth=0.5)
     # Plot wires connecting nodes of the same color (index j) between slices
     wire_points = np.vstack([nodes_for_this_j, nodes_for_this_j[0]]) # Close the loop
     ax.plot(wire_points[:, 0], wire_points[:, 1], wire_points[:, 2],
@@ -87,7 +87,7 @@ for k in range(N_slices):
 ax.set_xticks([])
 ax.set_yticks([])
 ax.set_zticks([])
-ax.set_title(f"Torus with Twisted Rings (Twist={twist_factor}, {N_slices} Slices, {M_nodes_per_slice} Nodes/Slice)")
+ax.set_title(f"Model Stages: {N_slices}, Data Parallelism Factor: {M_nodes_per_slice}")
 
 # Set aspect ratio
 x_min, x_max = nodes[:,:,0].min(), nodes[:,:,0].max()
@@ -106,7 +106,7 @@ ax.set_xlim(mid_x - max_range, mid_x + max_range)
 ax.set_ylim(mid_y - max_range, mid_y + max_range)
 ax.set_zlim(mid_z - max_range, mid_z + max_range)
 
-ax.legend(title="Data Parallelism")
+ax.legend(title="")
 ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
 ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
 ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
