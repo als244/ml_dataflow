@@ -90,8 +90,12 @@ int main(int argc, char * argv[]){
 
 	// Preparing model...
 
-	DataflowDatatype block_dt = DATAFLOW_BF16;
-	DataflowDatatype block_dt_bwd = DATAFLOW_BF16;
+	// for GeForce cards FP16 is double performance of BF16 because can use FP16 compute...
+	//DataflowDatatype block_dt = DATAFLOW_FP16;
+	//DataflowDatatype block_dt_bwd = DATAFLOW_FP16;
+
+	DataflowDatatype block_dt = DATAFLOW_FP32;
+	DataflowDatatype block_dt_bwd = DATAFLOW_FP32;
 
 	size_t block_dt_size = dataflow_sizeof_element(block_dt);
 	size_t block_dt_bwd_size = dataflow_sizeof_element(block_dt_bwd);
@@ -99,6 +103,7 @@ int main(int argc, char * argv[]){
 	// for matmul accumulations...
 	// on Geforce using FP16 gets double perf,
 	// on datacenter cards should use DATAFLOW_FP32
+	//DataflowDatatype compute_dt = DATAFLOW_FP16;
 
 	// however for BF dataftype, requires FP32 compute...
 	DataflowDatatype compute_dt = DATAFLOW_FP32;
