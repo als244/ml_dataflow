@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Transformer Dataflow</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src='https://cdn.plot.ly/plotly-latest.min.js'></script>
 </head>
 <body>
     <header>
@@ -88,10 +89,10 @@
                         <label for="peer_bw_gbit_sec">Peer BW (Gb/s):</label>
                         <input type="number" id="peer_bw_gbit_sec" name="peer_bw_gbit_sec" value="100" min="1" required>
                     </div>
-                </div> <div class="form-footer">
+                    </div>
+                <div class="form-footer">
                     <button type="submit">Prepare Simulation</button>
                 </div>
-
             </form>
         </aside>
 
@@ -117,16 +118,16 @@
                 </div>
                 <div id="status-area">Status: Idle | Cycle: 0</div>
                 <div id="simulation-svg-container">
-
-                    <div id="error-message" class="error-message"></div>
                      <svg id="simulation-svg"
                           preserveAspectRatio="xMidYMid meet"
                           width="100%"
                           height="100%">
                      </svg>
-                     </div>
+                </div>
 
-                <div id="completion-popup" style="display: none;">
+                <div id="horizontal-resizer" style="display: none;"></div>
+                <div id="torus-plot-container" style="display: none;"></div>
+                 <div id="completion-popup" style="display: none;">
                     <div class="popup-content">
                         <h2>Completion Details</h2>
                         <button id="closeCompletionPopupBtn" class="close-btn">&times;</button>
