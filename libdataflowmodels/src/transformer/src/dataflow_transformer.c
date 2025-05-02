@@ -6,7 +6,7 @@
 
 
 // DETERMINES WHAT DATA TO SAVE...
-
+#define TO_SAVE_EMBEDDING 1
 // if 0, then no layers will be saved
 #define TO_SAVE_LAYER 1
 // if save layer is 1, then layer id specifies which layer to save
@@ -23,7 +23,7 @@
 
 #define DATA_SAVE_DIR "test_transformer_data"
 
-static int save_file(Dataflow_Handle * dataflow_handle, int stream_id, int layer_id, bool is_bwd, char * filename, void * dev_ptr, int M, int N, DataflowDatatype dt){
+static int save_file(Dataflow_Handle * dataflow_handle, int stream_id, int layer_id, int seq_id, int chunk_id, bool is_bwd, char * filename, void * dev_ptr, int M, int N, DataflowDatatype dt){
 
 	int ret;
 
@@ -49,17 +49,26 @@ static int save_file(Dataflow_Handle * dataflow_handle, int stream_id, int layer
 
 	if (layer_id >= 0){
 		if (is_bwd){
-			sprintf(full_filename, "%s/layers_bwd/%d/%s.dat", DATA_SAVE_DIR, layer_id, filename);
+			sprintf(full_filename, "%s/layers_bwd/%d/seq_%d_chunk_%d_%s.dat", DATA_SAVE_DIR, layer_id, seq_id, chunk_id, filename);
 		} else {
-			sprintf(full_filename, "%s/layers_fwd/%d/%s.dat", DATA_SAVE_DIR, layer_id, filename);
+			sprintf(full_filename, "%s/layers_fwd/%d/seq_%d_chunk_%d_%s.dat", DATA_SAVE_DIR, layer_id, seq_id, chunk_id, filename);
 		}
 	}
-	// head 
+	// embed or head 
 	else {
-		if (is_bwd){
-			sprintf(full_filename, "%s/head_bwd/%s.dat", DATA_SAVE_DIR, filename);
-		} else {
-			sprintf(full_filename, "%s/head_fwd/%s.dat", DATA_SAVE_DIR, filename);
+		if (layer_id == -2){
+			if (is_bwd){
+				sprintf(full_filename, "%s/embedding_bwd/seq_%d_chunk_%d_%s.dat", DATA_SAVE_DIR, seq_id, chunk_id, filename);
+			} else {
+				sprintf(full_filename, "%s/embedding_fwd/seq_%d_chunk_%d_%s.dat", DATA_SAVE_DIR, seq_id, chunk_id, filename);
+			}
+		}
+		else{
+			if (is_bwd){
+				sprintf(full_filename, "%s/head_bwd/seq_%d_chunk_%d_%s.dat", DATA_SAVE_DIR, seq_id, chunk_id, filename);
+			} else {
+				sprintf(full_filename, "%s/head_fwd/seq_%d_chunk_%d_%s.dat", DATA_SAVE_DIR, seq_id, chunk_id, filename);
+			}
 		}
 	}
 
@@ -101,6 +110,11 @@ int dataflow_submit_transformer_embedding(Dataflow_Handle * dataflow_handle, int
 
 		Seq_Batch * seq_batch = model_input -> seq_batch;
 
+		int seq_id = seq_batch -> seq_id;
+		int chunk_id = seq_batch -> chunk_id;
+
+		int total_tokens = seq_batch -> total_tokens;
+
 		Embedding_Config * embedding_table_config = embedding_table -> config;
 
 		int embedding_dim = embedding_table_config -> embedding_size;
@@ -122,6 +136,15 @@ int dataflow_submit_transformer_embedding(Dataflow_Handle * dataflow_handle, int
 		if (ret){
 			fprintf(stderr, "Error: failed to submit embedding table...\n");
 			return -1;
+		}
+
+
+		if (TO_SAVE_DATA && TO_SAVE_EMBEDDING) {
+			ret = save_file(dataflow_handle, compute_stream_id, -2, seq_id, chunk_id, false, "x_embedding", embedding_output -> X, total_tokens, embedding_dim, embed_dt);
+			if (ret){
+				fprintf(stderr, "Error: failed to save x_embedding file...\n");
+				return -1;
+			}
 		}
 
 		return 0;
@@ -152,6 +175,10 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 
 	   
 	Seq_Batch * seq_batch = block_input -> seq_batch;
+
+	int seq_id = seq_batch -> seq_id;
+	int chunk_id = seq_batch -> chunk_id;
+
 	Seq_Batch_Attention_Config * batch_attention_config = &(seq_batch -> attention_config);
     int num_seqs = batch_attention_config -> num_seqs;
     int total_q = batch_attention_config -> total_q;
@@ -200,7 +227,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, false, "x_act_stream", block_input -> X, total_q, model_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_act_stream", block_input -> X, total_q, model_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_act_stream file...\n");
 			return -1;
@@ -222,7 +249,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, false, "attn_norm", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "attn_norm", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save attention nor file...\n");
 			return -1;
@@ -249,7 +276,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, false, "x_q", working_activations -> x_q, total_q, model_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_q", working_activations -> x_q, total_q, model_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_q file...\n");
 			return -1;
@@ -271,7 +298,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, false, "x_k", working_activations -> x_k_local, total_q, kv_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_k", working_activations -> x_k_local, total_q, kv_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_k file...\n");
 			return -1;
@@ -293,7 +320,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, false, "x_v_local", working_activations -> x_v_local, total_q, kv_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_v_local", working_activations -> x_v_local, total_q, kv_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_v file...\n");
 			return -1;
@@ -320,7 +347,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, false, "x_q_rope", working_activations -> x_q, total_q, model_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_q_rope", working_activations -> x_q, total_q, model_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_q_rope file...\n");
 			return -1;
@@ -328,7 +355,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, false, "x_k_rope_local", working_activations -> x_k_local, total_q, kv_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_k_rope_local", working_activations -> x_k_local, total_q, kv_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_k_rope file...\n");
 			return -1;
@@ -362,10 +389,32 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	if (context){
 		x_k_global = context -> x_k;
 		x_v_global = context -> x_v;
+
+		void * x_k_global_dest = x_k_global + ((uint64_t) context -> cur_tokens_populated * (uint64_t) kv_dim * (uint64_t) x_el_size);
+		void * x_v_global_dest = x_v_global + ((uint64_t) context -> cur_tokens_populated * (uint64_t) kv_dim * (uint64_t) x_el_size);
+
+		// need to copy x_k_local and x_v_local into global context...
+
+		ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, x_k_global_dest, working_activations -> x_k_local, (uint64_t) total_q * (uint64_t) kv_dim * (uint64_t) x_el_size);
+		if (ret){
+			fprintf(stderr, "Error: failed to submit peer transfer for x_k_global...\n");
+			return -1;
+		}
+
+		ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, x_v_global_dest, working_activations -> x_v_local, (uint64_t) total_q * (uint64_t) kv_dim * (uint64_t) x_el_size);
+		if (ret){
+			fprintf(stderr, "Error: failed to submit peer transfer for x_v_global...\n");
+			return -1;
+		}
+
+		context -> cur_tokens_populated += total_q;
+
+		// assert (context -> cur_tokens_populated == total_q);
+
 	}
 
-	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, false, "x_k_global_attn_inp", x_k_global, total_k, kv_dim, fwd_dt);
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))) {
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_k_global_attn_inp", x_k_global, context -> cur_tokens_populated, kv_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_k_global_attn_inp file...\n");
 			return -1;
@@ -373,7 +422,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, false, "x_v_global_attn_inp", x_v_global, total_k, kv_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_v_global_attn_inp", x_v_global, context -> cur_tokens_populated, kv_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_k_global_attn_inp file...\n");
 			return -1;
@@ -393,10 +442,16 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 		fprintf(stderr, "Error: failed to submit attention...\n");
 		return -1;
 	}
+
+
+	// reset for beginning of next layer so it can populate
+	if (context -> cur_tokens_populated == context -> total_context_tokens){
+		context -> cur_tokens_populated = 0;
+	}
 	
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, false, "x_attn", working_activations -> x_attn_out, total_q, model_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_attn", working_activations -> x_attn_out, total_q, model_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_attn file...\n");
 			return -1;
@@ -422,7 +477,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, false, "x_attn_final_out", working_activations -> x_o, total_q, model_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_attn_final_out", working_activations -> x_o, total_q, model_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_attn_final_out file...\n");
 			return -1;
@@ -444,7 +499,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, false, "x_ffn_norm_out", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_ffn_norm_out", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_attn_final_out file...\n");
 			return -1;
@@ -469,7 +524,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, false, "x_1", (working_activations -> x_1)[0], total_q, ffn_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_1", (working_activations -> x_1)[0], total_q, ffn_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_1 file...\n");
 			return -1;
@@ -491,7 +546,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, false, "x_3", (working_activations -> x_3)[0], total_q, ffn_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_3", (working_activations -> x_3)[0], total_q, ffn_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_3 file...\n");
 			return -1;
@@ -513,7 +568,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, false, "x_swiglu", activation_workspace -> x_temp_mlp, total_q, ffn_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_swiglu", activation_workspace -> x_temp_mlp, total_q, ffn_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_swiglu file...\n");
 			return -1;
@@ -538,7 +593,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, false, "x_act_stream_out", block_output -> X, total_q, model_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_act_stream_out", block_output -> X, total_q, model_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_act_stream file...\n");
 			return -1;
@@ -561,6 +616,11 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 
     int ret;
 
+	Seq_Batch * seq_batch = block_input -> seq_batch;
+
+	int seq_id = seq_batch -> seq_id;
+	int chunk_id = seq_batch -> chunk_id;
+
     // Get dimensions from embedding config
     int vocab_size = (transformer_head -> embedding_config) -> vocab_size;
     int embedding_size = (transformer_head -> embedding_config) -> embedding_size;
@@ -572,7 +632,7 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 
 
 	if (TO_SAVE_DATA && TO_SAVE_HEAD){
-		ret = save_file(dataflow_handle, compute_stream_id, -1, false, "x_inp", block_input -> X, total_tokens, embedding_size, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, -1, seq_id, chunk_id, false, "x_inp", block_input -> X, total_tokens, embedding_size, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head x_inp file...\n");
 			return -1;
@@ -597,7 +657,7 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
     }
 
 	if (TO_SAVE_DATA && TO_SAVE_HEAD){
-		ret = save_file(dataflow_handle, compute_stream_id, -1, false, "x_norm", head_activations -> head_norm_out, total_tokens, embedding_size, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, -1, seq_id, chunk_id, false, "x_norm", head_activations -> head_norm_out, total_tokens, embedding_size, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head x_norm file...\n");
 			return -1;
@@ -633,7 +693,7 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
     }
 
 	if (TO_SAVE_DATA && TO_SAVE_HEAD){
-		ret = save_file(dataflow_handle, compute_stream_id, -1, false, "x_head_out", head_activations -> head_out, total_tokens, vocab_size, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, -1, seq_id, chunk_id, false, "x_head_out", head_activations -> head_out, total_tokens, vocab_size, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head x_head_out file...\n");
 			return -1;
@@ -662,7 +722,7 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
     }
 
 	if (TO_SAVE_DATA && TO_SAVE_HEAD){
-		ret = save_file(dataflow_handle, compute_stream_id, -1, false, "x_logits", model_output -> logits, total_tokens, vocab_size, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, -1, seq_id, chunk_id, false, "x_logits", model_output -> logits, total_tokens, vocab_size, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head x_logits file...\n");
 			return -1;
@@ -679,7 +739,7 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 
 
 
-	Seq_Batch * seq_batch = block_input -> seq_batch;
+	
 
 	if (seq_batch -> loss_config.num_tokens_to_predict == 0){
 		return 0;
@@ -709,7 +769,7 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
     }
 
 	if (TO_SAVE_DATA && TO_SAVE_HEAD){
-		ret = save_file(dataflow_handle, compute_stream_id, -1, true, "x_logits_loss", model_output -> logits, total_tokens, vocab_size, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, -1, seq_id, chunk_id, false, "x_logits_loss", model_output -> logits, total_tokens, vocab_size, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head x_logits_loss file...\n");
 			return -1;
@@ -785,7 +845,7 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
     }
 
 	if (TO_SAVE_DATA && TO_SAVE_HEAD){
-		ret = save_file(dataflow_handle, compute_stream_id, -1, true, "x_head_proj_inp", model_output -> logits, total_tokens, vocab_size, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, -1, seq_id, chunk_id, true, "x_head_proj_inp", model_output -> logits, total_tokens, vocab_size, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head x_head_proj_inp file...\n");
 			return -1;
@@ -814,7 +874,7 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
     }
 
 	if (TO_SAVE_DATA && TO_SAVE_HEAD){
-		ret = save_file(dataflow_handle, compute_stream_id, -1, true, "x_head_norm_inp", grad_stream -> X, total_tokens, embedding_size, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, -1, seq_id, chunk_id, true, "x_head_norm_inp", grad_stream -> X, total_tokens, embedding_size, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head x_head_norm_inp file...\n");
 			return -1;
@@ -904,6 +964,9 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 
 	// context gradients being accumulated
 	Seq_Batch_Context * bwd_context = seq_batch -> context;
+
+	int seq_id = seq_batch -> seq_id;
+	int chunk_id = seq_batch -> chunk_id;
 	
 
 	int to_transa = 0;
@@ -911,7 +974,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, true, "x_upstream_grad", inp_grad_stream -> X, total_q, model_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_upstream_grad", inp_grad_stream -> X, total_q, model_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_upstream_grad file...\n");
 			return -1;
@@ -940,7 +1003,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, true, "x_2_inp", activation_workspace -> x_temp_mlp, total_q, ffn_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_2_inp", activation_workspace -> x_temp_mlp, total_q, ffn_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_2_inp file...\n");
 			return -1;
@@ -962,7 +1025,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, true, "x_swiglu_inp", activation_workspace -> x_temp_mlp, total_q, ffn_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_swiglu_inp", activation_workspace -> x_temp_mlp, total_q, ffn_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_swiglu_inp file...\n");
 			return -1;
@@ -989,7 +1052,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, true, "x_1_inp", activation_workspace -> x_temp, total_q, model_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_1_inp", activation_workspace -> x_temp, total_q, model_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_1_inp file...\n");
 			return -1;
@@ -1010,7 +1073,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, true, "x_1_plus_x_3_inp", activation_workspace -> x_temp, total_q, model_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_1_plus_x_3_inp", activation_workspace -> x_temp, total_q, model_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_1_plus_x_3_inp file...\n");
 			return -1;
@@ -1033,7 +1096,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, true, "x_ffn_norm_inp_plus_upstream_grad", inp_grad_stream -> X, total_q, model_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_ffn_norm_inp_plus_upstream_grad", inp_grad_stream -> X, total_q, model_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_ffn_norm_inp_plus_upstream_grad file...\n");
 			return -1;
@@ -1074,7 +1137,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, true, "x_attn_out_proj_inp", activation_workspace -> x_temp, total_q, model_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_attn_out_proj_inp", activation_workspace -> x_temp, total_q, model_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_attn_out_proj_inp file...\n");
 			return -1;
@@ -1120,7 +1183,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, true, "x_attn_q_inp", working_activations -> x_q, total_q, model_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_attn_q_inp", working_activations -> x_q, total_q, model_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_attn_q_inp file...\n");
 			return -1;
@@ -1129,7 +1192,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, true, "x_attn_k_global_inp", bwd_context -> x_k, total_k, kv_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_attn_k_global_inp", bwd_context -> x_k, total_k, kv_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_attn_k_global_inp file...\n");
 			return -1;
@@ -1137,7 +1200,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, true, "x_attn_v_global_inp", bwd_context -> x_v, total_k, kv_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_attn_v_global_inp", bwd_context -> x_v, total_k, kv_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_attn_v_global_inp file...\n");
 			return -1;
@@ -1146,7 +1209,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, true, "x_attn_k_local_inp", working_activations -> x_k_local, total_q, kv_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_attn_k_local_inp", working_activations -> x_k_local, total_q, kv_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_attn_k_local_inp file...\n");
 			return -1;
@@ -1154,7 +1217,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, true, "x_attn_v_local_inp", working_activations -> x_v_local, total_q, kv_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_attn_v_local_inp", working_activations -> x_v_local, total_q, kv_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_attn_v_local_inp file...\n");
 			return -1;
@@ -1181,7 +1244,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, true, "x_q_rope_inp", working_activations -> x_q, total_q, model_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_q_rope_inp", working_activations -> x_q, total_q, model_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_q_rope_inp file...\n");
 			return -1;
@@ -1189,7 +1252,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, true, "x_k_local_rope_inp", working_activations -> x_k_local, total_q, kv_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_k_local_rope_inp", working_activations -> x_k_local, total_q, kv_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_k_local_rope_inp file...\n");
 			return -1;
@@ -1217,7 +1280,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, true, "x_q_inp", activation_workspace -> x_temp, total_q, model_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_q_inp", activation_workspace -> x_temp, total_q, model_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_q_inp file...\n");
 			return -1;
@@ -1244,7 +1307,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, true, "x_q_inp_plus_k_local_inp", activation_workspace -> x_temp, total_q, model_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_q_inp_plus_k_local_inp", activation_workspace -> x_temp, total_q, model_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_q_inp_plus_k_local_inp file...\n");
 			return -1;
@@ -1265,7 +1328,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, true, "x_q_inp_plus_k_local_inp_plus_v_local_inp", activation_workspace -> x_temp, total_q, model_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_q_inp_plus_k_local_inp_plus_v_local_inp", activation_workspace -> x_temp, total_q, model_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_q_inp_plus_k_local_inp_plus_v_local_inp file...\n");
 			return -1;
@@ -1288,7 +1351,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, true, "x_attn_norm_inp_plus_ffn_norm_inp_plus_upstream_grad", inp_grad_stream -> X, total_q, model_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_attn_norm_inp_plus_ffn_norm_inp_plus_upstream_grad", inp_grad_stream -> X, total_q, model_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_attn_norm_inp_plus_ffn_norm_inp_plus_upstream_grad file...\n");
 			return -1;

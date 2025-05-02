@@ -251,6 +251,9 @@ typedef struct seq_batch_context {
 	void * contextBuffer;
 	uint64_t contextBufferBytes;
 
+	int cur_tokens_populated;
+	int total_context_tokens;
+
 	// device pointers, but likely shared among multiple seq_batches
 	// if it is a single seq broken into many chunks...
 
@@ -265,6 +268,8 @@ typedef struct seq_batch_context {
 
 struct seq_batch {
 	
+	int seq_id;
+	int chunk_id;
 	int total_tokens;
 	int num_seqs;
 

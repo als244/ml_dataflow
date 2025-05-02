@@ -18,7 +18,7 @@ int bind_seq_batch_metadata_buffer(Seq_Batch * seq_batch, void * metadata_buffer
 int populate_seq_batch_metadata_buffer(Dataflow_Handle * dataflow_handle, int inbound_stream_id, 
                                         Seq_Batch * seq_batch,
                                         void * sys_registered_metadata_buffer, uint64_t sys_registered_metadata_buffer_size,
-                                        int total_tokens, int num_seqs,
+                                        int seq_id, int chunk_id, int total_tokens, int num_seqs,
                                         uint32_t * sys_token_ids, uint32_t * sys_labels,
                                         int * sys_seq_positions, 
                                         int * sys_q_seq_offsets, int * sys_q_seq_lens,

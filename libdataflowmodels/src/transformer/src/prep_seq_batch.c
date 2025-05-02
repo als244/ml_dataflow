@@ -280,7 +280,7 @@ static int compare_pairs(const void *a, const void *b) {
 int populate_seq_batch_metadata_buffer(Dataflow_Handle * dataflow_handle, int inbound_stream_id, 
                                         Seq_Batch * seq_batch,
                                         void * sys_registered_metadata_buffer, uint64_t sys_registered_metadata_buffer_size,
-                                        int total_tokens, int num_seqs,
+                                        int seq_id, int chunk_id, int total_tokens, int num_seqs,
                                         uint32_t * sys_token_ids, uint32_t * sys_labels,
                                         int * sys_seq_positions, 
                                         int * sys_q_seq_offsets, int * sys_q_seq_lens,
@@ -288,6 +288,11 @@ int populate_seq_batch_metadata_buffer(Dataflow_Handle * dataflow_handle, int in
 
         
         int ret;
+
+        seq_batch -> seq_id = seq_id;
+        seq_batch -> chunk_id = chunk_id;
+        seq_batch -> total_tokens = total_tokens;
+        seq_batch -> num_seqs = num_seqs;
 
         Seq_Batch_Metadata_Offsets * metadata_offsets = &(seq_batch -> metadata_offsets);
         if (sys_registered_metadata_buffer_size < metadata_offsets -> total_size){

@@ -9,6 +9,9 @@
 #include <pthread.h>
 #include <math.h>
 
+#include <assert.h>
+#include <errno.h>
+
 #include <semaphore.h>
 #include <string.h>
 #include <immintrin.h>
