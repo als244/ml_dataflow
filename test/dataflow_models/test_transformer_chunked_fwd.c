@@ -71,7 +71,7 @@ int main(int argc, char * argv[]){
 	}
 
 	// 22 GB...	
-	size_t dev_size_bytes = 22 * (1UL << 30);
+	size_t dev_size_bytes = 21 * (1UL << 30);
 
 	int dev_alignment = 256;
 
@@ -382,48 +382,9 @@ int main(int argc, char * argv[]){
 	}
 	*/
 
-	// Now we can prepare seq batch...
-
-	printf("Preparing seq batch...\n");
-	
-
 
 	int total_tokens = 2048;
 	int num_seqs = 1;
-
-	uint64_t metadata_buffer_size = get_seq_batch_metadata_buffer_size(num_seqs, total_tokens);
-
-	printf("Batch Config:\n\tTotal Tokens: %d\n\tNum Seqs: %d\n\n\tSeq Batch Metadata Buffer Size: %lu\n\n\n", total_tokens, num_seqs, metadata_buffer_size);
-
-	Seq_Batch * seq_batch = malloc(sizeof(Seq_Batch));
-	if (!seq_batch){
-		fprintf(stderr, "Error: failed to allocate seq_batch...\n");
-		return -1;
-	}
-
-	int max_total_local_expert_tokens = total_tokens;
-	ret = init_seq_batch_offsets(seq_batch, total_tokens, num_seqs, &(sys_blocks[0] -> config), max_total_local_expert_tokens);
-	if (ret){
-		fprintf(stderr, "Error: failed to init seq_batch offsets...\n");
-		return -1;
-	}
-
-
-	// 
-	ret = bind_seq_batch_metadata_buffer(seq_batch, cur_dev_mem, metadata_buffer_size);
-	if (ret){
-		fprintf(stderr, "Error: failed to bind seq_batch metadata buffer...\n");
-		return -1;
-	}
-
-	cur_dev_mem += metadata_buffer_size;
-
-	if ((dev_alignment > 0) && ((uint64_t) cur_dev_mem % dev_alignment != 0)) {
-		cur_dev_mem += dev_alignment - ((uint64_t) cur_dev_mem % dev_alignment);
-	}
-
-
-	// Populating the metadata buffer (on dev mem, via registered host mem)...
 
 	uint32_t * sys_token_ids = malloc(total_tokens * sizeof(uint32_t));
 
@@ -483,60 +444,162 @@ int main(int argc, char * argv[]){
 	}
 	fclose(f_labels);
 
+	// Now we can prepare seq batch...
+
+	printf("Preparing seq batch...\n");
+	
+
+
+	int max_tokens_per_chunk = 1024;
+	int num_chunks = MY_CEIL(total_tokens, max_tokens_per_chunk);
+	
+
+	uint64_t metadata_buffer_size = get_seq_batch_metadata_buffer_size(num_seqs, max_tokens_per_chunk);
+
+	printf("Batch Config:\n\tTotal Tokens: %d\n\tNum Seqs: %d\n\n\tSeq Batch Metadata Buffer Size: %lu\n\n\n", max_tokens_per_chunk, num_seqs, metadata_buffer_size);
+
+	Seq_Batch ** seq_batches = malloc(num_chunks * sizeof(Seq_Batch *));
+	if (!seq_batches){
+		fprintf(stderr, "Error: failed to allocate seq_batches...\n");
+		return -1;
+	}
+
+	int max_total_local_expert_tokens = max_tokens_per_chunk;
+
+	int remain_tokens = total_tokens;
+	int chunk_tokens;
+	int cur_token = 0;
 	int * sys_seq_positions = malloc(total_tokens * sizeof(int));
 
-	for (int i = 0; i < total_tokens; i++){
-		sys_seq_positions[i] = i;
+
+	// these are offsets relative to local q
+	// for all chunks except last should be [0, max_tokens_per_chunk
+	// for last chunk should be [0, remain_tokens]
+	int * cur_sys_q_seq_offsets = malloc(2 * sizeof(int));
+	// this should be [max_tokens_per_chunk]
+	// for all chunks except last
+	// for last chunk should be [remain_tokens]
+	int * cur_sys_q_seq_lens = malloc(sizeof(int));
+
+	// these are offsets relative to the global k context
+	// thus for chunk 0 should be [0, max_tokens_per_chunk]
+	// for chunk 1 should be [0, 2 * max_tokens_per_chunk]
+	// etc.
+	// until last chunk should be [0, total_tokens]
+	int * cur_sys_k_seq_offsets = malloc(2 * sizeof(int));
+	// this is size of keys to look over
+	// thus for chunk 0 should be [max_tokens_per_chunk]
+	// for chunk 1 should be [2 * max_tokens_per_chunk]
+	// etc.
+	// until last chunk should be [total_tokens]
+	int * cur_sys_k_seq_lens = malloc(sizeof(int));
+
+	uint32_t * cur_sys_token_ids = sys_token_ids;
+	uint32_t * cur_sys_labels = sys_labels;
+
+
+	// CREATE DEVICE CONTEXT THAT ALL CHUNKS WILL REFERENCE...
+
+	Seq_Batch_Context * seq_context = malloc(sizeof(Seq_Batch_Context));
+	if (!seq_context){
+		fprintf(stderr, "Error: failed to allocate seq_context...\n");
+		return -1;
 	}
 
-	int sys_q_seq_offsets[] = {0, 2048};
-	int sys_q_seq_lens[] = {2048};
-
-
-	int sys_k_seq_offsets[] = {0, 2048};
-	int sys_k_seq_lens[] = {2048};
-
-	int seq_id = 0;
-	int chunk_id = 0;
+	uint64_t context_buffer_size = 2 * (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_size;
+	seq_context -> contextBuffer = cur_dev_mem;
+	seq_context -> contextBufferBytes = context_buffer_size;
 	
-	printf("Populating Seq Batch's device metadata buffer with contents passed from host...\n");
+	seq_context -> cur_tokens_populated = 0;
+	seq_context -> total_context_tokens = total_tokens;
 
-	ret = populate_seq_batch_metadata_buffer(&dataflow_handle, inbound_stream_id, 
-                                        seq_batch,
+	seq_context -> x_k = cur_dev_mem;
+	seq_context -> x_v = seq_context -> x_k + (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_size;
+
+	cur_dev_mem += context_buffer_size;
+	
+	int seq_id = 0;
+
+	int * cur_sys_seq_positions = malloc(max_tokens_per_chunk * sizeof(int));
+
+	for (int i = 0; i < num_chunks; i++){
+		chunk_tokens = MY_MIN(remain_tokens, max_tokens_per_chunk);
+		remain_tokens -= chunk_tokens;
+
+		seq_batches[i] = malloc(sizeof(Seq_Batch));
+		if (!seq_batches[i]){
+			fprintf(stderr, "Error: failed to allocate seq_batch...\n");
+			return -1;
+		}
+
+		// set the context
+		seq_batches[i] -> context = seq_context;
+
+		ret = init_seq_batch_offsets(seq_batches[i], chunk_tokens, num_seqs, &(sys_blocks[0] -> config), max_total_local_expert_tokens);
+		if (ret){
+			fprintf(stderr, "Error: failed to init seq_batch offsets...\n");
+			return -1;
+		}
+
+		ret = bind_seq_batch_metadata_buffer(seq_batches[i], cur_dev_mem, metadata_buffer_size);
+		if (ret){
+			fprintf(stderr, "Error: failed to bind seq_batch metadata buffer...\n");
+			return -1;
+		}
+
+		cur_dev_mem += metadata_buffer_size;
+
+		if ((dev_alignment > 0) && ((uint64_t) cur_dev_mem % dev_alignment != 0)) {
+			cur_dev_mem += dev_alignment - ((uint64_t) cur_dev_mem % dev_alignment);
+		}
+
+		
+
+		for (int j = 0; j < chunk_tokens; j++){
+			cur_sys_seq_positions[j] = cur_token;
+			cur_token++;
+		}
+
+		cur_sys_q_seq_offsets[0] = 0;
+		cur_sys_q_seq_offsets[1] = chunk_tokens;
+		cur_sys_q_seq_lens[0] = chunk_tokens;
+
+		cur_sys_k_seq_offsets[0] = 0;
+		cur_sys_k_seq_offsets[1] = cur_token;
+		cur_sys_k_seq_lens[0] = cur_token;
+
+		ret = populate_seq_batch_metadata_buffer(&dataflow_handle, inbound_stream_id, 
+                                        seq_batches[i],
                                         cur_host_mem, metadata_buffer_size,
-                                        seq_id, chunk_id, total_tokens, num_seqs,
-                                        sys_token_ids, sys_labels,
-                                        sys_seq_positions, 
-                                        sys_q_seq_offsets, sys_q_seq_lens,
-                                        sys_k_seq_offsets, sys_k_seq_lens);
+                                        seq_id, i, chunk_tokens, num_seqs,
+                                        cur_sys_token_ids, cur_sys_labels,
+                                        cur_sys_seq_positions, 
+                                        cur_sys_q_seq_offsets, cur_sys_q_seq_lens,
+                                        cur_sys_k_seq_offsets, cur_sys_k_seq_lens);
 
-	if (ret){
-		fprintf(stderr, "Error: failed to populate seq_batch metadata buffer...\n");
-		return -1;
+		if (ret){
+			fprintf(stderr, "Error: failed to populate seq_batch metadata buffer for chunk #%d...\n", i);
+			return -1;
+		}
+
+		ret = (dataflow_handle.sync_stream)(&dataflow_handle, inbound_stream_id);
+		if (ret){
+			fprintf(stderr, "Error: failed to sync inbound stream after populating seq_batch metadata buffer for chunk #%d...\n", i);
+			return -1;
+		}
+
+		cur_sys_token_ids += chunk_tokens;
+		cur_sys_labels += chunk_tokens;
 	}
 
+	free(cur_sys_seq_positions);
+	free(cur_sys_q_seq_offsets);
+	free(cur_sys_q_seq_lens);
+	free(cur_sys_k_seq_offsets);
+	free(cur_sys_k_seq_lens);
 
-	// IF we are following up with embedding, ensure to wait for inbound stream....
-
-
-	printf("Waiting for data transfer of metadata buffer to complete before submitting onto compute stream...\n");
-
-	void * inbound_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, inbound_stream_id);
-	if (!inbound_stream_state){
-		fprintf(stderr, "Error: failed to get stream state...\n");
-		return -1;
-	}
-
-	ret = dataflow_handle.submit_dependency(&dataflow_handle, compute_stream_id, inbound_stream_state);
-	if (ret){
-		fprintf(stderr, "Error: failed to submit dependency...\n");
-		return -1;
-	}
-
-
-	// For now set seq_batch context to NULL to indicate no other context...
-
-	seq_batch -> context = NULL;
+	assert(remain_tokens == 0);
+	
 	/*
 
 	// For now just calling sync_stream to inspect outputs (with cuda-gdb...)
@@ -551,6 +614,7 @@ int main(int argc, char * argv[]){
 
 	printf("\n\nReady for embedding...\n");
 
+	// SKELETONS FOR OUTER STRUCTURES...
 
 	Transformer_Model_Input * model_input = malloc(sizeof(Transformer_Model_Input));
 	if (!model_input){
@@ -558,11 +622,12 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
-	model_input -> seq_batch = seq_batch;
+	// EACh TIME CHUNK GOES THROUGH EMBEDDING NEED TO FILL IN :
 	
-	uint64_t block_transition_size = (uint64_t) total_tokens * (uint64_t) model_dim * (uint64_t) block_dt_size;
+	//model_input -> seq_batch = seq_batches[i];
 
-	int num_block_transitions = 2;
+
+	int num_block_transitions = 2 * num_chunks;
 
 	Transformer_Block_Transition * sys_block_transitions = malloc(num_block_transitions * sizeof(Transformer_Block_Transition));
 	if (!sys_block_transitions){
@@ -575,22 +640,26 @@ int main(int argc, char * argv[]){
 		fprintf(stderr, "Error: failed to allocate block_transitions...\n");
 		return -1;
 	}
+	
+	uint64_t block_transition_size = (uint64_t) max_tokens_per_chunk * (uint64_t) model_dim * (uint64_t) block_dt_size;
 
-	for (int i = 0; i < num_block_transitions; i++){
-		sys_block_transitions[i].seq_batch = seq_batch;
+
+	
+	for (int i = 0; i < num_block_transitions; i++){;
 		sys_block_transitions[i].X = cur_host_mem;
+		sys_block_transitions[i].seq_batch = seq_batches[i / 2];
 		cur_host_mem += block_transition_size;
 
-		block_transitions[i].seq_batch = seq_batch;
 		block_transitions[i].X = cur_dev_mem;
+		block_transitions[i].seq_batch = seq_batches[i / 2];
 		cur_dev_mem += block_transition_size;
 	}
 
+	// each block transition needs to fill in:
+
 
 	// TODO:
-
 	// need to save and bind activations...
-
 	// IGNORING SENDING BACK SAVED ACTIVATIONS FOR NOW...
 
 	int num_saved_activation_buffers = 2;
@@ -600,10 +669,10 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
-	uint64_t saved_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batch);
+	uint64_t saved_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batches[0]);
 	
 	for (int i = 0; i < num_saved_activation_buffers; i++){
-		ret = bind_seq_batch_saved_activations_buffer(seq_batch, &(saved_activations[i]), cur_dev_mem, saved_activations_buffer_size, i);
+		ret = bind_seq_batch_saved_activations_buffer(seq_batches[0], &(saved_activations[i]), cur_dev_mem, saved_activations_buffer_size, i);
 		if (ret){
 			fprintf(stderr, "Error: failed to bind seq_batch saved_activations buffer...\n");
 			return -1;
@@ -613,7 +682,7 @@ int main(int argc, char * argv[]){
 	}
 	
 
-	uint64_t activation_workspace_size = get_seq_batch_activation_workspace_buffer_size(seq_batch, &(blocks[0] -> config));
+	uint64_t activation_workspace_size = get_seq_batch_activation_workspace_buffer_size(seq_batches[0], &(blocks[0] -> config));
 	Seq_Batch_Activation_Workspace * activation_workspace = malloc(sizeof(Seq_Batch_Activation_Workspace));
 	if (!activation_workspace){
 		fprintf(stderr, "Error: failed to allocate activation_workspace...\n");
@@ -624,7 +693,7 @@ int main(int argc, char * argv[]){
 	activation_workspace -> activationWorkspaceBytes = activation_workspace_size;
 
 	activation_workspace -> x_temp = cur_dev_mem;
-	activation_workspace -> x_temp_mlp = activation_workspace -> x_temp + ((uint64_t) total_tokens * (uint64_t) model_dim * (uint64_t) block_dt_size);
+	activation_workspace -> x_temp_mlp = activation_workspace -> x_temp + ((uint64_t) max_tokens_per_chunk * (uint64_t) model_dim * (uint64_t) block_dt_size);
 	
 	cur_dev_mem += activation_workspace_size;
 
@@ -656,29 +725,32 @@ int main(int argc, char * argv[]){
 		fprintf(stderr, "Error: failed to allocate head_activations...\n");
 		return -1;
 	}
-
-	head_activations -> num_tokens = total_tokens;
+	
 	head_activations -> buffer = cur_dev_mem;
 	head_activations -> head_norm_out = head_activations -> buffer;
-	uint64_t head_norm_out_size = (uint64_t) total_tokens * (uint64_t) model_dim * (uint64_t) block_dt_size;
+	uint64_t head_norm_out_size = (uint64_t) max_tokens_per_chunk * (uint64_t) model_dim * (uint64_t) block_dt_size;
 	cur_dev_mem += head_norm_out_size;
 	head_activations -> head_norm_weighted_sums = cur_dev_mem;
-	uint64_t head_norm_weighted_sums_size = (uint64_t) total_tokens * (uint64_t) sizeof(float);
+	uint64_t head_norm_weighted_sums_size = (uint64_t) max_tokens_per_chunk * (uint64_t) sizeof(float);
 	cur_dev_mem += head_norm_weighted_sums_size;
 	head_activations -> head_norm_rms_vals = cur_dev_mem;
-	uint64_t head_norm_rms_vals_size = (uint64_t) total_tokens * (uint64_t) sizeof(float);
+	uint64_t head_norm_rms_vals_size = (uint64_t) max_tokens_per_chunk * (uint64_t) sizeof(float);
 	cur_dev_mem += head_norm_rms_vals_size;
 	head_activations -> head_out = cur_dev_mem;
-	uint64_t head_out_size = (uint64_t) total_tokens * (uint64_t) vocab_size * (uint64_t) block_dt_size;
+	uint64_t head_out_size = (uint64_t) max_tokens_per_chunk * (uint64_t) vocab_size * (uint64_t) block_dt_size;
 	cur_dev_mem += head_out_size;
 	head_activations -> kernelWorkspace = kernelWorkspace;
 	head_activations -> kernelWorkspaceBytes = kernelWorkspaceBytes;
+
+
+	// EACH HEAD ACTIVATIONS STRUCT NEEDS TO BE FILLED IN WITH:
+	// head_activations -> num_tokens = total_tokens;
 	
 
 	// PREPARING SPECIAL MODEL OUTPUT STRUCT...
 
 
-	uint64_t logits_size = (uint64_t) total_tokens * (uint64_t) vocab_size * block_dt_bwd_size;
+	uint64_t logits_size = (uint64_t) max_tokens_per_chunk * (uint64_t) vocab_size * block_dt_bwd_size;
 	void * sys_logits = cur_host_mem;
 	cur_host_mem += logits_size;
 
@@ -688,26 +760,98 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
-	model_output -> seq_batch = seq_batch;
 	model_output -> logits = cur_dev_mem;
 	cur_dev_mem += logits_size;
+
+
+	// EACH MODEL OUTPUT STRUCT NEEDS TO BE FILLED IN WITH:
+	// model_output -> seq_batch = seq_batches[i];
 
 
 
 	// 1.) DOING EMBEDDDING....
 
-	printf("\n\nSubmitting embedding...\n\n");
+	// for layer 0 we include the embedding table...
 
-	ret = dataflow_submit_transformer_embedding(&dataflow_handle, compute_stream_id,
+	for (int i = 0; i < num_chunks; i++){
+		printf("\n\nSubmitting embedding for chunk #%d...\n\n", i);
+		
+		model_input -> seq_batch = seq_batches[i];
+
+		ret = dataflow_submit_transformer_embedding(&dataflow_handle, compute_stream_id,
 											model_input,
 											embedding_table,
-											&(block_transitions[0]));
-	if (ret){
-		fprintf(stderr, "Error: failed to submit transformer embedding...\n");
-		return -1;
+											&(block_transitions[2 * i]));
+		if (ret){
+			fprintf(stderr, "Error: failed to submit transformer embedding...\n");
+			return -1;
+		}
+
+		printf("\n\nSubmitting layer #0 for chunk #%d...\n\n", i);
+
+		ret = dataflow_submit_transformer_block(&dataflow_handle, compute_stream_id, 
+								&(block_transitions[2 * i]), 
+								blocks[0], 
+								activations, 
+								&(block_transitions[2 * i + 1]));
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit transformer block...\n");
+			return -1;
+		}
+
+
 	}
 
-	// now save the block transition, first ensure sync with compute stream...
+	// 2.) DOING CORE BLOCKS...
+	for (int k = 1; k < n_layers; k++){
+		for (int i = 0; i < num_chunks; i++){
+			
+			printf("\n\nSubmitting transformer for chunk #%d, block #%d...!\n\n", i, k);
+			
+
+			ret = dataflow_submit_transformer_block(&dataflow_handle, compute_stream_id, 
+									&(block_transitions[2 * i + (k % 2)]), 
+									blocks[k], 
+									activations, 
+									&(block_transitions[2 * i + ((k + 1) % 2)])) ;
+
+			if (ret){
+				fprintf(stderr, "Error: failed to submit transformer block for chunk #%d, block #%d...\n", i, k);
+				return -1;
+			}
+		}
+	}
+
+	// 3.) NOW DOING HEAD, FOR NOW IN REVERSE ORDER...
+
+	Transformer_Block_Transition * final_block_output_transition = &(block_transitions[2 * num_chunks - 1]);
+
+	for (int i = num_chunks - 1; i >= 0; i--){
+		printf("\n\nSubmitting head for chunk #%d...\n\n", i);
+
+		final_block_output_transition = &(block_transitions[2 * i + ((n_layers + 1) % 2)]);
+
+		model_output -> seq_batch = seq_batches[i];
+		head_activations -> num_tokens = seq_batches[i] -> total_tokens;
+	
+
+		ret = dataflow_submit_transformer_head(&dataflow_handle, compute_stream_id,
+                        						final_block_output_transition, head,
+                        						head_activations, 
+                        						model_output,
+												// during interference these would be NULL
+												NULL,
+												NULL);
+
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit transformer head...\n");
+			return -1;
+		}
+	}
+
+	printf("Finished enqueueing all dataflow operations! Waiting to sync...\n\n");
 
 	ret = dataflow_handle.sync_stream(&dataflow_handle, compute_stream_id);
 	if (ret){
@@ -715,104 +859,7 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
-	ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, outbound_stream_id, sys_block_transitions[0].X, block_transitions[0].X, block_transition_size);
-	if (ret){
-		fprintf(stderr, "Error: failed to submit outbound transfer for block transition...\n");
-		return -1;
-	}
-
-	ret = dataflow_handle.sync_stream(&dataflow_handle, outbound_stream_id);
-	if (ret){
-		fprintf(stderr, "Error: failed to sync outbound stream...\n");
-		return -1;
-	}
-
-	// save the block transitions...
-
-	ret = save_host_matrix("test_transformer_data/example_embed_output.dat", sys_block_transitions[0].X, total_tokens, model_dim, block_dt);
-	if (ret){
-		fprintf(stderr, "Error: failed to save example embed output...\n");
-		return -1;
-	}
-
-	// 2.) DOING BLOCKS...
-
-	for (int i = 0; i < n_layers; i++){
-		printf("\n\nSubmitting transformer block #%d...!\n\n", i);
-	
-
-		ret = dataflow_submit_transformer_block(&dataflow_handle, compute_stream_id, 
-								&(block_transitions[i % 2]), 
-								blocks[i], 
-								activations, 
-								&(block_transitions[(i + 1) % 2]));
-
-		if (ret){
-			fprintf(stderr, "Error: failed to submit transformer block...\n");
-			return -1;
-		}
-	}
-
-
-
-	Transformer_Block_Transition * final_block_output_transition = &(block_transitions[n_layers % 2]);
-
-	// 3.) DOING HEAD...
-
-	printf("\n\nSubmitting head...\n\n");
-
-	ret = dataflow_submit_transformer_head(&dataflow_handle, compute_stream_id,
-                        final_block_output_transition, head,
-                        head_activations, 
-                        model_output,
-						// during interference these would be NULL
-						NULL,
-						NULL);
-
-
-	if (ret){
-		fprintf(stderr, "Error: failed to submit transformer head...\n");
-		return -1;
-	}
-
-	void * compute_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, compute_stream_id);
-	if (!compute_stream_state){
-		fprintf(stderr, "Error: failed to get compute stream state...\n");
-		return -1;
-	}
-
-	ret = dataflow_handle.submit_dependency(&dataflow_handle, outbound_stream_id, compute_stream_state);
-	if (ret){
-		fprintf(stderr, "Error: failed to submit dependency...\n");
-		return -1;
-	}
-
-
-
-	ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, outbound_stream_id, sys_logits, model_output -> logits, logits_size);
-	if (ret){
-		fprintf(stderr, "Error: failed to submit outbound transfer for logits...\n");
-		return -1;
-	}
-
-
-	printf("Ensuring outbound transfer arrives before saving logits...\n\n");
-
-	ret = dataflow_handle.sync_stream(&dataflow_handle, outbound_stream_id);
-	if (ret){
-		fprintf(stderr, "Error: failed to sync outbound stream...\n");
-		return -1;
-	}
-
-	// save the block transitions...
-
-	ret = save_host_matrix("test_transformer_data/example_logits.dat", sys_logits, total_tokens, vocab_size, block_dt);
-	if (ret){
-		fprintf(stderr, "Error: failed to save example logits...\n");
-		return -1;
-	}
-
-	printf("Successfully saved logits!\n\nForward pass complete!!!\n\n");
+	printf("All operations complete! Exiting...\n\n");
 
 	return 0;
 }
