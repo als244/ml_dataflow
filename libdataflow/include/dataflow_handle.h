@@ -98,7 +98,7 @@ struct dataflow_handle {
 	// a higher layer of memory management. Bulk call to alloc that then can be oragnized elsewhere...
 	void * (*alloc_mem)(Dataflow_Handle * dataflow_handle, uint64_t size_bytes);
 	void (*free_mem)(Dataflow_Handle * dataflow_handle, void * dev_ptr);
-	int (*set_mem)(Dataflow_Handle * dataflow_handle, int stream_id, void * host_ptr, uint8_t val, uint64_t size_bytes);
+	int (*set_mem)(Dataflow_Handle * dataflow_handle, int stream_id, void * dev_ptr, uint8_t val, uint64_t size_bytes);
 	// The host pointer should be on same numa node as device
 	// ensures good transfer performance by page-locking host memory in way that streaming device driver can understand
 	int (*enable_access_to_host_mem)(Dataflow_Handle * dataflow_handle, void * host_ptr, uint64_t size_bytes, unsigned int flags);
