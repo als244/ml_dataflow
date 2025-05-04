@@ -64,7 +64,8 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 								Transformer_Block_Transition * inp_grad_stream, 
 								Seq_Batch_Saved_Activations * fwd_activations, Seq_Batch_Context * fwd_context,
 								Transformer_Block_Activations * grad_activations,
-								Transformer_Block * grad_weights);
+								Transformer_Block * grad_weights,
+								Transformer_Block_Transition * next_grad_stream);
 
 int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int compute_stream_id,
                                 Transformer_Block_Transition * grad_stream,

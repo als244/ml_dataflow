@@ -305,7 +305,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "attn_norm", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_attn_norm", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save attention nor file...\n");
 			return -1;
@@ -1030,7 +1030,8 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 								Transformer_Block_Transition * inp_grad_stream, 
 								Seq_Batch_Saved_Activations * fwd_activations, Seq_Batch_Context * fwd_context,
 								Transformer_Block_Activations * grad_activations,
-								Transformer_Block * grad_weights) {
+								Transformer_Block * grad_weights,
+								Transformer_Block_Transition * next_grad_stream) {
 
 	
 	int ret;
@@ -1081,6 +1082,14 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 			fprintf(stderr, "Error: failed to save x_upstream_grad file...\n");
 			return -1;
 		}
+	}
+
+	// Will be modifying the input gradient stream (adding to it, but need to save it for the bwd_w pass, so make a copy and put it in the next gradient stream)
+
+	ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, next_grad_stream -> X, inp_grad_stream -> X, total_q * model_dim * x_el_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit memcpy to update the the working gradient stream...\n");
+		return -1;
 	}
 
 
@@ -1191,14 +1200,14 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 							transformer_block -> w_ffn_norm,
 							fwd_activations -> x_o,  // Input to norm
 							activation_workspace -> x_temp,  // Upstream gradient
-							inp_grad_stream -> X);                    // Final output gradient
+							next_grad_stream -> X);                    // Final output gradient
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit ffn norm backward...\n");
 		return -1;
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_BWD_LAYER && ((BWD_LAYER_ID_TO_SAVE == -1) || (layer_id == BWD_LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_ffn_norm_inp_plus_upstream_grad", inp_grad_stream -> X, total_q, model_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_ffn_norm_inp_plus_upstream_grad", next_grad_stream -> X, total_q, model_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_ffn_norm_inp_plus_upstream_grad file...\n");
 			return -1;
@@ -1454,14 +1463,14 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 							transformer_block -> w_attn_norm,
 							fwd_activations -> x_inp,  // Input to norm
 							activation_workspace -> x_temp,  // Upstream gradient
-							inp_grad_stream -> X);                    // Final output gradient
+							next_grad_stream -> X);                    // Final output gradient
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit attention norm backward...\n");
 		return -1;
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_BWD_LAYER && ((BWD_LAYER_ID_TO_SAVE == -1) || (layer_id == BWD_LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_attn_norm_inp_plus_ffn_norm_inp_plus_upstream_grad", inp_grad_stream -> X, total_q, model_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_next_grad_stream", next_grad_stream -> X, total_q, model_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_attn_norm_inp_plus_ffn_norm_inp_plus_upstream_grad file...\n");
 			return -1;
