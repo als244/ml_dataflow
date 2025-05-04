@@ -19,7 +19,7 @@ random.seed(SEED)
 MAX_SEQ_LEN = 2048
 MAX_BATCH_SIZE = 1
 
-MODEL_PATH = "./models/8B_inst/"
+MODEL_PATH = "./models/1B_inst/"
 
 with open(MODEL_PATH + "params.json", "r") as f:
 	model_args = json.loads(f.read())

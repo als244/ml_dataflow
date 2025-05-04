@@ -125,6 +125,7 @@ int main(int argc, char * argv[]){
 
 	// llama3 70B config
 	/*
+	int n_layers = 80;
 	int num_q_heads = 64;
 	int num_kv_heads = 8;
 	int head_dim = 128;
@@ -132,14 +133,25 @@ int main(int argc, char * argv[]){
 	*/
 
 	// llama3 8b config
+	/*
+	int n_layers = 32;
 	int num_q_heads = 32;
 	int num_kv_heads = 8;
 	int head_dim = 128;
 	int ffn_dim = 14336;
 	int model_dim = num_q_heads * head_dim;
 	int kv_dim = num_kv_heads * head_dim;
+	*/
 
-	int n_layers = 32;
+
+	// llama3 1B config
+	int n_layers = 16;
+	int num_q_heads = 32;
+	int num_kv_heads = 8;
+	int head_dim = 64;
+	int ffn_dim = 8192;
+	int model_dim = num_q_heads * head_dim;
+	int kv_dim = num_kv_heads * head_dim;
 
 	int vocab_size = 128256;
 
@@ -182,7 +194,7 @@ int main(int argc, char * argv[]){
 	cur_host_mem += sys_embedding_table -> embedding_table_size;
 
 
-	FILE * fp = fopen("../data/8B/embed/tok_embeddings.weight", "rb");
+	FILE * fp = fopen("../data/1B/embed/tok_embeddings.weight", "rb");
 	if (!fp){
 		fprintf(stderr, "Error: failed to open data/embed/tok_embedding.weight...\n");
 		return -1;
@@ -247,7 +259,7 @@ int main(int argc, char * argv[]){
 
 	printf("Binding all sys transformer blocks...\n");
 
-	char * layer_base_path = "../data/8B/layers";
+	char * layer_base_path = "../data/1B/layers";
 
 	char layer_path[PATH_MAX];
 	for (int i = 0; i < n_layers; i++){
@@ -337,7 +349,7 @@ int main(int argc, char * argv[]){
 
 	cur_host_mem += combined_head_size;
 
-	fp = fopen("../data/8B/head/combined_head.weight", "rb");
+	fp = fopen("../data/1B/head/combined_head.weight", "rb");
 	if (!fp){
 		fprintf(stderr, "Error: failed to open data/head/combined_head.weight...\n");
 		return -1;
