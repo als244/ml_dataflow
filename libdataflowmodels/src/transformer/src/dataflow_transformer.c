@@ -11,6 +11,8 @@
 
 // DETERMINES WHAT DATA TO SAVE...
 #define TO_SAVE_EMBEDDING 1
+#define TO_SAVE_EMBEDDING_BWD 1
+
 // if 0, then no layers will be saved
 #define TO_SAVE_LAYER 1
 // if save layer is 1, then layer id specifies which layer to save
@@ -23,6 +25,9 @@
 
 #define TO_SAVE_BWD_LAYER 1
 #define BWD_LAYER_ID_TO_SAVE -1
+
+
+#define TO_SAVE_MODEL_GRADS 1
 
 
 
@@ -57,27 +62,68 @@ static int save_file(Dataflow_Handle * dataflow_handle, int stream_id, int layer
 
 	char full_filename[1024];
 
-	if (layer_id >= 0){
-		if (is_bwd){
-			sprintf(full_filename, "%s/layers_bwd/%d/seq_%d_chunk_%d_%s.dat", DATA_SAVE_DIR, layer_id, seq_id, chunk_id, filename);
-		} else {
-			sprintf(full_filename, "%s/layers_fwd/%d/seq_%d_chunk_%d_%s.dat", DATA_SAVE_DIR, layer_id, seq_id, chunk_id, filename);
-		}
-	}
-	// embed or head 
-	else {
-		if (layer_id == -2){
+	// model weights!
+	if (seq_id == -1){
+		if (layer_id >= 0){
 			if (is_bwd){
-				sprintf(full_filename, "%s/embedding_bwd/seq_%d_chunk_%d_%s.dat", DATA_SAVE_DIR, seq_id, chunk_id, filename);
-			} else {
-				sprintf(full_filename, "%s/embedding_fwd/seq_%d_chunk_%d_%s.dat", DATA_SAVE_DIR, seq_id, chunk_id, filename);
+				sprintf(full_filename, "%s/model_grads/layers/%d/%s.dat", DATA_SAVE_DIR, layer_id, filename);
+			}
+			else{
+				sprintf(full_filename, "%s/model/layers/%d/%s.dat", DATA_SAVE_DIR, layer_id, filename);
 			}
 		}
 		else{
+			// layer id == -2 => embedding
+			if (layer_id == -2){
+				if (is_bwd){
+					sprintf(full_filename, "%s/model_grads/embedding/%s.dat", DATA_SAVE_DIR, filename);
+				}
+				else{
+					sprintf(full_filename, "%s/model/embedding/%s.dat", DATA_SAVE_DIR, filename);
+				}
+			}
+			// layer id == -1 => head
+			else if (layer_id == -1){
+				if (is_bwd){
+					sprintf(full_filename, "%s/model_grads/head/%s.dat", DATA_SAVE_DIR, filename);
+				}
+				else{
+					sprintf(full_filename, "%s/model/head/%s.dat", DATA_SAVE_DIR, filename);
+				}
+			}
+			else{
+				fprintf(stderr, "Error: invalid layer id (should be -2 (embedding), -1 (head), or layer id >= 0)): %d\n", layer_id);
+				return -1;
+			}
+		}
+	}
+	else{
+		if (layer_id >= 0){
 			if (is_bwd){
-				sprintf(full_filename, "%s/head_bwd/seq_%d_chunk_%d_%s.dat", DATA_SAVE_DIR, seq_id, chunk_id, filename);
+				sprintf(full_filename, "%s/layers_bwd/%d/seq_%d_chunk_%d_%s.dat", DATA_SAVE_DIR, layer_id, seq_id, chunk_id, filename);
 			} else {
-				sprintf(full_filename, "%s/head_fwd/seq_%d_chunk_%d_%s.dat", DATA_SAVE_DIR, seq_id, chunk_id, filename);
+				sprintf(full_filename, "%s/layers_fwd/%d/seq_%d_chunk_%d_%s.dat", DATA_SAVE_DIR, layer_id, seq_id, chunk_id, filename);
+			}
+		}
+		// embed or head 
+		else {
+			if (layer_id == -2){
+				if (is_bwd){
+					sprintf(full_filename, "%s/embedding_bwd/seq_%d_chunk_%d_%s.dat", DATA_SAVE_DIR, seq_id, chunk_id, filename);
+				} else {
+					sprintf(full_filename, "%s/embedding_fwd/seq_%d_chunk_%d_%s.dat", DATA_SAVE_DIR, seq_id, chunk_id, filename);
+				}
+			}
+			else if (layer_id == -1){
+				if (is_bwd){
+					sprintf(full_filename, "%s/head_bwd/seq_%d_chunk_%d_%s.dat", DATA_SAVE_DIR, seq_id, chunk_id, filename);
+				} else {
+					sprintf(full_filename, "%s/head_fwd/seq_%d_chunk_%d_%s.dat", DATA_SAVE_DIR, seq_id, chunk_id, filename);
+				}
+			}
+			else{
+				fprintf(stderr, "Error: invalid layer id (should be -2 (embedding), -1 (head), or layer id >= 0)): %d\n", layer_id);
+				return -1;
 			}
 		}
 	}
@@ -105,10 +151,6 @@ static int save_file(Dataflow_Handle * dataflow_handle, int stream_id, int layer
 	free(host_ptr);
 
 	return 0;
-	
-	
-	
-	
 }
 
 
@@ -857,6 +899,14 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
         return ret;
     }
 
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+		ret = save_file(dataflow_handle, compute_stream_id, -1, -1, -1, true, "w_head", grad_transformer_head -> w_head, embedding_size, vocab_size, bwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save head w_head file...\n");
+			return -1;
+		}
+	}
+
 	// Now repurpose head_activation -> head_norm_out as the derivative of the norm
 
 	if (TO_PRINT){
@@ -885,7 +935,7 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
     }
 
 	if (TO_SAVE_DATA && TO_SAVE_HEAD_BWD){
-		ret = save_file(dataflow_handle, compute_stream_id, -1, seq_id, chunk_id, true, "x_head_proj_inp", model_output -> logits, total_tokens, vocab_size, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, -1, seq_id, chunk_id, true, "x_head_proj_inp", head_activations -> head_norm_out, total_tokens, embedding_size, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head x_head_proj_inp file...\n");
 			return -1;
@@ -916,7 +966,7 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
     }
 
 	if (TO_SAVE_DATA && TO_SAVE_HEAD_BWD){
-		ret = save_file(dataflow_handle, compute_stream_id, -1, seq_id, chunk_id, true, "x_head_norm_inp", grad_stream -> X, total_tokens, embedding_size, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, -1, seq_id, chunk_id, true, "x_head_norm_inp", grad_stream -> X, total_tokens, embedding_size, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head x_head_norm_inp file...\n");
 			return -1;
@@ -941,6 +991,14 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
         fprintf(stderr, "Error: Failed to submit bwd w rms norm in transformer head...\n");
         return ret;
     }
+
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+		ret = save_file(dataflow_handle, compute_stream_id, -1, -1, -1, true, "w_head_norm", grad_transformer_head -> w_head_norm, 1, embedding_size, bwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save head w_head_norm file...\n");
+			return -1;
+		}
+	}
 
 	// FINAL OUTPUT GRADIENT IS IN grad_stream -> X!!!
 
@@ -1158,6 +1216,14 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	if (ret){
 		fprintf(stderr, "Error: failed to submit ffn norm weight gradient computation during bwd_x...\n");
 		return -1;
+	}
+
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "w_ffn_norm", grad_weights -> w_ffn_norm, 1, model_dim, bwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save head w_ffn_norm file...\n");
+			return -1;
+		}
 	}
 
 	// 6. Backprop through attention output projection
@@ -1402,6 +1468,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 		}
 	}
 
+
 	// While we have the correct upstream gradient, also do bwd_w for attn norm
 	ret = dataflow_submit_default_rms_norm_bwd_w(dataflow_handle, compute_stream_id,
 								bwd_dt, bwd_dt,
@@ -1413,6 +1480,14 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	if (ret){
 		fprintf(stderr, "Error: failed to submit attention norm weight gradient computation during bwd_w...\n");
 		return -1;
+	}
+
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, -1, -1, true, "w_attn_norm", grad_weights -> w_attn_norm, 1, model_dim, bwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save head w_attn_norm file...\n");
+			return -1;
+		}
 	}
 
 	// while we still the layer weights, recompute the RMS norms 
@@ -1515,6 +1590,14 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
         return -1;
     }
 
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, -1, -1, true, "w_2", (grad_weights -> w_2)[0], ffn_dim, model_dim, bwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save head w_2 file...\n");
+			return -1;
+		}
+	}
+
     // 2. FFN w1 and w3 weight gradients after SwiGLU
     ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
                     bwd_dt, bwd_dt, bwd_dt, bwd_dt,
@@ -1529,6 +1612,14 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
         return -1;
     }
 
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, -1, -1, true, "w_1", (grad_weights -> w_1)[0], model_dim, ffn_dim, bwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save head w_1 file...\n");
+			return -1;
+		}
+	}
+
     ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
                     bwd_dt, bwd_dt, bwd_dt, bwd_dt,
                     compute_dt,
@@ -1541,6 +1632,14 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
         fprintf(stderr, "Error: failed to submit w3 weight gradient computation...\n");
         return -1;
     }
+
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, -1, -1, true, "w_3", (grad_weights -> w_3)[0], model_dim, ffn_dim, bwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save head w_3 file...\n");
+			return -1;
+		}
+	}
 
     // 3. FFN RMS Norm weight gradients -- already done in bwd_x while we hda correct streaming grad
 
@@ -1558,6 +1657,14 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
         return -1;
     }
 
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, -1, -1, true, "w_o", grad_weights -> w_o, model_dim, model_dim, bwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save head w_o file...\n");
+			return -1;
+		}
+	}
+
     // 5. Q, K, V projection weight gradients
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
                     bwd_dt, bwd_dt, bwd_dt, bwd_dt,
@@ -1572,6 +1679,14 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
         return -1;
     }
 
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, -1, -1, true, "w_v", grad_weights -> w_v, model_dim, kv_dim, bwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save head w_v file...\n");
+			return -1;
+		}
+	}
+
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
                     bwd_dt, bwd_dt, bwd_dt, bwd_dt,
                     compute_dt,
@@ -1584,6 +1699,14 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
         fprintf(stderr, "Error: failed to submit K projection weight gradient computation...\n");
         return -1;
     }
+
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, -1, -1, true, "w_k", grad_weights -> w_k, model_dim, kv_dim, bwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save head w_k file...\n");
+			return -1;
+		}
+	}
 
 
     ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
@@ -1598,6 +1721,14 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
         fprintf(stderr, "Error: failed to submit Q projection weight gradient computation...\n");
         return -1;
     }
+
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, -1, -1, true, "w_q", grad_weights -> w_q, model_dim, model_dim, bwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save head w_q file...\n");
+			return -1;
+		}
+	}
 
     // 6. Attention RMS Norm weight gradients
     // -- already done in bwd_x while we had the correct streaming grad
@@ -1616,6 +1747,7 @@ int dataflow_submit_transformer_embedding_bwd_w(Dataflow_Handle * dataflow_handl
 
 		Embedding_Config * embedding_table_config = grad_embedding_table -> config;
 
+		int vocab_size = embedding_table_config -> vocab_size;
 		int embedding_dim = embedding_table_config -> embedding_size;
 
 		Seq_Batch_Embedding_Config * batch_embedding_config = &(seq_batch -> embedding_config);
@@ -1635,6 +1767,14 @@ int dataflow_submit_transformer_embedding_bwd_w(Dataflow_Handle * dataflow_handl
 		if (ret){
 			fprintf(stderr, "Error: failed to submit embedding table bwd_w...\n");
 			return -1;
+		}
+
+		if (TO_SAVE_DATA && TO_SAVE_EMBEDDING_BWD){
+			ret = save_file(dataflow_handle, compute_stream_id, -2, -1, -1, true, "tok_embeddings", grad_embedding_table -> embedding_table, vocab_size, embedding_dim, embed_dt);
+			if (ret){
+				fprintf(stderr, "Error: failed to save embedding table bwd_w file...\n");
+				return -1;
+			}
 		}
 
 		return 0;
