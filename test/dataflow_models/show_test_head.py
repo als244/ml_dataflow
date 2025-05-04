@@ -2,24 +2,25 @@ import numpy as np
 import torch
 import sys
 
-if len(sys.argv) != 4:
-    print("Error. Usage: python show_test_layer_inp_out.py <num_tokens> <model_dim> <vocab_size>")
+if len(sys.argv) != 5:
+    print("Error. Usage: python show_test_layer_inp_out.py <model_dim> <vocab_size> <seq_id> <chunk_id>")
     sys.exit(1)
 
-num_tokens = int(sys.argv[1])
-model_dim = int(sys.argv[2])
-vocab_size = int(sys.argv[3])
+model_dim = int(sys.argv[1])
+vocab_size = int(sys.argv[2])
+seq_id = int(sys.argv[3])
+chunk_id = int(sys.argv[4])
 
-head_inp_path = f"test_transformer_data/head_fwd/x_inp.dat"
-head_norm_path = f"test_transformer_data/head_fwd/x_norm.dat"
-head_out_path = f"test_transformer_data/head_fwd/x_head_out.dat"
-logits_path = f"test_transformer_data/head_fwd/x_logits.dat"
+head_inp_path = f"test_transformer_data/head_fwd/seq_{seq_id}_chunk_{chunk_id}_x_inp.dat"
+head_norm_path = f"test_transformer_data/head_fwd/seq_{seq_id}_chunk_{chunk_id}_x_norm.dat"
+head_out_path = f"test_transformer_data/head_fwd/seq_{seq_id}_chunk_{chunk_id}_x_head_out.dat"
+logits_path = f"test_transformer_data/head_fwd/seq_{seq_id}_chunk_{chunk_id}_x_logits.dat"
 
 
-np_inp = np.fromfile(head_inp_path, dtype=np.uint16).reshape(num_tokens, model_dim)
-np_norm = np.fromfile(head_norm_path, dtype=np.uint16).reshape(num_tokens, model_dim)
-np_head_out = np.fromfile(head_out_path, dtype=np.uint16).reshape(num_tokens, vocab_size)
-np_logits = np.fromfile(logits_path, dtype=np.uint16).reshape(num_tokens, vocab_size)
+np_inp = np.fromfile(head_inp_path, dtype=np.uint16).reshape(-1, model_dim)
+np_norm = np.fromfile(head_norm_path, dtype=np.uint16).reshape(-1, model_dim)
+np_head_out = np.fromfile(head_out_path, dtype=np.uint16).reshape(-1, vocab_size)
+np_logits = np.fromfile(logits_path, dtype=np.uint16).reshape(-1, vocab_size)
 
 
 t_inp = torch.from_numpy(np_inp).view(torch.bfloat16)

@@ -94,8 +94,8 @@ int main(int argc, char * argv[]){
 	//DataflowDatatype block_dt = DATAFLOW_FP16;
 	//DataflowDatatype block_dt_bwd = DATAFLOW_FP16;
 
-	DataflowDatatype block_dt = DATAFLOW_FP32;
-	DataflowDatatype block_dt_bwd = DATAFLOW_FP32;
+	DataflowDatatype block_dt = DATAFLOW_BF16;
+	DataflowDatatype block_dt_bwd = DATAFLOW_BF16;
 
 	size_t block_dt_size = dataflow_sizeof_element(block_dt);
 	size_t block_dt_bwd_size = dataflow_sizeof_element(block_dt_bwd);
