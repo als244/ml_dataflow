@@ -1,16 +1,18 @@
 
 #include "dataflow_transformer.h"
-#define TO_PRINT 1
+
+// toggle to print out before submitting any ops...
+#define TO_PRINT 0
 
 // meta-toggle required to be set to 1 to save any data
 // when set to 0, nothing will be saved
-#define TO_SAVE_DATA 1
+#define TO_SAVE_DATA 0
 
 
 // DETERMINES WHAT DATA TO SAVE...
-#define TO_SAVE_EMBEDDING 0
+#define TO_SAVE_EMBEDDING 1
 // if 0, then no layers will be saved
-#define TO_SAVE_LAYER 0
+#define TO_SAVE_LAYER 1
 // if save layer is 1, then layer id specifies which layer to save
 // if -1, then all layers will be saved
 #define LAYER_ID_TO_SAVE -1
@@ -802,7 +804,7 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
     }
 
 	if (TO_SAVE_DATA && TO_SAVE_HEAD){
-		ret = save_file(dataflow_handle, compute_stream_id, -1, seq_id, chunk_id, false, "x_logits_loss", model_output -> logits, total_tokens, vocab_size, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, -1, seq_id, chunk_id, true, "x_logits_loss", model_output -> logits, total_tokens, vocab_size, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head x_logits_loss file...\n");
 			return -1;
