@@ -1653,13 +1653,13 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 			return -1;
 		}
 
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_fwd_k", fwd_context -> x_k, total_q, kv_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_fwd_k", fwd_context -> x_k, total_k, kv_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_fwd_k file...\n");
 			return -1;
 		}
 
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_fwd_v", fwd_context -> x_v, total_q, kv_dim, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_fwd_v", fwd_context -> x_v, total_k, kv_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_fwd_v file...\n");
 			return -1;
