@@ -749,9 +749,6 @@ int main(int argc, char * argv[]){
 	head_activations -> head_norm_out = head_activations -> buffer;
 	uint64_t head_norm_out_size = (uint64_t) max_tokens_per_chunk * (uint64_t) model_dim * (uint64_t) block_dt_size;
 	cur_dev_mem += head_norm_out_size;
-	head_activations -> head_norm_weighted_sums = cur_dev_mem;
-	uint64_t head_norm_weighted_sums_size = (uint64_t) max_tokens_per_chunk * (uint64_t) sizeof(float);
-	cur_dev_mem += head_norm_weighted_sums_size;
 	head_activations -> head_norm_rms_vals = cur_dev_mem;
 	uint64_t head_norm_rms_vals_size = (uint64_t) max_tokens_per_chunk * (uint64_t) sizeof(float);
 	cur_dev_mem += head_norm_rms_vals_size;
