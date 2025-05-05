@@ -70,7 +70,7 @@ int default_rms_norm_set_launch_config(Cuda_Launch_Config * cuda_launch_config, 
 
 	// saving weights as floats in smem
 	// and copying X to smem
-	int rms_smem = 4 * model_dim + dtype_size * model_dim;
+	int rms_smem = 4 * model_dim + (dtype_size * model_dim);
 
 	int rms_max_smem = (cuda_function -> function_config).func_max_smem;
 
@@ -154,7 +154,7 @@ int default_rms_norm_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_launch_co
 
 	int max_rows_per_block = MY_CEIL(num_rows, (cuda_launch_config -> gridDimX));
 
-	int rms_smem = helper_data_dtype_size * (max_rows_per_block + model_dim);	
+	int rms_smem = rms_base_smem + (helper_data_dtype_size * max_rows_per_block);	
 
 	// Should never fail...
 	if (rms_smem > rms_max_smem){
@@ -231,7 +231,7 @@ int default_rms_norm_bwd_w_set_launch_config(Cuda_Launch_Config * cuda_launch_co
 
 	int max_rows_per_block = MY_CEIL(num_rows, (cuda_launch_config -> gridDimX));
 
-	int rms_smem = helper_data_dtype_size * (max_rows_per_block + model_dim);	
+	int rms_smem = rms_base_smem + (helper_data_dtype_size * max_rows_per_block);	
 
 	// Should never fail...
 	if (rms_smem > rms_max_smem){
@@ -376,7 +376,7 @@ int default_rms_norm_noscale_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_l
 
 	int max_rows_per_block = MY_CEIL(num_rows, (cuda_launch_config -> gridDimX));
 
-	int rms_smem = helper_data_dtype_size * (max_rows_per_block + model_dim);	
+	int rms_smem = rms_base_smem + (helper_data_dtype_size * max_rows_per_block);	
 
 	// Should never fail...
 	if (rms_smem > rms_max_smem){
