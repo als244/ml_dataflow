@@ -708,7 +708,7 @@ int main(int argc, char * argv[]){
 	int num_fwd_contexts = n_layers;
 
 
-	Seq_Batch_Context ** fwd_contexts = malloc(num_fwd_contexts * sizeof(Seq_Batch_Context *));
+	Seq_Batch_Context * fwd_contexts = malloc(num_fwd_contexts * sizeof(Seq_Batch_Context));
 	if (!fwd_contexts){
 		fprintf(stderr, "Error: failed to allocate fwd_contexts...\n");
 		return -1;
@@ -725,14 +725,14 @@ int main(int argc, char * argv[]){
 
 
 	for (int i = 0; i < num_fwd_contexts; i++){
-		(fwd_contexts[i]) -> contextBuffer = cur_dev_mem;
-		(fwd_contexts[i]) -> contextBufferBytes = context_buffer_size;
+		(&(fwd_contexts[i])) -> contextBuffer = cur_dev_mem;
+		(&(fwd_contexts[i])) -> contextBufferBytes = context_buffer_size;
 	
-		(fwd_contexts[i]) -> cur_tokens_populated = 0;
-		(fwd_contexts[i]) -> total_context_tokens = total_tokens;
+		(&(fwd_contexts[i])) -> cur_tokens_populated = 0;
+		(&(fwd_contexts[i])) -> total_context_tokens = total_tokens;
 
-		(fwd_contexts[i]) -> x_k = cur_dev_mem;
-		(fwd_contexts[i]) -> x_v = (fwd_contexts[i]) -> x_k + (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_size;
+		(&(fwd_contexts[i])) -> x_k = cur_dev_mem;
+		(&(fwd_contexts[i])) -> x_v = (&(fwd_contexts[i])) -> x_k + (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_size;
 
 		cur_dev_mem += context_buffer_size;
 	} 
@@ -1043,7 +1043,7 @@ int main(int argc, char * argv[]){
 		cur_activations = activations[i];
 
 		// set the context
-		seq_batches[i] -> context = fwd_contexts[0];
+		seq_batches[i] -> context = &(fwd_contexts[0]);
 
 		ret = dataflow_submit_transformer_block(&dataflow_handle, compute_stream_id, 
 								&(block_transitions[2 * i]), 
@@ -1068,7 +1068,7 @@ int main(int argc, char * argv[]){
 			cur_activations = activations[k * num_chunks + i];
 
 			// set the context
-			seq_batches[i] -> context = fwd_contexts[k];
+			seq_batches[i] -> context = &(fwd_contexts[k]);
 			
 
 			ret = dataflow_submit_transformer_block(&dataflow_handle, compute_stream_id, 
@@ -1146,7 +1146,7 @@ int main(int argc, char * argv[]){
 			ret = dataflow_submit_transformer_block_bwd_x(&dataflow_handle, compute_stream_id,
 								blocks[k], 
 								&(block_transitions[2 * i + (k % 2)]), 
-								cur_fwd_activations, fwd_contexts[k],
+								cur_fwd_activations, &(fwd_contexts[k]),
 								grad_activations,
 								grad_blocks[k],
 								&(block_transitions[2 * i + ((k + 1) % 2)]));
