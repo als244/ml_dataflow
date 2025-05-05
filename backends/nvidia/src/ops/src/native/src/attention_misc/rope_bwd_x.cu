@@ -145,8 +145,8 @@ extern "C" __global__ void default_rope_bwd_x_bf16_kernel(uint64_t N, int model_
 		float updated_grad_odd  = -sin_val * grad_even + cos_val * grad_odd;
 
 		// Update the gradients in place.
-		dX_q[i]     = __bfloat162float(updated_grad_even);
-		dX_q[i + 1] = __bfloat162float(updated_grad_odd);
+		dX_q[i]     = __float2bfloat16(updated_grad_even);
+		dX_q[i + 1] = __float2bfloat16(updated_grad_odd);
 
 		// ------------------------
 		// Process the key branch

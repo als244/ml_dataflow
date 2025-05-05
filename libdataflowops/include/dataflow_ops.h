@@ -162,6 +162,7 @@ int dataflow_submit_default_rms_norm(Dataflow_Handle * handle, int stream_id,
 
 
 // if X_out is not NULL, then it gets populated the the recomputed value from fwd pass
+// accumulates result into dX
 int dataflow_submit_default_rms_norm_bwd_x(Dataflow_Handle * handle, int stream_id, 
 								DataflowDatatype fwd_dt, DataflowDatatype bwd_dt, 
 								int n_rows, int n_cols, float eps, 
