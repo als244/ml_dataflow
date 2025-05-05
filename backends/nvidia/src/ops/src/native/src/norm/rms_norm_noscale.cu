@@ -1,7 +1,7 @@
 #include "nvidia_ops.h"
 
 
-extern "C" __global__ void default_rms_norm_noscale_fp32_kernel(int n_rows, int n_cols, float eps, float * X, float * out, float * weighted_sums, float * rms_vals) {
+extern "C" __global__ void default_rms_norm_noscale_fp32_kernel(int n_rows, int n_cols, float eps, float * X, float * out, float * rms_vals) {
 
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
@@ -101,9 +101,6 @@ extern "C" __global__ void default_rms_norm_noscale_fp32_kernel(int n_rows, int 
 				// so we can easilly compute the backpass...
 
 				// During inference this should be null and not needed
-				if (weighted_sums){
-					weighted_sums[row_id] = running_sum;
-				}
 				if (rms_vals){
 					rms_vals[row_id] = reduction_data_sq[0];
 				}
@@ -135,7 +132,7 @@ extern "C" __global__ void default_rms_norm_noscale_fp32_kernel(int n_rows, int 
 
 
 // num_stages is defined by amount of smem avail, so needs to be passed in as arg
-extern "C" __global__ void default_rms_norm_noscale_fp16_kernel(int n_rows, int n_cols, float eps, __half * X, __half * out, float * weighted_sums, float * rms_vals) {
+extern "C" __global__ void default_rms_norm_noscale_fp16_kernel(int n_rows, int n_cols, float eps, __half * X, __half * out, float * rms_vals) {
 
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
@@ -235,9 +232,6 @@ extern "C" __global__ void default_rms_norm_noscale_fp16_kernel(int n_rows, int 
 				// so we can easilly compute the backpass...
 
 				// During inference this should be null and not needed
-				if (weighted_sums){
-					weighted_sums[row_id] = running_sum;
-				}
 				if (rms_vals){
 					rms_vals[row_id] = reduction_data_sq[0];
 				}
@@ -267,7 +261,7 @@ extern "C" __global__ void default_rms_norm_noscale_fp16_kernel(int n_rows, int 
 }
 
 
-extern "C" __global__ void default_rms_norm_noscale_bf16_kernel(int n_rows, int n_cols, float eps, __nv_bfloat16 * X, __nv_bfloat16 * out, float * weighted_sums, float * rms_vals) {
+extern "C" __global__ void default_rms_norm_noscale_bf16_kernel(int n_rows, int n_cols, float eps, __nv_bfloat16 * X, __nv_bfloat16 * out, float * rms_vals) {
 
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
@@ -365,9 +359,6 @@ extern "C" __global__ void default_rms_norm_noscale_bf16_kernel(int n_rows, int 
 				// so we can easilly compute the backpass...
 
 				// During inference this should be null and not needed
-				if (weighted_sums){
-					weighted_sums[row_id] = running_sum;
-				}
 				if (rms_vals){
 					rms_vals[row_id] = reduction_data_sq[0];
 				}
@@ -397,7 +388,7 @@ extern "C" __global__ void default_rms_norm_noscale_bf16_kernel(int n_rows, int 
 }
 
 
-extern "C" __global__ void default_rms_norm_noscale_fp8e4m3_kernel(int n_rows, int n_cols, float eps, __nv_fp8_e4m3 * X, __nv_fp8_e4m3 * out, float * weighted_sums, float * rms_vals) {
+extern "C" __global__ void default_rms_norm_noscale_fp8e4m3_kernel(int n_rows, int n_cols, float eps, __nv_fp8_e4m3 * X, __nv_fp8_e4m3 * out, float * rms_vals) {
 
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
@@ -494,9 +485,6 @@ extern "C" __global__ void default_rms_norm_noscale_fp8e4m3_kernel(int n_rows, i
 				// so we can easilly compute the backpass...
 
 				// During inference this should be null and not needed
-				if (weighted_sums){
-					weighted_sums[row_id] = running_sum;
-				}
 				if (rms_vals){
 					rms_vals[row_id] = reduction_data_sq[0];
 				}
@@ -526,7 +514,7 @@ extern "C" __global__ void default_rms_norm_noscale_fp8e4m3_kernel(int n_rows, i
 }
 
 
-extern "C" __global__ void default_rms_norm_noscale_fp8e5m2_kernel(int n_rows, int n_cols, float eps, __nv_fp8_e5m2 * X, __nv_fp8_e5m2 * out, float * weighted_sums, float * rms_vals) {
+extern "C" __global__ void default_rms_norm_noscale_fp8e5m2_kernel(int n_rows, int n_cols, float eps, __nv_fp8_e5m2 * X, __nv_fp8_e5m2 * out, float * rms_vals) {
 
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
@@ -624,9 +612,6 @@ extern "C" __global__ void default_rms_norm_noscale_fp8e5m2_kernel(int n_rows, i
 				// so we can easilly compute the backpass...
 
 				// During inference this should be null and not needed
-				if (weighted_sums){
-					weighted_sums[row_id] = running_sum;
-				}
 				if (rms_vals){
 					rms_vals[row_id] = reduction_data_sq[0];
 				}

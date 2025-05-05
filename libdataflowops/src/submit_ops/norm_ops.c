@@ -4,7 +4,7 @@
 int dataflow_submit_default_rms_norm(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, 
 						int n_rows, int n_cols, float eps, 
-						void * rms_weight, void * X, void * out, float * weighted_sums, float * rms_vals){
+						void * rms_weight, void * X, void * out, float * rms_vals){
 	
 	int ret;
 
@@ -20,8 +20,7 @@ int dataflow_submit_default_rms_norm(Dataflow_Handle * handle, int stream_id,
 	op_args[3] = &rms_weight;
 	op_args[4] = &X;
 	op_args[5] = &out;
-	op_args[6] = &weighted_sums;
-	op_args[7] = &rms_vals;
+	op_args[6] = &rms_vals;
 
 
 	ret = (handle -> submit_op)(handle, &rms_norm_op, stream_id);
@@ -33,12 +32,11 @@ int dataflow_submit_default_rms_norm(Dataflow_Handle * handle, int stream_id,
 	return 0;
 }
 
-
 int dataflow_submit_default_rms_norm_bwd_x(Dataflow_Handle * handle, int stream_id, 
 								DataflowDatatype fwd_dt, DataflowDatatype bwd_dt, 
 								int n_rows, int n_cols, float eps, 
-								float * fwd_weighted_sums, float * fwd_rms_vals,
-								 void * rms_weight, void * X_inp, void * upstream_dX, void * dX){
+								float * fwd_rms_vals,
+								void * rms_weight, void * X_inp, void * upstream_dX, void * dX, void * X_out){
 	
 	int ret;
 
@@ -51,13 +49,12 @@ int dataflow_submit_default_rms_norm_bwd_x(Dataflow_Handle * handle, int stream_
 	op_args[0] = &n_rows;
 	op_args[1] = &n_cols;
 	op_args[2] = &eps;
-	op_args[3] = &fwd_weighted_sums;
-	op_args[4] = &fwd_rms_vals;
-	op_args[5] = &rms_weight;
-	op_args[6] = &X_inp;
-	op_args[7] = &upstream_dX;
-	op_args[8] = &dX;
-
+	op_args[3] = &fwd_rms_vals;
+	op_args[4] = &rms_weight;
+	op_args[5] = &X_inp;
+	op_args[6] = &upstream_dX;
+	op_args[7] = &dX;
+	op_args[8] = &X_out;
 
 	ret = (handle -> submit_op)(handle, &rms_norm_bwd_x_op, stream_id);
 	if (ret){
@@ -100,7 +97,7 @@ int dataflow_submit_default_rms_norm_bwd_w(Dataflow_Handle * handle, int stream_
 int dataflow_submit_default_rms_norm_noscale(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, 
 						int n_rows, int n_cols, float eps, 
-						void * X, void * out, float * weighted_sums, float * rms_vals){
+						void * X, void * out, float * rms_vals){
 
 	int ret;
 
@@ -115,8 +112,7 @@ int dataflow_submit_default_rms_norm_noscale(Dataflow_Handle * handle, int strea
 	op_args[2] = &eps;
 	op_args[3] = &X;
 	op_args[4] = &out;
-	op_args[5] = &weighted_sums;
-	op_args[6] = &rms_vals;
+	op_args[5] = &rms_vals;
 
 
 	ret = (handle -> submit_op)(handle, &rms_norm_noscale_op, stream_id);
@@ -133,8 +129,8 @@ int dataflow_submit_default_rms_norm_noscale(Dataflow_Handle * handle, int strea
 int dataflow_submit_default_rms_norm_noscale_bwd_x(Dataflow_Handle * handle, int stream_id, 
 								DataflowDatatype fwd_dt, DataflowDatatype bwd_dt, 
 								int n_rows, int n_cols, float eps, 
-								float * fwd_weighted_sums, float * fwd_rms_vals,
-								void * X_inp, void * upstream_dX, void * dX){
+								float * fwd_rms_vals,
+								void * X_inp, void * upstream_dX, void * dX, void * X_out) {
 	
 	int ret;
 
@@ -147,11 +143,11 @@ int dataflow_submit_default_rms_norm_noscale_bwd_x(Dataflow_Handle * handle, int
 	op_args[0] = &n_rows;
 	op_args[1] = &n_cols;
 	op_args[2] = &eps;
-	op_args[3] = &fwd_weighted_sums;
-	op_args[4] = &fwd_rms_vals;
-	op_args[5] = &X_inp;
-	op_args[6] = &upstream_dX;
-	op_args[7] = &dX;
+	op_args[3] = &fwd_rms_vals;
+	op_args[4] = &X_inp;
+	op_args[5] = &upstream_dX;
+	op_args[6] = &dX;
+	op_args[7] = &X_out;
 
 
 	ret = (handle -> submit_op)(handle, &rms_norm_noscale_bwd_x_op, stream_id);

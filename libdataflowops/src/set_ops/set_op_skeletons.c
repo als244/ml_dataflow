@@ -401,7 +401,7 @@ void dataflow_set_default_rms_norm_skeleton(Op_Skeleton * skeleton, DataflowData
 	// last character must be null no matter what, if nickname is less than null bytes were added prior
 	(skeleton_header -> op_nickname)[MAX_OP_NICKNAME_SIZE] = '\0'; 
 	
-	int num_args = 8;
+	int num_args = 7;
 
 	skeleton_header -> num_args = num_args;
 
@@ -414,7 +414,6 @@ void dataflow_set_default_rms_norm_skeleton(Op_Skeleton * skeleton, DataflowData
 	arg_dtypes[4] = fwd_datatype;
 	arg_dtypes[5] = fwd_datatype;
 	arg_dtypes[6] = DATAFLOW_FP32;
-	arg_dtypes[7] = DATAFLOW_FP32;
 
 	for (int i = num_args; i < MAX_OP_ARGS; i++){
 		arg_dtypes[i] = DATAFLOW_NONE;
@@ -423,6 +422,7 @@ void dataflow_set_default_rms_norm_skeleton(Op_Skeleton * skeleton, DataflowData
 	dataflow_do_fingerprinting(skeleton_header, sizeof(Op_Skeleton_Header), (skeleton -> identifier).fingerprint);
 
 }
+
 
 void dataflow_set_default_rms_norm_bwd_x_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype, DataflowDatatype bwd_datatype) {
 
@@ -447,11 +447,12 @@ void dataflow_set_default_rms_norm_bwd_x_skeleton(Op_Skeleton * skeleton, Datafl
 	arg_dtypes[1] = DATAFLOW_INT_SCALAR;
 	arg_dtypes[2] = DATAFLOW_FP32_SCALAR;
 	arg_dtypes[3] = DATAFLOW_FP32;
-	arg_dtypes[4] = DATAFLOW_FP32;
+	arg_dtypes[4] = fwd_datatype;
 	arg_dtypes[5] = fwd_datatype;
-	arg_dtypes[6] = fwd_datatype;
+	arg_dtypes[6] = bwd_datatype;
 	arg_dtypes[7] = bwd_datatype;
-	arg_dtypes[8] = bwd_datatype;
+	// optional output if we want to save re-computed value from fwd pass
+	arg_dtypes[8] = fwd_datatype;
 
 	for (int i = num_args; i < MAX_OP_ARGS; i++){
 		arg_dtypes[i] = DATAFLOW_NONE;
@@ -507,7 +508,7 @@ void dataflow_set_default_rms_norm_noscale_skeleton(Op_Skeleton * skeleton, Data
 	// last character must be null no matter what, if nickname is less than null bytes were added prior
 	(skeleton_header -> op_nickname)[MAX_OP_NICKNAME_SIZE] = '\0'; 
 	
-	int num_args = 7;
+	int num_args = 6;
 
 	skeleton_header -> num_args = num_args;
 
@@ -519,7 +520,6 @@ void dataflow_set_default_rms_norm_noscale_skeleton(Op_Skeleton * skeleton, Data
 	arg_dtypes[3] = fwd_datatype;
 	arg_dtypes[4] = fwd_datatype;
 	arg_dtypes[5] = DATAFLOW_FP32;
-	arg_dtypes[6] = DATAFLOW_FP32;
 
 	for (int i = num_args; i < MAX_OP_ARGS; i++){
 		arg_dtypes[i] = DATAFLOW_NONE;
@@ -552,10 +552,11 @@ void dataflow_set_default_rms_norm_noscale_bwd_x_skeleton(Op_Skeleton * skeleton
 	arg_dtypes[1] = DATAFLOW_INT_SCALAR;
 	arg_dtypes[2] = DATAFLOW_FP32_SCALAR;
 	arg_dtypes[3] = DATAFLOW_FP32;
-	arg_dtypes[4] = DATAFLOW_FP32;
-	arg_dtypes[5] = fwd_datatype;
+	arg_dtypes[4] = fwd_datatype;
+	arg_dtypes[5] = bwd_datatype;
 	arg_dtypes[6] = bwd_datatype;
-	arg_dtypes[7] = bwd_datatype;
+	// optional output if we want to save re-computed value from fwd pass
+	arg_dtypes[7] = fwd_datatype;
 
 	for (int i = num_args; i < MAX_OP_ARGS; i++){
 		arg_dtypes[i] = DATAFLOW_NONE;

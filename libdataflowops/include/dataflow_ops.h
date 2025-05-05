@@ -154,17 +154,19 @@ int dataflow_submit_default_embedding_table_bwd_w(Dataflow_Handle * handle, int 
 
 // From norm_ops.c
 
+// computes correct output along with saving rms_vals
 int dataflow_submit_default_rms_norm(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, 
 						int n_rows, int n_cols, float eps, 
-						void * rms_weight, void * X, void * out, float * weighted_sums, float * rms_vals);
+						void * rms_weight, void * X, void * out, float * rms_vals);
 
 
+// if X_out is not NULL, then it gets populated the the recomputed value from fwd pass
 int dataflow_submit_default_rms_norm_bwd_x(Dataflow_Handle * handle, int stream_id, 
 								DataflowDatatype fwd_dt, DataflowDatatype bwd_dt, 
 								int n_rows, int n_cols, float eps, 
-								float * fwd_weighted_sums, float * fwd_rms_vals,
-								 void * rms_weight, void * X_inp, void * upstream_dX, void * dX);
+								float * fwd_rms_vals,
+								void * rms_weight, void * X_inp, void * upstream_dX, void * dX, void * X_out);
 
 
 int dataflow_submit_default_rms_norm_bwd_w(Dataflow_Handle * handle, int stream_id, 
@@ -177,14 +179,15 @@ int dataflow_submit_default_rms_norm_bwd_w(Dataflow_Handle * handle, int stream_
 int dataflow_submit_default_rms_norm_noscale(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, 
 						int n_rows, int n_cols, float eps, 
-						void * X, void * out, float * weighted_sums, float * rms_vals);
+						void * X, void * out, float * rms_vals);
 
 
+// if X_out is not NULL, then it gets populated the the recomputed value from fwd pass
 int dataflow_submit_default_rms_norm_noscale_bwd_x(Dataflow_Handle * handle, int stream_id, 
 								DataflowDatatype fwd_dt, DataflowDatatype bwd_dt, 
 								int n_rows, int n_cols, float eps, 
-								float * fwd_weighted_sums, float * fwd_rms_vals,
-								void * X_inp, void * upstream_dX, void * dX);
+								float * fwd_rms_vals,
+								void * X_inp, void * upstream_dX, void * dX, void * X_out);
 
 // From attn_misc_ops.c
 

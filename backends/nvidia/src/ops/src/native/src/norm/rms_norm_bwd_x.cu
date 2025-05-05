@@ -1,7 +1,7 @@
 #include "nvidia_ops.h"
 
 
-extern "C" __global__ void default_rms_norm_bwd_x_fp32_fp32_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, float * rms_weight, float * X_inp, float * upstream_dX, float * dX) {
+extern "C" __global__ void default_rms_norm_bwd_x_fp32_fp32_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, float * rms_weight, float * X_inp, float * upstream_dX, float * dX, float * X_out) {
 		
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
@@ -13,18 +13,23 @@ extern "C" __global__ void default_rms_norm_bwd_x_fp32_fp32_kernel(int n_rows, i
 
 	// length should be equal to number of rows
 	// load in squared sums and then divide by n_cols and take sqrt
-	float * weights = (float *) sdata;
-
-
-	float * shared_fwd_weighted_sums = (float *) (weights + n_cols); 
-	// working space when computing weight derivs...
-	// the dot products will be updated here and when complete
-	// will accumulate in dW
+	float * inp_row = (float *) sdata;
+	float * weights = (float *) (inp_row + n_cols);
 
 	// length equal to the number of columns
-	float * shared_fwd_rms_vals = (float *) (shared_fwd_weighted_sums + max_rows_per_block);  
+	float * shared_recip_avgs = (float *) (weights + max_rows_per_block);
 
+	// every warp will have a reduced value
 
+	// for every row we need to compute C = sum_j(upstream_dX[j] * x_out[j])
+	// as prerequisite to computing the RMS norm...
+	__shared__ float reduction_data_dout[32];
+
+	//
+
+	// then we compute 
+	// dX[i] = recip_avg * (upstream_dX[i] * rms_weight[i] - C * ((x_inp[i] * recip_avg) / n_cols))
+	
 
 	int row_base = blockIdx.x;
 
@@ -45,6 +50,9 @@ extern "C" __global__ void default_rms_norm_bwd_x_fp32_fp32_kernel(int n_rows, i
 
 	
 	int thread_id = threadIdx.x;
+
+	int warp_id = thread_id / 32;
+	int lane_id = thread_id % 32;
 
 	for (uint64_t i = thread_id; i < n_cols; i+=blockDim.x){
 		weights[i] = rms_weight[i];
@@ -53,35 +61,106 @@ extern "C" __global__ void default_rms_norm_bwd_x_fp32_fp32_kernel(int n_rows, i
 	// retrieve back the recip squared avgs
 	// corresponding to this blocks rows
 	for (int i = row_offset + thread_id; i < row_offset + rows_per_block; i+=blockDim.x){
-		shared_fwd_weighted_sums[i - row_offset] = fwd_weighted_sums[i];
-		shared_fwd_rms_vals[i - row_offset] = fwd_rms_vals[i];
+		shared_recip_avgs[i - row_offset] = fwd_rms_vals[i];
 	}
 
 	__syncthreads();
 
 	float deriv;
-	float cur_weighted_sum;
-	float cur_rms_val;
-	float cur_rms_val_cub;
+	
+	float cur_recip_avg;
+	float cur_upstream_sum;
 
 	float inp_val;
+	float out_val;
+	float out_val_scaled;
+	float cur_weight;
+
+	unsigned warp_mask = 0xFFFFFFFFU;
 
 	uint64_t row_ind_start;
 	for (int row_id = row_offset; row_id < row_offset + rows_per_block; row_id++){
 		row_ind_start = (uint64_t) (row_id) * (uint64_t) n_cols;
 
-		cur_weighted_sum = shared_fwd_weighted_sums[row_id - row_offset];
-		cur_rms_val = shared_fwd_rms_vals[row_id - row_offset];
-		cur_rms_val_cub = cur_rms_val * cur_rms_val * cur_rms_val;
+		// first save down the input row, so we can can recompute the output
+		for (int i = thread_id; i < n_cols; i+=blockDim.x){
+			inp_row[i] = X_inp[row_ind_start + i];
+		}
+
+		__syncthreads();
+
+		cur_recip_avg = shared_recip_avgs[row_id - row_offset];
+
+		
+		// first get the value C which is the sum of the upstream_dX * X_out
+		cur_upstream_sum = 0;
+		for (int i = thread_id; i < n_cols; i+=blockDim.x){
+			cur_weight = weights[i];
+			out_val = cur_weight * (inp_row[i] * cur_recip_avg);
+
+			// if we want to recompute the forward pass, we already have done all the work
+			// and can save it down here...
+			if (X_out){
+				X_out[row_id * n_cols + i] = out_val;
+			}
+
+			cur_upstream_sum += upstream_dX[row_ind_start + i] * out_val;
+		}
+
+		// now have each warp reduce their results
+		__syncwarp();
+
+		for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
+			cur_upstream_sum += __shfl_down_sync(warp_mask, cur_upstream_sum, warp_offset);
+		}
+
+		if (lane_id == 0){
+			reduction_data_dout[warp_id] = cur_upstream_sum;
+		}
+
+		__syncthreads();
+
+		// now we reduce among the warps, by using threads within the first warp
+
+		if (warp_id == 0){
+
+			// reassigning starting value to be the value reduced among each of the warps
+			cur_upstream_sum = reduction_data_dout[lane_id];
+
+			for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
+				cur_upstream_sum += __shfl_down_sync(warp_mask, cur_upstream_sum, warp_offset);
+			}
+
+			// now thread 0 contains the full sum
+			// can reset to be within the first index, that other threads can access
+			if (lane_id == 0){
+				reduction_data_dout[0] = cur_upstream_sum;
+			}
+		}
+
+		__syncthreads();
+
+		// now reset the upstream sum variable to be the entire row's sum
+		// that thread 0 (warp id 0, lane id 0) has just published
+		cur_upstream_sum = reduction_data_dout[0];
+
+		// now can compute:
+		// dX[i] = recip_avg * (upstream_dX[i] * rms_weight[i] - C * ((x_inp[i] * recip_avg) / n_cols))
+
 		
 		for (int i = thread_id; i < n_cols; i+=blockDim.x){
-			inp_val = X_inp[row_ind_start + i];
-			deriv = (weights[i] * cur_rms_val) - (((inp_val * cur_rms_val_cub) / n_cols) * cur_weighted_sum);
+			cur_weight = weights[i];
+			inp_val = inp_row[i];
+			out_val_scaled = cur_upstream_sum * ((inp_val * cur_recip_avg) / n_cols);
+			deriv = (cur_recip_avg * ((cur_weight * upstream_dX[row_ind_start + i]) - out_val_scaled));
 
 			// now update dX
-			dX[row_id * n_cols + i] += upstream_dX[row_id * n_cols + i] * deriv;
-
+			dX[row_id * n_cols + i] += deriv;
 		}
+
+		// ensure sync before next row which will overwrite the input row
+		__syncthreads();
+		
 	}
 }
 
@@ -89,7 +168,7 @@ extern "C" __global__ void default_rms_norm_bwd_x_fp32_fp32_kernel(int n_rows, i
 // Here dX is (N, model_dim) and contains the backprop loss flow that we will update in-place
 // This needs to be called after the bwd_weight because the weight we use the updstream dL/dX and this function will
 // modify the same pointer...
-extern "C" __global__ void default_rms_norm_bwd_x_fp16_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __half * rms_weight, __half * X_inp, __half * upstream_dX, __half * dX){
+extern "C" __global__ void default_rms_norm_bwd_x_fp16_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __half * rms_weight, __half * X_inp,  __half * upstream_dX, __half * dX, __half * X_out){
 		
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
@@ -101,16 +180,23 @@ extern "C" __global__ void default_rms_norm_bwd_x_fp16_fp16_kernel(int n_rows, i
 
 	// length should be equal to number of rows
 	// load in squared sums and then divide by n_cols and take sqrt
-	float * weights = (float *) sdata;
-
-
-	float * shared_fwd_weighted_sums = (float *) (weights + n_cols); 
-	// working space when computing weight derivs...
-	// the dot products will be updated here and when complete
-	// will accumulate in dW
+	__half * inp_row = (__half *) sdata;
+	float * weights = (float *) (inp_row + n_cols);
 
 	// length equal to the number of columns
-	float * shared_fwd_rms_vals = (float *) (shared_fwd_weighted_sums + max_rows_per_block); 
+	float * shared_recip_avgs = (float *) (weights + max_rows_per_block);
+
+	// every warp will have a reduced value
+
+	// for every row we need to compute C = sum_j(upstream_dX[j] * x_out[j])
+	// as prerequisite to computing the RMS norm...
+	__shared__ float reduction_data_dout[32];
+
+	//
+
+	// then we compute 
+	// dX[i] = recip_avg * (upstream_dX[i] * rms_weight[i] - C * ((x_inp[i] * recip_avg) / n_cols))
+	
 
 	int row_base = blockIdx.x;
 
@@ -130,7 +216,10 @@ extern "C" __global__ void default_rms_norm_bwd_x_fp16_fp16_kernel(int n_rows, i
 	}
 
 	
-	int thread_id = threadIdx.x; 
+	int thread_id = threadIdx.x;
+
+	int warp_id = thread_id / 32;
+	int lane_id = thread_id % 32;
 
 	for (uint64_t i = thread_id; i < n_cols; i+=blockDim.x){
 		weights[i] = __half2float(rms_weight[i]);
@@ -139,40 +228,112 @@ extern "C" __global__ void default_rms_norm_bwd_x_fp16_fp16_kernel(int n_rows, i
 	// retrieve back the recip squared avgs
 	// corresponding to this blocks rows
 	for (int i = row_offset + thread_id; i < row_offset + rows_per_block; i+=blockDim.x){
-		shared_fwd_weighted_sums[i - row_offset] = fwd_weighted_sums[i];
-		shared_fwd_rms_vals[i - row_offset] = fwd_rms_vals[i];
+		shared_recip_avgs[i - row_offset] = fwd_rms_vals[i];
 	}
 
 	__syncthreads();
 
 	float deriv;
-	float cur_weighted_sum;
-	float cur_rms_val;
-	float cur_rms_val_cub;
+	
+	float cur_recip_avg;
+	float cur_upstream_sum;
 
 	float inp_val;
+	float out_val;
+	float out_val_scaled;
+	float cur_weight;
+
+	unsigned warp_mask = 0xFFFFFFFFU;
 
 	uint64_t row_ind_start;
 	for (int row_id = row_offset; row_id < row_offset + rows_per_block; row_id++){
 		row_ind_start = (uint64_t) (row_id) * (uint64_t) n_cols;
 
-		cur_weighted_sum = shared_fwd_weighted_sums[row_id - row_offset];
-		cur_rms_val = shared_fwd_rms_vals[row_id - row_offset];
-		cur_rms_val_cub = cur_rms_val * cur_rms_val * cur_rms_val;
+		// first save down the input row, so we can can recompute the output
+		for (int i = thread_id; i < n_cols; i+=blockDim.x){
+			inp_row[i] = X_inp[row_ind_start + i];
+		}
+
+		__syncthreads();
+
+		cur_recip_avg = shared_recip_avgs[row_id - row_offset];
+
+		
+		// first get the value C which is the sum of the upstream_dX * X_out
+		cur_upstream_sum = 0;
+		for (int i = thread_id; i < n_cols; i+=blockDim.x){
+			cur_weight = weights[i];
+			inp_val = __half2float(inp_row[i]);
+			out_val = cur_weight * (inp_val * cur_recip_avg);
+
+			// if we want to recompute the forward pass, we already have done all the work
+			// and can save it down here...
+			if (X_out){
+				X_out[row_id * n_cols + i] = __float2half(out_val);
+			}
+
+			cur_upstream_sum += __half2float(upstream_dX[row_ind_start + i]) * out_val;
+		}
+
+		// now have each warp reduce their results
+		__syncwarp();
+
+		for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
+			cur_upstream_sum += __shfl_down_sync(warp_mask, cur_upstream_sum, warp_offset);
+		}
+
+		if (lane_id == 0){
+			reduction_data_dout[warp_id] = cur_upstream_sum;
+		}
+
+		__syncthreads();
+
+		// now we reduce among the warps, by using threads within the first warp
+
+		if (warp_id == 0){
+
+			// reassigning starting value to be the value reduced among each of the warps
+			cur_upstream_sum = reduction_data_dout[lane_id];
+
+			for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
+				cur_upstream_sum += __shfl_down_sync(warp_mask, cur_upstream_sum, warp_offset);
+			}
+
+			// now thread 0 contains the full sum
+			// can reset to be within the first index, that other threads can access
+			if (lane_id == 0){
+				reduction_data_dout[0] = cur_upstream_sum;
+			}
+		}
+
+		__syncthreads();
+
+		// now reset the upstream sum variable to be the entire row's sum
+		// that thread 0 (warp id 0, lane id 0) has just published
+		cur_upstream_sum = reduction_data_dout[0];
+
+		// now can compute:
+		// dX[i] = recip_avg * (upstream_dX[i] * rms_weight[i] - C * ((x_inp[i] * recip_avg) / n_cols))
+
 		
 		for (int i = thread_id; i < n_cols; i+=blockDim.x){
-			inp_val = __half2float(X_inp[row_ind_start + i]);
-			deriv = (weights[i] * cur_rms_val) - (((inp_val * cur_rms_val_cub) / n_cols) * cur_weighted_sum);
+			cur_weight = weights[i];
+			inp_val = __half2float(inp_row[i]);
+			out_val_scaled = cur_upstream_sum * ((inp_val * cur_recip_avg) / n_cols);
+			deriv = (cur_recip_avg * ((cur_weight * __half2float(upstream_dX[row_ind_start + i])) - out_val_scaled));
 
 			// now update dX
-			dX[row_id * n_cols + i] += upstream_dX[row_id * n_cols + i] * __float2half(deriv);
-
+			dX[row_id * n_cols + i] += __float2half(deriv);
 		}
+
+		// ensure sync before next row which will overwrite the input row
+		__syncthreads();
+		
 	}
 }
 
 
-extern "C" __global__ void default_rms_norm_bwd_x_bf16_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __nv_bfloat16 * rms_weight, __nv_bfloat16 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX) {
+extern "C" __global__ void default_rms_norm_bwd_x_bf16_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_bfloat16 * rms_weight, __nv_bfloat16 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX, __nv_bfloat16 * X_out) {
 		
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
@@ -182,19 +343,25 @@ extern "C" __global__ void default_rms_norm_bwd_x_bf16_bf16_kernel(int n_rows, i
 	int rows_remain = n_rows % gridDim.x;
 	int max_rows_per_block = rows_per_block + (rows_remain > 0);
 
-
 	// length should be equal to number of rows
 	// load in squared sums and then divide by n_cols and take sqrt
-	float * weights = (float *) sdata;
-
-
-	float * shared_fwd_weighted_sums = (float *) (weights + n_cols); 
-	// working space when computing weight derivs...
-	// the dot products will be updated here and when complete
-	// will accumulate in dW
+	__nv_bfloat16 * inp_row = (__nv_bfloat16 *) sdata;
+	float * weights = (float *) (inp_row + n_cols);
 
 	// length equal to the number of columns
-	float * shared_fwd_rms_vals = (float *) (shared_fwd_weighted_sums + max_rows_per_block); 
+	float * shared_recip_avgs = (float *) (weights + max_rows_per_block);
+
+	// every warp will have a reduced value
+
+	// for every row we need to compute C = sum_j(upstream_dX[j] * x_out[j])
+	// as prerequisite to computing the RMS norm...
+	__shared__ float reduction_data_dout[32];
+
+	//
+
+	// then we compute 
+	// dX[i] = recip_avg * (upstream_dX[i] * rms_weight[i] - C * ((x_inp[i] * recip_avg) / n_cols))
+	
 
 	int row_base = blockIdx.x;
 
@@ -215,6 +382,9 @@ extern "C" __global__ void default_rms_norm_bwd_x_bf16_bf16_kernel(int n_rows, i
 
 	
 	int thread_id = threadIdx.x;
+
+	int warp_id = thread_id / 32;
+	int lane_id = thread_id % 32;
 
 	for (uint64_t i = thread_id; i < n_cols; i+=blockDim.x){
 		weights[i] = __bfloat162float(rms_weight[i]);
@@ -223,125 +393,116 @@ extern "C" __global__ void default_rms_norm_bwd_x_bf16_bf16_kernel(int n_rows, i
 	// retrieve back the recip squared avgs
 	// corresponding to this blocks rows
 	for (int i = row_offset + thread_id; i < row_offset + rows_per_block; i+=blockDim.x){
-		shared_fwd_weighted_sums[i - row_offset] = fwd_weighted_sums[i];
-		shared_fwd_rms_vals[i - row_offset] = fwd_rms_vals[i];
+		shared_recip_avgs[i - row_offset] = fwd_rms_vals[i];
 	}
 
 	__syncthreads();
 
 	float deriv;
-	float cur_weighted_sum;
-	float cur_rms_val;
-	float cur_rms_val_cub;
-
-	float inp_val;
-
-	uint64_t row_ind_start;
-	for (int row_id = row_offset; row_id < row_offset + rows_per_block; row_id++){
-		row_ind_start = (uint64_t) (row_id) * (uint64_t) n_cols;
-
-		cur_weighted_sum = shared_fwd_weighted_sums[row_id - row_offset];
-		cur_rms_val = shared_fwd_rms_vals[row_id - row_offset];
-		cur_rms_val_cub = cur_rms_val * cur_rms_val * cur_rms_val;
-		
-		for (int i = thread_id; i < n_cols; i+=blockDim.x){
-			inp_val = __bfloat162float(X_inp[row_ind_start + i]);
-			deriv = (weights[i] * cur_rms_val) - (((inp_val * cur_rms_val_cub) / n_cols) * cur_weighted_sum);
-
-			// now update dX
-			dX[row_id * n_cols + i] += upstream_dX[row_id * n_cols + i] * __float2bfloat16(deriv);
-
-		}
-	}
-}
-
-
-extern "C" __global__ void default_rms_norm_bwd_x_fp8e4m3_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __nv_fp8_e4m3 * rms_weight, __nv_fp8_e4m3 * X_inp, __half * upstream_dX, __half * dX) {
-		
-	// this gets dynamically allocated the size of model_dim
-	extern __shared__ uint8_t sdata[];
-
-	int rows_per_block = n_rows / gridDim.x;
-	int rows_remain = n_rows % gridDim.x;
-	int max_rows_per_block = rows_per_block + (rows_remain > 0);
-
-	// length should be equal to number of rows
-	// load in squared sums and then divide by n_cols and take sqrt
-	float * weights = (float *) sdata;
-
-
-	float * shared_fwd_weighted_sums = (float *) (weights + n_cols); 
-	// working space when computing weight derivs...
-	// the dot products will be updated here and when complete
-	// will accumulate in dW
-
-	// length equal to the number of columns
-	float * shared_fwd_rms_vals = (float *) (shared_fwd_weighted_sums + max_rows_per_block);  
-
-	int row_base = blockIdx.x;
-
-	if (row_base >= n_rows){
-		return;
-	}
-
-
-	int row_offset;
-	if (blockIdx.x < rows_remain){
-		// this block will need to do an extra row
-		rows_per_block += 1;
-		// all prior blocks also had an extra row
-		row_offset = row_base * rows_per_block;
-	}
-	else{
-		row_offset = row_base * rows_per_block + rows_remain;
-	}
-
 	
-	int thread_id = threadIdx.x;
-
-	for (uint64_t i = thread_id; i < n_cols; i+=blockDim.x){
-		weights[i] = float(rms_weight[i]);
-	}
-
-	// retrieve back the recip squared avgs
-	// corresponding to this blocks rows
-	for (int i = row_offset + thread_id; i < row_offset + rows_per_block; i+=blockDim.x){
-		shared_fwd_weighted_sums[i - row_offset] = fwd_weighted_sums[i];
-		shared_fwd_rms_vals[i - row_offset] = fwd_rms_vals[i];
-	}
-
-	__syncthreads();
-
-	float deriv;
-	float cur_weighted_sum;
-	float cur_rms_val;
-	float cur_rms_val_cub;
+	float cur_recip_avg;
+	float cur_upstream_sum;
 
 	float inp_val;
+	float out_val;
+	float out_val_scaled;
+	float cur_weight;
+
+	unsigned warp_mask = 0xFFFFFFFFU;
 
 	uint64_t row_ind_start;
 	for (int row_id = row_offset; row_id < row_offset + rows_per_block; row_id++){
 		row_ind_start = (uint64_t) (row_id) * (uint64_t) n_cols;
 
-		cur_weighted_sum = shared_fwd_weighted_sums[row_id - row_offset];
-		cur_rms_val = shared_fwd_rms_vals[row_id - row_offset];
-		cur_rms_val_cub = cur_rms_val * cur_rms_val * cur_rms_val;
+		// first save down the input row, so we can can recompute the output
+		for (int i = thread_id; i < n_cols; i+=blockDim.x){
+			inp_row[i] = X_inp[row_ind_start + i];
+		}
+
+		__syncthreads();
+
+		cur_recip_avg = shared_recip_avgs[row_id - row_offset];
+
+		
+		// first get the value C which is the sum of the upstream_dX * X_out
+		cur_upstream_sum = 0;
+		for (int i = thread_id; i < n_cols; i+=blockDim.x){
+			cur_weight = weights[i];
+			inp_val = __bfloat162float(inp_row[i]);
+			out_val = cur_weight * (inp_val * cur_recip_avg);
+
+			// if we want to recompute the forward pass, we already have done all the work
+			// and can save it down here...
+			if (X_out){
+				X_out[row_id * n_cols + i] = __float2bfloat16(out_val);
+			}
+
+			cur_upstream_sum += __bfloat162float(upstream_dX[row_ind_start + i]) * out_val;
+		}
+
+		// now have each warp reduce their results
+		__syncwarp();
+
+		for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
+			cur_upstream_sum += __shfl_down_sync(warp_mask, cur_upstream_sum, warp_offset);
+		}
+
+		if (lane_id == 0){
+			reduction_data_dout[warp_id] = cur_upstream_sum;
+		}
+
+		__syncthreads();
+
+		// now we reduce among the warps, by using threads within the first warp
+
+		if (warp_id == 0){
+
+			// reassigning starting value to be the value reduced among each of the warps
+			cur_upstream_sum = reduction_data_dout[lane_id];
+
+			for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
+				cur_upstream_sum += __shfl_down_sync(warp_mask, cur_upstream_sum, warp_offset);
+			}
+
+			// now thread 0 contains the full sum
+			// can reset to be within the first index, that other threads can access
+			if (lane_id == 0){
+				reduction_data_dout[0] = cur_upstream_sum;
+			}
+		}
+
+		__syncthreads();
+
+		// now reset the upstream sum variable to be the entire row's sum
+		// that thread 0 (warp id 0, lane id 0) has just published
+		cur_upstream_sum = reduction_data_dout[0];
+
+		// now can compute:
+		// dX[i] = recip_avg * (upstream_dX[i] * rms_weight[i] - C * ((x_inp[i] * recip_avg) / n_cols))
+
 		
 		for (int i = thread_id; i < n_cols; i+=blockDim.x){
-			inp_val = float(X_inp[row_ind_start + i]);
-			deriv = (weights[i] * cur_rms_val) - (((inp_val * cur_rms_val_cub) / n_cols) * cur_weighted_sum);
+			cur_weight = weights[i];
+			inp_val = __bfloat162float(inp_row[i]);
+			out_val_scaled = cur_upstream_sum * ((inp_val * cur_recip_avg) / n_cols);
+			deriv = (cur_recip_avg * ((cur_weight * __bfloat162float(upstream_dX[row_ind_start + i])) - out_val_scaled));
 
 			// now update dX
-			dX[row_id * n_cols + i] += upstream_dX[row_id * n_cols + i] * __float2half(deriv);
-
+			dX[row_id * n_cols + i] += __float2bfloat16(deriv);
 		}
+
+		// ensure sync before next row which will overwrite the input row
+		__syncthreads();
+		
 	}
 }
 
-extern "C" __global__ void default_rms_norm_bwd_x_fp8e4m3_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __nv_fp8_e4m3 * rms_weight, __nv_fp8_e4m3 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX) {
+
+extern "C" __global__ void default_rms_norm_bwd_x_fp8e4m3_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e4m3 * rms_weight, __nv_fp8_e4m3 * X_inp, __half * upstream_dX, __half * dX, __nv_fp8_e4m3 * X_out) {
 		
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
+
 
 	int rows_per_block = n_rows / gridDim.x;
 	int rows_remain = n_rows % gridDim.x;
@@ -349,100 +510,23 @@ extern "C" __global__ void default_rms_norm_bwd_x_fp8e4m3_bf16_kernel(int n_rows
 
 	// length should be equal to number of rows
 	// load in squared sums and then divide by n_cols and take sqrt
-	float * weights = (float *) sdata;
-
-
-	float * shared_fwd_weighted_sums = (float *) (weights + n_cols); 
-	// working space when computing weight derivs...
-	// the dot products will be updated here and when complete
-	// will accumulate in dW
+	__nv_fp8_e4m3 * inp_row = (__nv_fp8_e4m3 *) sdata;
+	float * weights = (float *) (inp_row + n_cols);
 
 	// length equal to the number of columns
-	float * shared_fwd_rms_vals = (float *) (shared_fwd_weighted_sums + max_rows_per_block);   
+	float * shared_recip_avgs = (float *) (weights + max_rows_per_block);
 
-	int row_base = blockIdx.x;
+	// every warp will have a reduced value
 
-	if (row_base >= n_rows){
-		return;
-	}
+	// for every row we need to compute C = sum_j(upstream_dX[j] * x_out[j])
+	// as prerequisite to computing the RMS norm...
+	__shared__ float reduction_data_dout[32];
 
+	//
 
-	int row_offset;
-	if (blockIdx.x < rows_remain){
-		// this block will need to do an extra row
-		rows_per_block += 1;
-		// all prior blocks also had an extra row
-		row_offset = row_base * rows_per_block;
-	}
-	else{
-		row_offset = row_base * rows_per_block + rows_remain;
-	}
-
+	// then we compute 
+	// dX[i] = recip_avg * (upstream_dX[i] * rms_weight[i] - C * ((x_inp[i] * recip_avg) / n_cols))
 	
-	int thread_id = threadIdx.x; 
-
-	for (uint64_t i = thread_id; i < n_cols; i+=blockDim.x){
-		weights[i] = float(rms_weight[i]);
-	}
-
-	// retrieve back the recip squared avgs
-	// corresponding to this blocks rows
-	for (int i = row_offset + thread_id; i < row_offset + rows_per_block; i+=blockDim.x){
-		shared_fwd_weighted_sums[i - row_offset] = fwd_weighted_sums[i];
-		shared_fwd_rms_vals[i - row_offset] = fwd_rms_vals[i];
-	}
-
-	__syncthreads();
-
-	float deriv;
-	float cur_weighted_sum;
-	float cur_rms_val;
-	float cur_rms_val_cub;
-
-	float inp_val;
-
-	uint64_t row_ind_start;
-	for (int row_id = row_offset; row_id < row_offset + rows_per_block; row_id++){
-		row_ind_start = (uint64_t) (row_id) * (uint64_t) n_cols;
-
-		cur_weighted_sum = shared_fwd_weighted_sums[row_id - row_offset];
-		cur_rms_val = shared_fwd_rms_vals[row_id - row_offset];
-		cur_rms_val_cub = cur_rms_val * cur_rms_val * cur_rms_val;
-		
-		
-		for (int i = thread_id; i < n_cols; i+=blockDim.x){
-			inp_val = float(X_inp[row_ind_start + i]);
-			deriv = (weights[i] * cur_rms_val) - (((inp_val * cur_rms_val_cub) / n_cols) * cur_weighted_sum);
-
-			// now update dX
-			dX[row_id * n_cols + i] += upstream_dX[row_id * n_cols + i] * __float2bfloat16(deriv);
-
-		}
-	}
-}
-
-
-extern "C" __global__ void default_rms_norm_bwd_x_fp8e5m2_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __nv_fp8_e5m2 * rms_weight, __nv_fp8_e5m2 * X_inp, __half * upstream_dX, __half * dX) {
-		
-	// this gets dynamically allocated the size of model_dim
-	extern __shared__ uint8_t sdata[];
-
-	int rows_per_block = n_rows / gridDim.x;
-	int rows_remain = n_rows % gridDim.x;
-	int max_rows_per_block = rows_per_block + (rows_remain > 0);
-
-	// length should be equal to number of rows
-	// load in squared sums and then divide by n_cols and take sqrt
-	float * weights = (float *) sdata;
-
-
-	float * shared_fwd_weighted_sums = (float *) (weights + n_cols); 
-	// working space when computing weight derivs...
-	// the dot products will be updated here and when complete
-	// will accumulate in dW
-
-	// length equal to the number of columns
-	float * shared_fwd_rms_vals = (float *) (shared_fwd_weighted_sums + max_rows_per_block);  
 
 	int row_base = blockIdx.x;
 
@@ -464,6 +548,8 @@ extern "C" __global__ void default_rms_norm_bwd_x_fp8e5m2_fp16_kernel(int n_rows
 	
 	int thread_id = threadIdx.x;
 
+	int warp_id = thread_id / 32;
+	int lane_id = thread_id % 32;
 
 	for (uint64_t i = thread_id; i < n_cols; i+=blockDim.x){
 		weights[i] = float(rms_weight[i]);
@@ -472,43 +558,115 @@ extern "C" __global__ void default_rms_norm_bwd_x_fp8e5m2_fp16_kernel(int n_rows
 	// retrieve back the recip squared avgs
 	// corresponding to this blocks rows
 	for (int i = row_offset + thread_id; i < row_offset + rows_per_block; i+=blockDim.x){
-		shared_fwd_weighted_sums[i - row_offset] = fwd_weighted_sums[i];
-		shared_fwd_rms_vals[i - row_offset] = fwd_rms_vals[i];
+		shared_recip_avgs[i - row_offset] = fwd_rms_vals[i];
 	}
 
 	__syncthreads();
 
 	float deriv;
-	float cur_weighted_sum;
-	float cur_rms_val;
-	float cur_rms_val_cub;
+	
+	float cur_recip_avg;
+	float cur_upstream_sum;
 
 	float inp_val;
+	float out_val;
+	float out_val_scaled;
+	float cur_weight;
+
+	unsigned warp_mask = 0xFFFFFFFFU;
 
 	uint64_t row_ind_start;
 	for (int row_id = row_offset; row_id < row_offset + rows_per_block; row_id++){
 		row_ind_start = (uint64_t) (row_id) * (uint64_t) n_cols;
 
-		cur_weighted_sum = shared_fwd_weighted_sums[row_id - row_offset];
-		cur_rms_val = shared_fwd_rms_vals[row_id - row_offset];
-		cur_rms_val_cub = cur_rms_val * cur_rms_val * cur_rms_val;
+		// first save down the input row, so we can can recompute the output
+		for (int i = thread_id; i < n_cols; i+=blockDim.x){
+			inp_row[i] = X_inp[row_ind_start + i];
+		}
+
+		__syncthreads();
+
+		cur_recip_avg = shared_recip_avgs[row_id - row_offset];
+
 		
+		// first get the value C which is the sum of the upstream_dX * X_out
+		cur_upstream_sum = 0;
+		for (int i = thread_id; i < n_cols; i+=blockDim.x){
+			cur_weight = weights[i];
+			inp_val = float(inp_row[i]);
+			out_val = cur_weight * (inp_val * cur_recip_avg);
+
+			// if we want to recompute the forward pass, we already have done all the work
+			// and can save it down here...
+			if (X_out){
+				X_out[row_id * n_cols + i] = __nv_fp8_e4m3(out_val);
+			}
+
+			cur_upstream_sum += __half2float(upstream_dX[row_ind_start + i]) * out_val;
+		}
+
+		// now have each warp reduce their results
+		__syncwarp();
+
+		for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
+			cur_upstream_sum += __shfl_down_sync(warp_mask, cur_upstream_sum, warp_offset);
+		}
+
+		if (lane_id == 0){
+			reduction_data_dout[warp_id] = cur_upstream_sum;
+		}
+
+		__syncthreads();
+
+		// now we reduce among the warps, by using threads within the first warp
+
+		if (warp_id == 0){
+
+			// reassigning starting value to be the value reduced among each of the warps
+			cur_upstream_sum = reduction_data_dout[lane_id];
+
+			for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
+				cur_upstream_sum += __shfl_down_sync(warp_mask, cur_upstream_sum, warp_offset);
+			}
+
+			// now thread 0 contains the full sum
+			// can reset to be within the first index, that other threads can access
+			if (lane_id == 0){
+				reduction_data_dout[0] = cur_upstream_sum;
+			}
+		}
+
+		__syncthreads();
+
+		// now reset the upstream sum variable to be the entire row's sum
+		// that thread 0 (warp id 0, lane id 0) has just published
+		cur_upstream_sum = reduction_data_dout[0];
+
+		// now can compute:
+		// dX[i] = recip_avg * (upstream_dX[i] * rms_weight[i] - C * ((x_inp[i] * recip_avg) / n_cols))
+
 		
 		for (int i = thread_id; i < n_cols; i+=blockDim.x){
-			inp_val = float(X_inp[row_ind_start + i]);
-			deriv = (weights[i] * cur_rms_val) - (((inp_val * cur_rms_val_cub) / n_cols) * cur_weighted_sum);
+			cur_weight = weights[i];
+			inp_val = float(inp_row[i]);
+			out_val_scaled = cur_upstream_sum * ((inp_val * cur_recip_avg) / n_cols);
+			deriv = (cur_recip_avg * ((cur_weight * __half2float(upstream_dX[row_ind_start + i])) - out_val_scaled));
 
 			// now update dX
-			dX[row_id * n_cols + i] += upstream_dX[row_id * n_cols + i] * __float2half(deriv);
-
+			dX[row_id * n_cols + i] += __float2half(deriv);
 		}
+
+		// ensure sync before next row which will overwrite the input row
+		__syncthreads();
+		
 	}
 }
 
-extern "C" __global__ void default_rms_norm_bwd_x_fp8e5m2_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_weighted_sums, float * fwd_rms_vals, __nv_fp8_e5m2 * rms_weight, __nv_fp8_e5m2 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX) {
+extern "C" __global__ void default_rms_norm_bwd_x_fp8e4m3_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e4m3 * rms_weight, __nv_fp8_e4m3 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX, __nv_fp8_e4m3 * X_out) {
 		
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];
+
 
 	int rows_per_block = n_rows / gridDim.x;
 	int rows_remain = n_rows % gridDim.x;
@@ -516,16 +674,23 @@ extern "C" __global__ void default_rms_norm_bwd_x_fp8e5m2_bf16_kernel(int n_rows
 
 	// length should be equal to number of rows
 	// load in squared sums and then divide by n_cols and take sqrt
-	float * weights = (float *) sdata;
-
-
-	float * shared_fwd_weighted_sums = (float *) (weights + n_cols); 
-	// working space when computing weight derivs...
-	// the dot products will be updated here and when complete
-	// will accumulate in dW
+	__nv_fp8_e4m3 * inp_row = (__nv_fp8_e4m3 *) sdata;
+	float * weights = (float *) (inp_row + n_cols);
 
 	// length equal to the number of columns
-	float * shared_fwd_rms_vals = (float *) (shared_fwd_weighted_sums + max_rows_per_block);
+	float * shared_recip_avgs = (float *) (weights + max_rows_per_block);
+
+	// every warp will have a reduced value
+
+	// for every row we need to compute C = sum_j(upstream_dX[j] * x_out[j])
+	// as prerequisite to computing the RMS norm...
+	__shared__ float reduction_data_dout[32];
+
+	//
+
+	// then we compute 
+	// dX[i] = recip_avg * (upstream_dX[i] * rms_weight[i] - C * ((x_inp[i] * recip_avg) / n_cols))
+	
 
 	int row_base = blockIdx.x;
 
@@ -547,6 +712,9 @@ extern "C" __global__ void default_rms_norm_bwd_x_fp8e5m2_bf16_kernel(int n_rows
 	
 	int thread_id = threadIdx.x;
 
+	int warp_id = thread_id / 32;
+	int lane_id = thread_id % 32;
+
 	for (uint64_t i = thread_id; i < n_cols; i+=blockDim.x){
 		weights[i] = float(rms_weight[i]);
 	}
@@ -554,35 +722,435 @@ extern "C" __global__ void default_rms_norm_bwd_x_fp8e5m2_bf16_kernel(int n_rows
 	// retrieve back the recip squared avgs
 	// corresponding to this blocks rows
 	for (int i = row_offset + thread_id; i < row_offset + rows_per_block; i+=blockDim.x){
-		shared_fwd_weighted_sums[i - row_offset] = fwd_weighted_sums[i];
-		shared_fwd_rms_vals[i - row_offset] = fwd_rms_vals[i];
-
+		shared_recip_avgs[i - row_offset] = fwd_rms_vals[i];
 	}
 
 	__syncthreads();
 
 	float deriv;
-	float cur_weighted_sum;
-	float cur_rms_val;
-	float cur_rms_val_cub;
+	
+	float cur_recip_avg;
+	float cur_upstream_sum;
 
 	float inp_val;
+	float out_val;
+	float out_val_scaled;
+	float cur_weight;
+
+	unsigned warp_mask = 0xFFFFFFFFU;
 
 	uint64_t row_ind_start;
 	for (int row_id = row_offset; row_id < row_offset + rows_per_block; row_id++){
 		row_ind_start = (uint64_t) (row_id) * (uint64_t) n_cols;
+
+		// first save down the input row, so we can can recompute the output
+		for (int i = thread_id; i < n_cols; i+=blockDim.x){
+			inp_row[i] = X_inp[row_ind_start + i];
+		}
+
+		__syncthreads();
+
+		cur_recip_avg = shared_recip_avgs[row_id - row_offset];
+
 		
-		cur_weighted_sum = shared_fwd_weighted_sums[row_id - row_offset];
-		cur_rms_val = shared_fwd_rms_vals[row_id - row_offset];
-		cur_rms_val_cub = cur_rms_val * cur_rms_val * cur_rms_val;
+		// first get the value C which is the sum of the upstream_dX * X_out
+		cur_upstream_sum = 0;
+		for (int i = thread_id; i < n_cols; i+=blockDim.x){
+			cur_weight = weights[i];
+			inp_val = float(inp_row[i]);
+			out_val = cur_weight * (inp_val * cur_recip_avg);
+
+			// if we want to recompute the forward pass, we already have done all the work
+			// and can save it down here...
+			if (X_out){
+				X_out[row_id * n_cols + i] = __nv_fp8_e4m3(out_val);
+			}
+
+			cur_upstream_sum += __bfloat162float(upstream_dX[row_ind_start + i]) * out_val;
+		}
+
+		// now have each warp reduce their results
+		__syncwarp();
+
+		for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
+			cur_upstream_sum += __shfl_down_sync(warp_mask, cur_upstream_sum, warp_offset);
+		}
+
+		if (lane_id == 0){
+			reduction_data_dout[warp_id] = cur_upstream_sum;
+		}
+
+		__syncthreads();
+
+		// now we reduce among the warps, by using threads within the first warp
+
+		if (warp_id == 0){
+
+			// reassigning starting value to be the value reduced among each of the warps
+			cur_upstream_sum = reduction_data_dout[lane_id];
+
+			for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
+				cur_upstream_sum += __shfl_down_sync(warp_mask, cur_upstream_sum, warp_offset);
+			}
+
+			// now thread 0 contains the full sum
+			// can reset to be within the first index, that other threads can access
+			if (lane_id == 0){
+				reduction_data_dout[0] = cur_upstream_sum;
+			}
+		}
+
+		__syncthreads();
+
+		// now reset the upstream sum variable to be the entire row's sum
+		// that thread 0 (warp id 0, lane id 0) has just published
+		cur_upstream_sum = reduction_data_dout[0];
+
+		// now can compute:
+		// dX[i] = recip_avg * (upstream_dX[i] * rms_weight[i] - C * ((x_inp[i] * recip_avg) / n_cols))
+
 		
 		for (int i = thread_id; i < n_cols; i+=blockDim.x){
-			inp_val = float(X_inp[row_ind_start + i]);
-			deriv = (weights[i] * cur_rms_val) - (((inp_val * cur_rms_val_cub) / n_cols) * cur_weighted_sum);
+			cur_weight = weights[i];
+			inp_val = float(inp_row[i]);
+			out_val_scaled = cur_upstream_sum * ((inp_val * cur_recip_avg) / n_cols);
+			deriv = (cur_recip_avg * ((cur_weight * __bfloat162float(upstream_dX[row_ind_start + i])) - out_val_scaled));
 
 			// now update dX
-			dX[row_id * n_cols + i] += upstream_dX[row_id * n_cols + i] * __float2bfloat16(deriv);
-
+			dX[row_id * n_cols + i] += __float2bfloat16(deriv);
 		}
+
+		// ensure sync before next row which will overwrite the input row
+		__syncthreads();
+		
+	}
+}
+
+
+extern "C" __global__ void default_rms_norm_bwd_x_fp8e5m2_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e5m2 * rms_weight, __nv_fp8_e5m2 * X_inp, __half * upstream_dX, __half * dX, __nv_fp8_e5m2 * X_out) {
+		
+	// this gets dynamically allocated the size of model_dim
+	extern __shared__ uint8_t sdata[];
+
+
+	int rows_per_block = n_rows / gridDim.x;
+	int rows_remain = n_rows % gridDim.x;
+	int max_rows_per_block = rows_per_block + (rows_remain > 0);
+
+	// length should be equal to number of rows
+	// load in squared sums and then divide by n_cols and take sqrt
+	__nv_fp8_e5m2 * inp_row = (__nv_fp8_e5m2 *) sdata;
+	float * weights = (float *) (inp_row + n_cols);
+
+	// length equal to the number of columns
+	float * shared_recip_avgs = (float *) (weights + max_rows_per_block);
+
+	// every warp will have a reduced value
+
+	// for every row we need to compute C = sum_j(upstream_dX[j] * x_out[j])
+	// as prerequisite to computing the RMS norm...
+	__shared__ float reduction_data_dout[32];
+
+	//
+
+	// then we compute 
+	// dX[i] = recip_avg * (upstream_dX[i] * rms_weight[i] - C * ((x_inp[i] * recip_avg) / n_cols))
+	
+
+	int row_base = blockIdx.x;
+
+	if (row_base >= n_rows){
+		return;
+	}
+
+	int row_offset;
+	if (blockIdx.x < rows_remain){
+		// this block will need to do an extra row
+		rows_per_block += 1;
+		// all prior blocks also had an extra row
+		row_offset = row_base * rows_per_block;
+	}
+	else{
+		row_offset = row_base * rows_per_block + rows_remain;
+	}
+
+	
+	int thread_id = threadIdx.x;
+
+	int warp_id = thread_id / 32;
+	int lane_id = thread_id % 32;
+
+	for (uint64_t i = thread_id; i < n_cols; i+=blockDim.x){
+		weights[i] = float(rms_weight[i]);
+	}
+
+	// retrieve back the recip squared avgs
+	// corresponding to this blocks rows
+	for (int i = row_offset + thread_id; i < row_offset + rows_per_block; i+=blockDim.x){
+		shared_recip_avgs[i - row_offset] = fwd_rms_vals[i];
+	}
+
+	__syncthreads();
+
+	float deriv;
+	
+	float cur_recip_avg;
+	float cur_upstream_sum;
+
+	float inp_val;
+	float out_val;
+	float out_val_scaled;
+	float cur_weight;
+
+	unsigned warp_mask = 0xFFFFFFFFU;
+
+	uint64_t row_ind_start;
+	for (int row_id = row_offset; row_id < row_offset + rows_per_block; row_id++){
+		row_ind_start = (uint64_t) (row_id) * (uint64_t) n_cols;
+
+		// first save down the input row, so we can can recompute the output
+		for (int i = thread_id; i < n_cols; i+=blockDim.x){
+			inp_row[i] = X_inp[row_ind_start + i];
+		}
+
+		__syncthreads();
+
+		cur_recip_avg = shared_recip_avgs[row_id - row_offset];
+
+		
+		// first get the value C which is the sum of the upstream_dX * X_out
+		cur_upstream_sum = 0;
+		for (int i = thread_id; i < n_cols; i+=blockDim.x){
+			cur_weight = weights[i];
+			inp_val = float(inp_row[i]);
+			out_val = cur_weight * (inp_val * cur_recip_avg);
+
+			// if we want to recompute the forward pass, we already have done all the work
+			// and can save it down here...
+			if (X_out){
+				X_out[row_id * n_cols + i] = __nv_fp8_e5m2(out_val);
+			}
+
+			cur_upstream_sum += __half2float(upstream_dX[row_ind_start + i]) * out_val;
+		}
+
+		// now have each warp reduce their results
+		__syncwarp();
+
+		for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
+			cur_upstream_sum += __shfl_down_sync(warp_mask, cur_upstream_sum, warp_offset);
+		}
+
+		if (lane_id == 0){
+			reduction_data_dout[warp_id] = cur_upstream_sum;
+		}
+
+		__syncthreads();
+
+		// now we reduce among the warps, by using threads within the first warp
+
+		if (warp_id == 0){
+
+			// reassigning starting value to be the value reduced among each of the warps
+			cur_upstream_sum = reduction_data_dout[lane_id];
+
+			for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
+				cur_upstream_sum += __shfl_down_sync(warp_mask, cur_upstream_sum, warp_offset);
+			}
+
+			// now thread 0 contains the full sum
+			// can reset to be within the first index, that other threads can access
+			if (lane_id == 0){
+				reduction_data_dout[0] = cur_upstream_sum;
+			}
+		}
+
+		__syncthreads();
+
+		// now reset the upstream sum variable to be the entire row's sum
+		// that thread 0 (warp id 0, lane id 0) has just published
+		cur_upstream_sum = reduction_data_dout[0];
+
+		// now can compute:
+		// dX[i] = recip_avg * (upstream_dX[i] * rms_weight[i] - C * ((x_inp[i] * recip_avg) / n_cols))
+
+		
+		for (int i = thread_id; i < n_cols; i+=blockDim.x){
+			cur_weight = weights[i];
+			inp_val = float(inp_row[i]);
+			out_val_scaled = cur_upstream_sum * ((inp_val * cur_recip_avg) / n_cols);
+			deriv = (cur_recip_avg * ((cur_weight * __half2float(upstream_dX[row_ind_start + i])) - out_val_scaled));
+
+			// now update dX
+			dX[row_id * n_cols + i] += __float2half(deriv);
+		}
+
+		// ensure sync before next row which will overwrite the input row
+		__syncthreads();
+		
+	}
+}
+
+extern "C" __global__ void default_rms_norm_bwd_x_fp8e5m2_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e5m2 * rms_weight, __nv_fp8_e5m2 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX, __nv_fp8_e5m2 * X_out) {
+		
+	// this gets dynamically allocated the size of model_dim
+	extern __shared__ uint8_t sdata[];
+
+
+	int rows_per_block = n_rows / gridDim.x;
+	int rows_remain = n_rows % gridDim.x;
+	int max_rows_per_block = rows_per_block + (rows_remain > 0);
+
+	// length should be equal to number of rows
+	// load in squared sums and then divide by n_cols and take sqrt
+	__nv_fp8_e5m2 * inp_row = (__nv_fp8_e5m2 *) sdata;
+	float * weights = (float *) (inp_row + n_cols);
+
+	// length equal to the number of columns
+	float * shared_recip_avgs = (float *) (weights + max_rows_per_block);
+
+	// every warp will have a reduced value
+
+	// for every row we need to compute C = sum_j(upstream_dX[j] * x_out[j])
+	// as prerequisite to computing the RMS norm...
+	__shared__ float reduction_data_dout[32];
+
+	//
+
+	// then we compute 
+	// dX[i] = recip_avg * (upstream_dX[i] * rms_weight[i] - C * ((x_inp[i] * recip_avg) / n_cols))
+	
+
+	int row_base = blockIdx.x;
+
+	if (row_base >= n_rows){
+		return;
+	}
+
+	int row_offset;
+	if (blockIdx.x < rows_remain){
+		// this block will need to do an extra row
+		rows_per_block += 1;
+		// all prior blocks also had an extra row
+		row_offset = row_base * rows_per_block;
+	}
+	else{
+		row_offset = row_base * rows_per_block + rows_remain;
+	}
+
+	
+	int thread_id = threadIdx.x;
+
+	int warp_id = thread_id / 32;
+	int lane_id = thread_id % 32;
+
+	for (uint64_t i = thread_id; i < n_cols; i+=blockDim.x){
+		weights[i] = float(rms_weight[i]);
+	}
+
+	// retrieve back the recip squared avgs
+	// corresponding to this blocks rows
+	for (int i = row_offset + thread_id; i < row_offset + rows_per_block; i+=blockDim.x){
+		shared_recip_avgs[i - row_offset] = fwd_rms_vals[i];
+	}
+
+	__syncthreads();
+
+	float deriv;
+	
+	float cur_recip_avg;
+	float cur_upstream_sum;
+
+	float inp_val;
+	float out_val;
+	float out_val_scaled;
+	float cur_weight;
+
+	unsigned warp_mask = 0xFFFFFFFFU;
+
+	uint64_t row_ind_start;
+	for (int row_id = row_offset; row_id < row_offset + rows_per_block; row_id++){
+		row_ind_start = (uint64_t) (row_id) * (uint64_t) n_cols;
+
+		// first save down the input row, so we can can recompute the output
+		for (int i = thread_id; i < n_cols; i+=blockDim.x){
+			inp_row[i] = X_inp[row_ind_start + i];
+		}
+
+		__syncthreads();
+
+		cur_recip_avg = shared_recip_avgs[row_id - row_offset];
+
+		
+		// first get the value C which is the sum of the upstream_dX * X_out
+		cur_upstream_sum = 0;
+		for (int i = thread_id; i < n_cols; i+=blockDim.x){
+			cur_weight = weights[i];
+			inp_val = float(inp_row[i]);
+			out_val = cur_weight * (inp_val * cur_recip_avg);
+
+			// if we want to recompute the forward pass, we already have done all the work
+			// and can save it down here...
+			if (X_out){
+				X_out[row_id * n_cols + i] = __nv_fp8_e5m2(out_val);
+			}
+
+			cur_upstream_sum += __bfloat162float(upstream_dX[row_ind_start + i]) * out_val;
+		}
+
+		// now have each warp reduce their results
+		__syncwarp();
+
+		for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
+			cur_upstream_sum += __shfl_down_sync(warp_mask, cur_upstream_sum, warp_offset);
+		}
+
+		if (lane_id == 0){
+			reduction_data_dout[warp_id] = cur_upstream_sum;
+		}
+
+		__syncthreads();
+
+		// now we reduce among the warps, by using threads within the first warp
+
+		if (warp_id == 0){
+
+			// reassigning starting value to be the value reduced among each of the warps
+			cur_upstream_sum = reduction_data_dout[lane_id];
+
+			for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
+				cur_upstream_sum += __shfl_down_sync(warp_mask, cur_upstream_sum, warp_offset);
+			}
+
+			// now thread 0 contains the full sum
+			// can reset to be within the first index, that other threads can access
+			if (lane_id == 0){
+				reduction_data_dout[0] = cur_upstream_sum;
+			}
+		}
+
+		__syncthreads();
+
+		// now reset the upstream sum variable to be the entire row's sum
+		// that thread 0 (warp id 0, lane id 0) has just published
+		cur_upstream_sum = reduction_data_dout[0];
+
+		// now can compute:
+		// dX[i] = recip_avg * (upstream_dX[i] * rms_weight[i] - C * ((x_inp[i] * recip_avg) / n_cols))
+
+		
+		for (int i = thread_id; i < n_cols; i+=blockDim.x){
+			cur_weight = weights[i];
+			inp_val = float(inp_row[i]);
+			out_val_scaled = cur_upstream_sum * ((inp_val * cur_recip_avg) / n_cols);
+			deriv = (cur_recip_avg * ((cur_weight * __bfloat162float(upstream_dX[row_ind_start + i])) - out_val_scaled));
+
+			// now update dX
+			dX[row_id * n_cols + i] += __float2bfloat16(deriv);
+		}
+
+		// ensure sync before next row which will overwrite the input row
+		__syncthreads();
+		
 	}
 }

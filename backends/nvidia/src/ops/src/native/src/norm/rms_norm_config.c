@@ -35,7 +35,8 @@ int default_rms_norm_set_launch_config(Cuda_Launch_Config * cuda_launch_config, 
 
 	DataflowDatatype * arg_dtypes = op_skeleton_header -> arg_dtypes;
 
-	DataflowDatatype norm_dt = arg_dtypes[3];
+	// X dtype
+	DataflowDatatype norm_dt = arg_dtypes[4];
 
 	size_t dtype_size = dataflow_sizeof_element(norm_dt);
 
@@ -52,19 +53,24 @@ int default_rms_norm_set_launch_config(Cuda_Launch_Config * cuda_launch_config, 
 
 	Cuda_Device_Info * device_info = (Cuda_Device_Info *) dataflow_handle -> device_info;
 
-	int sm_count = device_info -> sm_count;
-
-	cuda_launch_config -> gridDimX = sm_count;
-
 	int rms_max_threads_per_block = (cuda_function -> function_config).func_max_threads_per_block;
 	cuda_launch_config -> blockDimX = rms_max_threads_per_block;
 
+	int sm_count = device_info -> sm_count;
 
 	void ** op_args = op -> op_args;
 
+	int num_rows = *((int *) op_args[0]);
+
+	int num_blocks = MY_MIN(num_rows, sm_count);
+
+	cuda_launch_config -> gridDimX = num_blocks;
+
 	int model_dim = *((int *) op_args[1]);
 
-	int rms_smem = 2 * dtype_size * model_dim;
+	// saving weights as floats in smem
+	// and copying X to smem
+	int rms_smem = 4 * model_dim + dtype_size * model_dim;
 
 	int rms_max_smem = (cuda_function -> function_config).func_max_smem;
 
@@ -86,13 +92,25 @@ int default_rms_norm_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_launch_co
 
 	DataflowDatatype * arg_dtypes = op_skeleton_header -> arg_dtypes;
 
-	// backward dtype
+
+
+	// dtype of saved rms vals from fwd pass
 	DataflowDatatype helper_data_dt = arg_dtypes[3];
 
 	size_t helper_data_dtype_size = dataflow_sizeof_element(helper_data_dt);
 
 	if (helper_data_dtype_size == 0){
 		fprintf(stderr, "Error: rms norm not available for dtype %s...\n", dataflow_datatype_as_string(helper_data_dt));
+		return -1;
+	}
+
+	// dtype of fwd X`
+	DataflowDatatype fwd_dt = arg_dtypes[5];
+
+	size_t fwd_dtype_size = dataflow_sizeof_element(fwd_dt);
+
+	if (fwd_dtype_size == 0){
+		fprintf(stderr, "Error: rms norm not available for dtype %s...\n", dataflow_datatype_as_string(fwd_dt));
 		return -1;
 	}
 
@@ -111,23 +129,27 @@ int default_rms_norm_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_launch_co
 
 	int model_dim = *((int *) op_args[1]);
 
-	int rms_base_smem = helper_data_dtype_size * model_dim;
+	// saving down original row and also weights as floats in smem
+	int rms_base_smem = (fwd_dtype_size * model_dim) + (4 * model_dim);
 
 	int rms_max_smem = (cuda_function -> function_config).func_max_smem;
 
 	int rms_remain_smem = rms_max_smem - rms_base_smem;
 
-	// need to save the weighted sums and squared sums
-	int rms_max_rows_per_block = rms_remain_smem / (2 * helper_data_dtype_size);
+	// need to save down the rms vals in smem
+	int rms_max_rows_per_block = rms_remain_smem / (helper_data_dtype_size);
 
-	int num_blocks = MY_CEIL(num_rows, rms_max_rows_per_block);
+	int min_num_blocks = MY_CEIL(num_rows, rms_max_rows_per_block);
 
 	int sm_count = device_info -> sm_count;
-	if (num_blocks <= sm_count){
+	
+
+	// could parallelize more, by having more blocks that use less than max rows per block...
+	if (min_num_blocks <= sm_count) {
 		cuda_launch_config -> gridDimX = sm_count;
 	}
 	else{
-		cuda_launch_config -> gridDimX = num_blocks;
+		cuda_launch_config -> gridDimX = min_num_blocks;
 	}
 
 	int max_rows_per_block = MY_CEIL(num_rows, (cuda_launch_config -> gridDimX));
@@ -136,7 +158,7 @@ int default_rms_norm_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_launch_co
 
 	// Should never fail...
 	if (rms_smem > rms_max_smem){
-		fprintf(stderr, "Error: rms norm will fail. Unable to support model dim of %d with max rows per block of %d, and intermediate dtype %s. Not enough smem on device, max for this func is %d bytes, but requires %d...\n", model_dim, max_rows_per_block, dataflow_datatype_as_string(helper_data_dt), rms_max_smem, rms_smem);
+		fprintf(stderr, "Error: rms norm bwd x will fail. Unable to support model dim of %d with max rows per block of %d, and intermediate dtype %s. Not enough smem on device, max for this func is %d bytes, but requires %d...\n", model_dim, max_rows_per_block, dataflow_datatype_as_string(helper_data_dt), rms_max_smem, rms_smem);
 		return -1;
 	}
 
@@ -184,22 +206,27 @@ int default_rms_norm_bwd_w_set_launch_config(Cuda_Launch_Config * cuda_launch_co
 
 	int model_dim = *((int *) op_args[1]);
 
-	int rms_base_smem = helper_data_dtype_size * model_dim;
+	// saving weight derivs as floats in smem
+	int rms_base_smem = 4 * model_dim;
 
 	int rms_max_smem = (cuda_function -> function_config).func_max_smem;
 
 	int rms_remain_smem = rms_max_smem - rms_base_smem;
 
-	int rms_max_rows_per_block = rms_remain_smem / helper_data_dtype_size;
+	// need to save down the rms vals in smem
+	int rms_max_rows_per_block = rms_remain_smem / (helper_data_dtype_size);
 
-	int num_blocks = MY_CEIL(num_rows, rms_max_rows_per_block);
+	int min_num_blocks = MY_CEIL(num_rows, rms_max_rows_per_block);
 
 	int sm_count = device_info -> sm_count;
-	if (num_blocks <= sm_count){
+	
+
+	// could parallelize more, by having more blocks that use less than max rows per block...
+	if (min_num_blocks <= sm_count) {
 		cuda_launch_config -> gridDimX = sm_count;
 	}
 	else{
-		cuda_launch_config -> gridDimX = num_blocks;
+		cuda_launch_config -> gridDimX = min_num_blocks;
 	}
 
 	int max_rows_per_block = MY_CEIL(num_rows, (cuda_launch_config -> gridDimX));
@@ -208,7 +235,7 @@ int default_rms_norm_bwd_w_set_launch_config(Cuda_Launch_Config * cuda_launch_co
 
 	// Should never fail...
 	if (rms_smem > rms_max_smem){
-		fprintf(stderr, "Error: rms norm will fail. Unable to support model dim of %d with max rows per block of %d, and intermediate dtype %s. Not enough smem on device, max for this func is %d bytes, but requires %d...\n", model_dim, max_rows_per_block, dataflow_datatype_as_string(helper_data_dt), rms_max_smem, rms_smem);
+		fprintf(stderr, "Error: rms norm bwd w will fail. Unable to support model dim of %d with max rows per block of %d, and intermediate dtype %s. Not enough smem on device, max for this func is %d bytes, but requires %d...\n", model_dim, max_rows_per_block, dataflow_datatype_as_string(helper_data_dt), rms_max_smem, rms_smem);
 		return -1;
 	}
 
@@ -230,6 +257,7 @@ int default_rms_norm_noscale_set_launch_config(Cuda_Launch_Config * cuda_launch_
 
 	DataflowDatatype * arg_dtypes = op_skeleton_header -> arg_dtypes;
 
+	// X dtype
 	DataflowDatatype norm_dt = arg_dtypes[3];
 
 	size_t dtype_size = dataflow_sizeof_element(norm_dt);
@@ -249,13 +277,17 @@ int default_rms_norm_noscale_set_launch_config(Cuda_Launch_Config * cuda_launch_
 
 	int sm_count = device_info -> sm_count;
 
-	cuda_launch_config -> gridDimX = sm_count;
+	void ** op_args = op -> op_args;
+
+	int num_rows = *((int *) op_args[0]);
+
+	int num_blocks = MY_MIN(num_rows, sm_count);
+
+	cuda_launch_config -> gridDimX = num_blocks;
 
 	int rms_max_threads_per_block = (cuda_function -> function_config).func_max_threads_per_block;
 	cuda_launch_config -> blockDimX = rms_max_threads_per_block;
 
-
-	void ** op_args = op -> op_args;
 
 	int model_dim = *((int *) op_args[1]);
 
@@ -265,7 +297,7 @@ int default_rms_norm_noscale_set_launch_config(Cuda_Launch_Config * cuda_launch_
 	int rms_max_smem = (cuda_function -> function_config).func_max_smem;
 
 	if (rms_smem > rms_max_smem){
-		fprintf(stderr, "Error: rms norm will fail. Unable to support model dim of %d and dtype %s. Not enough smem on device, max for this func is %d bytes, but requires %d...\n", model_dim, dataflow_datatype_as_string(norm_dt), rms_max_smem, rms_smem);
+		fprintf(stderr, "Error: rms norm noscale will fail. Unable to support model dim of %d and dtype %s. Not enough smem on device, max for this func is %d bytes, but requires %d...\n", model_dim, dataflow_datatype_as_string(norm_dt), rms_max_smem, rms_smem);
 		return -1;
 	}
 
@@ -282,13 +314,25 @@ int default_rms_norm_noscale_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_l
 
 	DataflowDatatype * arg_dtypes = op_skeleton_header -> arg_dtypes;
 
-	// backward dtype
+	
+
+	// dtype of saved rms vals from fwd pass
 	DataflowDatatype helper_data_dt = arg_dtypes[3];
 
 	size_t helper_data_dtype_size = dataflow_sizeof_element(helper_data_dt);
 
 	if (helper_data_dtype_size == 0){
 		fprintf(stderr, "Error: rms norm not available for dtype %s...\n", dataflow_datatype_as_string(helper_data_dt));
+		return -1;
+	}
+
+	// dtype of fwd X`
+	DataflowDatatype fwd_dt = arg_dtypes[4];
+
+	size_t fwd_dtype_size = dataflow_sizeof_element(fwd_dt);
+
+	if (fwd_dtype_size == 0){
+		fprintf(stderr, "Error: rms norm not available for dtype %s...\n", dataflow_datatype_as_string(fwd_dt));
 		return -1;
 	}
 
@@ -307,23 +351,27 @@ int default_rms_norm_noscale_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_l
 
 	int model_dim = *((int *) op_args[1]);
 
-	int rms_base_smem = helper_data_dtype_size * model_dim;
+	// saving down original row and also weights as floats in smem
+	int rms_base_smem = (fwd_dtype_size * model_dim);
 
 	int rms_max_smem = (cuda_function -> function_config).func_max_smem;
 
 	int rms_remain_smem = rms_max_smem - rms_base_smem;
 
-	// need to save the weighted sums and squared sums
-	int rms_max_rows_per_block = rms_remain_smem / (2 * helper_data_dtype_size);
+	// need to save down the rms vals in smem
+	int rms_max_rows_per_block = rms_remain_smem / (helper_data_dtype_size);
 
-	int num_blocks = MY_CEIL(num_rows, rms_max_rows_per_block);
+	int min_num_blocks = MY_CEIL(num_rows, rms_max_rows_per_block);
 
 	int sm_count = device_info -> sm_count;
-	if (num_blocks <= sm_count){
+	
+
+	// could parallelize more, by having more blocks that use less than max rows per block...
+	if (min_num_blocks <= sm_count) {
 		cuda_launch_config -> gridDimX = sm_count;
 	}
 	else{
-		cuda_launch_config -> gridDimX = num_blocks;
+		cuda_launch_config -> gridDimX = min_num_blocks;
 	}
 
 	int max_rows_per_block = MY_CEIL(num_rows, (cuda_launch_config -> gridDimX));
@@ -332,7 +380,7 @@ int default_rms_norm_noscale_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_l
 
 	// Should never fail...
 	if (rms_smem > rms_max_smem){
-		fprintf(stderr, "Error: rms norm will fail. Unable to support model dim of %d with max rows per block of %d, and intermediate dtype %s. Not enough smem on device, max for this func is %d bytes, but requires %d...\n", model_dim, max_rows_per_block, dataflow_datatype_as_string(helper_data_dt), rms_max_smem, rms_smem);
+		fprintf(stderr, "Error: rms norm bwd x noscale will fail. Unable to support model dim of %d with max rows per block of %d, and intermediate dtype %s. Not enough smem on device, max for this func is %d bytes, but requires %d...\n", model_dim, max_rows_per_block, dataflow_datatype_as_string(helper_data_dt), rms_max_smem, rms_smem);
 		return -1;
 	}
 
