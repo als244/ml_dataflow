@@ -1362,6 +1362,36 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	}
 
 
+
+
+	// Now need to copy the correct parts of bwd_context -> x_k and bwd_context -> x_v to the correct locations in working_activations -> x_k_local and working_activations -> x_v_local!...
+
+	uint64_t start_local_token_ind = bwd_context -> total_context_tokens - bwd_context -> cur_tokens_populated;
+	void * x_k_global_src = bwd_context -> x_k + ((uint64_t) start_local_token_ind * (uint64_t) kv_dim * (uint64_t) x_el_size);
+	void * x_v_global_src = bwd_context -> x_v + ((uint64_t) start_local_token_ind * (uint64_t) kv_dim * (uint64_t) x_el_size);
+
+	// need to copy gradients from global ctx into local...
+
+	ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, working_activations -> x_k_local, x_k_global_src, (uint64_t) total_q * (uint64_t) kv_dim * (uint64_t) x_el_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit peer transfer for x_k_global...\n");
+		return -1;
+	}
+
+	ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, working_activations -> x_v_local, x_v_global_src, (uint64_t) total_q * (uint64_t) kv_dim * (uint64_t) x_el_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit peer transfer for x_v_global...\n");
+		return -1;
+	}
+
+	// Update the cur_tokens_populated...
+	bwd_context -> cur_tokens_populated += total_q;
+
+	if (bwd_context -> cur_tokens_populated == bwd_context -> total_context_tokens){
+		bwd_context -> cur_tokens_populated = 0;
+	}
+
+
 	if (TO_SAVE_DATA && TO_SAVE_BWD_LAYER && ((BWD_LAYER_ID_TO_SAVE == -1) || (layer_id == BWD_LAYER_ID_TO_SAVE))){
 		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_attn_k_local_inp", working_activations -> x_k_local, total_q, kv_dim, bwd_dt);
 		if (ret){
@@ -1377,6 +1407,8 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 			return -1;
 		}
 	}
+
+
 
 	// Now workng_activations -> x_k_locat should be pointer within bwd_context -> x_k
 	// with the correct accumulated gradients...
