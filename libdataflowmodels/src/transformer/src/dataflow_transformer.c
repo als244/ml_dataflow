@@ -1050,6 +1050,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
     int ffn_dim = bwd_block_config -> ffn_dim;
 
 	size_t x_el_size = dataflow_sizeof_element(fwd_dt);
+	size_t x_el_bwd_size = dataflow_sizeof_element(bwd_dt);
 
 	   
 	Seq_Batch * seq_batch = inp_grad_stream -> seq_batch;
@@ -1367,18 +1368,18 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	// Now need to copy the correct parts of bwd_context -> x_k and bwd_context -> x_v to the correct locations in working_activations -> x_k_local and working_activations -> x_v_local!...
 
 	uint64_t start_local_token_ind = bwd_context -> total_context_tokens - bwd_context -> cur_tokens_populated;
-	void * x_k_global_src = bwd_context -> x_k + ((uint64_t) start_local_token_ind * (uint64_t) kv_dim * (uint64_t) x_el_size);
-	void * x_v_global_src = bwd_context -> x_v + ((uint64_t) start_local_token_ind * (uint64_t) kv_dim * (uint64_t) x_el_size);
+	void * x_k_global_src = bwd_context -> x_k + ((uint64_t) start_local_token_ind * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
+	void * x_v_global_src = bwd_context -> x_v + ((uint64_t) start_local_token_ind * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
 
 	// need to copy gradients from global ctx into local...
 
-	ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, working_activations -> x_k_local, x_k_global_src, (uint64_t) total_q * (uint64_t) kv_dim * (uint64_t) x_el_size);
+	ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, working_activations -> x_k_local, x_k_global_src, (uint64_t) total_q * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
 	if (ret){
 		fprintf(stderr, "Error: failed to submit peer transfer for x_k_global...\n");
 		return -1;
 	}
 
-	ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, working_activations -> x_v_local, x_v_global_src, (uint64_t) total_q * (uint64_t) kv_dim * (uint64_t) x_el_size);
+	ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, working_activations -> x_v_local, x_v_global_src, (uint64_t) total_q * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
 	if (ret){
 		fprintf(stderr, "Error: failed to submit peer transfer for x_v_global...\n");
 		return -1;
@@ -1605,7 +1606,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 							fwd_activations -> x_inp,
 							working_activations -> recomputed_activations -> recomputed_attn_norm,
 							NULL, NULL);
-	if (!ret){
+	if (ret){
 		fprintf(stderr, "Error: failed to submit recompute attn norm...\n");
 		return -1;
 	}
@@ -1618,7 +1619,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 							fwd_activations -> x_o,
 							working_activations -> recomputed_activations -> recomputed_ffn_norm,
 							NULL, NULL);
-	if (!ret){
+	if (ret){
 		fprintf(stderr, "Error: failed to submit recompute ffn norm...\n");
 		return -1;
 	}
