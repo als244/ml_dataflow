@@ -1367,7 +1367,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 
 	// Now need to copy the correct parts of bwd_context -> x_k and bwd_context -> x_v to the correct locations in working_activations -> x_k_local and working_activations -> x_v_local!...
 
-	uint64_t start_local_token_ind = bwd_context -> total_context_tokens - bwd_context -> cur_tokens_populated;
+	uint64_t start_local_token_ind = (bwd_context -> total_context_tokens - bwd_context -> cur_tokens_populated) - total_q;
 	void * x_k_global_src = bwd_context -> x_k + ((uint64_t) start_local_token_ind * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
 	void * x_v_global_src = bwd_context -> x_v + ((uint64_t) start_local_token_ind * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
 
