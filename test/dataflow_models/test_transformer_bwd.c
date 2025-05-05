@@ -738,16 +738,18 @@ int main(int argc, char * argv[]){
 	} 
 
 
+	uint64_t context_buffer_bwd_size = 2 * (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_bwd_size;
+	
 	(bwd_context) -> contextBuffer = cur_dev_mem;
-	(bwd_context) -> contextBufferBytes = context_buffer_size;
+	(bwd_context) -> contextBufferBytes = context_buffer_bwd_size;
 	
 	(bwd_context) -> cur_tokens_populated = 0;
 	(bwd_context) -> total_context_tokens = total_tokens;
 
 	(bwd_context) -> x_k = cur_dev_mem;
-	(bwd_context) -> x_v = (bwd_context) -> x_k + (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_size;
+	(bwd_context) -> x_v = (bwd_context) -> x_k + (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_bwd_size;
 
-	cur_dev_mem += context_buffer_size;
+	cur_dev_mem += context_buffer_bwd_size;
 
 	
 	/*
@@ -845,29 +847,6 @@ int main(int argc, char * argv[]){
 	// Saved Actviations will live on device and might be transferred back to host and retrieved prior to bwd pass...
 
 
-		// RECOMPUTED ACTIVATIONS BUFFER SPACE FOR RE-CALCULATING NORM VALUES...
-		// IN REALITY WE ONLY NEED ONE OF THESE FOR THE ENTIRE DEVICE, but this is easier to handle...
-
-	Seq_Batch_Recomputed_Activations * recomputed_activations = malloc(sizeof(Seq_Batch_Recomputed_Activations));
-	if (!recomputed_activations){
-		fprintf(stderr, "Error: failed to allocate recomputed_activations cotnainer...\n");
-		return -1;
-	}
-
-	uint64_t recomputed_activations_buffer_size = get_seq_batch_recomputed_activations_buffer_size(seq_batches[0]);
-
-
-
-	void * recomputed_activations_buffer = cur_dev_mem;
-
-	ret = bind_seq_batch_recomputed_activations_buffer(&(seq_batches[0] -> recomputed_activations_offsets), recomputed_activations, recomputed_activations_buffer, recomputed_activations_buffer_size);
-	if (ret){
-		fprintf(stderr, "Error: failed to bind seq_batch recomputed_activations buffer...\n");
-		return -1;
-	}
-
-	cur_dev_mem += recomputed_activations_buffer_size;
-
 	// JUST FOR NOW (while testing for correctness): NOT DEALING WITH DATA TRANSFERS AND SAVING ALL ACTIVATIONS ON DEVICE...
 
 	int num_saved_activation_buffers = n_layers * num_chunks;
@@ -892,11 +871,8 @@ int main(int argc, char * argv[]){
 
 		cur_dev_mem += saved_activations_buffer_size;
 
-		// set the recomputed activations buffer
-		// Every chunk and layer can reuse the same recomputed activations buffer...
-		// This gets populated during BWD X and is used during BWD W...
-		// so it will get reset for each chunk and each layer during bwd pass...
-		saved_activations[i].recomputed_activations = recomputed_activations;
+		// only the grad activations will have a recomputed activations buffer...
+		saved_activations[i].recomputed_activations = NULL;
 	}
 	
 	
@@ -954,6 +930,34 @@ int main(int argc, char * argv[]){
 	}
 
 	cur_dev_mem += grad_activations_buffer_size;
+
+
+
+	// RECOMPUTED ACTIVATIONS BUFFER SPACE FOR RE-CALCULATING NORM VALUES...
+	// This attaches to grad activations...
+
+	Seq_Batch_Recomputed_Activations * recomputed_activations = malloc(sizeof(Seq_Batch_Recomputed_Activations));
+	if (!recomputed_activations){
+		fprintf(stderr, "Error: failed to allocate recomputed_activations cotnainer...\n");
+		return -1;
+	}
+
+	uint64_t recomputed_activations_buffer_size = get_seq_batch_recomputed_activations_buffer_size(seq_batches[0]);
+
+
+
+	void * recomputed_activations_buffer = cur_dev_mem;
+
+	ret = bind_seq_batch_recomputed_activations_buffer(&(seq_batches[0] -> recomputed_activations_offsets), recomputed_activations, recomputed_activations_buffer, recomputed_activations_buffer_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to bind seq_batch recomputed_activations buffer...\n");
+		return -1;
+	}
+
+	cur_dev_mem += recomputed_activations_buffer_size;
+
+	// set the recomputed activations buffer in grad activations...
+	grad_saved_activations -> recomputed_activations = recomputed_activations;
 
 
 	Transformer_Block_Activations * grad_activations = malloc(sizeof(Transformer_Block_Activations));
