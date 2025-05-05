@@ -2,11 +2,11 @@
 #include "dataflow_transformer.h"
 
 // toggle to print out before submitting any ops...
-#define TO_PRINT 0
+#define TO_PRINT 1
 
 // meta-toggle required to be set to 1 to save any data
 // when set to 0, nothing will be saved
-#define TO_SAVE_DATA 0
+#define TO_SAVE_DATA 1
 
 
 // DETERMINES WHAT DATA TO SAVE...
@@ -1265,7 +1265,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 			return -1;
 		}
 
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_ffn_norm_recomputed", ffn_norm_recomputed, total_q, 1, DATAFLOW_FP32);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_ffn_norm_recomputed", ffn_norm_recomputed, total_q, model_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_ffn_norm_recomputed file...\n");
 			return -1;
@@ -1425,9 +1425,14 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	// Now need to copy the correct parts of bwd_context -> x_k and bwd_context -> x_v to the correct locations in working_activations -> x_k_local and working_activations -> x_v_local!...
 
 	uint64_t start_local_token_ind = (bwd_context -> total_context_tokens - bwd_context -> cur_tokens_populated) - total_q;
+	printf("\n\n\nLayer %d!\n\tSeq %d\n\tChunk %d\n\tTotal Context Tokens %d\n\tCur Tokens Populated %d\n\tStart local token ind: %lu\n\n", layer_id, seq_id, chunk_id, bwd_context -> total_context_tokens, bwd_context -> cur_tokens_populated, start_local_token_ind);
 	void * x_k_global_src = bwd_context -> x_k + ((uint64_t) start_local_token_ind * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
 	void * x_v_global_src = bwd_context -> x_v + ((uint64_t) start_local_token_ind * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
-
+	
+	printf("\n\nBwd X -> k: %p\nX k global src: %p\nX k local dst: %p\nSize of copy: %lu\n", bwd_context -> x_k, x_k_global_src, working_activations -> x_k_local, (uint64_t) total_q * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
+	printf("\n\nBwd X -> v: %p\nX v global src: %p\nX v local dst: %p\nSize of copy: %lu\n\n\n\n", bwd_context -> x_v, x_v_global_src, working_activations -> x_v_local, (uint64_t) total_q * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
+	
+	
 	// need to copy gradients from global ctx into local...
 
 	ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, working_activations -> x_k_local, x_k_global_src, (uint64_t) total_q * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
