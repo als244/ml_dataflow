@@ -19,14 +19,7 @@ import time
 import pickle
 
 
-
-SAVE_LAYER_ID = -1
-SAVE_ITER = 0
-
 SAVE_DIR = "/mnt/storage/research/ml_dataflow/correct_transformer_data"
-TOKEN_ITERS_TO_PRINT = 1
-
-
 
 @dataclass
 class ModelArgs:

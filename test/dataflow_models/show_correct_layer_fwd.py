@@ -2,7 +2,7 @@ import torch
 import sys
 
 if len(sys.argv) < 2:
-    print("Error. Usage: python show_correct_layer_inp_out.py <layer_id>")
+    print("Error. Usage: python show_correct_layer_fwd.py <layer_id>")
     sys.exit(1)
 
 layer_id = int(sys.argv[1])
