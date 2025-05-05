@@ -497,20 +497,18 @@ uint64_t get_seq_batch_recomputed_activations_buffer_size(Seq_Batch * seq_batch)
     return seq_batch -> recomputed_activations_offsets.total_size;
 }
 
-int bind_seq_batch_recomputed_activations_buffer(Seq_Batch_Saved_Activations * saved_activations, void * recomputed_activations_buffer, uint64_t recomputed_activations_buffer_size) {
+int bind_seq_batch_recomputed_activations_buffer(Seq_Batch_Recomputed_Activations_Offsets * recomputed_activations_offsets, Seq_Batch_Recomputed_Activations * recomputed_activations, void * recomputed_activations_buffer, uint64_t recomputed_activations_buffer_size) {
 
-    Seq_Batch_Recomputed_Activations_Offsets * recomputed_activations_offsets = &(saved_activations -> seq_batch -> recomputed_activations_offsets);
-    
     if (recomputed_activations_buffer_size < recomputed_activations_offsets -> total_size){
         fprintf(stderr, "Error: recomputed activations buffer size is less than the required size. Tried to bind with size %lu, but required size is %lu...\n", recomputed_activations_buffer_size, recomputed_activations_offsets -> total_size);
         return -1;
     }
 
-    saved_activations -> recomputed_activations -> recomputedActivationsBuffer = recomputed_activations_buffer;
-    saved_activations -> recomputed_activations -> recomputedActivationsBufferBytes = recomputed_activations_buffer_size;
+    recomputed_activations -> recomputedActivationsBuffer = recomputed_activations_buffer;
+    recomputed_activations -> recomputedActivationsBufferBytes = recomputed_activations_buffer_size;
 
-    saved_activations -> recomputed_activations -> recomputed_attn_norm = (void *) (recomputed_activations_buffer + recomputed_activations_offsets -> recomputed_attn_norm);
-    saved_activations -> recomputed_activations -> recomputed_ffn_norm = (void *) (recomputed_activations_buffer + recomputed_activations_offsets -> recomputed_ffn_norm);
+    recomputed_activations -> recomputed_attn_norm = (void *) (recomputed_activations_buffer + recomputed_activations_offsets -> recomputed_attn_norm);
+    recomputed_activations -> recomputed_ffn_norm = (void *) (recomputed_activations_buffer + recomputed_activations_offsets -> recomputed_ffn_norm);
 
     return 0;
 }
