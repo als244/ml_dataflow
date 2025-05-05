@@ -1095,6 +1095,11 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 
 
 	// 1. Backprop through FFN w2 matmul
+
+	if (TO_PRINT){
+		printf("Submitting Matmul to get dX for input of W2 FFN...\n");
+	}
+
 	// Forward: [num_tokens, ffn_dim] @ [ffn_dim, model_dim] -> [num_tokens, model_dim]
 	// Backward: dX = dY @ W^T
 	// M = output rows of dX = ffn_dim
@@ -1124,6 +1129,11 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 
 
 	// 2. Backprop through SwiGLU
+
+	if (TO_PRINT){
+		printf("Submitting SwiGLU Bwd X to get dX for input of W1 and W3 FFNs...\n");
+	}
+
 	ret = dataflow_submit_default_swiglu_bwd_x(dataflow_handle, compute_stream_id,
 						bwd_dt, bwd_dt,
 						total_q, ffn_dim,
@@ -1149,6 +1159,11 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	// M = output rows of dX = model_dim
 	// K = output cols of dX = ffn_dim
 	// N = batch dim = num_tokens
+
+	if (TO_PRINT){
+		printf("Submitting Matmuls (W1, W3) to get dX for output of FFN norm...\n");
+	}
+
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
 					bwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
 					compute_dt,
@@ -1192,6 +1207,11 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	}
 
 	// 4. Backprop through FFN RMS Norm
+
+	if (TO_PRINT){
+		printf("Submitting RMS Norm Bwd X for FFN norm...\n");
+	}
+
 	ret = dataflow_submit_default_rms_norm_bwd_x(dataflow_handle, compute_stream_id,
 							bwd_dt, bwd_dt,
 							total_q, model_dim, (transformer_block -> config).eps,
@@ -1215,6 +1235,12 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	}
 
 	// 5. Now that we have the correct upstream gradient also do bwd_w for ffn norm
+
+
+	if (TO_PRINT){
+		printf("Submitting RMS Norm Bwd W for FFN norm...\n");
+	}
+
 	ret = dataflow_submit_default_rms_norm_bwd_w(dataflow_handle, compute_stream_id,
 								bwd_dt, bwd_dt,
 								total_q, model_dim, (transformer_block -> config).eps,
@@ -1241,6 +1267,11 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	// M = output rows of dX = model_dim
 	// K = output cols of dX = model_dim
 	// N = batch dim = num_tokens
+
+	if (TO_PRINT){
+		printf("Submitting Matmul to get dX for input of W_o...\n");
+	}
+
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
 					bwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
 					compute_dt,
@@ -1270,6 +1301,10 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	if (ret){
 		fprintf(stderr, "Error: unable to set attention workspace mem to 0 before submitting...\n");
 		return -1;
+	}
+
+	if (TO_PRINT){
+		printf("Submitting attention bwd to get dX for output of W_q (+ rope), W_k (+ rope), and W_v...\n");
 	}
 
 	// 7. Backprop through attention
@@ -1347,6 +1382,11 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	// with the correct accumulated gradients...
 
 	// 8. Backprop through RoPE
+
+	if (TO_PRINT){
+		printf("Submitting RoPE Bwd X to get dX for output of W_q and W_k...\n");
+	}
+
 	ret = dataflow_submit_default_rope_bwd_x(dataflow_handle, compute_stream_id,
 						bwd_dt,
 						(uint64_t)total_q * (uint64_t)model_dim,
@@ -1385,6 +1425,12 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	// M = output rows of dX = model_dim
 	// K = output cols of dX = model_dim
 	// N = batch dim = num_tokens
+
+	if (TO_PRINT){
+		printf("Submitting Matmuls (W_q, W_k, W_v) to get dX for output of Attenttion Norm...\n");
+	}
+
+
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
 					bwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
 					compute_dt,
@@ -1454,6 +1500,11 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 		}
 	}
 
+	if (TO_PRINT){
+		printf("Submitting RMS Norm Bwd X for Attenttion Norm to get final updated gradient stream...\n");
+	}
+
+
 	// 10. Finally backprop through attention RMS norm
 	ret = dataflow_submit_default_rms_norm_bwd_x(dataflow_handle, compute_stream_id,
 							bwd_dt, bwd_dt,
@@ -1479,6 +1530,10 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 
 
 	// While we have the correct upstream gradient, also do bwd_w for attn norm
+	if (TO_PRINT){
+		printf("Submitting RMS Norm Bwd W for Attenttion Norm...\n");
+	}
+
 	ret = dataflow_submit_default_rms_norm_bwd_w(dataflow_handle, compute_stream_id,
 								bwd_dt, bwd_dt,
 								total_q, model_dim, (transformer_block -> config).eps,
@@ -1506,6 +1561,11 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	// more (temporary) device memory to working_activations to account for recomputed RMS norms...
 
 	// recompute attn norm
+
+	if (TO_PRINT){
+		printf("Recomputing Attention and FFN Norms to prepare for Bwd W...\n");
+	}
+
 	ret = dataflow_submit_default_rms_norm(dataflow_handle, compute_stream_id,
 							bwd_dt, 
 							total_q, model_dim, (transformer_block -> config).eps,
@@ -1574,6 +1634,10 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
 	
 
 	// 1.) Recompute-Swiglu in order to compute w2 grad
+	if (TO_PRINT){
+		printf("Recomputing SwiGLU to get input of W2 FFN...\n");
+	}
+
 	ret = dataflow_submit_default_swiglu(dataflow_handle, compute_stream_id,
 						fwd_dt,
 						total_q, ffn_dim,
@@ -1586,6 +1650,11 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
 
     // 2. FFN w2 weight gradients
     // dW2^T = x_temp_mlp @ dX_out^T
+	
+	if (TO_PRINT){
+		printf("Submitting Matmul to get dW_2...\n");
+	}
+
     ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
                     bwd_dt, bwd_dt, bwd_dt, bwd_dt,
                     compute_dt,
@@ -1608,6 +1677,11 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
 	}
 
     // 2. FFN w1 and w3 weight gradients after SwiGLU
+
+	if (TO_PRINT){
+		printf("Submitting Matmul to get dW_1...\n");
+	}
+	
     ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
                     bwd_dt, bwd_dt, bwd_dt, bwd_dt,
                     compute_dt,
@@ -1627,6 +1701,10 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
 			fprintf(stderr, "Error: failed to save head w_1 file...\n");
 			return -1;
 		}
+	}
+
+	if (TO_PRINT){
+		printf("Submitting Matmul to get dW_3...\n");
 	}
 
     ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
@@ -1652,6 +1730,10 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
 
     // 3. FFN RMS Norm weight gradients -- already done in bwd_x while we hda correct streaming grad
 
+	if (TO_PRINT){
+		printf("Submitting Matmul to get dW_o..\n");
+	}
+
     // 4. Attention output projection weight gradients
     ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
                     bwd_dt, bwd_dt, bwd_dt, bwd_dt,
@@ -1675,6 +1757,11 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
 	}
 
     // 5. Q, K, V projection weight gradients
+
+	if (TO_PRINT){
+		printf("Submitting Matmul to get dW_v..\n");
+	}
+
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
                     bwd_dt, bwd_dt, bwd_dt, bwd_dt,
                     compute_dt,
@@ -1696,6 +1783,10 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
 		}
 	}
 
+	if (TO_PRINT){
+		printf("Submitting Matmul to get dW_k..\n");
+	}
+
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
                     bwd_dt, bwd_dt, bwd_dt, bwd_dt,
                     compute_dt,
@@ -1715,6 +1806,10 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
 			fprintf(stderr, "Error: failed to save head w_k file...\n");
 			return -1;
 		}
+	}
+
+	if (TO_PRINT){
+		printf("Submitting Matmul to get dW_q..\n");
 	}
 
 
@@ -1768,7 +1863,11 @@ int dataflow_submit_transformer_embedding_bwd_w(Dataflow_Handle * dataflow_handl
 		uint32_t * sorted_token_mapping = batch_embedding_config -> sorted_token_mapping;
 		uint32_t * unique_token_sorted_inds_start = batch_embedding_config -> unique_token_sorted_inds_start;
 
-		ret = dataflow_submit_default_embedding_table(dataflow_handle, compute_stream_id,
+		if (TO_PRINT){
+			printf("Submitting Embedding Bwd W...\n");
+		}
+
+		ret = dataflow_submit_default_embedding_table_bwd_w(dataflow_handle, compute_stream_id,
 														embed_dt, num_unique_tokens, embedding_dim, 
 														sorted_token_ids, sorted_token_mapping, unique_token_sorted_inds_start,
 														grad_stream -> X, grad_embedding_table -> embedding_table);
