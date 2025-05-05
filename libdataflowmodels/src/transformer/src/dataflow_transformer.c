@@ -1623,7 +1623,45 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	if (TO_SAVE_DATA && TO_SAVE_BWD_LAYER && ((BWD_LAYER_ID_TO_SAVE == -1) || (layer_id == BWD_LAYER_ID_TO_SAVE))){
 		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_next_grad_stream", next_grad_stream -> X, total_q, model_dim, bwd_dt);
 		if (ret){
-			fprintf(stderr, "Error: failed to save x_attn_norm_inp_plus_ffn_norm_inp_plus_upstream_grad file...\n");
+			fprintf(stderr, "Error: failed to save x_next_grad_stream file...\n");
+			return -1;
+		}
+	}
+
+	if (layer_id == 15){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "w_q", transformer_block -> w_q, model_dim, model_dim, bwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save w_q file...\n");
+			return -1;
+		}
+
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "w_k", transformer_block -> w_k, model_dim, model_dim, bwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save w_k file...\n");
+			return -1;
+		}
+
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "w_v", transformer_block -> w_v, model_dim, model_dim, bwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save w_v file...\n");
+			return -1;
+		}
+
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_fwd_q", fwd_activations -> x_q, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_fwd_q file...\n");
+			return -1;
+		}
+
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_fwd_k", fwd_context -> x_k, total_q, kv_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_fwd_k file...\n");
+			return -1;
+		}
+
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_fwd_v", fwd_context -> x_v, total_q, kv_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_fwd_v file...\n");
 			return -1;
 		}
 	}
