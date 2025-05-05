@@ -807,7 +807,7 @@ int main(int argc, char * argv[]){
 
 	// SAME KERNEL WORKSPACE ACROSS ALL COMPUTATIONS!
 
-	uint64_t kernelWorkspaceBytes = 1UL << 24;
+	uint64_t kernelWorkspaceBytes = 1UL << 28;
 	void * kernelWorkspace = cur_dev_mem;
 	cur_dev_mem += kernelWorkspaceBytes;
 
