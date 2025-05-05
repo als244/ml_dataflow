@@ -122,7 +122,6 @@ typedef struct transformer_head_activations {
 	void * buffer;
 	// tempporary buffer for norm output
 	void * head_norm_out;
-	void * head_norm_weighted_sums;
 	void * head_norm_rms_vals;
 	void * head_out;
 

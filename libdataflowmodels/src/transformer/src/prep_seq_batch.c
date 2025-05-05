@@ -61,9 +61,6 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
     saved_activations_offsets -> x_inp = cur_offset;
     cur_offset += total_tokens * model_dim * dt_size;
 
-    saved_activations_offsets -> attn_norm_weighted_sums = cur_offset;
-    cur_offset += total_tokens * sizeof(float);
-
     saved_activations_offsets -> attn_norm_rms_vals = cur_offset;
     cur_offset += total_tokens * sizeof(float);
 
@@ -86,9 +83,6 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
 
     saved_activations_offsets -> x_o = cur_offset;
     cur_offset += total_tokens * model_dim * dt_size;
-
-    saved_activations_offsets -> ffn_norm_weighted_sums = cur_offset;
-    cur_offset += total_tokens * sizeof(float);
 
     saved_activations_offsets -> ffn_norm_rms_vals = cur_offset;
     cur_offset += total_tokens * sizeof(float);
@@ -442,7 +436,6 @@ int bind_seq_batch_saved_activations_buffer(Seq_Batch * seq_batch, Seq_Batch_Sav
     saved_activations -> savedActivationsBufferBytes = saved_activations_buffer_size;
 
     saved_activations -> x_inp = (void *) (saved_activations_buffer + saved_activations_offsets -> x_inp);
-    saved_activations -> attn_norm_weighted_sums = (float *) (saved_activations_buffer + saved_activations_offsets -> attn_norm_weighted_sums);
     saved_activations -> attn_norm_rms_vals = (float *) (saved_activations_buffer + saved_activations_offsets -> attn_norm_rms_vals);
     saved_activations -> x_q = (void *) (saved_activations_buffer + saved_activations_offsets -> x_q);
     saved_activations -> x_k_local = (void *) (saved_activations_buffer + saved_activations_offsets -> x_k_local);
@@ -450,7 +443,6 @@ int bind_seq_batch_saved_activations_buffer(Seq_Batch * seq_batch, Seq_Batch_Sav
     saved_activations -> softmax_lse = (float *) (saved_activations_buffer + saved_activations_offsets -> softmax_lse);
     saved_activations -> x_attn_out = (void *) (saved_activations_buffer + saved_activations_offsets -> x_attn_out);
     saved_activations -> x_o = (void *) (saved_activations_buffer + saved_activations_offsets -> x_o);
-    saved_activations -> ffn_norm_weighted_sums = (float *) (saved_activations_buffer + saved_activations_offsets -> ffn_norm_weighted_sums);
     saved_activations -> ffn_norm_rms_vals = (float *) (saved_activations_buffer + saved_activations_offsets -> ffn_norm_rms_vals);
 
 

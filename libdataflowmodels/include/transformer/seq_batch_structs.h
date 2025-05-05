@@ -31,7 +31,6 @@ typedef struct seq_batch_metadata_offsets {
 
 typedef struct seq_batch_saved_activations_offsets {
 	uint64_t x_inp;
-	uint64_t attn_norm_weighted_sums;
 	uint64_t attn_norm_rms_vals;
 	uint64_t x_q;
 	uint64_t x_k_local;
@@ -39,7 +38,6 @@ typedef struct seq_batch_saved_activations_offsets {
 	uint64_t softmax_lse;
 	uint64_t x_attn_out;
 	uint64_t x_o;
-	uint64_t ffn_norm_weighted_sums;
 	uint64_t ffn_norm_rms_vals;
 
 
@@ -201,7 +199,6 @@ typedef struct seq_batch_saved_activations {
 	void * x_inp;
 
 	// used during backprop
-	float * attn_norm_weighted_sums;
 	float * attn_norm_rms_vals;
 	void * x_q;
 
@@ -217,7 +214,6 @@ typedef struct seq_batch_saved_activations {
     void * x_attn_out;
 	void * x_o;
 	// used during backprop
-	float * ffn_norm_weighted_sums;
 	float * ffn_norm_rms_vals;
 
 

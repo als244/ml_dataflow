@@ -288,16 +288,28 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 		}
 	}
 
+	if (TO_PRINT){
+		printf("Saving blocking input into activations buffer...\n");
+	}
+
+	ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, working_activations -> x_inp, block_input -> X, (uint64_t) total_q * (uint64_t) model_dim * (uint64_t) x_el_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit peer transfer for x_inp...\n");
+		return -1;
+	}
+
 
 	if (TO_PRINT){
 		printf("Submitting Attention RMS Norm...!\n");
 	}
 
+
+
 	ret = dataflow_submit_default_rms_norm(dataflow_handle, compute_stream_id, 
 						fwd_dt, 
 						total_q, model_dim, (transformer_block -> config).eps, 
 						transformer_block -> w_attn_norm, block_input -> X, activation_workspace -> x_temp, 
-						working_activations -> attn_norm_weighted_sums, working_activations -> attn_norm_rms_vals);
+						working_activations -> attn_norm_rms_vals);
 
 	if (ret){
 		fprintf(stderr, "Error: failed to submit attention norm...\n");
@@ -557,7 +569,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 						fwd_dt, 
 						total_q, model_dim, (transformer_block -> config).eps, 
 						transformer_block -> w_ffn_norm, working_activations -> x_o, activation_workspace -> x_temp, 
-						working_activations -> ffn_norm_weighted_sums, working_activations -> ffn_norm_rms_vals);
+						working_activations -> ffn_norm_rms_vals);
 
 	if (ret){
 		fprintf(stderr, "Error: failed to submit ffn norm...\n");
@@ -722,7 +734,6 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
                          transformer_head -> w_head_norm,
                          block_input -> X,
                          head_activations -> head_norm_out,
-                         head_activations -> head_norm_weighted_sums,
                          head_activations -> head_norm_rms_vals);
     if (ret) {
         fprintf(stderr, "Error: Failed to submit RMS normalization in transformer head...\n");
@@ -948,18 +959,20 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 	}
 
 	// Finally backpropagate through RMS normalization
+
+	// don't need to save downt the recomputed norm value because already have it...
     ret = dataflow_submit_default_rms_norm_bwd_x(dataflow_handle, compute_stream_id,
                                transformer_head -> bwd_dt,
                                transformer_head -> bwd_dt,
                                head_activations -> num_tokens,
                                embedding_size,
                                transformer_head -> eps,
-                               head_activations -> head_norm_weighted_sums,
                                head_activations -> head_norm_rms_vals,
                                transformer_head -> w_head_norm,
                                block_input -> X,         // Original input
                                head_activations -> head_norm_out,      // Upstream gradient
-                               grad_stream -> X);
+                               grad_stream -> X, 
+							   NULL);
 	if (ret) {
         fprintf(stderr, "Error: Failed to submit bwd x rms norm in transformer head...\n");
         return ret;
@@ -1147,9 +1160,17 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_BWD_LAYER && ((BWD_LAYER_ID_TO_SAVE == -1) || (layer_id == BWD_LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_swiglu_inp", activation_workspace -> x_temp_mlp, total_q, ffn_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_1_swiglu_inp", (working_activations -> x_1)[0], total_q, ffn_dim, bwd_dt);
 		if (ret){
-			fprintf(stderr, "Error: failed to save x_swiglu_inp file...\n");
+			fprintf(stderr, "Error: failed to save x_1_swiglu_inp file...\n");
+			return -1;
+		}
+	}
+
+	if (TO_SAVE_DATA && TO_SAVE_BWD_LAYER && ((BWD_LAYER_ID_TO_SAVE == -1) || (layer_id == BWD_LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_3_swiglu_inp", (working_activations -> x_3)[0], total_q, ffn_dim, bwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_3_swiglu_inp file...\n");
 			return -1;
 		}
 	}
@@ -1192,7 +1213,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 					to_transa, to_transb,
 					model_dim, ffn_dim, total_q,  // M = model_dim, K = ffn_dim, N = num_tokens
 					1.0, 1.0,  // Add to previous gradient
-					(transformer_block -> w_3)[0], (working_activations -> x_3)[0], NULL, activation_workspace -> x_temp,
+					(transformer_block -> w_3)[0], (working_activations -> x_3)[0], activation_workspace -> x_temp, activation_workspace -> x_temp,
 					kernelWorkspaceBytes, kernelWorkspace);
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit w3 backward matmul...\n");
@@ -1213,22 +1234,58 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 		printf("Submitting RMS Norm Bwd X for FFN norm...\n");
 	}
 
+	// save the recomputed norm value because will need it for bwd_w pass...
+	void * ffn_norm_recomputed = working_activations -> recomputed_activations -> recomputed_ffn_norm;
+
 	ret = dataflow_submit_default_rms_norm_bwd_x(dataflow_handle, compute_stream_id,
 							bwd_dt, bwd_dt,
 							total_q, model_dim, (transformer_block -> config).eps,
-							fwd_activations -> ffn_norm_weighted_sums,
 							fwd_activations -> ffn_norm_rms_vals,
 							transformer_block -> w_ffn_norm,
 							fwd_activations -> x_o,  // Input to norm
 							activation_workspace -> x_temp,  // Upstream gradient
-							next_grad_stream -> X);                    // Final output gradient
+							next_grad_stream -> X,
+							ffn_norm_recomputed); // Saving the result into the working activations -> x_o);                    
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit ffn norm backward...\n");
 		return -1;
 	}
 
+	if (layer_id == 15){
+
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_ffn_norm_inp", fwd_activations -> x_o, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_ffn_norm_inp file...\n");
+			return -1;
+		}
+
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_ffn_norm_rms_vals", fwd_activations -> ffn_norm_rms_vals, total_q, 1, DATAFLOW_FP32);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_ffn_norm_rms_vals file...\n");
+			return -1;
+		}
+
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_ffn_norm_recomputed", ffn_norm_recomputed, total_q, 1, DATAFLOW_FP32);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_ffn_norm_recomputed file...\n");
+			return -1;
+		}
+
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "w_ffn_norm", transformer_block -> w_ffn_norm, 1, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save w_ffn_norm file...\n");
+			return -1;
+		}
+	}
+
 	if (TO_SAVE_DATA && TO_SAVE_BWD_LAYER && ((BWD_LAYER_ID_TO_SAVE == -1) || (layer_id == BWD_LAYER_ID_TO_SAVE))){
 		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_ffn_norm_inp_plus_upstream_grad", next_grad_stream -> X, total_q, model_dim, bwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_ffn_norm_inp_plus_upstream_grad file...\n");
+			return -1;
+		}
+
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_dloss_dattn_out", working_activations -> x_o, total_q, model_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_ffn_norm_inp_plus_upstream_grad file...\n");
 			return -1;
@@ -1255,7 +1312,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "w_ffn_norm", grad_weights -> w_ffn_norm, 1, model_dim, bwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, -1, -1, true, "w_ffn_norm", grad_weights -> w_ffn_norm, 1, model_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head w_ffn_norm file...\n");
 			return -1;
@@ -1279,7 +1336,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 					to_transa, to_transb,
 					model_dim, model_dim, total_q,  // M = model_dim, K = model_dim, N = num_tokens
 					1.0, 0.0,
-					transformer_block -> w_o, working_activations -> x_o, NULL, activation_workspace -> x_temp,
+					transformer_block -> w_o, next_grad_stream -> X, NULL, activation_workspace -> x_temp,
 					kernelWorkspaceBytes, kernelWorkspace);
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit attention output backward matmul...\n");
@@ -1497,7 +1554,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 					to_transa, to_transb,
 					model_dim, kv_dim, total_q,  // M = model_dim, K = kv_dim, N = num_tokens
 					1.0, 1.0,  // Add to previous gradient
-					transformer_block -> w_k, working_activations -> x_k_local, NULL, activation_workspace -> x_temp,
+					transformer_block -> w_k, working_activations -> x_k_local, activation_workspace -> x_temp, activation_workspace -> x_temp,
 					kernelWorkspaceBytes, kernelWorkspace);
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit K projection backward matmul...\n");
@@ -1518,7 +1575,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 					to_transa, to_transb,
 					model_dim, kv_dim, total_q,  // M = model_dim, K = kv_dim, N = num_tokens
 					1.0, 1.0,  // Add to previous gradient
-					transformer_block -> w_v, working_activations -> x_v_local, NULL, activation_workspace -> x_temp,
+					transformer_block -> w_v, working_activations -> x_v_local, activation_workspace -> x_temp, activation_workspace -> x_temp,
 					kernelWorkspaceBytes, kernelWorkspace);
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit V projection backward matmul...\n");
@@ -1539,15 +1596,20 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 
 
 	// 10. Finally backprop through attention RMS norm
+
+	// save the recomputed norm value because will need it for bwd_w pass...
+	void * attn_norm_recomputed = working_activations -> recomputed_activations -> recomputed_attn_norm;
+
+
 	ret = dataflow_submit_default_rms_norm_bwd_x(dataflow_handle, compute_stream_id,
 							bwd_dt, bwd_dt,
 							total_q, model_dim, (transformer_block -> config).eps,
-							fwd_activations -> attn_norm_weighted_sums,
 							fwd_activations -> attn_norm_rms_vals,
 							transformer_block -> w_attn_norm,
 							fwd_activations -> x_inp,  // Input to norm
 							activation_workspace -> x_temp,  // Upstream gradient
-							next_grad_stream -> X);                    // Final output gradient
+							next_grad_stream -> X,
+							attn_norm_recomputed);                    // Final output gradient
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit attention norm backward...\n");
 		return -1;
@@ -1585,43 +1647,6 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 			fprintf(stderr, "Error: failed to save head w_attn_norm file...\n");
 			return -1;
 		}
-	}
-
-	// while we still the layer weights, recompute the RMS norms 
-	// needed to do bwd_w computations...
-
-	// before call to this bwd_x function, we should have already bound
-	// more (temporary) device memory to working_activations to account for recomputed RMS norms...
-
-	// recompute attn norm
-
-	if (TO_PRINT){
-		printf("Recomputing Attention and FFN Norms to prepare for Bwd W...\n");
-	}
-
-	ret = dataflow_submit_default_rms_norm(dataflow_handle, compute_stream_id,
-							bwd_dt, 
-							total_q, model_dim, (transformer_block -> config).eps,
-							transformer_block -> w_attn_norm,
-							fwd_activations -> x_inp,
-							working_activations -> recomputed_activations -> recomputed_attn_norm,
-							NULL, NULL);
-	if (ret){
-		fprintf(stderr, "Error: failed to submit recompute attn norm...\n");
-		return -1;
-	}
-
-	// recompute ffn norm
-	ret = dataflow_submit_default_rms_norm(dataflow_handle, compute_stream_id,
-							bwd_dt, 
-							total_q, model_dim, (transformer_block -> config).eps,
-							transformer_block -> w_ffn_norm,
-							fwd_activations -> x_o,
-							working_activations -> recomputed_activations -> recomputed_ffn_norm,
-							NULL, NULL);
-	if (ret){
-		fprintf(stderr, "Error: failed to submit recompute ffn norm...\n");
-		return -1;
 	}
 
 	// now all gradients should be computed and saved within grad_activations -> working_activations...!!!
