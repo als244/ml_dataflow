@@ -204,7 +204,7 @@ void dataflow_set_flash3_attention_fwd_skeleton(Op_Skeleton * skeleton) {
 	// x_attn_out
 	arg_dtypes[16] = DATAFLOW_VOID;
 	// softmax_lse
-	arg_dtypes[17] = DATAFLOW_VOID;
+	arg_dtypes[17] = DATAFLOW_FP32;
 
 	// workspaceBytes 
 	arg_dtypes[18] = DATAFLOW_UINT64_SCALAR;
@@ -279,7 +279,7 @@ void dataflow_set_flash3_attention_bwd_skeleton(Op_Skeleton * skeleton) {
 	// x_attn_out
 	arg_dtypes[16] = DATAFLOW_VOID;
 	// softmax_lse
-	arg_dtypes[17] = DATAFLOW_VOID;
+	arg_dtypes[17] = DATAFLOW_FP32;
 
 	// dx_out (upstream gradient)
 	arg_dtypes[18] = DATAFLOW_VOID;

@@ -53,34 +53,46 @@ def gqa(Q, K, V, h_q, h_k, head_dim, mask=None):
 def main():
     
     num_seqs = 1
-    seq_len = 512
+    seq_len = 2048
 
     data_dir = f"test_attention"
 
-    h_q = 64
+    h_q = 32
     h_k = 8
-    head_dim = 128
+    head_dim = 64
 
     model_dim = int(h_q * head_dim)
-
+    kv_dim = int(h_k * head_dim)
 
 
     # Load your numpy arrays.
     # Replace these with the actual file paths or loading mechanism.
-    np_Q = np.fromfile(f"{data_dir}/x_q.dat", dtype=np.float16).reshape(num_seqs, seq_len, h_q, head_dim)       # Expected shape: [B, T, 64, 128]
-    np_K = np.fromfile(f"{data_dir}/x_k.dat", dtype=np.float16).reshape(num_seqs, seq_len, h_k, head_dim)       # Expected shape: [B, S, 8, 128]
-    np_V = np.fromfile(f"{data_dir}/x_v.dat", dtype=np.float16).reshape(num_seqs, seq_len, h_k, head_dim)       # Expected shape: [B, S, 8, 128]
-    np_dX_out = np.fromfile(f"{data_dir}/dx_out.dat", dtype=np.float16).reshape(num_seqs, seq_len, h_q, head_dim)  # Expected shape: [B, T, 64, 128]
+    np_Q = np.fromfile(f"{data_dir}/x_q.dat", dtype=np.uint16).reshape(num_seqs, seq_len, h_q, head_dim)       # Expected shape: [B, T, 64, 128]
+    np_K = np.fromfile(f"{data_dir}/x_k.dat", dtype=np.uint16).reshape(num_seqs, seq_len, h_k, head_dim)       # Expected shape: [B, S, 8, 128]
+    np_V = np.fromfile(f"{data_dir}/x_v.dat", dtype=np.uint16).reshape(num_seqs, seq_len, h_k, head_dim)       # Expected shape: [B, S, 8, 128]
+    np_dX_out = np.fromfile(f"{data_dir}/dx_out.dat", dtype=np.uint16).reshape(num_seqs, seq_len, h_q, head_dim)  # Expected shape: [B, T, 64, 128]
+
+    
 
     # Set device (GPU if available)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    # Convert numpy arrays to FP16 PyTorch tensors and set requires_grad=True for inputs.
-    Q = torch.tensor(np_Q, dtype=torch.float16, device=device, requires_grad=True)
-    K = torch.tensor(np_K, dtype=torch.float16, device=device, requires_grad=True)
-    V = torch.tensor(np_V, dtype=torch.float16, device=device, requires_grad=True)
-    dX_out = torch.tensor(np_dX_out, dtype=torch.float16, device=device)
+    # 1. Create uint16 tensor
+    temp_Q = torch.tensor(np_Q, dtype=torch.uint16, device=device)
+    # 2. View as bfloat16
+    # 3. Clone, detach, then enable gradients
+    Q = temp_Q.view(torch.bfloat16).clone().detach().requires_grad_(True)
 
+    temp_K = torch.tensor(np_K, dtype=torch.uint16, device=device)
+    K = temp_K.view(torch.bfloat16).clone().detach().requires_grad_(True)
+
+    temp_V = torch.tensor(np_V, dtype=torch.uint16, device=device)
+    V = temp_V.view(torch.bfloat16).clone().detach().requires_grad_(True)
+
+    # Load dX_out (gradient input, doesn't need requires_grad=True)
+    # Also fixed a typo: added missing parenthesis after device=device
+    temp_dX_out = torch.tensor(np_dX_out, dtype=torch.uint16, device=device)
+    dX_out = temp_dX_out.view(torch.bfloat16)
     # Compute attention output
 
     # causal mask
@@ -89,9 +101,8 @@ def main():
     X_out = gqa(Q, K, V, h_q, h_k, head_dim, causal_mask)
 
     X_out_re = X_out.view(-1, model_dim)
-    
-    np_X_out = X_out_re.cpu().detach().numpy()
-    np_X_out.tofile(f"{data_dir}/torch_x_out.dat")
+
+    torch.save(X_out_re, f"{data_dir}/torch_x_out.pt")
 
     # Compute gradients using the provided upstream gradient dX_out.
     # This will backpropagate through the attention calculation.
@@ -102,8 +113,17 @@ def main():
     dX_K = K.grad  # Gradient w.r.t. K
     dX_V = V.grad  # Gradient w.r.t. V
     
-    dX_Q_re = dX_Q.view(-1, 8192)
+    dX_Q_re = dX_Q.view(-1, model_dim)
+    torch.save(dX_Q_re, f"{data_dir}/torch_dx_q.pt")
     print(f"dX_Q: {dX_Q_re}\n\n")
+
+    dX_K_re = dX_K.view(-1, kv_dim)
+    torch.save(dX_K_re, f"{data_dir}/torch_dx_k.pt")
+    print(f"dX_K: {dX_K_re}\n\n")
+
+    dX_V_re = dX_V.view(-1, kv_dim)
+    torch.save(dX_V_re, f"{data_dir}/torch_dx_v.pt")
+    print(f"dX_V: {dX_V_re}\n\n")
 
 if __name__ == "__main__":
     main()

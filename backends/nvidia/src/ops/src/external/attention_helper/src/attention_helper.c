@@ -40,7 +40,7 @@ int flash3_attention_fwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * 
 	void * x_v = *((void **) op_args[15]);
 
 	void * x_attn_out = *((void **) op_args[16]);
-	void * softmax_lse = *((void **) op_args[17]);
+	float * softmax_lse = *((float **) op_args[17]);
 
 	uint64_t workspaceBytes = *((uint64_t *) op_args[18]);
 	void * workspace = *((void **) op_args[19]);
@@ -120,7 +120,7 @@ int flash3_attention_bwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * 
 	void * x_v = *((void **) op_args[15]);
 
 	void * x_attn_out = *((void **) op_args[16]);
-	void * softmax_lse = *((void **) op_args[17]);
+	float * softmax_lse = *((float **) op_args[17]);
 
 	// upstream gradient
 	void * dx_out = *((void **) op_args[18]);
