@@ -1,11 +1,12 @@
 import torch
+import torch.nn as nn
 import glob
 import json
 
 from llama3_tokenizer import Tokenizer
-from llama3_model import ModelArgs, Transformer
+from llama3_model import ModelArgs, Transformer, TransformerBlock, Attention, FeedForward
 import time
-
+import functools
 import numpy as np
 import random
 import os
@@ -79,40 +80,54 @@ model.eval()
 
 BWD_SAVE_DIR = "/mnt/storage/research/ml_dataflow/correct_transformer_data"
 
-def save_gradient_hook(module, grad_input, grad_output):
+def save_gradient_hook(module, grad_input, grad_output, layer_id, module_name):
     """
-    Hook to save gradient streams for a TransformerBlock.
+    Unified hook to save gradient streams for TransformerBlock, Attention, or FeedForward.
 
     Args:
-        module (nn.Module): The TransformerBlock instance.
+        module (nn.Module): The module instance (TransformerBlock, Attention, or FeedForward).
         grad_input (tuple): Tuple of gradients w.r.t module inputs.
-                            grad_input[0] corresponds to the gradient of 'x' (output stream).
         grad_output (tuple): Tuple of gradients w.r.t module outputs.
-                             grad_output[0] corresponds to the gradient of 'out' (input stream).
+        layer_id (int): The ID of the parent TransformerBlock.
+        module_name (str): Name identifier for the module ('block', 'attention', 'feed_forward').
     """
-    layer_id = module.layer_id
-    layer_bwd_dir = f"{BWD_SAVE_DIR}/layers_bwd/{layer_id}"
-    os.makedirs(layer_bwd_dir, exist_ok=True)
+    # Construct the specific directory path
+    # e.g., /path/to/layers_bwd/0/attention/
+    # e.g., /path/to/layers_bwd/5/feed_forward/
+    # e.g., /path/to/layers_bwd/10/block/  (for the whole TransformerBlock)
+    module_bwd_dir = f"{BWD_SAVE_DIR}/layers_bwd/{layer_id}"
+    os.makedirs(module_bwd_dir, exist_ok=True)
 
-    # --- Save Gradient Stream INTO the block (dLoss/dOutput) ---
-    # grad_output is a tuple, we usually care about the first element if the forward returns one tensor.
-    if grad_output is not None and grad_output[0] is not None:
-        inp_stream_path = os.path.join(layer_bwd_dir, "grad_stream_inp.pt")
-        print(f"Saving grad stream input for layer {layer_id} to {inp_stream_path} (Shape: {grad_output[0].shape}, Dtype: {grad_output[0].dtype})")
-        torch.save(grad_output[0].detach().cpu(), inp_stream_path) # Detach and move to CPU to avoid GPU memory buildup if saving many layers
+    # --- Save Gradient Stream INTO the module (dLoss/dOutput) ---
+    # grad_output[0] contains the upstream gradient
+    if grad_output is not None and len(grad_output) > 0 and grad_output[0] is not None:
+        inp_stream_path = f"{module_bwd_dir}/{module_name}_grad_stream_inp.pt"
+        print(f"  Saving grad stream input for layer {layer_id} [{module_name}] to {inp_stream_path} (Shape: {grad_output[0].shape}, Dtype: {grad_output[0].dtype})")
+        try:
+            torch.save(grad_output[0].detach().cpu(), inp_stream_path)
+        except Exception as e:
+            print(f"  ERROR saving {inp_stream_path}: {e}")
     else:
-        print(f"WARNING: grad_output[0] is None for layer {layer_id}")
+        # This might happen for the very first input tensor if it doesn't require grad, but less likely for module outputs.
+        print(f"  WARNING: grad_output[0] is None or invalid for layer {layer_id} [{module_name}]")
 
 
-    # --- Save Gradient Stream OUT FROM the block (dLoss/dInput) ---
-    # grad_input is a tuple corresponding to the inputs of the forward method (x, freqs_cis, mask).
-    # We only care about the gradient w.r.t. 'x', which is grad_input[0].
-    if grad_input is not None and grad_input[0] is not None:
-        out_stream_path = os.path.join(layer_bwd_dir, "grad_stream_out.pt")
-        print(f"Saving grad stream output for layer {layer_id} to {out_stream_path} (Shape: {grad_input[0].shape}, Dtype: {grad_input[0].dtype})")
-        torch.save(grad_input[0].detach().cpu(), out_stream_path) # Detach and move to CPU
+    # --- Save Gradient Stream OUT FROM the module (dLoss/dInput) ---
+    # grad_input[0] contains the gradient passed downstream (to the previous layer/module)
+    # Note: Check indices if forward methods have multiple tensor inputs requiring grad.
+    # For Attention and FeedForward, the first input is usually the one we care about.
+    # For TransformerBlock, grad_input[0] is dLoss/dx (output stream for the whole block).
+    if grad_input is not None and len(grad_input) > 0 and grad_input[0] is not None:
+        out_stream_path = f"{module_bwd_dir}/{module_name}_grad_stream_out.pt"
+        print(f"  Saving grad stream output for layer {layer_id} [{module_name}] to {out_stream_path} (Shape: {grad_input[0].shape}, Dtype: {grad_input[0].dtype})")
+        try:
+            torch.save(grad_input[0].detach().cpu(), out_stream_path)
+        except Exception as e:
+            print(f"  ERROR saving {out_stream_path}: {e}")
     else:
-        print(f"WARNING: grad_input[0] is None for layer {layer_id}") # Should not happen in typical backprop
+         # grad_input might be None for inputs that don't require gradients (like masks, freqs_cis)
+         # but grad_input[0] corresponding to the main data tensor 'x' should exist.
+        print(f"  WARNING: grad_input[0] is None or invalid for layer {layer_id} [{module_name}]")
 
 
 
@@ -120,14 +135,40 @@ def save_gradient_hook(module, grad_input, grad_output):
 # --- Register Hooks BEFORE Forward/Backward Pass ---
 print("Registering backward hooks...")
 hook_handles = []
+total_hooks = 0
 for i, layer in enumerate(model.layers):
-    if isinstance(layer, torch.nn.Module): # Ensure it's a module
-        handle = layer.register_full_backward_hook(save_gradient_hook)
+    if isinstance(layer, TransformerBlock): # Ensure it's the correct type
+        print(f"Registering hooks for Layer {i}:")
+        # 1. Hook for the entire TransformerBlock
+        block_hook = functools.partial(save_gradient_hook, layer_id=i, module_name="block")
+        handle = layer.register_full_backward_hook(block_hook)
         hook_handles.append(handle)
-        print(f"Registered hook for TransformerBlock layer {i}")
+        total_hooks += 1
+        print(f"  Registered hook for TransformerBlock {i}")
+
+        # 2. Hook for the Attention submodule
+        if hasattr(layer, 'attention') and isinstance(layer.attention, nn.Module):
+            attn_hook = functools.partial(save_gradient_hook, layer_id=i, module_name="attention")
+            handle = layer.attention.register_full_backward_hook(attn_hook)
+            hook_handles.append(handle)
+            total_hooks += 1
+            print(f"  Registered hook for Attention in layer {i}")
+        else:
+            print(f"  WARNING: Layer {i} has no 'attention' nn.Module attribute.")
+
+        # 3. Hook for the FeedForward submodule
+        if hasattr(layer, 'feed_forward') and isinstance(layer.feed_forward, nn.Module):
+            ff_hook = functools.partial(save_gradient_hook, layer_id=i, module_name="feed_forward")
+            handle = layer.feed_forward.register_full_backward_hook(ff_hook)
+            hook_handles.append(handle)
+            total_hooks += 1
+            print(f"  Registered hook for FeedForward in layer {i}")
+        else:
+             print(f"  WARNING: Layer {i} has no 'feed_forward' nn.Module attribute.")
+
     else:
-        print(f"Warning: Item at index {i} in model.layers is not an nn.Module, skipping hook registration.")
-print(f"Total hooks registered: {len(hook_handles)}")
+        print(f"Warning: Item at index {i} in model.layers is not a TransformerBlock, skipping hook registration.")
+print(f"Total hooks registered: {total_hooks}")
 
 
 
