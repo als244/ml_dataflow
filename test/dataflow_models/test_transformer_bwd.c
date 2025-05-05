@@ -704,8 +704,9 @@ int main(int argc, char * argv[]){
 	// FOR NOW KEEPING N_LAYERS OF CONTEXT BECAUSE NOT TRANSFERRING BACK TO HOST...
 	// AND NEEDED FOR BACKPROP THROUGH TIME...
 
+	// in reality only need 1 fwd context and 1 bwd context...
 	int num_fwd_contexts = n_layers;
-	int num_bwd_contexts = n_layers;
+
 
 	Seq_Batch_Context ** fwd_contexts = malloc(num_fwd_contexts * sizeof(Seq_Batch_Context *));
 	if (!fwd_contexts){
@@ -713,9 +714,9 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
-	Seq_Batch_Context ** bwd_contexts = malloc(num_bwd_contexts * sizeof(Seq_Batch_Context *));
-	if (!bwd_contexts){
-		fprintf(stderr, "Error: failed to allocate bwd_contexts...\n");
+	Seq_Batch_Context * bwd_context = malloc(sizeof(Seq_Batch_Context));
+	if (!bwd_context){
+		fprintf(stderr, "Error: failed to allocate bwd_context...\n");
 		return -1;
 	}
 
@@ -737,18 +738,16 @@ int main(int argc, char * argv[]){
 	} 
 
 
-	for (int i = 0; i < num_bwd_contexts; i++){
-		(bwd_contexts[i]) -> contextBuffer = cur_dev_mem;
-		(bwd_contexts[i]) -> contextBufferBytes = context_buffer_size;
+	(bwd_context) -> contextBuffer = cur_dev_mem;
+	(bwd_context) -> contextBufferBytes = context_buffer_size;
 	
-		(bwd_contexts[i]) -> cur_tokens_populated = 0;
-		(bwd_contexts[i]) -> total_context_tokens = total_tokens;
+	(bwd_context) -> cur_tokens_populated = 0;
+	(bwd_context) -> total_context_tokens = total_tokens;
 
-		(bwd_contexts[i]) -> x_k = cur_dev_mem;
-		(bwd_contexts[i]) -> x_v = (bwd_contexts[i]) -> x_k + (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_size;
+	(bwd_context) -> x_k = cur_dev_mem;
+	(bwd_context) -> x_v = (bwd_context) -> x_k + (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_size;
 
-		cur_dev_mem += context_buffer_size;
-	}
+	cur_dev_mem += context_buffer_size;
 
 	
 	/*
@@ -1121,14 +1120,16 @@ int main(int argc, char * argv[]){
 			fprintf(stderr, "Error: failed to submit transformer head...\n");
 			return -1;
 		}
+
+		// Ensure that this seq batch's context will refere the bwd context,
+		// in order to correctly backprop through the block...
+		seq_batches[i] -> context = bwd_context;
 	}
 
 	for (int k = n_layers - 1; k >= 0; k--){
 
 		// need to ensure that grad context is zeroed out before starting each layer...
-
-		// normally we would only have 1 context and keep updating it...
-		ret = dataflow_handle.set_mem(&dataflow_handle, compute_stream_id, bwd_contexts[k] -> contextBuffer, 0, bwd_contexts[k] -> contextBufferBytes);
+		ret = dataflow_handle.set_mem(&dataflow_handle, compute_stream_id, bwd_context -> contextBuffer, 0, bwd_context -> contextBufferBytes);
 		if (ret){
 			fprintf(stderr, "Error: failed to zero out grad context for layer #%d...\n", k);
 			return -1;
@@ -1138,9 +1139,6 @@ int main(int argc, char * argv[]){
 
 
 			cur_fwd_activations = &(saved_activations[k * num_chunks + i]);
-
-			// set the context to reference the bwd context...
-			seq_batches[i] -> context = bwd_contexts[k];
 
 			
 			printf("\n\nSubmitting bwd_x for chunk #%d, block #%d...\n\n", i, k);
