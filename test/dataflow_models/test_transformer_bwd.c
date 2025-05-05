@@ -883,8 +883,8 @@ int main(int argc, char * argv[]){
 	
 	for (int i = 0; i < num_saved_activation_buffers; i++){
 
-		saved_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batches[(i % n_layers)]);
-		ret = bind_seq_batch_saved_activations_buffer(seq_batches[(i % n_layers)], &(saved_activations[i]), cur_dev_mem, saved_activations_buffer_size, i);
+		saved_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batches[(i % num_chunks)]);
+		ret = bind_seq_batch_saved_activations_buffer(seq_batches[(i % num_chunks)], &(saved_activations[i]), cur_dev_mem, saved_activations_buffer_size, i);
 		if (ret){
 			fprintf(stderr, "Error: failed to bind seq_batch saved_activations buffer...\n");
 			return -1;
