@@ -32,16 +32,22 @@ create_data_dirs:
 	i=0; while [ $$i -le 31 ]; do \
         	mkdir -p test_transformer_data/layers_fwd/$$i; \
 		mkdir -p test_transformer_data/layers_bwd/$$i; \
+		mkdir -p test_transformer_data/model_grads/layers/$$i; \
 		mkdir -p correct_transformer_data/layers_fwd/$$i; \
 		mkdir -p correct_transformer_data/layers_bwd/$$i; \
-        	i=$$(($$i + 1)); \
+		mkdir -p correct_transformer_data/model_grads/layers/$$i; \
+		i=$$(($$i + 1)); \
     	done; \
 	mkdir -p test_transformer_data/head_fwd; \
 	mkdir -p test_transformer_data/head_bwd; \
 	mkdir -p test_transformer_data/embedding_fwd; \
 	mkdir -p test_transformer_data/embedding_bwd; \
+	mkdir -p test_transformer_data/model_grads/embedding; \
+	mkdir -p test_transformer_data/model_grads/head; \
 	mkdir -p correct_transformer_data/head_fwd; \
 	mkdir -p correct_transformer_data/head_bwd; \
+	mkdir -p correct_transformer_data/model_grads/embedding; \
+	mkdir -p correct_transformer_data/model_grads/head; \
 	mkdir -p profiling
 
 test_transformer_fwd: test_transformer_fwd.c

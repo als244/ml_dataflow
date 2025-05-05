@@ -390,33 +390,12 @@ int main(int argc, char * argv[]){
 	}
 
 
+
+
 	// GRADIENTS!
 
-	// Head Gradients
-	Transformer_Head * grad_head = malloc(sizeof(Transformer_Head));
-	if (!grad_head){
-		fprintf(stderr, "Error: failed to allocate grad_head...\n");
-		return -1;
-	}
-
-	grad_head -> fwd_dt = block_dt;
-	grad_head -> bwd_dt = block_dt;
-	grad_head -> compute_dt = compute_dt;
-	grad_head -> eps = eps;
-	grad_head -> embedding_config = embedding_config;
-	grad_head -> buffer = cur_dev_mem;
-	grad_head -> w_head_norm = grad_head -> buffer;
-	grad_head -> w_head = grad_head -> w_head_norm + (uint64_t) model_dim * (uint64_t) block_dt_size;
-
-	cur_dev_mem += combined_head_size;
-
-	ret = dataflow_handle.set_mem(&dataflow_handle, inbound_stream_id, grad_head -> buffer, 0, combined_head_size);
-	if (ret){
-		fprintf(stderr, "Error: failed to set mem for grad_head...\n");
-		return -1;
-	}
-
-	int num_dev_block_grads = 1;
+	// JUST FOR NOW (while testing for correctness) keeping all block grads on device...
+	int num_dev_block_grads = n_layers;
 
 	Transformer_Block ** grad_blocks = malloc(num_dev_block_grads * sizeof(Transformer_Block *));
 	if (!grad_blocks){
@@ -452,8 +431,66 @@ int main(int argc, char * argv[]){
 
 		cur_dev_mem += aligned_size;
 	}
+
+	// Embedding Table Gradients
+	Transformer_Embedding_Table * grad_embedding_table = malloc(sizeof(Transformer_Embedding_Table));
+	if (!grad_embedding_table){
+		fprintf(stderr, "Error: failed to allocate grad_embedding_table...\n");
+		return -1;
+	}
+
+	grad_embedding_table -> config = embedding_config;
+	grad_embedding_table -> embedding_table_size = (uint64_t) vocab_size * (uint64_t) model_dim * block_dt_bwd_size;
+	grad_embedding_table -> embedding_table = cur_dev_mem;
+
+	ret = dataflow_handle.set_mem(&dataflow_handle, inbound_stream_id, grad_embedding_table -> embedding_table, 0, grad_embedding_table -> embedding_table_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to set mem for grad_embedding_table...\n");
+		return -1;
+	}
+
+	cur_dev_mem += grad_embedding_table -> embedding_table_size;
 	
 	
+
+	// Head Gradients
+	Transformer_Head * grad_head = malloc(sizeof(Transformer_Head));
+	if (!grad_head){
+		fprintf(stderr, "Error: failed to allocate grad_head...\n");
+		return -1;
+	}
+
+	grad_head -> fwd_dt = block_dt;
+	grad_head -> bwd_dt = block_dt_bwd;
+	grad_head -> compute_dt = compute_dt;
+	grad_head -> eps = eps;
+	grad_head -> embedding_config = embedding_config;
+	grad_head -> buffer = cur_dev_mem;
+	grad_head -> w_head_norm = grad_head -> buffer;
+	grad_head -> w_head = grad_head -> w_head_norm + (uint64_t) model_dim * (uint64_t) block_dt_bwd_size;
+
+	
+
+	ret = dataflow_handle.set_mem(&dataflow_handle, inbound_stream_id, grad_head -> buffer, 0, combined_head_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to set mem for grad_head...\n");
+		return -1;
+	}
+
+	uint64_t combined_head_bwd_size = combined_head_els * block_dt_bwd_size;
+
+	cur_dev_mem += combined_head_bwd_size;
+
+	
+	
+	
+
+
+
+
+
+
+
 
 
 	// CONTEXT AND GRAD CONTEXTS!
@@ -464,65 +501,8 @@ int main(int argc, char * argv[]){
 
 	int max_tokens_per_chunk = 2048;
 	int num_chunks = MY_CEIL(total_tokens, max_tokens_per_chunk);
-
-
-	// CREATE DEVICE CONTEXT THAT ALL CHUNKS WILL REFERENCE...
-
-	Seq_Batch_Context * seq_context = malloc(sizeof(Seq_Batch_Context));
-	if (!seq_context){
-		fprintf(stderr, "Error: failed to allocate seq_context...\n");
-		return -1;
-	}
-
-	uint64_t context_buffer_size = 2 * (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_size;
-	seq_context -> contextBuffer = cur_dev_mem;
-	seq_context -> contextBufferBytes = context_buffer_size;
-	
-	seq_context -> cur_tokens_populated = 0;
-	seq_context -> total_context_tokens = total_tokens;
-
-	seq_context -> x_k = cur_dev_mem;
-	seq_context -> x_v = seq_context -> x_k + (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_size;
-
-	cur_dev_mem += context_buffer_size;
-
-
-	Seq_Batch_Context * grad_seq_context = malloc(sizeof(Seq_Batch_Context));
-	if (!grad_seq_context){
-		fprintf(stderr, "Error: failed to allocate grad_seq_context...\n");
-		return -1;
-	}
-
-	uint64_t grad_context_buffer_size = 2 * (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_size;
-	grad_seq_context -> contextBuffer = cur_dev_mem;
-	grad_seq_context -> contextBufferBytes = grad_context_buffer_size;
-
-	grad_seq_context -> cur_tokens_populated = 0;
-	grad_seq_context -> total_context_tokens = total_tokens;
-
-	grad_seq_context -> x_k = cur_dev_mem;
-	grad_seq_context -> x_v = grad_seq_context -> x_k + (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_size;
-
-	cur_dev_mem += grad_context_buffer_size;
 	
 	
-
-	
-	
-	
-
-	
-
-
-	/*
-	printf("Waiting for inbound transfers to complete then preparing seq batch...\n");
-
-	ret = dataflow_handle.sync_stream(&dataflow_handle, inbound_stream_id);
-	if (ret){
-		fprintf(stderr, "Error: failed to sync inbound stream...\n");
-		return -1;
-	}
-	*/
 
 
 	uint32_t * sys_token_ids = malloc(total_tokens * sizeof(uint32_t));
@@ -649,9 +629,6 @@ int main(int argc, char * argv[]){
 			return -1;
 		}
 
-		// set the context
-		seq_batches[i] -> context = seq_context;
-
 		ret = init_seq_batch_offsets(seq_batches[i], chunk_tokens, num_seqs, &(sys_blocks[0] -> config), max_total_local_expert_tokens);
 		if (ret){
 			fprintf(stderr, "Error: failed to init seq_batch offsets...\n");
@@ -686,13 +663,13 @@ int main(int argc, char * argv[]){
 		cur_sys_k_seq_lens[0] = cur_token;
 
 		ret = populate_seq_batch_metadata_buffer(&dataflow_handle, inbound_stream_id, 
-                                        seq_batches[i],
-                                        cur_host_mem, metadata_buffer_size,
-                                        seq_id, i, chunk_tokens, num_seqs,
-                                        cur_sys_token_ids, cur_sys_labels,
-                                        cur_sys_seq_positions, 
-                                        cur_sys_q_seq_offsets, cur_sys_q_seq_lens,
-                                        cur_sys_k_seq_offsets, cur_sys_k_seq_lens);
+										seq_batches[i],
+										cur_host_mem, metadata_buffer_size,
+										seq_id, i, chunk_tokens, num_seqs,
+										cur_sys_token_ids, cur_sys_labels,
+										cur_sys_seq_positions, 
+										cur_sys_q_seq_offsets, cur_sys_q_seq_lens,
+										cur_sys_k_seq_offsets, cur_sys_k_seq_lens);
 
 		if (ret){
 			fprintf(stderr, "Error: failed to populate seq_batch metadata buffer for chunk #%d...\n", i);
@@ -705,8 +682,12 @@ int main(int argc, char * argv[]){
 			return -1;
 		}
 
+		// ADVANCE TO NEXT CHUNK
+
 		cur_sys_token_ids += chunk_tokens;
 		cur_sys_labels += chunk_tokens;
+		
+		
 	}
 
 	free(cur_sys_seq_positions);
@@ -716,6 +697,59 @@ int main(int argc, char * argv[]){
 	free(cur_sys_k_seq_lens);
 
 	assert(remain_tokens == 0);
+
+
+
+	// CREATE DEVICE CONTEXT THAT ALL CHUNKS WILL REFERENCE...
+	// FOR NOW KEEPING N_LAYERS OF CONTEXT BECAUSE NOT TRANSFERRING BACK TO HOST...
+	// AND NEEDED FOR BACKPROP THROUGH TIME...
+
+	int num_fwd_contexts = n_layers;
+	int num_bwd_contexts = n_layers;
+
+	Seq_Batch_Context ** fwd_contexts = malloc(num_fwd_contexts * sizeof(Seq_Batch_Context *));
+	if (!fwd_contexts){
+		fprintf(stderr, "Error: failed to allocate fwd_contexts...\n");
+		return -1;
+	}
+
+	Seq_Batch_Context ** bwd_contexts = malloc(num_bwd_contexts * sizeof(Seq_Batch_Context *));
+	if (!bwd_contexts){
+		fprintf(stderr, "Error: failed to allocate bwd_contexts...\n");
+		return -1;
+	}
+
+
+	uint64_t context_buffer_size = 2 * (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_size;
+
+
+	for (int i = 0; i < num_fwd_contexts; i++){
+		(fwd_contexts[i]) -> contextBuffer = cur_dev_mem;
+		(fwd_contexts[i]) -> contextBufferBytes = context_buffer_size;
+	
+		(fwd_contexts[i]) -> cur_tokens_populated = 0;
+		(fwd_contexts[i]) -> total_context_tokens = total_tokens;
+
+		(fwd_contexts[i]) -> x_k = cur_dev_mem;
+		(fwd_contexts[i]) -> x_v = (fwd_contexts[i]) -> x_k + (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_size;
+
+		cur_dev_mem += context_buffer_size;
+	} 
+
+
+	for (int i = 0; i < num_bwd_contexts; i++){
+		(bwd_contexts[i]) -> contextBuffer = cur_dev_mem;
+		(bwd_contexts[i]) -> contextBufferBytes = context_buffer_size;
+	
+		(bwd_contexts[i]) -> cur_tokens_populated = 0;
+		(bwd_contexts[i]) -> total_context_tokens = total_tokens;
+
+		(bwd_contexts[i]) -> x_k = cur_dev_mem;
+		(bwd_contexts[i]) -> x_v = (bwd_contexts[i]) -> x_k + (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_size;
+
+		cur_dev_mem += context_buffer_size;
+	}
+
 	
 	/*
 
@@ -772,6 +806,12 @@ int main(int argc, char * argv[]){
 		cur_dev_mem += block_transition_size;
 	}
 
+	// SAME KERNEL WORKSPACE ACROSS ALL COMPUTATIONS!
+
+	uint64_t kernelWorkspaceBytes = 1UL << 24;
+	void * kernelWorkspace = cur_dev_mem;
+	cur_dev_mem += kernelWorkspaceBytes;
+
 	// each block transition needs to fill in:
 
 
@@ -779,32 +819,15 @@ int main(int argc, char * argv[]){
 	// need to save and bind activations...
 	// IGNORING SENDING BACK SAVED ACTIVATIONS FOR NOW...
 
-	int num_saved_activation_buffers = 2;
-	Seq_Batch_Saved_Activations * saved_activations = malloc(num_saved_activation_buffers * sizeof(Seq_Batch_Saved_Activations));
-	if (!saved_activations){
-		fprintf(stderr, "Error: failed to allocate saved_activations...\n");
-		return -1;
-	}
 
-	uint64_t saved_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batches[0]);
-	
-	for (int i = 0; i < num_saved_activation_buffers; i++){
-		ret = bind_seq_batch_saved_activations_buffer(seq_batches[0], &(saved_activations[i]), cur_dev_mem, saved_activations_buffer_size, i);
-		if (ret){
-			fprintf(stderr, "Error: failed to bind seq_batch saved_activations buffer...\n");
-			return -1;
-		}
-
-		cur_dev_mem += saved_activations_buffer_size;
-	}
-	
-
-	uint64_t activation_workspace_size = get_seq_batch_activation_workspace_buffer_size(seq_batches[0], &(blocks[0] -> config));
+	// Need 1 activation workspace per device...
 	Seq_Batch_Activation_Workspace * activation_workspace = malloc(sizeof(Seq_Batch_Activation_Workspace));
 	if (!activation_workspace){
 		fprintf(stderr, "Error: failed to allocate activation_workspace...\n");
 		return -1;
 	}
+
+	uint64_t activation_workspace_size = get_seq_batch_activation_workspace_buffer_size(seq_batches[0], &(blocks[0] -> config));
 
 	activation_workspace -> activationWorkspaceBuffer = cur_dev_mem;
 	activation_workspace -> activationWorkspaceBytes = activation_workspace_size;
@@ -812,27 +835,137 @@ int main(int argc, char * argv[]){
 	activation_workspace -> x_temp = cur_dev_mem;
 	activation_workspace -> x_temp_mlp = activation_workspace -> x_temp + ((uint64_t) max_tokens_per_chunk * (uint64_t) model_dim * (uint64_t) block_dt_size);
 	
+
+	activation_workspace -> kernelWorkspace = kernelWorkspace;
+	activation_workspace -> kernelWorkspaceBytes = kernelWorkspaceBytes;
+
 	cur_dev_mem += activation_workspace_size;
 
 
-	uint64_t kernelWorkspaceBytes = 1UL << 24;
-	void * kernelWorkspace = cur_dev_mem;
-	cur_dev_mem += kernelWorkspaceBytes;
 
-	// FOR NOW ONLY USING A SINGLE ACTIVATIONS STRUCT, BUT IN REALITY WILL HAVE A STACK OF THESE AND THEY
-	// WILL GET SENT BACK TO HOST...
+	// Saved Actviations will live on device and might be transferred back to host and retrieved prior to bwd pass...
 
-	Transformer_Block_Activations * activations = malloc(sizeof(Transformer_Block_Activations));
-	if (!activations){
-		fprintf(stderr, "Error: failed to allocate activations...\n");
+
+		// RECOMPUTED ACTIVATIONS BUFFER SPACE FOR RE-CALCULATING NORM VALUES...
+		// IN REALITY WE ONLY NEED ONE OF THESE FOR THE ENTIRE DEVICE, but this is easier to handle...
+
+	Seq_Batch_Recomputed_Activations * recomputed_activations = malloc(sizeof(Seq_Batch_Recomputed_Activations));
+	if (!recomputed_activations){
+		fprintf(stderr, "Error: failed to allocate recomputed_activations cotnainer...\n");
 		return -1;
 	}
 
+	uint64_t recomputed_activations_buffer_size = get_seq_batch_recomputed_activations_buffer_size(seq_batches[0]);
 
-	activations -> working_activations = &(saved_activations[0]);
-	activation_workspace -> kernelWorkspace = kernelWorkspace;
-	activation_workspace -> kernelWorkspaceBytes = kernelWorkspaceBytes;
-	activations -> activation_workspace = activation_workspace;
+
+
+	void * recomputed_activations_buffer = cur_dev_mem;
+
+	ret = bind_seq_batch_recomputed_activations_buffer(&(seq_batches[0] -> recomputed_activations_offsets), recomputed_activations, recomputed_activations_buffer, recomputed_activations_buffer_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to bind seq_batch recomputed_activations buffer...\n");
+		return -1;
+	}
+
+	cur_dev_mem += recomputed_activations_buffer_size;
+
+	// JUST FOR NOW (while testing for correctness): NOT DEALING WITH DATA TRANSFERS AND SAVING ALL ACTIVATIONS ON DEVICE...
+
+	int num_saved_activation_buffers = n_layers * num_chunks;
+
+	Seq_Batch_Saved_Activations * saved_activations = malloc(num_saved_activation_buffers * sizeof(Seq_Batch_Saved_Activations));
+	if (!saved_activations){
+		fprintf(stderr, "Error: failed to allocate saved_activations...\n");
+		return -1;
+	}
+
+	uint64_t saved_activations_buffer_size;
+
+	
+	for (int i = 0; i < num_saved_activation_buffers; i++){
+
+		saved_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batches[(i % n_layers)]);
+		ret = bind_seq_batch_saved_activations_buffer(seq_batches[(i % n_layers)], &(saved_activations[i]), cur_dev_mem, saved_activations_buffer_size, i);
+		if (ret){
+			fprintf(stderr, "Error: failed to bind seq_batch saved_activations buffer...\n");
+			return -1;
+		}
+
+		cur_dev_mem += saved_activations_buffer_size;
+
+		// set the recomputed activations buffer
+		// Every chunk and layer can reuse the same recomputed activations buffer...
+		// This gets populated during BWD X and is used during BWD W...
+		// so it will get reset for each chunk and each layer during bwd pass...
+		saved_activations[i].recomputed_activations = recomputed_activations;
+	}
+	
+	
+	
+	
+	// Now we will have a certain amount of activations on device that will be paired with a saved activations buffer in order
+	// to actually have output space....
+
+
+	// JUST FOR NOW (while testing for correctness): NOT DEALING WITH DATA TRANSFERS AND SAVING ALL ACTIVATIONS ON DEVICE...
+
+	int num_dev_activations = n_layers * num_chunks;
+
+	Transformer_Block_Activations ** activations = malloc(num_dev_activations * sizeof(Transformer_Block_Activations *));
+	if (!activations){
+		fprintf(stderr, "Error: failed to allocate top level activations container...\n");
+		return -1;
+	}
+
+	for (int i = 0; i < num_dev_activations; i++){
+		activations[i] = malloc(sizeof(Transformer_Block_Activations));
+		if (!activations[i]){
+			fprintf(stderr, "Error: failed to allocate activations container for chunk #%d...\n", i);
+			return -1;
+		}
+
+        // Just for now we know that that the saved activations buffer will be the same size as the activations buffer...
+		// (all chunks + layers)
+		
+		// In reality, the working activations will be tied to a saved activations buffer popped
+		// from a queue holding "free" saved activations buffers...
+		(activations[i]) -> working_activations = &(saved_activations[i]);
+
+		// can all resuse the same workspace...
+		(activations[i]) -> activation_workspace = activation_workspace;
+	}
+
+	// ONLY NEED ONE GRAD ACTIVATIONS STRUCT WHICH WILL BE RE-USED FOR EACH CHUNK AND EACH LAYER...
+	// (the workspace during bwd x, and then passed in for bwd w)
+
+	Seq_Batch_Saved_Activations * grad_saved_activations = malloc(sizeof(Seq_Batch_Saved_Activations));
+	if (!grad_saved_activations){
+		fprintf(stderr, "Error: failed to allocate grad_saved_activations...\n");
+		return -1;
+	}
+
+	// seq batch 0 is the largest, so won't need more space than this...
+	uint64_t grad_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batches[0]);
+
+	// using seq batch 0 offsets is safe because all seq batches are either the same or smaller (in terms of total tokens, thus saved activations offsets...)
+	ret = bind_seq_batch_saved_activations_buffer(seq_batches[0], grad_saved_activations, cur_dev_mem, grad_activations_buffer_size, 0);
+	if (ret){
+		fprintf(stderr, "Error: failed to bind seq_batch grad_saved_activations buffer...\n");
+		return -1;
+	}
+
+	cur_dev_mem += grad_activations_buffer_size;
+
+
+	Transformer_Block_Activations * grad_activations = malloc(sizeof(Transformer_Block_Activations));
+	if (!grad_activations){
+		fprintf(stderr, "Error: failed to allocate grad_activations...\n");
+		return -1;
+	}
+
+	grad_activations -> working_activations = grad_saved_activations;
+	(grad_activations) -> activation_workspace = activation_workspace;
+
 
 
 	// PREPARING SPECIAL HEAD ACTIVATIONS STRUCT...
@@ -885,6 +1018,8 @@ int main(int argc, char * argv[]){
 	// model_output -> seq_batch = seq_batches[i];
 
 
+	Transformer_Block_Activations * cur_activations;
+	Seq_Batch_Saved_Activations * cur_fwd_activations;
 
 	// 1.) DOING EMBEDDDING....
 
@@ -906,10 +1041,15 @@ int main(int argc, char * argv[]){
 
 		printf("\n\nSubmitting layer #0 for chunk #%d...\n\n", i);
 
+		cur_activations = activations[i];
+
+		// set the context
+		seq_batches[i] -> context = fwd_contexts[0];
+
 		ret = dataflow_submit_transformer_block(&dataflow_handle, compute_stream_id, 
 								&(block_transitions[2 * i]), 
 								blocks[0], 
-								activations, 
+								cur_activations, 
 								&(block_transitions[2 * i + 1]));
 
 		if (ret){
@@ -925,12 +1065,17 @@ int main(int argc, char * argv[]){
 		for (int i = 0; i < num_chunks; i++){
 			
 			printf("\n\nSubmitting transformer for chunk #%d, block #%d...!\n\n", i, k);
+
+			cur_activations = activations[k * num_chunks + i];
+
+			// set the context
+			seq_batches[i] -> context = fwd_contexts[k];
 			
 
 			ret = dataflow_submit_transformer_block(&dataflow_handle, compute_stream_id, 
 									&(block_transitions[2 * i + (k % 2)]), 
 									blocks[k], 
-									activations, 
+									cur_activations, 
 									&(block_transitions[2 * i + ((k + 1) % 2)])) ;
 
 			if (ret){
@@ -953,14 +1098,20 @@ int main(int argc, char * argv[]){
 
 		grad_stream_from_head = &(block_transitions[2 * i + ((n_layers - 1) % 2)]);
 
+		// ensure grad stream is zeroed out...
+		ret = dataflow_handle.set_mem(&dataflow_handle, compute_stream_id, grad_stream_from_head -> X, 0, block_transition_size);
+		if (ret){
+			fprintf(stderr, "Error: failed to zero out grad stream for chunk #%d before head...\n", i);
+			return -1;
+		}
+
 		model_output -> seq_batch = seq_batches[i];
 		head_activations -> num_tokens = seq_batches[i] -> total_tokens;
 	
-
 		ret = dataflow_submit_transformer_head(&dataflow_handle, compute_stream_id,
-                        						final_block_output_transition, head,
-                        						head_activations, 
-                        						model_output,
+												final_block_output_transition, head,
+												head_activations, 
+												model_output,
 												// during interference these would be NULL
 												grad_head,
 												grad_stream_from_head);
@@ -971,6 +1122,75 @@ int main(int argc, char * argv[]){
 			return -1;
 		}
 	}
+
+	for (int k = n_layers - 1; k >= 0; k--){
+
+		// need to ensure that grad context is zeroed out before starting each layer...
+
+		// normally we would only have 1 context and keep updating it...
+		ret = dataflow_handle.set_mem(&dataflow_handle, compute_stream_id, bwd_contexts[k] -> contextBuffer, 0, bwd_contexts[k] -> contextBufferBytes);
+		if (ret){
+			fprintf(stderr, "Error: failed to zero out grad context for layer #%d...\n", k);
+			return -1;
+		}
+
+		for (int i = num_chunks - 1; i >= 0; i--){
+
+
+			cur_fwd_activations = &(saved_activations[k * num_chunks + i]);
+
+			// set the context to reference the bwd context...
+			seq_batches[i] -> context = bwd_contexts[k];
+
+			
+			printf("\n\nSubmitting bwd_x for chunk #%d, block #%d...\n\n", i, k);
+
+			ret = dataflow_submit_transformer_block_bwd_x(&dataflow_handle, compute_stream_id,
+								blocks[k], 
+								&(block_transitions[2 * i + (k % 2)]), 
+								cur_fwd_activations, fwd_contexts[k],
+								grad_activations,
+								grad_blocks[k],
+								&(block_transitions[2 * i + ((k + 1) % 2)]));
+
+			if (ret){
+				fprintf(stderr, "Error: failed to submit transformer block bwd_x for chunk #%d, block #%d...\n", i, k);
+				return -1;
+			}
+
+			printf("\n\nSubmitting bwd_w for chunk #%d, block #%d...\n\n", i, k);
+
+			// utilizing the newly populated grad_activations struct
+			// to update the grad_weights...
+
+			ret = dataflow_submit_transformer_block_bwd_w(&dataflow_handle, compute_stream_id,
+                                &(block_transitions[2 * i + (k % 2)]),
+                                cur_fwd_activations, 
+                                grad_activations, 
+                                grad_blocks[k]);
+
+			if (ret){
+				fprintf(stderr, "Error: failed to submit transformer block bwd_w for chunk #%d, block #%d...\n", i, k);
+				return -1;
+			}
+		}
+	}
+
+
+	for (int i = num_chunks - 1; i >= 0; i--){
+		printf("\n\nSubmitting embedding bwd_w for chunk #%d...\n\n", i);
+
+		// layer 0'ths output grad stream will be at index 1 (for given chunk)
+		ret = dataflow_submit_transformer_embedding_bwd_w(&dataflow_handle, compute_stream_id,
+											&(block_transitions[2 * i + 1]),
+											grad_embedding_table);
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit transformer embedding bwd_w for chunk #%d...\n", i);
+			return -1;
+		}
+	}
+	
 
 	printf("Finished enqueueing all dataflow operations! Waiting to sync...\n\n");
 
