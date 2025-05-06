@@ -1574,11 +1574,19 @@ class SimulationRunner:
         gbps = 1e9
         gb = (1 << 30)
 
-        contextTransferCycleText = f"{self.contextTransferFrames}" if self.trueContextTransferCycles < self.round_frames_to_zero_cutoff else f"{self.trueContextTransferCycles:.2f}; set to {self.contextTransferFrames}"
-        blockTransitionCyclesText = f"{self.activationTransitionFrames}" if self.trueActivationTransitionCycles >= self.round_frames_to_zero_cutoff else f"{self.trueActivationTransitionCycles:.2f}; set to {self.activationTransitionFrames}"
+        if self.trueContextTransferCycles < self.round_frames_to_zero_cutoff:
+            contextTransferCycleText = f"{self.trueContextTransferCycles:.2f}; set to {self.contextTransferFrames}"
+        else:
+            contextTransferCycleText = f"{self.contextTransferFrames}"
 
+        if self.trueActivationTransitionCycles < self.round_frames_to_zero_cutoff:
+            blockTransitionCyclesText = f"{self.trueActivationTransitionCycles:.2f}; set to {self.activationTransitionFrames}"
+        else:
+            blockTransitionCyclesText = f"{self.activationTransitionFrames}"
+
+        ## override for single device case
         if self.N == 1:
-            blockTransitionCyclesText = f"0"
+            blockTransitionCyclesText = f"N/A"
 
         first_train_chunk_str = f""
 
