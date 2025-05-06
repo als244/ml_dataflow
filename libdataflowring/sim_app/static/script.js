@@ -34,6 +34,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const completionArea = document.getElementById('completion-area'); // Content area inside popup
     const memoryLegendArea = document.getElementById('memory-legend-area');
     const computeLegendArea = document.getElementById('compute-legend-area');
+    const simulationArea = document.querySelector('.simulation-area');
+    const leftLegendResizer = document.getElementById('left-legend-resizer');
+    const rightLegendResizer = document.getElementById('right-legend-resizer');
     const errorMessageDiv = document.getElementById('error-message');
     const submitButton = paramsForm.querySelector('button[type="submit"]');
     const controlElements = document.querySelectorAll('.controls button, .controls input, .controls span');
@@ -132,47 +135,63 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleMouseMove(e) {
         if (!isResizing) return;
-
+    
         const currentY = e.clientY;
         const deltaY = currentY - startY;
         let newTopHeight = initialTopHeight + deltaY;
         let newBottomHeight = initialBottomHeight - deltaY;
-        const totalAvailableHeight = initialTopHeight + initialBottomHeight; // Keep total height constant
-
-        // Enforce minimum heights and adjust the other pane
-        if (newTopHeight < minPaneHeight) {
-            newTopHeight = minPaneHeight;
+        const totalAvailableHeight = initialTopHeight + initialBottomHeight;
+    
+        // Enforce minimum heights and adjust the other pane (using a simplified robust logic)
+        if (totalAvailableHeight >= 2 * minPaneHeight) { // Enough for both minimums
+            if (newTopHeight < minPaneHeight) {
+                newTopHeight = minPaneHeight;
+                newBottomHeight = totalAvailableHeight - newTopHeight;
+            } else if (newBottomHeight < minPaneHeight) {
+                newBottomHeight = minPaneHeight;
+                newTopHeight = totalAvailableHeight - newBottomHeight;
+            }
+        } else if (totalAvailableHeight >= minPaneHeight) { // Enough for one minimum, but not both
+            // Prioritize the pane being expanded, or ensure one gets minPaneHeight
+            if (deltaY > 0) { // Expanding top or top was initially larger
+                newTopHeight = Math.min(newTopHeight, totalAvailableHeight - minPaneHeight); // Cap top to leave space for bottom's min
+                newTopHeight = Math.max(newTopHeight, minPaneHeight); // Ensure top is at least min
+                newBottomHeight = totalAvailableHeight - newTopHeight;
+            } else { // Expanding bottom or bottom was initially larger/equal
+                newBottomHeight = Math.min(newBottomHeight, totalAvailableHeight - minPaneHeight); // Cap bottom
+                newBottomHeight = Math.max(newBottomHeight, minPaneHeight); // Ensure bottom is at least min
+                newTopHeight = totalAvailableHeight - newBottomHeight;
+            }
+        } else { // Not enough for even one minPaneHeight
+            // Split available height proportionally based on drag or initial ratio
+            const topRatio = (initialTopHeight / totalAvailableHeight) || 0.5; // Avoid division by zero
+            newTopHeight = totalAvailableHeight * topRatio;
             newBottomHeight = totalAvailableHeight - newTopHeight;
         }
-        if (newBottomHeight < minPaneHeight) {
-            newBottomHeight = minPaneHeight;
-            newTopHeight = totalAvailableHeight - newBottomHeight;
+        // Ensure no negative heights after all calculations
+        newTopHeight = Math.max(0, newTopHeight);
+        newBottomHeight = Math.max(0, newBottomHeight);
+    
+        if (svgContainer) { // Check if svgContainer exists
+          svgContainer.style.height = `${newTopHeight}px`;
         }
-
-        // Ensure we don't exceed original total height if mins push boundaries
-        if (newTopHeight + newBottomHeight > totalAvailableHeight) {
-             // This case should ideally be handled by the above logic, but as a fallback:
-             // Prioritize the pane being expanded, adjust the other
-            if (deltaY > 0) { // Increasing top height
-                newBottomHeight = totalAvailableHeight - newTopHeight;
-            } else { // Increasing bottom height
-                 newTopHeight = totalAvailableHeight - newBottomHeight;
-            }
+        if (torusPlotContainer) { // Check if torusPlotContainer exists
+          torusPlotContainer.style.height = `${newBottomHeight}px`;
         }
-
-
-        svgContainer.style.height = `${newTopHeight}px`;
-        torusPlotContainer.style.height = `${newBottomHeight}px`;
-
+    
+    
         // Resize Plotly plot during vertical drag
         if (torusPlotInitialized && torusPlotContainer) {
             try {
+                // === CHANGE HERE ===
+                // Instead of Plotly.relayout to set height, use Plotly.Plots.resize
+                // This allows Plotly to read both width and height from the container.
                 Plotly.Plots.resize(torusPlotContainer);
+                // ===================
             } catch (resizeError) {
                 console.warn("Error resizing Plotly plot during drag:", resizeError);
             }
         }
-        // Optional: Resize SVG viewbox if needed (might not be necessary with grid centering)
     }
 
     function handleMouseUp() {
@@ -180,19 +199,57 @@ document.addEventListener('DOMContentLoaded', () => {
             isResizing = false;
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
-            document.body.style.cursor = '';
-            svgContainer.style.pointerEvents = '';
-            torusPlotContainer.style.pointerEvents = '';
-
+            if (document.body) document.body.style.cursor = ''; // Check document.body
+            if (svgContainer) svgContainer.style.pointerEvents = ''; // Check svgContainer
+            if (torusPlotContainer) torusPlotContainer.style.pointerEvents = ''; // Check torusPlotContainer
+    
             // Final resize call after mouse up
             if (torusPlotInitialized && torusPlotContainer) {
                 try {
-                    Plotly.Plots.resize(torusPlotContainer);
+                    Plotly.Plots.resize(torusPlotContainer); // Ensure this is called on mouse up
                 } catch (resizeError) {
                     console.warn("Error resizing Plotly plot on mouseup:", resizeError);
                 }
             }
         }
+    }
+
+    let isResizingHorizontal = false;
+    let currentHorizontalResizer = null;
+    let startX, initialLeftWidth, initialMainWidth, initialRightWidth;
+    const minPaneWidth = 100; // Same as CSS min-width for legends, or a bit more for main
+
+    // --- Function to handle horizontal resizing ---
+    function initHorizontalResizer(resizer, leftPane, rightPane) {
+        if (!resizer || !leftPane || !rightPane) {
+            // console.warn("Resizer or panes not found for: ", resizer ? resizer.id : 'unknown resizer');
+            return;
+        }
+
+        resizer.addEventListener('mousedown', (e) => {
+            isResizingHorizontal = true;
+            currentHorizontalResizer = resizer;
+            startX = e.clientX;
+
+            initialLeftWidth = leftPane.offsetWidth;
+            initialRightWidth = rightPane.offsetWidth;
+            // If one of the panes is the central 'simulation-area', its width is more flexible
+            // We assume the structure: leftLegend - resizer - mainArea - resizer - rightLegend
+            // Or mainArea - resizer - rightLegend (if left resizer targets mainArea as its 'rightPane')
+            // Or leftLegend - resizer - mainArea (if right resizer targets mainArea as its 'leftPane')
+
+            document.addEventListener('mousemove', handleHorizontalMouseMove);
+            document.addEventListener('mouseup', handleHorizontalMouseUp);
+
+            e.preventDefault();
+            document.body.style.cursor = 'col-resize';
+            // Optional: Disable pointer events on panes during resize to prevent interference
+            leftPane.style.pointerEvents = 'none';
+            rightPane.style.pointerEvents = 'none';
+            if (leftPane !== simulationArea && rightPane !== simulationArea && simulationArea) {
+                 simulationArea.style.pointerEvents = 'none';
+            }
+        });
     }
 
     const handleWindowResize = debounce(() => {
@@ -220,7 +277,7 @@ document.addEventListener('DOMContentLoaded', () => {
                      }
                 } else {
                      // Fallback to default split if current heights are invalid (e.g., 0)
-                     const initialTopPercent = 0.60;
+                     const initialTopPercent = 0.65;
                      newTopPx = Math.max(minPaneHeight, Math.floor(availableHeight * initialTopPercent));
                      newBottomPx = Math.max(minPaneHeight, availableHeight - newTopPx);
                      if(newTopPx + newBottomPx > availableHeight) {
@@ -250,6 +307,103 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 250); // Debounce for 250ms
 
     window.addEventListener('resize', handleWindowResize);
+
+    function handleHorizontalMouseMove(e) {
+        if (!isResizingHorizontal || !currentHorizontalResizer) return;
+
+        const currentX = e.clientX;
+        const deltaX = currentX - startX;
+
+        // Determine which panes are being resized based on currentHorizontalResizer.id
+        let leftPane, rightPane;
+        let currentLeftWidth, currentRightWidth;
+
+        if (currentHorizontalResizer.id === 'left-legend-resizer') {
+            leftPane = memoryLegendArea;
+            rightPane = simulationArea; // The main content area
+            currentLeftWidth = initialLeftWidth;
+            // initialMainWidth isn't explicitly stored, it will be the remainder
+        } else if (currentHorizontalResizer.id === 'right-legend-resizer') {
+            leftPane = simulationArea; // The main content area
+            rightPane = computeLegendArea;
+            currentRightWidth = initialRightWidth;
+            // initialMainWidth isn't explicitly stored
+        } else {
+            return; // Should not happen
+        }
+
+
+        if (currentHorizontalResizer.id === 'left-legend-resizer') {
+            let newLeftWidth = initialLeftWidth + deltaX;
+            // Enforce min width for left legend
+            newLeftWidth = Math.max(minPaneWidth, newLeftWidth);
+            // Ensure main area doesn't get too small
+            const mainAreaCurrentWidth = rightPane.offsetWidth; // Get current width of simulationArea
+            if (mainAreaCurrentWidth - (newLeftWidth - initialLeftWidth) < minPaneWidth) {
+                 newLeftWidth = initialLeftWidth + (mainAreaCurrentWidth - minPaneWidth);
+            }
+
+            leftPane.style.flexBasis = `${newLeftWidth}px`;
+
+        } else if (currentHorizontalResizer.id === 'right-legend-resizer') {
+            let newRightWidth = initialRightWidth - deltaX; // Delta is reversed for right pane
+            // Enforce min width for right legend
+            newRightWidth = Math.max(minPaneWidth, newRightWidth);
+            // Ensure main area doesn't get too small
+            const mainAreaCurrentWidth = leftPane.offsetWidth; // Get current width of simulationArea
+             if (mainAreaCurrentWidth - (newRightWidth - initialRightWidth) < minPaneWidth) {
+                 newRightWidth = initialRightWidth + (mainAreaCurrentWidth - minPaneWidth);
+            }
+            rightPane.style.flexBasis = `${newRightWidth}px`;
+        }
+
+        // Trigger Plotly resize if the main simulation area (which contains plots) changes size
+        if (torusPlotInitialized && torusPlotContainer && (leftPane === simulationArea || rightPane === simulationArea)) {
+            try {
+                Plotly.Plots.resize(torusPlotContainer);
+            } catch (resizeError) {
+                // console.warn("Error resizing Plotly plot during horizontal drag:", resizeError);
+            }
+        }
+         // You might also need to resize the SVG animation if its container size changes significantly
+        if (svgContainer && (leftPane === simulationArea || rightPane === simulationArea)) {
+            // If your SVG relies on container size, you might need a resize function for it too.
+            // For example, re-running parts of setupSVG or adjusting its viewBox if needed.
+            // Or if your SVG is responsive via CSS (max-width/height: 100%), it might adjust automatically.
+        }
+    }
+
+    function handleHorizontalMouseUp() {
+        if (isResizingHorizontal) {
+            isResizingHorizontal = false;
+            document.removeEventListener('mousemove', handleHorizontalMouseMove);
+            document.removeEventListener('mouseup', handleHorizontalMouseUp);
+            document.body.style.cursor = '';
+
+            // Re-enable pointer events
+            memoryLegendArea.style.pointerEvents = '';
+            computeLegendArea.style.pointerEvents = '';
+            if(simulationArea) simulationArea.style.pointerEvents = '';
+
+
+            // Final resize call for Plotly if it was involved
+            if (torusPlotInitialized && torusPlotContainer && currentHorizontalResizer) {
+                 let resizerId = currentHorizontalResizer.id;
+                 if (resizerId === 'left-legend-resizer' || (resizerId === 'right-legend-resizer' && simulationArea)) {
+                    try {
+                        Plotly.Plots.resize(torusPlotContainer);
+                    } catch (resizeError) {
+                        // console.warn("Error resizing Plotly plot on horizontal mouseup:", resizeError);
+                    }
+                }
+            }
+            currentHorizontalResizer = null;
+        }
+    }
+
+    // Initialize the resizers
+    initHorizontalResizer(leftLegendResizer, memoryLegendArea, simulationArea);
+    initHorizontalResizer(rightLegendResizer, simulationArea, computeLegendArea);
 
     function syncAnimationHeaderVisibility() {
         if (!animationHeader || !svg) {
@@ -447,9 +601,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 // from formData or simulationConfig later if needed.
                 const modelStages = simulationConfig.N; // Example value from screenshot
                 const dataParallelismFactor = 16; // Example value from screenshot
+                
                 drawTorusPlot(modelStages, dataParallelismFactor);
-                showTorusPlot();
                 torusPlotInitialized = true;
+                showTorusPlot();
+                
                 // *** END NEW ***
 
                 // Start the update loop ONLY if the initial state is not paused
@@ -1405,8 +1561,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 text: `Model Stages: ${N_slices}<br>Ring Copies: ${M_nodes_per_slice} (Hypothetical)`,
                 x: 0.5, // Center horizontally
                 xanchor: 'center', // Anchor the center of the text at x=0.5
-                y: 0.95, // Adjust vertical position if needed
-                yanchor: 'top'
             },
            showlegend: true,
             legend: {
@@ -1416,7 +1570,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 y: 0.5,
                 yanchor: 'middle'
              },
-            margin: { l: 10, r: 10, b: 10, t: 10 }, // Balanced left/right, added small bottom margin
+            margin: { l: 10, r: 10, b: 10, t: 30 }, // Balanced left/right, added small bottom margin
            scene: {
                xaxis: { visible: false, showgrid: false, zeroline: false, automargin: true },
                yaxis: { visible: false, showgrid: false, zeroline: false, automargin: true },
@@ -1437,42 +1591,42 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function showTorusPlot() {
         if (torusPlotContainer && horizontalResizer) {
-            // *** NEW: Set initial heights and show resizer ***
-            const parentHeight = torusPlotContainer.parentElement.clientHeight; // Get height of .simulation-area
-            const resizerHeight = horizontalResizer.offsetHeight || 8; // Use defined or default height
+            const parentHeight = torusPlotContainer.parentElement.clientHeight; 
+            const resizerHeight = horizontalResizer.offsetHeight || 8; 
             const availableHeight = parentHeight - resizerHeight;
 
-            // Example initial split (adjust percentage as needed)
-            const initialTopPercent = 0.60; // 60% for SVG container
+            const initialTopPercent = 0.60; 
             let initialTopPx = Math.max(minPaneHeight, Math.floor(availableHeight * initialTopPercent));
             let initialBottomPx = Math.max(minPaneHeight, availableHeight - initialTopPx);
 
-             // Adjust if total exceeds available due to min height constraints
-             if(initialTopPx + initialBottomPx > availableHeight) {
-                // Prioritize top pane perhaps? Or split remaining space?
-                // Simple approach: Reduce bottom pane if possible
+            if (initialTopPx + initialBottomPx > availableHeight) {
                 initialBottomPx = availableHeight - initialTopPx;
                 if (initialBottomPx < minPaneHeight) {
                     initialBottomPx = minPaneHeight;
-                    initialTopPx = availableHeight - initialBottomPx; // Adjust top accordingly
+                    initialTopPx = availableHeight - initialBottomPx;
                 }
-             }
-
+            }
 
             console.log(`Setting initial heights: Top=${initialTopPx}px, Bottom=${initialBottomPx}px`);
-            svgContainer.style.height = `${initialTopPx}px`;
+            if (svgContainer) { // Added null check for svgContainer
+                svgContainer.style.height = `${initialTopPx}px`;
+            }
             torusPlotContainer.style.height = `${initialBottomPx}px`;
 
             torusPlotContainer.style.display = 'block';
-            horizontalResizer.style.display = 'block'; // Show the resizer
+            horizontalResizer.style.display = 'block'; 
 
             // Tell Plotly to resize after container is visible and sized
-             if (torusPlotInitialized) {
-                 try {
-                    Plotly.Plots.resize(torusPlotContainer);
-                 } catch(e) { console.warn("Plotly resize failed on show:", e); }
-             }
-
+            if (torusPlotInitialized) { // This flag is now reliably true
+                requestAnimationFrame(() => {
+                    try {
+                        Plotly.Plots.resize(torusPlotContainer);
+                        console.log("Plotly.Plots.resize called from showTorusPlot via rAF");
+                    } catch (e) {
+                        console.warn("Plotly resize failed in showTorusPlot (rAF):", e);
+                    }
+                });
+            }
         }
     }
 

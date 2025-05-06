@@ -6,19 +6,21 @@
 }
 
 /* Basic Reset & Body */
-html, body {
+html {
     height: 100%;
-    margin: 0;
-    padding: 0;
+    overflow: hidden;
 }
+
 body {
     font-family: sans-serif;
     display: flex;
     flex-direction: column;
     color: #333;
     background-color: #fff;
-    height: 100vh;
-    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    height: 100vh; /* Make body exactly viewport height */
+    overflow: hidden;   /* Prevent body from scrolling */
 }
 
 /* Header */
@@ -63,6 +65,7 @@ header h2 {
     flex-direction: column;
     min-height: 0;
     position: relative;
+    overflow: hidden;
 }
 
 #paramsForm {
@@ -151,38 +154,32 @@ header h2 {
 
 /* Content Area Wrapper */
 .content-area-wrapper {
-    flex: 1; /* Takes remaining space */
+    flex: 1;
     display: flex;
-    align-items: stretch;
-    overflow: scroll;
-    padding: 20px;
-    gap: 20px;
+    align-items: stretch; /* Ensures children take full height */
+    padding: 5px;
+    gap: 0; /* Remove existing gap, resizers will create visual separation */
     min-width: 0;
     min-height: 0;
+    overflow: hidden;
 }
 
 /* Individual Legend Area Styling */
 .legend-area {
-    flex: 0 1 auto; /* Grow 0, Shrink 1, Basis auto */
-    /* Consider adding min/max width if needed: */
-    /* min-width: 150px; */
-    /* max-width: 300px; */
-    /* font-family: monospace; */ /* Moved font-family to pre for better control */
-    /* font-size: 0.75rem; */ /* Set font-size to 0 to collapse whitespace */
-    font-size: 0; /* Collapse whitespace nodes between child elements */
-    white-space: pre-wrap; /* This might be unnecessary now */
-    padding: 10px 15px;
-    border: 1px solid #ccc;
+    flex-basis: 200px;
+    flex-shrink: 0;
+    flex-grow: 0;
+    min-width: 100px;
+    max-width: 500px;
     background-color: #fdfdfd;
-    border-radius: 5px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    border: 1px solid #ddd;
+    padding: 0; /* Padding on h2 and pre */
+    overflow-y: scroll; /* Prevent legend area itself from scrolling; pre will scroll */
     display: flex;
     flex-direction: column;
-    overflow-y: scroll;
-    overflow-x: hidden;
-    max-height: 100%;
-    align-self: flex-start;
+    min-height: 0;
 }
+
 .legend-area h2 {
     margin-top: 0;
     font-size: 1.15rem; /* Restore font size for h2 */
@@ -197,31 +194,51 @@ header h2 {
     z-index: 1;
     flex-shrink: 0;
     text-align: center;
+    white-space: normal;
+    padding-top: 5px;
+    padding-bottom: 5px;
 }
 .legend-area pre {
     margin: 0;
     padding-top: 15px;
     padding-bottom: 10px;
+    padding-left: 10px; 
     font-family: monospace; /* Set font-family here */
     font-size: 0.75rem; /* Restore specific font size for pre (was inherited) */
     color: #555;
     flex-grow: 1;
     white-space: pre;
-    overflow-x: auto;
+    overflow-x: visible;
 }
 
 /* Simulation Area Styling */
 .simulation-area {
-    flex: 1 1 0; /* Grow 1, Shrink 1, Basis 0% */
+    flex: 1 1 0; /* Grow and shrink as needed, taking remaining space */
+    /* ... (your existing simulation area styles) ... */
+    min-width: 300px; /* Example: Set a minimum width for the central area */
     display: flex;
     flex-direction: column;
-    min-height: 0;
-    min-width: 0;
-    padding: 0;
-    border: none;
-    background-color: #fff;
     position: relative;
     overflow: hidden;
+}
+
+.vertical-resizer {
+    flex: 0 0 6px; /* Width of the resizer bar, don't grow or shrink */
+    background-color: #ccc;
+    cursor: col-resize; /* Cursor indicating horizontal resize */
+    /* To center the bar visually if it's inside a gap, or use margins */
+    /* margin: 0 5px; */ /* If you want space around it, adjust .content-area-wrapper gap instead */
+    border-left: 1px solid #bbb;
+    border-right: 1px solid #bbb;
+    min-height: 100%; /* Make it full height of the wrapper */
+    box-sizing: border-box;
+    z-index: 20; /* Ensure it's above other content if overlapping occurs */
+    margin-left: 8px;  /* Adjust this value as needed */
+    margin-right: 8px; /* Adjust this value as needed */
+}
+
+.vertical-resizer:hover {
+    background-color: #b7b4b4;
 }
 
 /* Controls and Status Area */
@@ -229,7 +246,7 @@ header h2 {
     flex-shrink: 0;
 }
 .controls {
-    margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px 15px; justify-content: center; align-items: center; border-bottom: 1px solid #eee; padding: 10px; padding-bottom: 15px; background-color: #f8f8f8; border-radius: 5px;
+    margin-bottom: 2px; display: flex; flex-wrap: wrap; gap: 8px 12px; justify-content: center; align-items: center; border-bottom: 1px solid #eee; padding: 8px; padding-bottom: 8px; background-color: #f8f8f8; border-radius: 5px; white-space: pre;
 }
 /* ... (rest of controls styles remain the same) ... */
 .controls button, .controls input[type="range"], .controls input[type="number"], .controls label, .controls span { padding: 8px 12px; font-size: 0.9em; vertical-align: middle; }
@@ -246,26 +263,40 @@ header h2 {
 #runToBtn { background-color: #17a2b8; }
 #runToBtn:hover:not(:disabled) { background-color: #138496; }
 
+.control-group {
+    display: flex;         /* Make the group itself a flex container */
+    align-items: center;   /* Vertically align the label, input, and button within the group */
+    gap: 5px;              /* Optional: adds a small space between items in the group */
+    flex-shrink: 0;        /* Prevents this group from shrinking if .controls is tight for space.
+                               This helps keep it on one line. */
+}
+
+/* Optional: if you want to ensure these specific items don't shrink individually within their group */
+.control-group label,
+.control-group input[type="number"],
+.control-group button {
+    flex-shrink: 0;
+}
+
 
 #status-area {
     margin-bottom: 10px; padding: 8px 15px; font-weight: bold; text-align: center; font-size: 1.1em; background-color: #e9ecef; border-radius: 4px; color: #495057;
 }
 
 #simulation-svg-container {
-    /* Let flex control height initially */
-    /* height: 60%; */ /* REMOVE fixed initial height */
-    flex-grow: 1; /* Allow SVG container to grow */
-    flex-shrink: 1; /* Allow SVG container to shrink */
-    min-height: 50px; /* Minimum height */
-    width: 100%;
-    border: 1px solid #ccc;
+    /* height will be set by JS; remove flex-grow/shrink if JS solely controls height */
+    /* flex-grow: 1; REMOVED */
+    /* flex-shrink: 1; REMOVED */
+    min-height: 50px; /* Keep min-height */
+    width: 100%; 
+    border: 1px solid #ccc; 
     background-color: #fdfdfd;
-    position: relative; /* For potential absolute elements inside? */
-    overflow: hidden; /* Clip SVG content */
-    border-radius: 4px;
-    display: grid; /* Use grid to center SVG */
-    place-items: center;
-    padding: 10px;
+    position: relative; 
+    overflow: hidden; 
+    border-radius: 2px;
+    display: grid; 
+    place-items: center; 
+    padding: 0px; 
     box-sizing: border-box;
 }
 
@@ -299,7 +330,7 @@ header h2 {
 
 #horizontal-resizer {
     width: 100%;
-    height: 8px; /* Height of the draggable bar */
+    height: 6px; /* Height of the draggable bar */
     background-color: #ccc; /* Color of the bar */
     cursor: row-resize;  /* Cursor indicating vertical resize */
     flex-shrink: 0; /* Prevent the resizer from shrinking */
@@ -307,6 +338,8 @@ header h2 {
     border-top: 1px solid #bbb;
     border-bottom: 1px solid #bbb;
     box-sizing: border-box;
+    margin-top: 5px;  /* Adjust this value as needed */
+    margin-bottom: 5px; /* Adjust this value as needed */
 }
 /* Style on hover for better feedback */
 #horizontal-resizer:hover {
@@ -314,20 +347,19 @@ header h2 {
 }
 
 #torus-plot-container {
-    /* Let flex control height initially */
-    /* height: calc(40% - 8px); */ /* REMOVE fixed initial height */
-    flex-grow: 1; /* Allow Plotly container to grow */
-    flex-shrink: 1; /* Allow Plotly container to shrink */
-    min-height: 50px; /* Minimum height */
-    width: 100%; /* Full width of parent */
-    margin-top: 0; /* No margin needed, resizer provides separation */
+    /* height will be set by JS; remove flex-grow/shrink if JS solely controls height */
+    /* flex-grow: 1; REMOVED */
+    /* flex-shrink: 1; REMOVED */
+    min-height: 50px; /* Keep min-height */
+    width: 100%; 
+    margin-top: 0; 
     border: 1px solid #ccc;
-    background-color: #ffffff;
-    border-radius: 4px;
-    display: none; /* Initially hidden */
-    box-sizing: border-box;
-    padding: 10px;
-    overflow: hidden; /* IMPORTANT: Clip Plotly content */
+    background-color: #ffffff; 
+    border-radius: 4px; 
+    display: none; /* JS will show it */
+    box-sizing: border-box; 
+    padding: 10px; 
+    overflow: hidden; /* Clip Plotly */
 }
 
 /* Completion Popup Styles - No changes */

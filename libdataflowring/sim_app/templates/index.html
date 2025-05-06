@@ -109,6 +109,8 @@
                 <pre></pre>
             </div>
 
+            <div class="vertical-resizer" id="left-legend-resizer"></div>
+
             <main class="simulation-area">
 
                 <div class="controls">
@@ -116,10 +118,13 @@
                     <button id="pauseBtn" disabled>Pause</button>
                     <label for="speedSlider">Speed:</label>
                     <input type="range" id="speedSlider" min="1" max="100" value="50" disabled>
-                    <span id="speedValue">50</span>
-                    <label for="runToCycleInput">Run to Cycle:</label>
-                    <input type="number" id="runToCycleInput" min="0" value="0" style="width: 80px;" disabled>
-                    <button id="runToBtn" disabled>Run</button>
+                    <span id="speedValue">80</span>
+
+                    <div class="control-group">
+                        <label for="runToCycleInput">Run to Cycle:</label>
+                        <input type="number" id="runToCycleInput" min="0" value="0" style="width: 80px;" disabled>
+                        <button id="runToBtn" disabled>Run</button>
+                    </div>
                 </div>
                 <div id="status-area">Status: Idle | Cycle: 0</div>
                 <div id="simulation-svg-container">
@@ -143,6 +148,8 @@
                     </div>
                 </div>
             </main>
+
+            <div class="vertical-resizer" id="right-legend-resizer"></div>
 
             <div id="compute-legend-area" class="legend-area" >
                  <h2>Compute<br>&<br>Communication</h2>
