@@ -73,7 +73,6 @@ def get_runner_from_session():
         runner = SimulationRunner(full_state['params'])
         # *** CORRECTED: Load using the correct method and full state ***
         runner.load_from_serializable_state(full_state)
-        print(f"Session {session.sid}: Successfully loaded runner state (Frame: {runner.current_frame_index}, Paused: {runner.animation_paused}).")
         return runner
     except Exception as e:
         print(f"Session {session.sid}: Error recreating SimulationRunner from session state: {e}")
@@ -115,7 +114,6 @@ def start_simulation_route(): # Renamed to avoid conflict with any potential imp
             "success": True,
             "state": initial_render_state, # This state should contain the initial speed_level
             "config": config
-            # "interval_sec": interval_sec # REMOVED
          })
     except ValueError as e:
         return jsonify({"success": False, "error": str(e)}), 400

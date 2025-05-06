@@ -92,7 +92,6 @@ async function fetchUpdateFromAPI() {
 }
 
 async function sendControlToAPI(command, value = null) {
-    console.log(`Worker: Sending command to API: ${command}`, value !== null ? `Value: ${value}` : '');
     isWorkerFetching = true;
     try {
         const body = { command };
@@ -110,7 +109,6 @@ async function sendControlToAPI(command, value = null) {
             let previousClientSpeedLevel = workerSimulationState.speed_level;
 
             if (data.state_summary && typeof data.state_summary === 'object') {
-                console.log("Worker [sendControlToAPI]: Updating from state_summary. Server speed_level (will be ignored):", data.state_summary.speed_level);
                 // Selectively update from summary, DO NOT take speed_level from here
                 if (typeof data.state_summary.is_paused === 'boolean') workerSimulationState.is_paused = data.state_summary.is_paused;
                 if (typeof data.state_summary.is_complete === 'boolean') workerSimulationState.is_complete = data.state_summary.is_complete;
@@ -118,7 +116,6 @@ async function sendControlToAPI(command, value = null) {
                 workerSimulationState.target_cycle = data.state_summary.target_cycle; // Can be null
             } else if (data.state && typeof data.state === 'object') {
                 // If server sends full state for a control command (less common but possible)
-                console.log("Worker [sendControlToAPI]: Updating from full data.state. Server speed_level (will be ignored/overridden):", data.state.speed_level);
                 workerSimulationState = data.state; // Full overwrite
             } else {
                 console.warn(`Worker [sendControlToAPI]: Command '${command}' response lacked valid state_summary or state.`);
@@ -187,8 +184,6 @@ function stopWorkerLoop() {
 
 self.onmessage = function(e) {
     const { command, value, initialState, initialInterval, config } = e.data; // initialInterval will be ignored
-    console.log("Worker: Message received from main script:", JSON.parse(JSON.stringify(e.data)));
-
     switch (command) {
         case 'initialize':
             console.log("Worker [initialize]: Received 'initialize' command.");
