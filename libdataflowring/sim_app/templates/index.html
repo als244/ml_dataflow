@@ -28,7 +28,7 @@
                         <label for="seqlen">Sequence Length (K):</label>
                         <input type="number" id="seqlen" name="seqlen" value="256" min="1" required>
                         <label for="max_attended_tokens">Max Attended Tokens (K):</label>
-                        <input type="number" id="max_attended_tokens" name="max_attended_tokens" value="256" min="1" required>
+                        <input type="number" id="max_attended_tokens" name="max_attended_tokens" value="100" min="1" required>
                         <label for="train_token_ratio">Train Token Ratio:</label>
                         <input type="number" id="train_token_ratio" name="train_token_ratio" value="0.25" step="0.01" min="0.01" max="1.0" required>
                         <label for="train_chunk_distribution">Train Chunk Distribution:</label>
@@ -69,7 +69,7 @@
                         <input type="number" id="active_experts" name="active_experts" value="1" min="1" step="1" max="65536" required>
                         <label for="expert_dim">Expert Dim:</label>
                         <input type="number" id="expert_dim" name="expert_dim" value="27648" min="1" step="1" required>
-                        <label for="attn_type">Attention Type:</label>
+                        <label for="attn_type">Attention Algo:</label>
                         <select id="attn_type" name="attn_type" required disabled>
                             <option value="Exact" selected>Exact</option>
                             <option value="Approximate">Approximate</option>
