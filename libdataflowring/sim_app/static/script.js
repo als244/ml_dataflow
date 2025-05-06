@@ -1558,17 +1558,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const layout = {
             // *** MODIFIED: Title Object for Centering ***
             title: {
-                text: `Model Stages: ${N_slices}<br>Ring Copies: ${M_nodes_per_slice} (Hypothetical)`,
+                text: `<b>Model Stages: ${N_slices}<br>(Hypothetical) Concurrent Rings: ${M_nodes_per_slice}</b>`,
                 x: 0.5, // Center horizontally
                 xanchor: 'center', // Anchor the center of the text at x=0.5
+                font: {
+                    size: 16, // Change this value to your desired font size
+                    family: 'sans-serif', // You can also specify font family
+                }
             },
            showlegend: true,
             legend: {
                 title: { text: '' },
                 x: 0, // Position legend slightly to the right
                 xanchor: 'left',
-                y: 0.5,
-                yanchor: 'middle'
+                y: 1,
+                yanchor: 'top'
              },
             margin: { l: 10, r: 10, b: 10, t: 30 }, // Balanced left/right, added small bottom margin
            scene: {

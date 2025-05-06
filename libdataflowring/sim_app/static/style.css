@@ -57,7 +57,7 @@ header h2 {
 
 /* Sidebar Styling */
 .sidebar {
-    flex: 0 0 240px;
+    flex: 0 0 205px;
     border-right: 1px solid #ccc;
     background-color: #f8f8f8;
     font-size: 0.85rem;
@@ -73,7 +73,7 @@ header h2 {
     flex-direction: column;
     flex-grow: 1;
     min-height: 0;
-    padding: 20px;
+    padding: 10px;
     padding-bottom: 0;
     overflow: hidden;
 }
@@ -90,7 +90,7 @@ header h2 {
     display: grid;
     /* Adjusted columns for better auto-sizing potential */
     grid-template-columns: 90px 1fr;
-    gap: 8px 10px;
+    gap: 6px 10px;
     align-items: center;
     margin-bottom: 15px;
 }
