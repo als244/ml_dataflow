@@ -68,10 +68,6 @@ labels = torch.from_numpy(np_labels).long().to(device).unsqueeze(0)
 
 
 model.to(device)
-model.eval()
-
-
-
 
 
 
@@ -171,15 +167,100 @@ for i, layer in enumerate(model.layers):
 print(f"Total hooks registered: {total_hooks}")
 
 
+captured_gradients = {}
+
+def save_specific_gradient_hook(module, grad_input, grad_output, identifier):
+    """
+    Hook specifically designed to capture grad_input[0] (gradient w.r.t. input activation).
+    """
+    print(f"Hook triggered for identifier: {identifier}")
+    if grad_input is not None and len(grad_input) > 0 and grad_input[0] is not None:
+        grad = grad_input[0].detach().cpu()
+        print(f"  Capturing gradient w.r.t. input for '{identifier}'. Shape: {grad.shape}, Dtype: {grad.dtype}")
+        captured_gradients[identifier] = grad
+        # Optional: Save directly here if preferred
+        # grad_path = f"{BWD_SAVE_DIR}/{identifier}_grad_input.pt"
+        # os.makedirs(os.path.dirname(grad_path), exist_ok=True)
+        # try:
+        #     torch.save(grad, grad_path)
+        #     print(f"  Saved gradient to {grad_path}")
+        # except Exception as e:
+        #     print(f"  ERROR saving gradient for {identifier}: {e}")
+    else:
+        print(f"  WARNING: grad_input[0] is None or invalid for '{identifier}'")
+
+if hasattr(model, 'output') and isinstance(model.output, nn.Module):
+    print("Registering hook for final projection layer input gradient...")
+    # Use functools.partial to pass the identifier
+    head_input_hook = functools.partial(save_specific_gradient_hook, identifier="head_input")
+    handle = model.output.register_full_backward_hook(head_input_hook)
+    hook_handles.append(handle) # Add to your list to remove later
+    print("  Registered hook on model.output")
+else:
+    print("WARNING: Could not find 'model.output' or it's not an nn.Module. Cannot register hook.")
+
+last_layer = model.layers[10]
+last_ff_layer = last_layer.feed_forward
+
+hook_ffn_norm = functools.partial(save_specific_gradient_hook, identifier="final_ffn_norm")
+handle_ffn_norm = last_layer.ffn_norm.register_full_backward_hook(hook_ffn_norm)
+hook_handles.append(handle_ffn_norm)
+
+# Register hook for w1.weight
+hook_w1 = functools.partial(save_specific_gradient_hook, identifier="final_w1_inp")
+handle_w1 = last_ff_layer.w1.register_full_backward_hook(hook_w1)
+hook_handles.append(handle_w1)
+
+
+# Register hook for w2.weight
+hook_w2 = functools.partial(save_specific_gradient_hook, identifier="final_w2_inp")
+handle_w2 = last_ff_layer.w2.register_full_backward_hook(hook_w2)
+hook_handles.append(handle_w2)
+print("  Registered hook on last_ff_layer.w2.weight")
+
+# Register hook for w3.weight
+hook_w3 = functools.partial(save_specific_gradient_hook, identifier="final_w3_inp")
+handle_w3 = last_ff_layer.w3.register_full_backward_hook(hook_w3)
+hook_handles.append(handle_w3)
+print("  Registered hook on last_ff_layer.w3.weight")
+
+
+
+last_attn_layer = last_layer.attention
+
+hook_wq = functools.partial(save_specific_gradient_hook, identifier="final_wq_inp")
+handle_wq = last_attn_layer.wq.register_full_backward_hook(hook_wq)
+hook_handles.append(handle_wq)
+print("  Registered hook on last_attn_layer.wq.weight")
+
+# Register hook for w2.weight
+hook_wk = functools.partial(save_specific_gradient_hook, identifier="final_wk_inp")
+handle_wk = last_attn_layer.wk.register_full_backward_hook(hook_wk)
+hook_handles.append(handle_wk)
+print("  Registered hook on last_attn_layer.wk.weight")
+
+# Register hook for w3.weight
+hook_wv = functools.partial(save_specific_gradient_hook, identifier="final_wv_inp")
+handle_wv = last_attn_layer.wv.register_full_backward_hook(hook_wv)
+hook_handles.append(handle_wv)
+print("  Registered hook on last_attn_layer.wv.weight")
+
+
 
 print("Starting forward pass...")
 start_fwd = time.time_ns()
-# Ensure model and inputs are on the same device
-predictions = model.forward(token_ids.to(device)) # Shape: (bsz, seqlen, vocab_size)
+with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+    # Ensure model and inputs are on the same device
+    predictions = model.forward(token_ids.to(device)) # Shape: (bsz, seqlen, vocab_size)
 stop_fwd = time.time_ns()
 time_fwd_ms = (stop_fwd - start_fwd) / 1e6
 print(f"Forward pass completed in {time_fwd_ms:.2f} ms")
 print(f"Predictions shape: {predictions.shape}")
+
+predictions.retain_grad()
+
+predictions_path = f"{BWD_SAVE_DIR}/head_fwd/predictions.pt"
+torch.save(predictions, predictions_path)
 
 # --- Loss Calculation ---
 print("Calculating loss...")
@@ -199,6 +280,39 @@ stop_bwd = time.time_ns()
 time_bwd_ms = (stop_bwd - start_bwd) / 1e6
 print(f"Backward pass completed in {time_bwd_ms:.2f} ms")
 
+head_input_gradient = captured_gradients.get("head_input")
+
+head_input_gradient_path = f"{BWD_SAVE_DIR}/head_bwd/head_input_gradient.pt"
+torch.save(head_input_gradient, head_input_gradient_path)
+
+final_ffn_norm_gradient = captured_gradients.get("final_ffn_norm")
+torch.save(final_ffn_norm_gradient, f"{BWD_SAVE_DIR}/layers_bwd/10/ffn_norm_gradient.pt")
+
+final_w1_inp_gradient = captured_gradients.get("final_w1_inp")
+torch.save(final_w1_inp_gradient, f"{BWD_SAVE_DIR}/layers_bwd/10/w1_inp_gradient.pt")
+
+final_w2_inp_gradient = captured_gradients.get("final_w2_inp")
+torch.save(final_w2_inp_gradient, f"{BWD_SAVE_DIR}/layers_bwd/10/w2_inp_gradient.pt")
+
+final_w3_inp_gradient = captured_gradients.get("final_w3_inp")
+torch.save(final_w3_inp_gradient, f"{BWD_SAVE_DIR}/layers_bwd/10/w3_inp_gradient.pt")
+
+final_wq_inp_gradient = captured_gradients.get("final_wq_inp")
+torch.save(final_wq_inp_gradient, f"{BWD_SAVE_DIR}/layers_bwd/10/wq_inp_gradient.pt")
+
+final_wk_inp_gradient = captured_gradients.get("final_wk_inp")
+torch.save(final_wk_inp_gradient, f"{BWD_SAVE_DIR}/layers_bwd/10/wk_inp_gradient.pt")
+
+final_wv_inp_gradient = captured_gradients.get("final_wv_inp")
+torch.save(final_wv_inp_gradient, f"{BWD_SAVE_DIR}/layers_bwd/10/wv_inp_gradient.pt")
+
+
+
+logits_grad = predictions.grad
+print(f"  Logits gradient shape: {logits_grad.shape}, dtype: {logits_grad.dtype}")
+
+logits_grad_path = f"{BWD_SAVE_DIR}/head_bwd/logits_grad.pt"
+torch.save(logits_grad, logits_grad_path)
 
 
 print("Removing hooks...")

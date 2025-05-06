@@ -16,7 +16,7 @@ int default_rope_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Data
 	void ** op_args = op -> op_args;
 
 	// total tokens * model dim
-	uint64_t N = *((int *) op_args[0]);
+	uint64_t N = *((uint64_t *) op_args[0]);
 
 	cuda_launch_config -> gridDimX = MY_CEIL(N / 2, max_threads_per_block);
 	cuda_launch_config -> blockDimX = max_threads_per_block;
@@ -43,7 +43,7 @@ int default_rope_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_launch_config
 	void ** op_args = op -> op_args;
 
 	// total tokens * model dim
-	uint64_t N = *((int *) op_args[0]);
+	uint64_t N = *((uint64_t *) op_args[0]);
 
 	cuda_launch_config -> gridDimX = MY_CEIL(N / 2, max_threads_per_block);
 	cuda_launch_config -> blockDimX = max_threads_per_block;
@@ -69,7 +69,7 @@ int default_copy_to_seq_context_set_launch_config(Cuda_Launch_Config * cuda_laun
 	void ** op_args = op -> op_args;
 
 	// total tokens * model dim
-	uint64_t N = *((int *) op_args[0]);
+	uint64_t N = *((uint64_t *) op_args[0]);
 
 	cuda_launch_config -> gridDimX = MY_CEIL(N, max_threads_per_block);
 	cuda_launch_config -> blockDimX = max_threads_per_block;
