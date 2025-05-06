@@ -1574,12 +1574,12 @@ class SimulationRunner:
         gbps = 1e9
         gb = (1 << 30)
 
-        if self.trueContextTransferCycles < self.round_frames_to_zero_cutoff:
+        if self.trueContextTransferCycles < 1:
             contextTransferCycleText = f"{self.trueContextTransferCycles:.2f}; set to {self.contextTransferFrames}"
         else:
             contextTransferCycleText = f"{self.contextTransferFrames}"
 
-        if self.trueActivationTransitionCycles < self.round_frames_to_zero_cutoff:
+        if self.trueActivationTransitionCycles < 1:
             blockTransitionCyclesText = f"{self.trueActivationTransitionCycles:.2f}; set to {self.activationTransitionFrames}"
         else:
             blockTransitionCyclesText = f"{self.activationTransitionFrames}"
