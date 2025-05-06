@@ -28,6 +28,7 @@ def parse_parameters(form_data):
     params['min_chunk_size'] = form_data.get('min_chunk_size', default=4096, type=int)
     params['N'] = form_data.get('N', default=8, type=int)
     params['seqlen'] = form_data.get('seqlen', default=256, type=int) # K tokens
+    params['max_attended_tokens'] = form_data.get('max_attended_tokens', default=256, type=int) # K tokens
     params['train_token_ratio'] = form_data.get('train_token_ratio', default=1, type=float)
     params['chunk_type'] = form_data.get('chunk_type', default="Equal Data", type=str)
     params['train_chunk_distribution'] = form_data.get('train_chunk_distribution', default="Uniform", type=str)

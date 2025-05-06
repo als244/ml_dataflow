@@ -1130,7 +1130,7 @@ class SimulationRunner:
         self.sim_speed_micros_per_cycle = params.get('sim_speed_micros_per_cycle', 1000)
         self.N = params.get('N', 8)
         self.seqlen = params.get('seqlen', 64) * (1 << 10)
-        self.max_attended_tokens = params.get('max_attended_tokens', 64) * (1 << 10)
+        self.max_attended_tokens = params.get('max_attended_tokens', 256) * (1 << 10)
         self.train_token_ratio = params.get('train_token_ratio', 1)
         self.min_chunk_size = params.get('min_chunk_size', 1024)
         self.train_chunk_distribution = params.get('train_chunk_distribution', "Uniform")
