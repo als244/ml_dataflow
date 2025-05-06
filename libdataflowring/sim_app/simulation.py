@@ -1521,7 +1521,7 @@ class SimulationRunner:
           f"- Parameters: {train_model_size / (1 << 30):.2f} GB\n"
           f"- Gradients: {train_gradient_size / (1 << 30):.2f} GB\n"
           f"- Opt. State: {(2 * train_model_size) / (1 << 30):.2f} GB\n\n"
-          f"Processed Data: \n"
+          f"Data: \n"
           f" Train Chunks\n"
           f"  - Block Inputs: {(train_block_inputs) / (1 << 30):.2f} GB\n"
           f"  - Seq. Context: {(train_context_size) / (1 << 30):.2f} GB\n"
