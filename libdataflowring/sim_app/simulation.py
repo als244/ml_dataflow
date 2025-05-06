@@ -1454,10 +1454,14 @@ class SimulationRunner:
         # Keep calculation logic, return the text string
         train_model_size = (self.layer_size_bytes * self.total_layers + self.head_layer_size_bytes)
         train_activation_size = (self.total_train_chunks * self.activation_size_bytes * self.total_layers) # Based on non-head layers
-        train_context_size = ((self.total_chunks - self.total_train_chunks) * self.chunk_context_size_bytes * self.total_layers)
+        train_context_size = self.total_train_chunks * self.chunk_context_size_bytes * self.total_layers
+        train_block_inputs = self.total_train_chunks * self.chunk_size * self.model_dim * self.total_layers * self.dtype_bytes
+        train_attn_output_size = self.total_train_chunks * self.chunk_size * self.model_dim * self.total_layers * self.dtype_bytes
+        train_remain_activation_size = train_activation_size - train_context_size - train_attn_output_size - train_block_inputs
+        non_train_context_size = ((self.total_chunks - self.total_train_chunks) * self.chunk_context_size_bytes * self.total_layers)
         train_gradient_size = train_model_size # Approximation
         train_optimizer_state_size = (2 * train_model_size) # Approximation
-        aggregate_memory_size = train_model_size + train_activation_size + train_context_size + train_gradient_size + train_optimizer_state_size
+        aggregate_memory_size = train_model_size  + train_gradient_size + train_optimizer_state_size + train_activation_size + non_train_context_size
         chunk_workspace_size = (self.chunk_size * self.expert_dim * self.active_experts * self.dtype_bytes) # Review if needed
 
         layer_allocation = (self.layer_capacity * self.layer_size_bytes)
@@ -1513,11 +1517,18 @@ class SimulationRunner:
           f"# Model Parameters: {total_model_params / (1e9):0.2f} B\n"
           f"     # Active: {total_active_params / (1e9):0.2f} B\n\n"
           f"--- FULL MEMORY OVERVIEW ---\n\n"
-          f" - Model: {train_model_size / (1 << 30):.2f} GB\n"
-          f" - Model Grads: {train_gradient_size / (1 << 30):.2f} GB\n"
-          f" - Opt. State: {(2 * train_model_size) / (1 << 30):.2f} GB\n"
-          f" - Activations: {train_activation_size / (1 << 30):.2f} GB\n"
-          f" - Ctx (Non-Train): {train_context_size / (1 << 30):.2f} GB\n"
+          f"Model: \n"
+          f"- Parameters: {train_model_size / (1 << 30):.2f} GB\n"
+          f"- Gradients: {train_gradient_size / (1 << 30):.2f} GB\n"
+          f"- Opt. State: {(2 * train_model_size) / (1 << 30):.2f} GB\n\n"
+          f"Processed Data: \n"
+          f" Train Chunks\n"
+          f"  - Block Inputs: {(train_block_inputs) / (1 << 30):.2f} GB\n"
+          f"  - Seq. Context: {(train_context_size) / (1 << 30):.2f} GB\n"
+          f"  - Attn Output: {(train_attn_output_size) / (1 << 30):.2f} GB\n"
+          f"  - Other Activ.: {(train_remain_activation_size) / (1 << 30):.2f} GB\n"
+          f" Non-Train Chunks\n"
+          f"  - Seq. Context: {(non_train_context_size) / (1 << 30):.2f} GB\n\n"
           f"TOTAL: {aggregate_memory_size / (1 << 30):.2f} GB\n\n\n"
           f"--- DATAFLOW CONFIG ---\n\n"
           f"Chunk Size: {self.chunk_size}\n"
