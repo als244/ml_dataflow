@@ -36,38 +36,6 @@ COLOR_FINISH_NODE_FILL_HEX = '#00CC00' # Example Hex for frontend
 def round_up_to_multiple(n, m):
     return int(((n + m - 1) // m) * m)
 
-def calculate_interval(speed_level, s_min, s_max, i_min_ms, i_max_ms):
-    """Linearly maps speed level (s_min to s_max) to interval (i_max_ms to i_min_ms)."""
-    # Ensure inputs are valid to avoid division by zero later
-    if i_min_ms < 0 or i_max_ms < i_min_ms or s_min < 0 or s_max < s_min:
-        # Return a default safe interval if inputs are illogical
-        print(f"Warning: Invalid inputs to calculate_interval. Using default.")
-        return 0.1 # Default to 100ms interval
-
-    # Calculate the positive range between slowest and fastest interval
-    interval_range_ms = i_max_ms - i_min_ms
-
-    # Handle cases where min/max are the same
-    if s_max == s_min:
-        # If speed range is zero, use the average or max interval (let's use max for clarity)
-        interval_ms = i_max_ms
-    else:
-        speed_range = s_max - s_min
-        # Normalize speed level: 0.0 for slowest (s_min), 1.0 for fastest (s_max)
-        # Clamp speed_level to be within [s_min, s_max]
-        clamped_speed_level = max(s_min, min(s_max, speed_level))
-        speed_normalized = (clamped_speed_level - s_min) / speed_range
-
-        # Interpolate: Start with the MIN interval (fastest) and add a portion
-        # of the range based on how close we are to the SLOWEST speed (1 - normalized).
-        # interval = min_interval + (1 - normalized_speed) * (max_interval - min_interval)
-        interval_ms = i_min_ms + (1 - speed_normalized) * interval_range_ms
-
-    # Ensure interval is at least 1ms (0.001s) before returning in seconds
-    # Also handle potential float inaccuracies near zero
-    calculated_interval_sec = interval_ms / 1000.0
-    return max(0.001, calculated_interval_sec)
-
 # --- Device Class (Keep logic, remove plotting references) ---
 class Device:
     # --- __init__ ---
@@ -1127,7 +1095,7 @@ class SimulationRunner:
         self.TO_PRINT = False # Hardcode for now
 
         # --- Extract and Calculate Parameters (Keep logic) ---
-        self.sim_speed_micros_per_cycle = params.get('sim_speed_micros_per_cycle', 1000)
+        self.cycle_rate_micros = params.get('cycle_rate_micros', 1000)
         self.N = params.get('N', 8)
         self.seqlen = params.get('seqlen', 64) * (1 << 10)
         self.max_attended_tokens = params.get('max_attended_tokens', 100) * (1 << 10)
@@ -1285,7 +1253,7 @@ class SimulationRunner:
         ## (where it is smoother and can much faster without dealing with net latency)
         ## but using longer to look better for other clients
         self.default_micros_per_cycle = 1000
-        self.cycles_per_second = 1e6 / self.sim_speed_micros_per_cycle
+        self.cycles_per_second = 1e6 / self.cycle_rate_micros
 
         self.flops_per_attn_chunk_mult = 2 * self.chunk_size * self.model_dim
         self.base_flops_per_layer_matmul = 2 * self.chunk_size * (
@@ -1436,17 +1404,6 @@ class SimulationRunner:
         self.completion_stats = {}
         self.target_cycle = None
         self.max_frames = params.get('max_frames', 1000000)
-
-        # Speed/Interval control
-        self.min_speed_level = 1
-        self.max_speed_level = 100
-        self.min_interval_ms = 1
-        self.max_interval_ms = 250
-        self.current_speed_level = 80
-        self.current_interval_sec = calculate_interval(
-            self.current_speed_level, self.min_speed_level, self.max_speed_level,
-            self.min_interval_ms, self.max_interval_ms
-        )
 
 
     # --- Legend Text Creation (Keep for stats calculation, text can be sent to frontend) ---
@@ -1662,9 +1619,6 @@ class SimulationRunner:
          self.simulation_complete = False
          self.completion_stats = {}
          self.target_cycle = None
-         # Don't reset speed/interval here, keep user setting
-         # self.current_speed_level = 50
-         # self.current_interval_sec = calculate_interval(...)
 
          self.all_devices = {} # Clear or create dict
 
@@ -1709,8 +1663,6 @@ class SimulationRunner:
             "simulation_complete": self.simulation_complete,
             "completion_stats": self.completion_stats,
             "target_cycle": self.target_cycle,
-            "current_speed_level": self.current_speed_level,
-            # current_interval_sec is derived from speed_level, no need to save
             "total_tasks": self.total_tasks, # Save calculated totals maybe?
             "total_computation_time": self.total_computation_time,
         }
@@ -1738,12 +1690,8 @@ class SimulationRunner:
             self.simulation_complete = full_state_dict.get('simulation_complete', False)
             self.completion_stats = full_state_dict.get('completion_stats', {})
             self.target_cycle = full_state_dict.get('target_cycle', None)
-            self.current_speed_level = full_state_dict.get('current_speed_level', 50)
             self.total_tasks = full_state_dict.get('total_tasks', self.total_tasks) # Keep recalculated if not saved
             self.total_computation_time = full_state_dict.get('total_computation_time', self.total_computation_time) # Keep recalculated if not saved
-
-            # Recalculate interval based on loaded speed
-            self.set_speed(self.current_speed_level)
 
 
             # --- Step 3: Restore individual device states ---
@@ -1881,13 +1829,6 @@ class SimulationRunner:
         else:
             print("Simulation cannot play (already complete or max frames).")
 
-    def set_speed(self, speed_level):
-        self.current_speed_level = max(self.min_speed_level, min(self.max_speed_level, speed_level))
-        self.current_interval_sec = calculate_interval(
-            self.current_speed_level, self.min_speed_level, self.max_speed_level,
-            self.min_interval_ms, self.max_interval_ms
-        )
-
     def set_target_cycle(self, cycle):
         if cycle < 0: return
         cycle = min(cycle, self.max_frames - 1)
@@ -1909,12 +1850,11 @@ class SimulationRunner:
             print(f"Already at target cycle {self.current_frame_index}. Pausing.")
 
     def get_state_summary(self):
-        """ Returns the general simulation state (pause, complete, speed, etc.). """
+        """ Returns the general simulation state (pause, complete,  etc.). """
         return {
             "current_frame": self.current_frame_index,
             "is_paused": self.animation_paused,
             "is_complete": self.simulation_complete,
-            "speed_level": self.current_speed_level,
             "target_cycle": self.target_cycle,
             "max_frames": self.max_frames,
             "completion_stats": self.completion_stats if self.simulation_complete else {}

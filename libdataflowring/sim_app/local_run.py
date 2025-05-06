@@ -47,17 +47,17 @@ server_session = Session(app)
 # --- End Session Configuration ---
 
 def parse_parameters(form_data):
-    # ... (parameter parsing code - unchanged) ...
+    """ Safely parses form data into simulation parameters. (Unchanged) """
     params = {}
     # ... (keep existing parsing logic - ensure it matches SimulationRunner needs) ...
-    params['sim_speed_micros_per_cycle'] = form_data.get('sim_speed_micros_per_cycle', default=2000, type=int)
+    params['cycle_rate_micros'] = form_data.get('cycle_rate_micros', default=2000, type=int)
     params['min_chunk_size'] = form_data.get('min_chunk_size', default=4096, type=int)
     params['N'] = form_data.get('N', default=8, type=int)
     params['seqlen'] = form_data.get('seqlen', default=256, type=int) # K tokens
     params['max_attended_tokens'] = form_data.get('max_attended_tokens', default=100, type=int) # K tokens
     params['train_token_ratio'] = form_data.get('train_token_ratio', default=1, type=float)
-    params['train_chunk_distribution'] = form_data.get('train_chunk_distribution', default="Uniform", type=str)
     params['chunk_type'] = form_data.get('chunk_type', default="Equal Data", type=str)
+    params['train_chunk_distribution'] = form_data.get('train_chunk_distribution', default="Uniform", type=str)
     params['bitwidth'] = form_data.get('bitwidth', default=16, type=int)
     params['total_layers'] = form_data.get('total_layers', default=64, type=int) # Non-head
     params['vocab_size'] = form_data.get('vocab_size', default=151646, type=int)
@@ -77,35 +77,34 @@ def parse_parameters(form_data):
     if params['N'] <= 0: raise ValueError("N must be positive.")
     return params
 
-
 # --- Helper Function to Load/Recreate Runner from Session ---
 def get_runner_from_session():
     """Retrieves FULL state from session, returns initialized SimulationRunner."""
-    session_id = session.sid if session.sid else 'None'# Print entire session dict
-
-    is_active = session.get('simulation_active')
-    if not is_active:
+    if not session.get('simulation_active'):
+        print(f"Session {session.sid if session.sid else 'None'}: No active simulation found in session.")
         return None
 
+    # *** CORRECTED: Load the FULL state dictionary ***
     full_state = session.get('simulation_full_state')
 
+    # Check if state exists and seems valid (has 'params' at least)
     if not full_state or not isinstance(full_state, dict) or 'params' not in full_state:
-        print(f"[get_runner_from_session] Invalid or missing 'simulation_full_state' or 'params' key.")
-        print(f"[get_runner_from_session] Clearing potentially corrupted session and returning None.")
-        session.clear()
+        print(f"Session {session.sid if session.sid else 'None'}: Invalid or missing 'simulation_full_state' in session.")
+        session.clear() # Clear corrupted session state
         session.modified = True
         return None
 
     try:
+        # Recreate the runner instance with original parameters from state
         runner = SimulationRunner(full_state['params'])
+        # *** CORRECTED: Load using the correct method and full state ***
         runner.load_from_serializable_state(full_state)
+        print(f"Session {session.sid}: Successfully loaded runner state (Frame: {runner.current_frame_index}, Paused: {runner.animation_paused}).")
         return runner
     except Exception as e:
-        print(f"[get_runner_from_session] !!! EXCEPTION OCCURRED while recreating/loading runner !!!")
-        print(f"[get_runner_from_session] Error type: {type(e).__name__}, Error message: {e}")
-        traceback.print_exc() # Print the full traceback to the console
-        print(f"[get_runner_from_session] Clearing session due to exception and returning None.")
-        session.clear()
+        print(f"Session {session.sid}: Error recreating SimulationRunner from session state: {e}")
+        traceback.print_exc()
+        session.clear() # Clear potentially problematic state
         session.modified = True
         return None
 
@@ -115,82 +114,56 @@ def index():
     return render_template('index.html')
 
 @app.route('/start_simulation', methods=['POST'])
-def start_simulation():
-    """ Initializes or restarts the simulation FOR THIS SESSION using full state. """
-    print(f"\n--- Request: /start_simulation ---")
-    session.clear() # Clear previous state first
-
+def start_simulation_route(): # Renamed to avoid conflict with any potential import
+    print(f"Received /start_simulation request for session ID: {session.sid if session.sid else 'NEW'}")
     try:
         params = parse_parameters(request.form)
-        print(f"Parsed parameters: {params}")
+        runner = SimulationRunner(params) # Initializes with default speed_level internally
+        runner.reset_simulation_state()
 
-        try:
-            runner = SimulationRunner(params)
-            runner.reset_simulation_state()
-            initial_full_state = runner.get_serializable_state()
-            initial_render_state = runner.get_render_state()
-            config = {
-                'N': runner.N,
-                'total_layers': runner.total_layers,
-                'memory_legend': runner._create_memory_legend_text(), # Ensure these methods exist
-                'compute_legend': runner._create_compute_legend_text() # Ensure these methods exist
-            }
-            interval_sec = runner.current_interval_sec
+        initial_full_state = runner.get_serializable_state()
+        initial_render_state = runner.get_render_state() # Should include the initial speed_level
+        config = {
+            'N': runner.N,
+            'total_layers': runner.total_layers,
+            'memory_legend': runner._create_memory_legend_text(),
+            'compute_legend': runner._create_compute_legend_text()
+        }
 
-        except Exception as e:
-            print(f"!!! EXCEPTION during SimulationRunner initialization !!!")
-            print(f"Error type: {type(e).__name__}, Error message: {e}")
-            traceback.print_exc()
-            return jsonify({"success": False, "error": f"Error initializing simulation: {e}"}), 500
-
-        # --- Store FULL state in the user's session ---
+        session.clear()
         session['simulation_full_state'] = initial_full_state
         session['simulation_active'] = True
-        session.modified = True # Mark session as modified
+        session.modified = True
+        print(f"Session {session.sid}: Stored initial full state with speed_level {initial_render_state.get('speed_level')}.")
+
 
         return jsonify({
             "success": True,
-            "state": initial_render_state,
-            "config": config,
-            "interval_sec": interval_sec
+            "state": initial_render_state, # This state should contain the initial speed_level
+            "config": config
+            # "interval_sec": interval_sec # REMOVED
          })
-
     except ValueError as e:
-        print(f"!!! EXCEPTION during parameter parsing !!!")
-        print(f"Error type: {type(e).__name__}, Error message: {e}")
-        traceback.print_exc()
-        session.clear() # Ensure session is clear on error
-        session.modified = True
         return jsonify({"success": False, "error": str(e)}), 400
     except Exception as e:
-        print(f"!!! UNEXPECTED EXCEPTION in /start_simulation !!!")
-        print(f"Error type: {type(e).__name__}, Error message: {e}")
         traceback.print_exc()
-        session.clear() # Ensure session is clear on error
-        session.modified = True
         return jsonify({"success": False, "error": f"Unexpected error: {e}"}), 500
 
 
 @app.route('/get_state_update')
-def get_state_update():
-    """ Steps the session's simulation and returns the current render state. """
-    runner = get_runner_from_session() # This function now has detailed logging
-
+def get_state_update_route(): # Renamed
+    runner = get_runner_from_session()
     if not runner:
         return jsonify({"success": False, "error": "Simulation not started or session expired"}), 400
 
-    # ... (rest of the logic is likely okay, but add prints if needed) ...
     current_render_state = None
-    interval = runner.current_interval_sec
     step_success = True
     should_step = not runner.animation_paused and not runner.simulation_complete
 
     if should_step:
         try:
-            keep_running = runner.step()
+            runner.step()
         except Exception as e:
-             print(f"!!! EXCEPTION during simulation step !!!")
-             print(f"Error type: {type(e).__name__}, Error message: {e}")
              traceback.print_exc()
              runner.pause()
              step_success = False
@@ -199,76 +172,72 @@ def get_state_update():
                  current_render_state["error_message"] = f"Error during step: {e}"
 
     if current_render_state is None:
-        current_render_state = runner.get_render_state()
-    interval = runner.current_interval_sec
+        current_render_state = runner.get_render_state() # speed_level is part of this state
 
     if current_render_state:
         updated_full_state = runner.get_serializable_state()
         session['simulation_full_state'] = updated_full_state
         session.modified = True
-        # print(f"[/get_state_update] Session content AFTER update: {dict(session)}") # Can be verbose
 
     return jsonify({
         "success": step_success,
-        "state": current_render_state,
-        "interval_sec": interval
+        "state": current_render_state
     })
 
 
 @app.route('/control', methods=['POST'])
-def control():
-    """ Handles control commands for the session's simulation. """
-    runner = get_runner_from_session() # This function now has detailed logging
-
+def control_route(): # Renamed
+    runner = get_runner_from_session()
     if not runner:
-         print("[/control] Runner not found, returning error.")
-         return jsonify({"success": False, "error": "Simulation not started or session expired"}), 400
+        return jsonify({"success": False, "error": "Simulation not started or session expired"}), 400
 
-    # ... (rest of the logic is likely okay, but add prints if needed) ...
     command = request.json.get('command')
     value = request.json.get('value')
-
-    response_state_summary = {}
-    interval = runner.current_interval_sec
     success = True
     error_msg = None
 
     try:
-        if command == 'play': runner.play()
-        elif command == 'pause': runner.pause()
+        if command == 'play':
+            runner.play()
+        elif command == 'pause':
+            runner.pause()
         elif command == 'restart':
             original_params = runner.params
-            runner = SimulationRunner(original_params)
+            runner = SimulationRunner(original_params) # Re-initializes with default speed_level
             runner.reset_simulation_state()
-        elif command == 'set_speed':
-            if value is not None: runner.set_speed(int(value)); interval = runner.current_interval_sec
-            else: success = False; error_msg = "Speed value missing"
         elif command == 'run_to_cycle':
-            if value is not None: runner.set_target_cycle(int(value))
-            else: success = False; error_msg = "Target cycle value missing"
+            if value is not None:
+                runner.set_target_cycle(int(value)) # This might also unpause the simulation
+            else:
+                 success = False
+                 error_msg = "Target cycle value missing"
         else:
-            success = False; error_msg = "Unknown command"
+            success = False
+            error_msg = "Unknown command"
 
-        response_state_summary = runner.get_state_summary()
+        response_state_summary = runner.get_state_summary() # Ensure this includes speed_level
 
         updated_full_state = runner.get_serializable_state()
         session['simulation_full_state'] = updated_full_state
         session.modified = True
-        # print(f"[/control] Session content AFTER control: {dict(session)}") # Can be verbose
 
     except Exception as e:
-        print(f"!!! EXCEPTION during control command '{command}' execution !!!")
-        print(f"Error type: {type(e).__name__}, Error message: {e}")
         traceback.print_exc()
         success = False
         error_msg = f"Error executing command: {e}"
-        try: response_state_summary = runner.get_state_summary(); interval = runner.current_interval_sec
-        except: pass
+        try:
+             response_state_summary = runner.get_state_summary()
+        except: response_state_summary = {}
 
-    response = {"success": success, "state_summary": response_state_summary, "interval_sec": interval}
-    if error_msg: response["error"] = error_msg
 
+    response = {
+        "success": success,
+        "state_summary": response_state_summary
+    }
+    if error_msg:
+        response["error"] = error_msg
     return jsonify(response), 200 if success else (400 if error_msg else 500)
+
 
 
 if __name__ == '__main__':
