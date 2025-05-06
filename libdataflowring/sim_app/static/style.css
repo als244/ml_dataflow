@@ -269,6 +269,26 @@ header h2 {
     box-sizing: border-box;
 }
 
+.animation-header-text {
+    position: absolute;
+    top: 10px;          /* Position from the top of the container's padding edge */
+    left: 10px;         /* Position from the left of the container's padding edge */
+    font-size: 1.2em;   /* Larger font size for a header */
+    font-weight: bold;  /* Bold text */
+    color: #333;        /* Header text color */
+    padding-bottom: 5px; /* Optional: space below the text if you add a border */
+    /* border-bottom: 2px solid #ddd; /* Optional: an underline for the header */
+    z-index: 10;        /* Ensure it's above the SVG content */
+    display: none;      /* Hidden by default, JS will make it visible */
+    background-color: rgba(253, 253, 253, 0.8); /* Optional: slight background for readability over SVG */
+    padding: 4px 8px; /* Optional: padding around the text */
+    border-radius: 3px; /* Optional: slightly rounded corners for the background */
+}
+
+.animation-header-text.visible {
+    display: block; /* Or 'inline-block' or 'flex' depending on needs */
+}
+
 /* SVG Styling */
 #simulation-svg {
     display: block; /* Remove extra space below SVG */

@@ -42,6 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const horizontalResizer = document.getElementById('horizontal-resizer');
     const completionPopup = document.getElementById('completion-popup');
     const closeCompletionPopupBtn = document.getElementById('closeCompletionPopupBtn');
+    const animationHeader = document.getElementById('animation-header');
 
 
     // --- Simulation State ---
@@ -250,8 +251,80 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.addEventListener('resize', handleWindowResize);
 
+    function syncAnimationHeaderVisibility() {
+        if (!animationHeader || !svg) {
+            return;
+        }
 
-    // --- API Communication Functions ---
+        // Check the computed display style of the SVG element AND if the simulation is initialized
+        const isSvgElementDisplayBlock = window.getComputedStyle(svg).display !== 'none';
+        const shouldBeVisible = isSvgElementDisplayBlock && simulationInitialized; // Key change here
+
+        if (shouldBeVisible) {
+            animationHeader.classList.add('visible');
+
+            /*
+            // Dynamic text update example:
+            if (simulationState) { // Check if simulationState is defined
+                let headerText = "Animation"; // Default
+                if (simulationState.is_complete) {
+                    headerText = "Animation Complete";
+                } else if (simulationState.is_paused) {
+                    headerText = "Animation Paused";
+                } else {
+                    headerText = "Animation Running";
+                }
+                // You could add cycle number or other info too
+                // animationHeader.textContent = `${headerText} (Cycle: ${simulationState.current_frame})`;
+                animationHeader.textContent = headerText; // Simpler for now
+            } else {
+                animationHeader.textContent = "Animation Area"; // Fallback if state is not yet defined
+            }
+            */
+
+        } else {
+            animationHeader.classList.remove('visible');
+        }
+    }
+
+    syncAnimationHeaderVisibility(); // Call it once to set initial state
+
+    // --- OBSERVERS FOR ROBUSTNESS ---
+
+    // 1. Observe the error message for class changes
+    if (errorMessageDiv) {
+        const errorObserver = new MutationObserver(() => {
+            syncAnimationHeaderVisibility();
+        });
+        // Observe changes to the 'class' attribute, which is how '.visible' is toggled
+        errorObserver.observe(errorMessageDiv, { attributes: true, attributeFilter: ['class'] });
+    }
+
+    // 2. Observe the SVG element itself for direct style changes
+    if (svg) {
+        const svgObserver = new MutationObserver((mutationsList) => {
+            for (const mutation of mutationsList) {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                    syncAnimationHeaderVisibility();
+                    break;
+                }
+            }
+        });
+        svgObserver.observe(svg, { attributes: true, attributeFilter: ['style'] });
+    }
+
+    // 3. Observe the SVG container for style changes (e.g., if it's hidden directly)
+    // This might be redundant if hiding the container also implies hiding the svg element itself,
+    // which would be caught by the svgObserver or errorObserver logic.
+    // But it can be added for extra safety if the container itself is a point of visibility control.
+    if (svgContainer) {
+        const svgContainerObserver = new MutationObserver(() => {
+            // Re-check SVG's computed style as container visibility affects children
+            syncAnimationHeaderVisibility();
+        });
+        svgContainerObserver.observe(svgContainer, { attributes: true, attributeFilter: ['style', 'class'] });
+    }
+
 
     // --- API Communication Functions ---
 
@@ -261,7 +334,7 @@ document.addEventListener('DOMContentLoaded', () => {
         event.preventDefault(); // Prevent default form submission behavior
         displayError(''); // Clear any previous error messages
         hideCompletionPopup(); // Ensure the completion popup is hidden
-
+        syncAnimationHeaderVisibility(); // Ensure the animation header is visible
         if (simulationInitialized) {
             console.log("Attempting to reset simulation via API...");
             isResetting = true; // SET FLAG to track reset process state
@@ -308,6 +381,7 @@ document.addEventListener('DOMContentLoaded', () => {
                  displayError(`Failed to reset simulation properly: ${error.message}`);
             } finally {
                 isResetting = false; // UNSET FLAG
+                syncAnimationHeaderVisibility();
             }
             return; // Exit after handling reset
         }
@@ -321,6 +395,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Ensure SVG is clear before setting up a new one
         if (svg) {
             svg.innerHTML = '';
+            syncAnimationHeaderVisibility();
             console.log("Cleared SVG content before starting new simulation.");
         } else {
             console.error("startSimulation (New): svg element reference is null!");
@@ -350,10 +425,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 // --- SETUP SVG STRUCTURE and PERFORM INITIAL DRAW ---
                 console.log("Calling setupSVG with new config:", simulationConfig);
                 setupSVG(simulationConfig); // Build the SVG structure based on NEW config (N)
+                syncAnimationHeaderVisibility();
                 console.log("Requesting initial SVG draw with state:", simulationState);
                 window.requestAnimationFrame(() => {
                     console.log("Executing initial updateSVG call via requestAnimationFrame.");
                     updateSVG(simulationState); // Perform the initial draw based on NEW state
+                    syncAnimationHeaderVisibility();
                 });
 
                 // Update UI elements
@@ -369,7 +446,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Hardcode parameters for now - replace with values derived
                 // from formData or simulationConfig later if needed.
                 const modelStages = simulationConfig.N; // Example value from screenshot
-                const dataParallelismFactor = 4; // Example value from screenshot
+                const dataParallelismFactor = 16; // Example value from screenshot
                 drawTorusPlot(modelStages, dataParallelismFactor);
                 showTorusPlot();
                 torusPlotInitialized = true;
@@ -395,6 +472,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Attempt to reset local state and UI display
                 simulationState = { ...simulationState, is_paused: true, is_complete: false, current_frame: 0 };
                 if (svg) svg.innerHTML = ''; // Clear SVG on failure
+                syncAnimationHeaderVisibility();
                 updateStatusDisplay(simulationState);
                 updateControls(simulationState);
                 hideTorusPlot();
@@ -408,6 +486,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Attempt to reset local state and UI display
             simulationState = { ...simulationState, is_paused: true, is_complete: false, current_frame: 0 };
             if (svg) svg.innerHTML = ''; // Clear SVG on failure
+            syncAnimationHeaderVisibility();
             updateStatusDisplay(simulationState);
             updateControls(simulationState);
             hideTorusPlot();
@@ -467,6 +546,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Adding another check inside rAF might be possible but likely adds complexity.
                     // if (!simulationActive) { console.log("fetchUpdate/rAF: Inactive, skipping updateSVG."); return; }
                     updateSVG(simulationState); // Update the main SVG visualization
+                    syncAnimationHeaderVisibility();
                 });
                 updateStatusDisplay(simulationState); // Update cycle count / status text
                 updateControls(simulationState);    // Update button enabled/disabled states
@@ -537,7 +617,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (command === 'restart') {
                     // Special handling for restart: clear SVG immediately, then fetch state 0
                     console.log("[sendControlCommand/restart] Clearing SVG content directly.");
-                    if (svg) { svg.innerHTML = ''; }
+                    if (svg) { svg.innerHTML = ''; syncAnimationHeaderVisibility();}
                     else { console.error("[sendControlCommand/restart] svg element reference is null!"); }
                     
                     hideTorusPlot();
@@ -595,6 +675,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // console.log("Attempting to fetch state after network error to sync UI.");
             // await fetchFullStateAfterCommand();
         }
+        syncAnimationHeaderVisibility();
     }
 
     async function fetchFullStateAfterCommand() {
@@ -602,10 +683,11 @@ document.addEventListener('DOMContentLoaded', () => {
              const response = await fetch('/get_state_update'); const data = await response.json();
              if (response.ok && data.success) {
                  simulationState = data.state; currentIntervalSec = data.interval_sec;
-                 window.requestAnimationFrame(() => { updateSVG(simulationState); });
+                 window.requestAnimationFrame(() => { updateSVG(simulationState); syncAnimationHeaderVisibility();});
                  updateStatusDisplay(simulationState); updateControls(simulationState);
              }
          } catch(e) { console.error("Error fetching state after command:", e)}
+         syncAnimationHeaderVisibility();
     }
 
      // This function is called by sendControlCommand after a successful 'restart' command
@@ -668,6 +750,7 @@ document.addEventListener('DOMContentLoaded', () => {
             handleApiError(error.message, "fetching state after reset (network error)");
             // updateSVG is NOT called in this failure case
         }
+        syncAnimationHeaderVisibility();
     }
 
 
@@ -695,6 +778,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         svg.innerHTML = ''; svgElements = {};
+        syncAnimationHeaderVisibility();
         nodePositions = { outer: [], inner: [], stall: [], unit: [], angleRad: [], angleDeg: [], angleToPrev: [], angleToNext: [] };
         drawingBounds = { minY: Infinity, maxY: -Infinity, minX: Infinity, maxX: -Infinity };
         const N = config.N; if (N <= 0) { console.error("Invalid number of devices (N):", N); return; }
@@ -713,6 +797,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const defs = document.createElementNS(svgNS, 'defs'); const markerSize = baseStrokeWidth * 10; const markerRefX = markerSize * 0.8; const marker = createMarker('arrowhead', 'black', markerSize, markerRefX, markerSize, markerSize); defs.appendChild(marker); svg.appendChild(defs);
         const g = addSvgElement(svg, 'g'); svgElements['main_group'] = g;
         for (let i = 0; i < N; i++) { const deviceId = `dev_${i}`; const outerPos = nodePositions.outer[i]; const innerPos = nodePositions.inner[i]; const stallPos = nodePositions.stall[i]; const unitDir = nodePositions.unit[i]; const baseColor = getColorForDevice(i, N, baseAnimationHue); const devGroup = addSvgElement(g, 'g', { id: deviceId }); svgElements[`${deviceId}_outer_circle`] = addSvgCircle(devGroup, outerPos.x, outerPos.y, outerNodeRadius, { fill: baseColor, stroke: 'black', 'stroke-width': baseStrokeWidth, opacity: deviceOpacity, id: `${deviceId}_outer_circle` }); const innerSquareSide = innerNodeRadius * 1.414; svgElements[`${deviceId}_inner_square`] = addSvgRect(devGroup, innerPos.x - innerSquareSide / 2, innerPos.y - innerSquareSide / 2, innerSquareSide, innerSquareSide, { fill: baseColor, stroke: 'black', 'stroke-width': baseStrokeWidth, opacity: innerNodeOpacity, id: `${deviceId}_inner_square` }); svgElements[`${deviceId}_stall_node`] = addSvgCircle(devGroup, stallPos.x, stallPos.y, stallNodeRadius, { fill: 'red', stroke: baseColor, 'stroke-width': baseStrokeWidth * 2, opacity: stallNodeOpacity, visibility: 'hidden', id: `${deviceId}_stall_node` }); svgElements[`${deviceId}_finish_indicator`] = addSvgCircle(devGroup, stallPos.x, stallPos.y, stallNodeRadius, { fill: 'lime', stroke: baseColor, 'stroke-width': baseStrokeWidth * 2, opacity: stallNodeOpacity, visibility: 'hidden', id: `${deviceId}_finish_indicator` }); svgElements[`${deviceId}_outer_label`] = addSvgText(devGroup, outerPos.x, outerPos.y, `D${i}`, { 'font-size': outerLabelFontSize, fill: 'black', id: `${deviceId}_outer_label`, 'pointer-events': 'none' }); svgElements[`${deviceId}_inner_label`] = addSvgText(devGroup, innerPos.x, innerPos.y, `Home`, { 'font-size': innerLabelFontSize, fill: 'black', id: `${deviceId}_inner_label`, 'pointer-events': 'none' }); svgElements[`${deviceId}_stall_label`] = addSvgText(devGroup, stallPos.x, stallPos.y, "", { 'font-size': stallLabelFontSize, fill: 'white', 'font-weight': 'bold', visibility: 'hidden', id: `${deviceId}_stall_label`, 'pointer-events': 'none' }); const perpVec = { x: -unitDir.y, y: unitDir.x }; const offset = { x: perpVec.x * arrowOffsetDist, y: perpVec.y * arrowOffsetDist }; const inStartX = innerPos.x + unitDir.x * innerNodeRadius + offset.x; const inStartY = innerPos.y + unitDir.y * innerNodeRadius + offset.y; const outStartX = outerPos.x - unitDir.x * outerNodeRadius - offset.x; const outStartY = outerPos.y - unitDir.y * outerNodeRadius - offset.y; svgElements[`${deviceId}_in_arrow`] = addSvgPath(devGroup, `M ${inStartX} ${inStartY}`, { stroke: 'gray', 'stroke-width': baseStrokeWidth * 1.5, fill: 'none', 'marker-end': 'url(#arrowhead)', visibility: 'hidden', id: `${deviceId}_in_arrow` }); svgElements[`${deviceId}_in_label`] = addSvgText(devGroup, inStartX, inStartY, "", { 'font-size': transferLabelFontSize, visibility: 'hidden', id: `${deviceId}_in_label`, 'pointer-events': 'none' }); svgElements[`${deviceId}_out_arrow`] = addSvgPath(devGroup, `M ${outStartX} ${outStartY}`, { stroke: 'gray', 'stroke-width': baseStrokeWidth * 1.5, fill: 'none', 'marker-end': 'url(#arrowhead)', visibility: 'hidden', id: `${deviceId}_out_arrow` }); svgElements[`${deviceId}_out_label`] = addSvgText(devGroup, outStartX, outStartY, "", { 'font-size': transferLabelFontSize, visibility: 'hidden', id: `${deviceId}_out_label`, 'pointer-events': 'none' }); svgElements[`${deviceId}_ring_arrow`] = addSvgPath(devGroup, `M ${outerPos.x} ${outerPos.y}`, { stroke: 'gray', 'stroke-width': baseStrokeWidth * 1.5, fill: 'none', 'marker-end': 'url(#arrowhead)', visibility: 'hidden', id: `${deviceId}_ring_arrow` }); svgElements[`${deviceId}_ring_label`] = addSvgText(devGroup, outerPos.x, outerPos.y, "", { 'font-size': transferLabelFontSize, visibility: 'hidden', id: `${deviceId}_ring_label`, 'pointer-events': 'none' }); svgElements[`${deviceId}_compute_arc`] = addSvgPath(devGroup, "", { stroke: 'gray', 'stroke-width': baseStrokeWidth * 3, fill: 'none', visibility: 'hidden', id: `${deviceId}_compute_arc` }); }
+        syncAnimationHeaderVisibility();
     }
 
     // --- SVG Update Function ---
@@ -722,6 +807,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // After a reset, simulationInitialized will be false.
         // Also check the isResetting flag just in case.
         if (!simulationInitialized || isResetting) {
+            syncAnimationHeaderVisibility();
              console.warn(`[updateSVG] Drawing aborted. simulationInitialized=${simulationInitialized}, isResetting=${isResetting}`);
              // Optionally, force clear the SVG again here as a safety measure,
              // though setupSVG should have handled the primary clearing during reset.
@@ -920,6 +1006,8 @@ document.addEventListener('DOMContentLoaded', () => {
              // console.log(`[updateSVG] Device ${i} compute arc visibility set to: ${setComputeVisible ? 'visible' : 'hidden'}`); // Kept commented
 
          } // End of device loop
+
+         syncAnimationHeaderVisibility();
     } // End of updateSVG function
 
     // --- UI Update Functions ---
@@ -941,13 +1029,13 @@ document.addEventListener('DOMContentLoaded', () => {
             completionPopup.style.display = 'none';
         }
     }
-    function displayError(message) { if (errorMessageDiv) { errorMessageDiv.textContent = message; errorMessageDiv.classList.toggle('visible', !!message); } }
+    function displayError(message) { if (errorMessageDiv) { errorMessageDiv.textContent = message; errorMessageDiv.classList.toggle('visible', !!message); } syncAnimationHeaderVisibility(); }
     function handleApiError(errorMsg, context) { const fullMsg = `Error ${context}: ${errorMsg}`; console.error(fullMsg); displayError(fullMsg); }
     function setFormEnabled(isEnabled) {
         // --- Handle Form Parameter Inputs ---
         Array.from(paramsForm.elements).forEach(el => {
             // Example: Keep certain form elements always disabled in prepare state if needed
-            if (isEnabled && (el.id === 'attn_type' || el.id == 'chunk_type' || el.id === 'min_chunk_size')) {
+            if (isEnabled && (el.id === 'attn_type' || el.id == 'chunk_type')) {
                  el.disabled = true;
             } else if (el !== submitButton) { // Don't disable the submit/reset button itself here
                 // Disable form inputs when simulation is active (!isEnabled)
@@ -1314,7 +1402,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const layout = {
             // *** MODIFIED: Title Object for Centering ***
             title: {
-                text: `Model Stages: ${N_slices}, Data Parallelism Factor: ${M_nodes_per_slice}`,
+                text: `Model Stages: ${N_slices}<br>Ring Copies: ${M_nodes_per_slice} (Hypothetical)`,
                 x: 0.5, // Center horizontally
                 xanchor: 'center', // Anchor the center of the text at x=0.5
                 y: 0.95, // Adjust vertical position if needed
@@ -1323,13 +1411,12 @@ document.addEventListener('DOMContentLoaded', () => {
            showlegend: true,
             legend: {
                 title: { text: '' },
-                x: 1, // Position legend slightly to the right
+                x: 0, // Position legend slightly to the right
                 xanchor: 'left',
                 y: 0.5,
                 yanchor: 'middle'
              },
-            // *** MODIFIED: Margins (Balanced L/R) ***
-            margin: { l: 20, r: 20, b: 20, t: 40 }, // Balanced left/right, added small bottom margin
+            margin: { l: 10, r: 10, b: 10, t: 10 }, // Balanced left/right, added small bottom margin
            scene: {
                xaxis: { visible: false, showgrid: false, zeroline: false, automargin: true },
                yaxis: { visible: false, showgrid: false, zeroline: false, automargin: true },
@@ -1417,7 +1504,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateStatusDisplay(simulationState);
     hideCompletionPopup(); // Ensure popup is hidden initially
 
-
+    syncAnimationHeaderVisibility();
     
 
 }); // End DOMContentLoaded

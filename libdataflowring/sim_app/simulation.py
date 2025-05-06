@@ -1127,8 +1127,10 @@ class SimulationRunner:
         self.TO_PRINT = False # Hardcode for now
 
         # --- Extract and Calculate Parameters (Keep logic) ---
+        self.sim_speed_micros_per_cycle = params.get('sim_speed_micros_per_cycle', 1000)
         self.N = params.get('N', 8)
         self.seqlen = params.get('seqlen', 64) * (1 << 10)
+        self.max_attended_tokens = params.get('max_attended_tokens', 64) * (1 << 10)
         self.train_token_ratio = params.get('train_token_ratio', 1)
         self.min_chunk_size = params.get('min_chunk_size', 1024)
         self.train_chunk_distribution = params.get('train_chunk_distribution', "Uniform")
@@ -1218,11 +1220,12 @@ class SimulationRunner:
         self.grad_layer_capacity = 2 if self.N <= self.total_layers else 1
         self.context_buffer_capacity = 1 # Keep simple
         self.grad_context_buffer_capacity = 1
+        self.per_layer_grad_context_size = self.total_train_chunks * self.chunk_context_size_bytes
 
         base_dev_mem = self.layer_capacity * self.layer_size_bytes
         base_dev_mem += self.grad_layer_capacity * self.layer_size_bytes
         base_dev_mem += self.context_buffer_capacity * self.per_layer_full_context_size
-        base_dev_mem += self.grad_context_buffer_capacity * self.per_layer_full_context_size
+        base_dev_mem += self.grad_context_buffer_capacity * self.per_layer_grad_context_size
         base_dev_mem += 2 * self.transitions_capacity * self.output_size_bytes
         base_dev_mem += 2 * self.activation_size_bytes
 
@@ -1230,10 +1233,10 @@ class SimulationRunner:
         model_dev_mem = self.layer_capacity * self.layer_size_bytes
         model_grad_dev_mem = self.grad_layer_capacity * self.layer_size_bytes
         context_dev_mem = (self.context_buffer_capacity) * self.per_layer_full_context_size
-        grad_context_dev_mem = (self.grad_context_buffer_capacity) * self.per_layer_full_context_size
+        grad_context_dev_mem = (self.grad_context_buffer_capacity) * self.per_layer_grad_context_size
         min_activations_dev_mem = 2 * self.activation_size_bytes
 
-        error_string = f"Currently only supports:\n\nLayer (& Grad) Capacity = 2 ({(model_dev_mem + model_grad_dev_mem) / (1 << 30):.3f} GB)\n\nContext Buffer (& Grad) Capacity = 1 ({(context_dev_mem + grad_context_dev_mem) / (1 << 30):.3f} GB)\n\nTransition Capacity = Num Devices ({(transition_dev_mem) / (1 << 30):.3f} GB)\n\nActivation Capacity >= 2 ({(min_activations_dev_mem) / (1 << 30):.3f} GB)\n\n\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\nMore generality coming soon...\n\nTry a Smaller Model or a Shorter Sequence (if Large Context Buffer).\n\n\n\nCannot run simulation with current configuration :("
+        error_string = f"Currently only supports:\n\nLayer (& Grad) Capacity = 2 ({(model_dev_mem + model_grad_dev_mem) / (1 << 30):.3f} GB)\n\nContext Buffer Capacity = 1 ({(context_dev_mem) / (1 << 30):.3f} GB)\nGrad Context Buffer Capacity = 1 ({(grad_context_dev_mem) / (1 << 30):.3f} GB)\n\nTransition Capacity = Num Devices ({(transition_dev_mem) / (1 << 30):.3f} GB)\n\nActivation Capacity >= 2 ({(min_activations_dev_mem) / (1 << 30):.3f} GB)\n\n\nThis requires at least {base_dev_mem / (1 << 30):.2f} GB of memory, but only {self.max_device_memory_bytes / (1 << 30):.2f} GB is available.\nMore generality coming soon...\n\nTry a Smaller Model or a Shorter Sequence (if Large Context Buffer).\n\n\n\nCannot run simulation with current configuration :("
         
         remain_dev_mem = self.max_device_memory_bytes
         remain_dev_mem -= model_dev_mem
@@ -1281,8 +1284,8 @@ class SimulationRunner:
         ## and becomes issue over network, working with 50-100 micros is good locally,
         ## (where it is smoother and can much faster without dealing with net latency)
         ## but using longer to look better for other clients
-        self.micros_per_cycle = 200
-        self.cycles_per_second = 1e6 / self.micros_per_cycle
+        self.default_micros_per_cycle = 1000
+        self.cycles_per_second = 1e6 / self.sim_speed_micros_per_cycle
 
         self.flops_per_attn_chunk_mult = 2 * self.chunk_size * self.model_dim
         self.base_flops_per_layer_matmul = 2 * self.chunk_size * (
@@ -1317,12 +1320,16 @@ class SimulationRunner:
         # BwdW time based on matmul part only
         bwdW_flops = self.base_flops_per_layer_matmul
         self.bwdWTimeSec = bwdW_flops / (safe_flops * safe_matmul_eff)
-        self.bwdWFrames = round(self.bwdWTimeSec * self.cycles_per_second)
+        self.true_bwdWCycles = self.bwdWTimeSec * self.cycles_per_second
+        self.bwdWFrames = max(1,round(self.bwdWTimeSec * self.cycles_per_second))
 
 
         prev_seq_len = 0
         for i in range(self.total_chunks):
             cur_seq_len = prev_seq_len + self.chunk_size
+            if cur_seq_len > self.max_attended_tokens:
+                cur_seq_len = self.max_attended_tokens
+
             attn_flops = self.flops_per_attn_chunk_mult * cur_seq_len
 
             self.total_attn_flops += self.total_layers * attn_flops
@@ -1343,13 +1350,15 @@ class SimulationRunner:
             matmul_time = self.base_flops_per_layer_matmul / (safe_flops * safe_matmul_eff)
             attn_time = attn_flops / (safe_flops * safe_attn_eff)
             self.computation_times_sec[i] = matmul_time + attn_time
-            self.computation_times_frames[i] = round(self.computation_times_sec[i] * self.cycles_per_second)
+            if i == 0:
+                self.true_first_chunk_cycles = self.computation_times_sec[i] * self.cycles_per_second
+            self.computation_times_frames[i] = max(1,round(self.computation_times_sec[i] * self.cycles_per_second))
             
             if is_train_chunk:
                 self.computation_times_frames_last_block[i] = self.computation_times_frames[i]
                 self.total_compute_cycles += self.total_layers * self.computation_times_frames[i]
             else:
-                self.computation_times_frames_last_block[i] = round(attn_time * self.cycles_per_second)
+                self.computation_times_frames_last_block[i] = max(1,round(attn_time * self.cycles_per_second))
                 self.total_compute_cycles += (self.total_layers - 1) * self.computation_times_frames[i] + self.computation_times_frames_last_block[i]
 
             
@@ -1362,7 +1371,7 @@ class SimulationRunner:
 
                 bwd_x_time = matmul_time + 2.5 * attn_time # Bwd Attn is 2x Fwd Attn
                 self.computation_times_sec_bwd[i] = bwd_x_time
-                self.computation_times_frames_bwd[i] = round(bwd_x_time * self.cycles_per_second)
+                self.computation_times_frames_bwd[i] = max(1,round(bwd_x_time * self.cycles_per_second))
                 self.total_compute_cycles += self.total_layers * self.computation_times_frames_bwd[i]
                 self.total_compute_cycles += self.total_layers * self.bwdWFrames # Add BwdW cycles
 
@@ -1388,18 +1397,33 @@ class SimulationRunner:
         safe_home_bw_bps = self.home_bw_gbit_sec * 1e9 if self.home_bw_gbit_sec > 0 else 1
         safe_peer_bw_bps = self.peer_bw_gbit_sec * 1e9 if self.peer_bw_gbit_sec > 0 else 1
 
+        self.round_frames_to_zero_cutoff = 0.1
+
         layer_transfer_time_sec = (self.layer_size_bytes * 8) / safe_home_bw_bps
-        self.layerTransferFrames = round(layer_transfer_time_sec * self.cycles_per_second)
+        self.layerTransferFrames = max(1,round(layer_transfer_time_sec * self.cycles_per_second))
+        self.trueLayerTransferCycles = layer_transfer_time_sec * self.cycles_per_second
         head_layer_transfer_time_sec = (self.head_layer_size_bytes * 8) / safe_home_bw_bps
-        self.headTransferFrames = round(head_layer_transfer_time_sec * self.cycles_per_second)
+        self.headTransferFrames = max(1,round(head_layer_transfer_time_sec * self.cycles_per_second))
+        self.trueHeadTransferCycles = head_layer_transfer_time_sec * self.cycles_per_second
         activation_transfer_time_sec = (self.activation_size_bytes * 8) / safe_home_bw_bps
-        self.savedActivationsFrames = round(activation_transfer_time_sec * self.cycles_per_second)
+        self.savedActivationsFrames = max(1,round(activation_transfer_time_sec * self.cycles_per_second))
+        self.trueSavedActivationsCycles = activation_transfer_time_sec * self.cycles_per_second
         chunk_context_transfer_time_sec = (self.chunk_context_size_bytes * 8) / safe_home_bw_bps
-        self.contextTransferFrames = max(1, round(chunk_context_transfer_time_sec * self.cycles_per_second))
+
+       
         self.trueContextTransferCycles = chunk_context_transfer_time_sec * self.cycles_per_second
+        if self.trueContextTransferCycles < self.round_frames_to_zero_cutoff:
+            self.contextTransferFrames = 0
+        else:
+            self.contextTransferFrames = max(1,round(chunk_context_transfer_time_sec * self.cycles_per_second))
+        
         transition_transfer_time_sec = (self.output_size_bytes * 8) / safe_peer_bw_bps
-        self.activationTransitionFrames = max(1, round(transition_transfer_time_sec * self.cycles_per_second)) if self.N > 1 else 0
         self.trueActivationTransitionCycles = transition_transfer_time_sec * self.cycles_per_second if self.N > 1 else 0
+        if self.trueActivationTransitionCycles < self.round_frames_to_zero_cutoff:
+            self.activationTransitionFrames = 0
+        else:
+            self.activationTransitionFrames = max(1,round(transition_transfer_time_sec * self.cycles_per_second))
+
 
         # --- Total FLOPS (Final Calculation) ---
         self.total_flops = self.total_fwd_flops + self.total_bwd_flops + self.total_head_flops
@@ -1439,7 +1463,7 @@ class SimulationRunner:
         layer_allocation = (self.layer_capacity * self.layer_size_bytes)
         grad_layer_allocation = (self.grad_layer_capacity * self.layer_size_bytes)
         context_buffer_allocation = (self.context_buffer_capacity * self.per_layer_full_context_size)
-        grad_context_buffer_allocation = (self.grad_context_buffer_capacity * self.per_layer_full_context_size)
+        grad_context_buffer_allocation = (self.grad_context_buffer_capacity * self.per_layer_grad_context_size)
         activation_allocation = (self.activations_capacity * self.activation_size_bytes)
         transition_allocation = (2 * self.transitions_capacity * self.output_size_bytes) # Use head cap estimate
         typical_device_memory_size = (layer_allocation + grad_layer_allocation +
@@ -1514,7 +1538,7 @@ class SimulationRunner:
           f" - Ctx Buffer Cap.: {self.context_buffer_capacity}\n"
           f"   {(self.context_buffer_capacity * self.per_layer_full_context_size)/ (1 << 30):.3f} GB\n"
           f" - Grad Ctx Buffer Cap.: {self.grad_context_buffer_capacity}\n"
-          f"   {(self.grad_context_buffer_capacity * self.per_layer_full_context_size)/ (1 << 30):.3f} GB\n"
+          f"   {(self.grad_context_buffer_capacity * self.per_layer_grad_context_size)/ (1 << 30):.3f} GB\n"
           f" - Trans. Cap. (Inp/Out): {self.transitions_capacity}\n"
           f"   {(2 * self.transitions_capacity * self.output_size_bytes)/ (1 << 30):.3f} GB\n\n"     
           f"Home Partitions (Typical):\n"
@@ -1549,8 +1573,9 @@ class SimulationRunner:
         tflops = 1e12
         gbps = 1e9
         gb = (1 << 30)
-        contextTransferCycleText = f"{self.contextTransferFrames}" if self.trueContextTransferCycles >= 1 else f"{self.trueContextTransferCycles:.1f}; set to 1"
-        blockTransitionCyclesText = f"{self.activationTransitionFrames}" if self.activationTransitionFrames >= 1 else f"{self.trueActivationTransitionCycles:.1f}; set to 1"
+
+        contextTransferCycleText = f"{self.contextTransferFrames}" if self.trueContextTransferCycles < self.round_frames_to_zero_cutoff else f"{self.trueContextTransferCycles:.2f}; set to {self.contextTransferFrames}"
+        blockTransitionCyclesText = f"{self.activationTransitionFrames}" if self.trueActivationTransitionCycles >= self.round_frames_to_zero_cutoff else f"{self.trueActivationTransitionCycles:.2f}; set to {self.activationTransitionFrames}"
 
         if self.N == 1:
             blockTransitionCyclesText = f"0"
@@ -1578,7 +1603,7 @@ class SimulationRunner:
             f" - Overall Matmul: {matmul_pct:.1f}%\n"
             f" - Overall Attn: {attn_pct:.1f}%\n\n\n"
             f"--- DERIVED SIM CONFIG ---\n\n"
-            f"Sim Speed:\n"
+            f"Cycle Rate:\n"
             f" - {1e6/self.cycles_per_second:.1f} us/cycle\n\n"
             f"* RUNTIME LOWER-BOUND * \n"
             f" - {math.ceil(self.total_compute_cycles / self.N)} Cycles\n\n"
@@ -1740,7 +1765,11 @@ class SimulationRunner:
 
         # --- Simulation Logic Order (Keep) ---
         if self.N > 0:
-            for i in range(self.N): self.all_devices[i].handle_completed_transfers(T, self.all_devices)
+            for i in range(self.N):
+               to_repeat = True
+               ## incase we completed a 0 cycle transfer...
+               while (to_repeat):
+                   to_repeat = self.all_devices[i].handle_completed_transfers(T, self.all_devices)
             newly_completed_this_cycle = 0
             all_devices_finished_compute = True
             for i in range(self.N):

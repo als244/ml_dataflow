@@ -50,11 +50,13 @@ def parse_parameters(form_data):
     # ... (parameter parsing code - unchanged) ...
     params = {}
     # ... (keep existing parsing logic - ensure it matches SimulationRunner needs) ...
+    params['sim_speed_micros_per_cycle'] = form_data.get('sim_speed_micros_per_cycle', default=2000, type=int)
+    params['min_chunk_size'] = form_data.get('min_chunk_size', default=4096, type=int)
     params['N'] = form_data.get('N', default=8, type=int)
-    params['seqlen'] = form_data.get('seqlen', default=64, type=int) # K tokens
+    params['seqlen'] = form_data.get('seqlen', default=256, type=int) # K tokens
+    params['max_attended_tokens'] = form_data.get('max_attended_tokens', default=256, type=int) # K tokens
     params['train_token_ratio'] = form_data.get('train_token_ratio', default=1, type=float)
     params['train_chunk_distribution'] = form_data.get('train_chunk_distribution', default="Uniform", type=str)
-    params['min_chunk_size'] = form_data.get('min_chunk_size', default=1024, type=int)
     params['chunk_type'] = form_data.get('chunk_type', default="Equal Data", type=str)
     params['bitwidth'] = form_data.get('bitwidth', default=16, type=int)
     params['total_layers'] = form_data.get('total_layers', default=64, type=int) # Non-head
@@ -65,7 +67,7 @@ def parse_parameters(form_data):
     params['active_experts'] = form_data.get('active_experts', default=1, type=int)
     params['expert_dim'] = form_data.get('expert_dim', default=27648, type=int)
     params['attn_type'] = form_data.get('attn_type', default="Exact", type=str)
-    params['max_device_memory_bytes'] = form_data.get('max_device_memory_gb', default=8, type=float) * (1 << 30)
+    params['max_device_memory_bytes'] = form_data.get('max_device_memory_gb', default=12, type=float) * (1 << 30)
     params['hardware_max_flops'] = form_data.get('hardware_max_tflops', default=989, type=float) * 1e12
     params['hardware_mem_bw_bytes_sec'] = form_data.get('hardware_mem_bw_gbs', default=3350, type=float) * (1 << 30) # Input GB/s
     params['matmul_efficiency'] = form_data.get('matmul_efficiency', default=0.7, type=float)

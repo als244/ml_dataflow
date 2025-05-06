@@ -19,23 +19,28 @@
             <form id="paramsForm">
                 <div class="form-scroll-content">
                     <div id="param-grid">
+                        <div class="section-header"><h3>Simulator Settings</h3></div>
+                        <label for="sim_speed_micros_per_cycle"> Cycle Rate (micros/cycle):</label>
+                        <input type="number" id="sim_speed_micros_per_cycle" name="sim_speed_micros_per_cycle" value="2000" min="1" required>
+                        <label for="min_chunk_size">Min Chunk Size (Tokens):</label>
+                        <input type="number" id="min_chunk_size" name="min_chunk_size" value="4096" min="1" required>
                         <div class="section-header"><h3>Training Spec</h3></div>
                         <label for="seqlen">Sequence Length (K):</label>
-                        <input type="number" id="seqlen" name="seqlen" value="64" min="1" required>
+                        <input type="number" id="seqlen" name="seqlen" value="256" min="1" required>
+                        <label for="max_attended_tokens">Max Attended Tokens (K):</label>
+                        <input type="number" id="max_attended_tokens" name="max_attended_tokens" value="256" min="1" required>
                         <label for="train_token_ratio">Train Token Ratio:</label>
                         <input type="number" id="train_token_ratio" name="train_token_ratio" value="0.25" step="0.01" min="0.01" max="1.0" required>
                         <label for="train_chunk_distribution">Train Chunk Distribution:</label>
                         <select id="train_chunk_distribution" name="train_chunk_distribution" required>
-                            <option value="Suffix" selected>Suffix</option>
-                            <option value="Uniform">Uniform</option>
+                            <option value="Uniform" selected>Uniform</option>
+                            <option value="Suffix">Suffix</option>
                         </select>
                         <label for="chunk_type">Chunk Type:</label>
                         <select id="chunk_type" name="chunk_type" required disabled>
                             <option value="Equal Data" selected>Equal Data</option>
                             <option value="Equal Computation">Equal Computation</option>
                         </select>
-                        <label for="min_chunk_size">Min Chunk Size:</label>
-                        <input type="number" id="min_chunk_size" name="min_chunk_size" value="1024" min="1" required disabled>
                     </div>
 
                     <div id="param-grid">
@@ -43,7 +48,7 @@
                         <label for="N">Num Devices:</label>
                         <input type="number" id="N" name="N" value="8" min="1" required>
                         <label for="max_device_memory_gb">Max Device Memory (GB):</label>
-                        <input type="number" id="max_device_memory_gb" name="max_device_memory_gb" value="8" step="0.1" min="1" required>
+                        <input type="number" id="max_device_memory_gb" name="max_device_memory_gb" value="12" step="0.1" min="1" required>
                     </div>
 
                     <div id="param-grid">
@@ -100,7 +105,7 @@
 
             <div id="error-message" class="error-message"></div>
             <div id="memory-legend-area" class="legend-area" >
-                <h2>Memory</h2>
+                <h2>Memory<br>&<br>Storage</h2>
                 <pre></pre>
             </div>
 
@@ -118,6 +123,9 @@
                 </div>
                 <div id="status-area">Status: Idle | Cycle: 0</div>
                 <div id="simulation-svg-container">
+
+                    <div id="animation-header" class="animation-header-text">Example Sequence</div>
+
                      <svg id="simulation-svg"
                           preserveAspectRatio="xMidYMid meet"
                           width="100%"
