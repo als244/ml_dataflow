@@ -71,7 +71,7 @@ int main(int argc, char * argv[]){
 	}
 
 	// 22 GB...	
-	size_t dev_size_bytes = 21 * (1UL << 30);
+	size_t dev_size_bytes = 19 * (1UL << 30);
 
 	int dev_alignment = 256;
 
@@ -1157,6 +1157,7 @@ int main(int argc, char * argv[]){
 				return -1;
 			}
 
+			
 			printf("\n\nSubmitting bwd_w for chunk #%d, block #%d...\n\n", i, k);
 
 			// utilizing the newly populated grad_activations struct
