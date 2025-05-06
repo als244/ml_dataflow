@@ -2,11 +2,11 @@
 #include "dataflow_transformer.h"
 
 // toggle to print out before submitting any ops...
-#define TO_PRINT 1
+#define TO_PRINT 0
 
 // meta-toggle required to be set to 1 to save any data
 // when set to 0, nothing will be saved
-#define TO_SAVE_DATA 1
+#define TO_SAVE_DATA 0
 
 
 // DETERMINES WHAT DATA TO SAVE...
@@ -882,7 +882,6 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 
 	float grad_avg_scale = 1.0f / ((float)head_activations -> num_tokens);
 
-
 	 // 2. Output projection weight gradients
     // Forward: [num_tokens, embedding_size] @ [embedding_size, vocab_size] -> [num_tokens, vocab_size]
     // Backward for weights: dW = X^T @ dY
@@ -949,6 +948,12 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 		ret = save_file(dataflow_handle, compute_stream_id, -1, seq_id, chunk_id, true, "x_head_proj_inp", head_activations -> head_norm_out, total_tokens, embedding_size, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head x_head_proj_inp file...\n");
+			return -1;
+		}
+
+		ret = save_file(dataflow_handle, compute_stream_id, -1, seq_id, chunk_id, true, "w_head_proj", transformer_head -> w_head, embedding_size, vocab_size, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save head w_head_proj file...\n");
 			return -1;
 		}
 	}
@@ -1165,9 +1170,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 			fprintf(stderr, "Error: failed to save x_1_swiglu_inp file...\n");
 			return -1;
 		}
-	}
 
-	if (TO_SAVE_DATA && TO_SAVE_BWD_LAYER && ((BWD_LAYER_ID_TO_SAVE == -1) || (layer_id == BWD_LAYER_ID_TO_SAVE))){
 		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_3_swiglu_inp", (working_activations -> x_3)[0], total_q, ffn_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_3_swiglu_inp file...\n");
@@ -1249,33 +1252,6 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit ffn norm backward...\n");
 		return -1;
-	}
-
-	if (layer_id == 15){
-
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_ffn_norm_inp", fwd_activations -> x_o, total_q, model_dim, fwd_dt);
-		if (ret){
-			fprintf(stderr, "Error: failed to save x_ffn_norm_inp file...\n");
-			return -1;
-		}
-
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_ffn_norm_rms_vals", fwd_activations -> ffn_norm_rms_vals, total_q, 1, DATAFLOW_FP32);
-		if (ret){
-			fprintf(stderr, "Error: failed to save x_ffn_norm_rms_vals file...\n");
-			return -1;
-		}
-
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_ffn_norm_recomputed", ffn_norm_recomputed, total_q, model_dim, fwd_dt);
-		if (ret){
-			fprintf(stderr, "Error: failed to save x_ffn_norm_recomputed file...\n");
-			return -1;
-		}
-
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "w_ffn_norm", transformer_block -> w_ffn_norm, 1, model_dim, fwd_dt);
-		if (ret){
-			fprintf(stderr, "Error: failed to save w_ffn_norm file...\n");
-			return -1;
-		}
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_BWD_LAYER && ((BWD_LAYER_ID_TO_SAVE == -1) || (layer_id == BWD_LAYER_ID_TO_SAVE))){
@@ -1365,6 +1341,14 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 		printf("Submitting attention bwd to get dX for output of W_q (+ rope), W_k (+ rope), and W_v...\n");
 	}
 
+	/*
+	ret = (dataflow_handle -> set_mem)(dataflow_handle, compute_stream_id, working_activations -> x_q, 0, (uint64_t) total_q * (uint64_t) model_dim * (uint64_t) x_el_bwd_size);
+	if (ret){
+		fprintf(stderr, "Error: unable to set x_q workspace mem to 0 before submitting...\n");
+		return -1;
+	}
+	*/
+
 	// 7. Backprop through attention
 	ret = dataflow_submit_attention_bwd(dataflow_handle, compute_stream_id,
 							bwd_dt,
@@ -1425,13 +1409,8 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	// Now need to copy the correct parts of bwd_context -> x_k and bwd_context -> x_v to the correct locations in working_activations -> x_k_local and working_activations -> x_v_local!...
 
 	uint64_t start_local_token_ind = (bwd_context -> total_context_tokens - bwd_context -> cur_tokens_populated) - total_q;
-	printf("\n\n\nLayer %d!\n\tSeq %d\n\tChunk %d\n\tTotal Context Tokens %d\n\tCur Tokens Populated %d\n\tStart local token ind: %lu\n\n", layer_id, seq_id, chunk_id, bwd_context -> total_context_tokens, bwd_context -> cur_tokens_populated, start_local_token_ind);
 	void * x_k_global_src = bwd_context -> x_k + ((uint64_t) start_local_token_ind * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
 	void * x_v_global_src = bwd_context -> x_v + ((uint64_t) start_local_token_ind * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
-	
-	printf("\n\nBwd X -> k: %p\nX k global src: %p\nX k local dst: %p\nSize of copy: %lu\n", bwd_context -> x_k, x_k_global_src, working_activations -> x_k_local, (uint64_t) total_q * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
-	printf("\n\nBwd X -> v: %p\nX v global src: %p\nX v local dst: %p\nSize of copy: %lu\n\n\n\n", bwd_context -> x_v, x_v_global_src, working_activations -> x_v_local, (uint64_t) total_q * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
-	
 	
 	// need to copy gradients from global ctx into local...
 
@@ -1627,45 +1606,6 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 			return -1;
 		}
 	}
-
-	if (layer_id == 15){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "w_q", transformer_block -> w_q, model_dim, model_dim, bwd_dt);
-		if (ret){
-			fprintf(stderr, "Error: failed to save w_q file...\n");
-			return -1;
-		}
-
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "w_k", transformer_block -> w_k, model_dim, kv_dim, fwd_dt);
-		if (ret){
-			fprintf(stderr, "Error: failed to save w_k file...\n");
-			return -1;
-		}
-
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "w_v", transformer_block -> w_v, model_dim, kv_dim, fwd_dt);
-		if (ret){
-			fprintf(stderr, "Error: failed to save w_v file...\n");
-			return -1;
-		}
-
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_fwd_q", fwd_activations -> x_q, total_q, model_dim, fwd_dt);
-		if (ret){
-			fprintf(stderr, "Error: failed to save x_fwd_q file...\n");
-			return -1;
-		}
-
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_fwd_k", fwd_context -> x_k, total_k, kv_dim, fwd_dt);
-		if (ret){
-			fprintf(stderr, "Error: failed to save x_fwd_k file...\n");
-			return -1;
-		}
-
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_fwd_v", fwd_context -> x_v, total_k, kv_dim, fwd_dt);
-		if (ret){
-			fprintf(stderr, "Error: failed to save x_fwd_v file...\n");
-			return -1;
-		}
-	}
-
 
 	// While we have the correct upstream gradient, also do bwd_w for attn norm
 	if (TO_PRINT){
