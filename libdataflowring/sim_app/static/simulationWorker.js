@@ -4,7 +4,7 @@ let workerSimulationState = {
     current_frame: 0, 
     is_paused: true, 
     is_complete: false, 
-    speed_level: 50, // Definitively 50 as the starting logical speed
+    speed_level: 80, // Definitively 50 as the starting logical speed
     target_cycle: null, 
     max_frames: 30000, 
     completion_stats: {}, 
@@ -204,7 +204,7 @@ self.onmessage = function(e) {
             // then ensure workerSimulationState gets a sensible default if initialState lacks it.
             if (typeof workerSimulationState.speed_level === 'undefined') {
                 console.warn("Worker [initialize]: initialState from server did not contain speed_level. Defaulting to worker's initial 50.");
-                workerSimulationState.speed_level = 50; // Fallback to worker's default
+                workerSimulationState.speed_level = 80; // Fallback to worker's default
             }
 
             workerSimulationConfig = config;
@@ -250,7 +250,7 @@ self.onmessage = function(e) {
             console.log("Worker: Reset command received.");
             stopWorkerLoop();
             workerInitialized = false;
-            workerSimulationState = { current_frame: 0, is_paused: true, is_complete: false, speed_level: 50, target_cycle: null, max_frames: 30000, devices: [] };
+            workerSimulationState = { current_frame: 0, is_paused: true, is_complete: false, speed_level: 80, target_cycle: null, max_frames: 30000, devices: [] };
             workerCurrentIntervalSec = calculateIntervalFromSpeed(workerSimulationState.speed_level); // Reset to default speed interval
             workerSimulationConfig = null;
             self.postMessage({ type: 'workerResetComplete' });

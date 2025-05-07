@@ -47,9 +47,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Simulation State (Main Thread - primarily for UI and config) ---
 
-    const initialSpeedDisplay = 50;
+    const initialSpeedDisplay = 80;
     
-    let simulationState = { current_frame: 0, is_paused: true, is_complete: false, speed_level: 50, target_cycle: null, max_frames: 30000, completion_stats: {}, devices: [] };
+    let simulationState = { current_frame: 0, is_paused: true, is_complete: false, speed_level: 80, target_cycle: null, max_frames: 30000, completion_stats: {}, devices: [] };
     let simulationConfig = { N: 0, total_layers: 0, total_layers_non_head: 0, memory_legend: "", compute_legend: "" };
     // currentIntervalSec is now primarily managed by worker, main thread receives it via messages
     let simulationInitialized = false; // Tracks if the main UI and SVG structure are set up for a simulation
