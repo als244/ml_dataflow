@@ -9,8 +9,6 @@ extern "C" __global__ void default_rms_norm_noscale_fp32_kernel(int n_rows, int 
 	float * row = (float *) sdata;
 
 	// every warp will have a reduced value
-	__shared__ float reduction_data[32];
-	// every warp will have a reduced value
 	__shared__ float reduction_data_sq[32];
 
 	int row_base = blockIdx.x;
@@ -38,11 +36,8 @@ extern "C" __global__ void default_rms_norm_noscale_fp32_kernel(int n_rows, int 
 	int warp_id = thread_id / 32;
 	int lane_id = thread_id % 32;
 
-	__syncthreads();
-
 	float cur_row_val;
 	float float_val;
-	float running_sum;
 	float running_sq_sum;
 	uint64_t row_ind_start;
 
@@ -52,8 +47,6 @@ extern "C" __global__ void default_rms_norm_noscale_fp32_kernel(int n_rows, int 
 	for (int row_id = row_offset; row_id < row_offset + rows_per_block; row_id++){
 		row_ind_start = (uint64_t) (row_id) * (uint64_t) n_cols;
 
-
-		running_sum = 0;
 		running_sq_sum = 0;
 
 		// 1.) do a per thread loading an initial reduction on max_smem
@@ -62,20 +55,16 @@ extern "C" __global__ void default_rms_norm_noscale_fp32_kernel(int n_rows, int 
 			// save for re-scaling
 			row[i] = cur_row_val;
 			float_val = cur_row_val;
-			running_sum += float_val;
-			float_val = float_val * float_val;
-			running_sq_sum += float_val;
+			running_sq_sum += float_val * float_val;
 			
 		}
 
 		// add this warp's result and place in smem
 		for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
-			running_sum += __shfl_down_sync(warp_mask, running_sum, warp_offset);
 			running_sq_sum += __shfl_down_sync(warp_mask, running_sq_sum, warp_offset);
 		}
 
 		if (lane_id == 0){
-			reduction_data[warp_id] = running_sum;
 			reduction_data_sq[warp_id] = running_sq_sum;
 		}
 
@@ -86,11 +75,9 @@ extern "C" __global__ void default_rms_norm_noscale_fp32_kernel(int n_rows, int 
 		
 		if (warp_id == 0){
 
-			running_sum = reduction_data[lane_id];
 			running_sq_sum = reduction_data_sq[lane_id];
 
 			for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
-				running_sum += __shfl_down_sync(warp_mask, running_sum, warp_offset);
 				running_sq_sum += __shfl_down_sync(warp_mask, running_sq_sum, warp_offset);
 			}
 
@@ -140,7 +127,6 @@ extern "C" __global__ void default_rms_norm_noscale_fp16_kernel(int n_rows, int 
 	__half * row = (__half *) sdata;
 
 	// every warp will have a reduced value
-	__shared__ float reduction_data[32];
 	__shared__ float reduction_data_sq[32];
 
 	int row_base = blockIdx.x;
@@ -168,11 +154,8 @@ extern "C" __global__ void default_rms_norm_noscale_fp16_kernel(int n_rows, int 
 	int warp_id = thread_id / 32;
 	int lane_id = thread_id % 32;
 
-	__syncthreads();
-
 	__half cur_row_val;
 	float float_val;
-	float running_sum;
 	float running_sq_sum;
 	uint64_t row_ind_start;
 
@@ -181,8 +164,6 @@ extern "C" __global__ void default_rms_norm_noscale_fp16_kernel(int n_rows, int 
 
 	for (int row_id = row_offset; row_id < row_offset + rows_per_block; row_id++){
 		row_ind_start = (uint64_t) (row_id) * (uint64_t) n_cols;
-
-		running_sum = 0;
 		running_sq_sum = 0;
 
 		// 1.) do a per thread loading an initial reduction on max_smem
@@ -191,20 +172,16 @@ extern "C" __global__ void default_rms_norm_noscale_fp16_kernel(int n_rows, int 
 			// save for re-scaling
 			row[i] = cur_row_val;
 			float_val = __half2float(cur_row_val);
-			running_sum += float_val;
-			float_val = float_val * float_val;
-			running_sq_sum += float_val;
+			running_sq_sum += float_val * float_val;
 			
 		}
 
 		// add this warp's result and place in smem
 		for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
-			running_sum += __shfl_down_sync(warp_mask, running_sum, warp_offset);
 			running_sq_sum += __shfl_down_sync(warp_mask, running_sq_sum, warp_offset);
 		}
 
 		if (lane_id == 0){
-			reduction_data[warp_id] = running_sum;
 			reduction_data_sq[warp_id] = running_sq_sum;
 		}
 
@@ -215,12 +192,10 @@ extern "C" __global__ void default_rms_norm_noscale_fp16_kernel(int n_rows, int 
 		
 		if (warp_id == 0){
 
-			running_sum = reduction_data[lane_id];
 			running_sq_sum = reduction_data_sq[lane_id];
 
 
 			for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
-				running_sum += __shfl_down_sync(warp_mask, running_sum, warp_offset);
 				running_sq_sum += __shfl_down_sync(warp_mask, running_sq_sum, warp_offset);
 			}
 
@@ -269,7 +244,6 @@ extern "C" __global__ void default_rms_norm_noscale_bf16_kernel(int n_rows, int 
 	__nv_bfloat16 * row = (__nv_bfloat16 *) sdata;
 
 	// every warp will have a reduced value
-	__shared__ float reduction_data[32];
 	__shared__ float reduction_data_sq[32];
 
 	int row_base = blockIdx.x;
@@ -297,11 +271,9 @@ extern "C" __global__ void default_rms_norm_noscale_bf16_kernel(int n_rows, int 
 	int warp_id = thread_id / 32;
 	int lane_id = thread_id % 32;
 
-	__syncthreads();
 
 	__nv_bfloat16 cur_row_val;
 	float float_val;
-	float running_sum;
 	float running_sq_sum;
 	uint64_t row_ind_start;
 
@@ -312,7 +284,6 @@ extern "C" __global__ void default_rms_norm_noscale_bf16_kernel(int n_rows, int 
 		row_ind_start = (uint64_t) (row_id) * (uint64_t) n_cols;
 
 		running_sq_sum = 0;
-		running_sum = 0;
 
 		// 1.) do a per thread loading an initial reduction on max_smem
 		for (int i = thread_id; i < n_cols; i+=blockDim.x){
@@ -320,20 +291,16 @@ extern "C" __global__ void default_rms_norm_noscale_bf16_kernel(int n_rows, int 
 			// save for re-scaling
 			row[i] = cur_row_val;
 			float_val = __bfloat162float(cur_row_val);
-			running_sum += float_val;
-			float_val = float_val * float_val;
-			running_sq_sum += float_val;
+			running_sq_sum += float_val * float_val;
 			
 		}
 
 		// add this warp's result and place in smem
 		for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
-			running_sum += __shfl_down_sync(warp_mask, running_sum, warp_offset);
 			running_sq_sum += __shfl_down_sync(warp_mask, running_sq_sum, warp_offset);
 		}
 
 		if (lane_id == 0){
-			reduction_data[warp_id] = running_sum;
 			reduction_data_sq[warp_id] = running_sq_sum;
 		}
 
@@ -344,11 +311,9 @@ extern "C" __global__ void default_rms_norm_noscale_bf16_kernel(int n_rows, int 
 		
 		if (warp_id == 0){
 
-			running_sum = reduction_data[lane_id];
 			running_sq_sum = reduction_data_sq[lane_id];
 
 			for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
-				running_sum += __shfl_down_sync(warp_mask, running_sum, warp_offset);
 				running_sq_sum += __shfl_down_sync(warp_mask, running_sq_sum, warp_offset);
 			}
 
@@ -396,7 +361,6 @@ extern "C" __global__ void default_rms_norm_noscale_fp8e4m3_kernel(int n_rows, i
 	__nv_fp8_e4m3 * row = (__nv_fp8_e4m3 *) sdata;
 
 	// every warp will have a reduced value
-	__shared__ float reduction_data[32];
 	__shared__ float reduction_data_sq[32];
 
 	int row_base = blockIdx.x;
@@ -424,11 +388,8 @@ extern "C" __global__ void default_rms_norm_noscale_fp8e4m3_kernel(int n_rows, i
 	int warp_id = thread_id / 32;
 	int lane_id = thread_id % 32;
 
-	__syncthreads();
-
 	__nv_fp8_e4m3 cur_row_val;
 	float float_val;
-	float running_sum;
 	float running_sq_sum;
 	uint64_t row_ind_start;
 
@@ -438,7 +399,6 @@ extern "C" __global__ void default_rms_norm_noscale_fp8e4m3_kernel(int n_rows, i
 	for (int row_id = row_offset; row_id < row_offset + rows_per_block; row_id++){
 		row_ind_start = (uint64_t) (row_id) * (uint64_t) n_cols;
 
-		running_sum = 0;
 		running_sq_sum = 0;
 		// 1.) do a per thread loading an initial reduction on max_smem
 		for (int i = thread_id; i < n_cols; i+=blockDim.x){
@@ -446,20 +406,16 @@ extern "C" __global__ void default_rms_norm_noscale_fp8e4m3_kernel(int n_rows, i
 			// save for re-scaling
 			row[i] = cur_row_val;
 			float_val = float(cur_row_val);
-			running_sum += float_val;
-			float_val = float_val * float_val;
-			running_sq_sum += float_val;
+			running_sq_sum += float_val * float_val;
 			
 		}
 
 		// add this warp's result and place in smem
 		for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
-			running_sum += __shfl_down_sync(warp_mask, running_sum, warp_offset);
 			running_sq_sum += __shfl_down_sync(warp_mask, running_sq_sum, warp_offset);
 		}
 
 		if (lane_id == 0){
-			reduction_data[warp_id] = running_sum;
 			reduction_data_sq[warp_id] = running_sq_sum;
 		}
 
@@ -470,11 +426,9 @@ extern "C" __global__ void default_rms_norm_noscale_fp8e4m3_kernel(int n_rows, i
 		
 		if (warp_id == 0){
 
-			running_sum = reduction_data[lane_id];
 			running_sq_sum = reduction_data_sq[lane_id];
 
 			for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
-				running_sum += __shfl_down_sync(warp_mask, running_sum, warp_offset);
 				running_sq_sum += __shfl_down_sync(warp_mask, running_sq_sum, warp_offset);
 			}
 
@@ -483,7 +437,7 @@ extern "C" __global__ void default_rms_norm_noscale_fp8e4m3_kernel(int n_rows, i
 
 				// Save down the squared sums of this row
 				// so we can easilly compute the backpass...
-
+				
 				// During inference this should be null and not needed
 				if (rms_vals){
 					rms_vals[row_id] = reduction_data_sq[0];
@@ -522,7 +476,6 @@ extern "C" __global__ void default_rms_norm_noscale_fp8e5m2_kernel(int n_rows, i
 	__nv_fp8_e5m2 * row = (__nv_fp8_e5m2 *) sdata;
 
 	// every warp will have a reduced value
-	__shared__ float reduction_data[32];
 	__shared__ float reduction_data_sq[32];
 
 	int row_base = blockIdx.x;
@@ -550,11 +503,8 @@ extern "C" __global__ void default_rms_norm_noscale_fp8e5m2_kernel(int n_rows, i
 	int warp_id = thread_id / 32;
 	int lane_id = thread_id % 32;
 
-	__syncthreads();
-
 	__nv_fp8_e5m2 cur_row_val;
 	float float_val;
-	float running_sum;
 	float running_sq_sum;
 	uint64_t row_ind_start;
 
@@ -564,7 +514,6 @@ extern "C" __global__ void default_rms_norm_noscale_fp8e5m2_kernel(int n_rows, i
 	for (int row_id = row_offset; row_id < row_offset + rows_per_block; row_id++){
 		row_ind_start = (uint64_t) (row_id) * (uint64_t) n_cols;
 
-		running_sum = 0;
 		running_sq_sum = 0;
 
 		// 1.) do a per thread loading an initial reduction on max_smem
@@ -573,20 +522,16 @@ extern "C" __global__ void default_rms_norm_noscale_fp8e5m2_kernel(int n_rows, i
 			// save for re-scaling
 			row[i] = cur_row_val;
 			float_val = float(cur_row_val);
-			running_sum += float_val;
-			float_val = float_val * float_val;
-			running_sum += float_val;
+			running_sq_sum += float_val * float_val;
 			
 		}
 
 		// add this warp's result and place in smem
 		for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
-			running_sum += __shfl_down_sync(warp_mask, running_sum, warp_offset);
 			running_sq_sum += __shfl_down_sync(warp_mask, running_sq_sum, warp_offset);
 		}
 
 		if (lane_id == 0){
-			reduction_data[warp_id] = running_sum;
 			reduction_data_sq[warp_id] = running_sq_sum;
 		}
 
@@ -597,11 +542,9 @@ extern "C" __global__ void default_rms_norm_noscale_fp8e5m2_kernel(int n_rows, i
 		
 		if (warp_id == 0){
 
-			running_sum = reduction_data[lane_id];
 			running_sq_sum = reduction_data_sq[lane_id];
 
 			for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
-				running_sum += __shfl_down_sync(warp_mask, running_sum, warp_offset);
 				running_sq_sum += __shfl_down_sync(warp_mask, running_sq_sum, warp_offset);
 			}
 

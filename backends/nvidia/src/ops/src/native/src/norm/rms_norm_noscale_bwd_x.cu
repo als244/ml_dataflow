@@ -3,20 +3,15 @@
 
 extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp32_fp32_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, float * X_inp, float * upstream_dX, float * dX, float * X_out) {
 		
-	// this gets dynamically allocated the size of model_dim
+	// this gets dynamically allocated the correct size
 	extern __shared__ uint8_t sdata[];
-
-
-	int rows_per_block = n_rows / gridDim.x;
-	int rows_remain = n_rows % gridDim.x;
-	int max_rows_per_block = rows_per_block + (rows_remain > 0);
 
 	// length should be equal to number of rows
 	// load in squared sums and then divide by n_cols and take sqrt
 	float * inp_row = (float *) sdata;
-
-	// length equal to the number of columns
-	float * shared_recip_avgs = (float *) (inp_row + max_rows_per_block);
+	
+	// length equal to rows_per_block
+	float * shared_recip_avgs = (float *) (inp_row + n_cols);
 
 	// every warp will have a reduced value
 
@@ -28,6 +23,10 @@ extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp32_fp32_kernel(int n
 
 	// then we compute 
 	// dX[i] = recip_avg * (upstream_dX[i] * rms_weight[i] - C * ((x_inp[i] * recip_avg) / n_cols))
+	
+
+	int rows_per_block = n_rows / gridDim.x;
+	int rows_remain = n_rows % gridDim.x;
 	
 
 	int row_base = blockIdx.x;
@@ -160,22 +159,17 @@ extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp32_fp32_kernel(int n
 // Here dX is (N, model_dim) and contains the backprop loss flow that we will update in-place
 // This needs to be called after the bwd_weight because the weight we use the updstream dL/dX and this function will
 // modify the same pointer...
-extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp16_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __half * X_inp,  __half * upstream_dX, __half * dX, __half * X_out){
+extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp16_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals,  __half * X_inp,  __half * upstream_dX, __half * dX, __half * X_out){
 		
-	// this gets dynamically allocated the size of model_dim
+	// this gets dynamically allocated the correct size
 	extern __shared__ uint8_t sdata[];
-
-
-	int rows_per_block = n_rows / gridDim.x;
-	int rows_remain = n_rows % gridDim.x;
-	int max_rows_per_block = rows_per_block + (rows_remain > 0);
 
 	// length should be equal to number of rows
 	// load in squared sums and then divide by n_cols and take sqrt
 	__half * inp_row = (__half *) sdata;
 
-	// length equal to the number of columns
-	float * shared_recip_avgs = (float *) (inp_row + max_rows_per_block);
+	// length equal to rows_per_block
+	float * shared_recip_avgs = (float *) (inp_row + n_cols);
 
 	// every warp will have a reduced value
 
@@ -187,6 +181,10 @@ extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp16_fp16_kernel(int n
 
 	// then we compute 
 	// dX[i] = recip_avg * (upstream_dX[i] * rms_weight[i] - C * ((x_inp[i] * recip_avg) / n_cols))
+	
+
+	int rows_per_block = n_rows / gridDim.x;
+	int rows_remain = n_rows % gridDim.x;
 	
 
 	int row_base = blockIdx.x;
@@ -211,7 +209,6 @@ extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp16_fp16_kernel(int n
 
 	int warp_id = thread_id / 32;
 	int lane_id = thread_id % 32;
-
 
 	// retrieve back the recip squared avgs
 	// corresponding to this blocks rows
@@ -320,20 +317,15 @@ extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp16_fp16_kernel(int n
 
 extern "C" __global__ void default_rms_norm_noscale_bwd_x_bf16_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_bfloat16 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX, __nv_bfloat16 * X_out) {
 		
-	// this gets dynamically allocated the size of model_dim
+	// this gets dynamically allocated the correct size
 	extern __shared__ uint8_t sdata[];
-
-
-	int rows_per_block = n_rows / gridDim.x;
-	int rows_remain = n_rows % gridDim.x;
-	int max_rows_per_block = rows_per_block + (rows_remain > 0);
 
 	// length should be equal to number of rows
 	// load in squared sums and then divide by n_cols and take sqrt
 	__nv_bfloat16 * inp_row = (__nv_bfloat16 *) sdata;
 
-	// length equal to the number of columns
-	float * shared_recip_avgs = (float *) (inp_row + max_rows_per_block);
+	// length equal to rows_per_block
+	float * shared_recip_avgs = (float *) (inp_row + n_cols);
 
 	// every warp will have a reduced value
 
@@ -345,6 +337,10 @@ extern "C" __global__ void default_rms_norm_noscale_bwd_x_bf16_bf16_kernel(int n
 
 	// then we compute 
 	// dX[i] = recip_avg * (upstream_dX[i] * rms_weight[i] - C * ((x_inp[i] * recip_avg) / n_cols))
+	
+
+	int rows_per_block = n_rows / gridDim.x;
+	int rows_remain = n_rows % gridDim.x;
 	
 
 	int row_base = blockIdx.x;
@@ -478,20 +474,15 @@ extern "C" __global__ void default_rms_norm_noscale_bwd_x_bf16_bf16_kernel(int n
 
 extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp8e4m3_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e4m3 * X_inp, __half * upstream_dX, __half * dX, __nv_fp8_e4m3 * X_out) {
 		
-	// this gets dynamically allocated the size of model_dim
+	// this gets dynamically allocated the correct size
 	extern __shared__ uint8_t sdata[];
-
-
-	int rows_per_block = n_rows / gridDim.x;
-	int rows_remain = n_rows % gridDim.x;
-	int max_rows_per_block = rows_per_block + (rows_remain > 0);
 
 	// length should be equal to number of rows
 	// load in squared sums and then divide by n_cols and take sqrt
 	__nv_fp8_e4m3 * inp_row = (__nv_fp8_e4m3 *) sdata;
 
-	// length equal to the number of columns
-	float * shared_recip_avgs = (float *) (inp_row + max_rows_per_block);
+	// length equal to rows_per_block
+	float * shared_recip_avgs = (float *) (inp_row + n_cols);
 
 	// every warp will have a reduced value
 
@@ -503,6 +494,10 @@ extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp8e4m3_fp16_kernel(in
 
 	// then we compute 
 	// dX[i] = recip_avg * (upstream_dX[i] * rms_weight[i] - C * ((x_inp[i] * recip_avg) / n_cols))
+	
+
+	int rows_per_block = n_rows / gridDim.x;
+	int rows_remain = n_rows % gridDim.x;
 	
 
 	int row_base = blockIdx.x;
@@ -635,21 +630,15 @@ extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp8e4m3_fp16_kernel(in
 
 extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp8e4m3_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e4m3 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX, __nv_fp8_e4m3 * X_out) {
 		
-	// this gets dynamically allocated the size of model_dim
+	// this gets dynamically allocated the correct size
 	extern __shared__ uint8_t sdata[];
-
-
-	int rows_per_block = n_rows / gridDim.x;
-	int rows_remain = n_rows % gridDim.x;
-	int max_rows_per_block = rows_per_block + (rows_remain > 0);
 
 	// length should be equal to number of rows
 	// load in squared sums and then divide by n_cols and take sqrt
 	__nv_fp8_e4m3 * inp_row = (__nv_fp8_e4m3 *) sdata;
-	float * weights = (float *) (inp_row + n_cols);
 
-	// length equal to the number of columns
-	float * shared_recip_avgs = (float *) (weights + max_rows_per_block);
+	// length equal to rows_per_block
+	float * shared_recip_avgs = (float *) (inp_row + n_cols);
 
 	// every warp will have a reduced value
 
@@ -662,6 +651,9 @@ extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp8e4m3_bf16_kernel(in
 	// then we compute 
 	// dX[i] = recip_avg * (upstream_dX[i] * rms_weight[i] - C * ((x_inp[i] * recip_avg) / n_cols))
 	
+
+	int rows_per_block = n_rows / gridDim.x;
+	int rows_remain = n_rows % gridDim.x;
 
 	int row_base = blockIdx.x;
 
@@ -794,20 +786,15 @@ extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp8e4m3_bf16_kernel(in
 
 extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp8e5m2_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e5m2 * X_inp, __half * upstream_dX, __half * dX, __nv_fp8_e5m2 * X_out) {
 		
-	// this gets dynamically allocated the size of model_dim
+	// this gets dynamically allocated the correct size
 	extern __shared__ uint8_t sdata[];
-
-
-	int rows_per_block = n_rows / gridDim.x;
-	int rows_remain = n_rows % gridDim.x;
-	int max_rows_per_block = rows_per_block + (rows_remain > 0);
 
 	// length should be equal to number of rows
 	// load in squared sums and then divide by n_cols and take sqrt
 	__nv_fp8_e5m2 * inp_row = (__nv_fp8_e5m2 *) sdata;
 
-	// length equal to the number of columns
-	float * shared_recip_avgs = (float *) (inp_row + max_rows_per_block);
+	// length equal to rows_per_block
+	float * shared_recip_avgs = (float *) (inp_row + n_cols);
 
 	// every warp will have a reduced value
 
@@ -820,6 +807,9 @@ extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp8e5m2_fp16_kernel(in
 	// then we compute 
 	// dX[i] = recip_avg * (upstream_dX[i] * rms_weight[i] - C * ((x_inp[i] * recip_avg) / n_cols))
 	
+
+	int rows_per_block = n_rows / gridDim.x;
+	int rows_remain = n_rows % gridDim.x;
 
 	int row_base = blockIdx.x;
 
@@ -951,21 +941,15 @@ extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp8e5m2_fp16_kernel(in
 
 extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp8e5m2_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e5m2 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX, __nv_fp8_e5m2 * X_out) {
 		
-	// this gets dynamically allocated the size of model_dim
+	// this gets dynamically allocated the correct size
 	extern __shared__ uint8_t sdata[];
-
-
-	int rows_per_block = n_rows / gridDim.x;
-	int rows_remain = n_rows % gridDim.x;
-	int max_rows_per_block = rows_per_block + (rows_remain > 0);
 
 	// length should be equal to number of rows
 	// load in squared sums and then divide by n_cols and take sqrt
 	__nv_fp8_e5m2 * inp_row = (__nv_fp8_e5m2 *) sdata;
-	float * weights = (float *) (inp_row + n_cols);
 
-	// length equal to the number of columns
-	float * shared_recip_avgs = (float *) (weights + max_rows_per_block);
+	// length equal to rows_per_block
+	float * shared_recip_avgs = (float *) (inp_row + n_cols);
 
 	// every warp will have a reduced value
 
@@ -978,6 +962,9 @@ extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp8e5m2_bf16_kernel(in
 	// then we compute 
 	// dX[i] = recip_avg * (upstream_dX[i] * rms_weight[i] - C * ((x_inp[i] * recip_avg) / n_cols))
 	
+
+	int rows_per_block = n_rows / gridDim.x;
+	int rows_remain = n_rows % gridDim.x;
 
 	int row_base = blockIdx.x;
 
