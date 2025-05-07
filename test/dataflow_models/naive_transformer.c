@@ -105,6 +105,8 @@ int main(int argc, char * argv[]){
 	// on Geforce using FP16 gets double perf,
 	// on datacenter cards should use DATAFLOW_FP32
 	//DataflowDatatype compute_dt = DATAFLOW_FP16;
+	//DataflowDatatype compute_dt_bwd = DATAFLOW_FP16;
+
 
 	// however for BF dataftype, requires FP32 compute...
 	DataflowDatatype compute_dt = DATAFLOW_FP32;
