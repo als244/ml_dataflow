@@ -107,7 +107,6 @@ def start_simulation_route(): # Renamed to avoid conflict with any potential imp
         session['simulation_full_state'] = initial_full_state
         session['simulation_active'] = True
         session.modified = True
-        print(f"Session {session.sid}: Stored initial full state with speed_level {initial_render_state.get('speed_level')}.")
 
 
         return jsonify({

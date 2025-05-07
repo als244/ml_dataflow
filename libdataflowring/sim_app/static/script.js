@@ -685,7 +685,98 @@ document.addEventListener('DOMContentLoaded', () => {
             const ringArrow = svgElements[`${deviceId}_ring_arrow`]; const ringLabel = svgElements[`${deviceId}_ring_label`];
             if (ringArrow && ringLabel && device.peer && device.peer.progress > 1e-6 && N > 1) { const progress = Math.min(1.0, device.peer.progress); const peerId = device.peer.target_peer; if (peerId >= 0 && peerId < N && peerId !== i && nodePositions.outer[peerId]) { const targetPos = nodePositions.outer[peerId]; const startPos = outerPos; const dx = targetPos.x - startPos.x; const dy = targetPos.y - startPos.y; const dist = Math.hypot(dx, dy); const startAngleRad = Math.atan2(dy, dx); const startEdge = pointOnCircle(startPos.x, startPos.y, outerNodeRadius, startAngleRad * 180 / Math.PI); const endAngleRad = Math.atan2(-dy, -dx); const endEdge = pointOnCircle(targetPos.x, targetPos.y, outerNodeRadius, endAngleRad * 180 / Math.PI); const currentEdgeX = startEdge.x + (endEdge.x - startEdge.x) * progress; const currentEdgeY = startEdge.y + (endEdge.y - startEdge.y) * progress; const sweepFlag = device.peer.direction > 0 ? 1 : 0; let arcRadius = dist * 0.6; if (Math.hypot(currentEdgeX - startEdge.x, currentEdgeY - startEdge.y) > 1e-3) { const pathData = `M ${startEdge.x} ${startEdge.y} A ${arcRadius} ${arcRadius} 0 0 ${sweepFlag} ${currentEdgeX} ${currentEdgeY}`; ringArrow.setAttribute('d', pathData); ringArrow.setAttribute('stroke', device.peer.color || 'indigo'); ringArrow.setAttribute('visibility', 'visible'); const midX = (startEdge.x + currentEdgeX) / 2; const midY = (startEdge.y + currentEdgeY) / 2; const vecCenterX = midX - centerX; const vecCenterY = midY - effectiveCenterY; const vecCenterMag = Math.hypot(vecCenterX, vecCenterY); const outX = vecCenterMag > 1e-6 ? vecCenterX / vecCenterMag : 0; const outY = vecCenterMag > 1e-6 ? vecCenterY / vecCenterMag : 0; const labelOffsetMag = labelOffsetDistance * 2.0; const labelX = midX + outX * labelOffsetMag; const labelY = midY + outY * labelOffsetMag; updateMultiLineText(ringLabel, device.peer.label || '', labelX, labelY, transferLabelFontSize); ringLabel.setAttribute('fill', device.peer.color || 'indigo'); ringLabel.setAttribute('visibility', 'visible'); } else { ringArrow.setAttribute('visibility', 'hidden'); ringLabel.setAttribute('visibility', 'hidden'); } } else { ringArrow.setAttribute('visibility', 'hidden'); ringLabel.setAttribute('visibility', 'hidden'); } } else if (ringArrow && ringLabel) { ringArrow.setAttribute('visibility', 'hidden'); ringLabel.setAttribute('visibility', 'hidden'); }
             const computeArc = svgElements[`${deviceId}_compute_arc`];
-            if (computeArc && device.compute && device.compute.progress > 1e-6) { const progress = Math.min(1.0, device.compute.progress); const type = device.compute.type; const arcOuterRadius = outerNodeRadius * computeArcRadiusScale; const anglePrev = nodePositions.angleToPrev[i]; const angleNext = nodePositions.angleToNext[i]; let theta1Deg = 0, theta2Deg = 0, totalSweepDeg = 0; if (N > 1) { if (type === "Fwd") { const angleStartDeg = (device.compute.layer > 0 || N <= 1) ? anglePrev : (angleNext - 180); const angleEndTargetDeg = angleNext; totalSweepDeg = (angleEndTargetDeg - angleStartDeg + 360) % 360; if (N === 1) totalSweepDeg = 360; theta1Deg = angleStartDeg; theta2Deg = angleStartDeg + progress * totalSweepDeg; } else if (type === "Head") { theta1Deg = anglePrev; totalSweepDeg = 360; theta2Deg = theta1Deg + progress * totalSweepDeg; } else { const angleStartDeg = angleNext; const angleEndTargetDeg = anglePrev; totalSweepDeg = (angleStartDeg - angleEndTargetDeg + 360) % 360; if (N === 1) totalSweepDeg = 360; const currentSweepDeg = progress * totalSweepDeg; theta1Deg = angleStartDeg - currentSweepDeg; theta2Deg = angleStartDeg; } } else { totalSweepDeg = 360; theta1Deg = -90; theta2Deg = theta1Deg + progress * totalSweepDeg; } if (Math.abs(progress * totalSweepDeg) > 1e-3) { const startPoint = pointOnCircle(outerPos.x, outerPos.y, arcOuterRadius, theta1Deg); const endPoint = pointOnCircle(outerPos.x, outerPos.y, arcOuterRadius, theta2Deg); const largeArcFlag = Math.abs(progress * totalSweepDeg) >= 360 ? 1 : (Math.abs(progress * totalSweepDeg) > 180 ? 1 : 0); const sweepFlagArc = 1; const pathData = `M ${startPoint.x} ${startPoint.y} A ${arcOuterRadius} ${arcOuterRadius} 0 ${largeArcFlag} ${sweepFlagArc} ${endPoint.x} ${endPoint.y}`; computeArc.setAttribute('d', pathData); computeArc.setAttribute('stroke', device.compute.color || 'gray'); computeArc.setAttribute('visibility', 'visible'); } else { computeArc.setAttribute('visibility', 'hidden'); } } else if (computeArc) { computeArc.setAttribute('visibility', 'hidden'); }
+            if (computeArc && device.compute && device.compute.progress > 1e-6) {
+                const progress = Math.min(1.0, device.compute.progress);
+                const type = device.compute.type;
+                const arcOuterRadius = outerNodeRadius * computeArcRadiusScale;
+
+                // These are the angular positions of the previous/next nodes in the ring.
+                // For N=2, anglePrev and angleNext will be the angle of the *other* node.
+                const anglePrev = nodePositions.angleToPrev[i];
+                const angleNext = nodePositions.angleToNext[i];
+
+                let theta1Deg = 0, theta2Deg = 0, totalSweepDeg = 0;
+                let angleStartDeg; // Keep angleStartDeg in a scope accessible for theta1Deg calculation
+
+                const isInitialLayer = (device.compute.layer === 0);
+
+                if (N > 1) {
+                    if (type === "Fwd") {
+                        if (N === 2) {
+                            // For N=2, a "Fwd" compute sweeps 180 degrees.
+                            // angleNext is the angle of the other node.
+                            // Start the arc from the point "opposite" the current node's direct line to the other node.
+                            angleStartDeg = angleNext - 180; // e.g., if other node is at 180 deg, this starts arc at 0 deg.
+                            totalSweepDeg = 180;
+                        } else { // N > 2 (original logic for more than 2 nodes)
+                            angleStartDeg = isInitialLayer ? (angleNext - 180) : anglePrev;
+                            totalSweepDeg = (angleNext - angleStartDeg + 360) % 360;
+                            // Fallback: if calculated sweep is 0 but should be a full circle (e.g. prev/next align unexpectedly)
+                            if (totalSweepDeg === 0 && angleNext === angleStartDeg && progress > 0) {
+                                totalSweepDeg = 360;
+                            }
+                        }
+                        theta1Deg = angleStartDeg;
+                        theta2Deg = angleStartDeg + progress * totalSweepDeg;
+
+                    } else if (type === "Head") {
+                        // "Head" type always sweeps a full circle, starting from anglePrev.
+                        angleStartDeg = anglePrev; // Defined for clarity, though only theta1Deg uses it directly here
+                        theta1Deg = angleStartDeg;
+                        totalSweepDeg = 360;
+                        theta2Deg = theta1Deg + progress * totalSweepDeg;
+
+                    } else { // Bwd type
+                        if (N === 2) {
+                            // For N=2, a "Bwd" compute sweeps 180 degrees "backwards" from the other node.
+                            angleStartDeg = angleNext; // The arc will end at the angle of the other node.
+                            totalSweepDeg = 180;    // The magnitude of the sweep.
+                        } else { // N > 2 (original logic for more than 2 nodes)
+                            angleStartDeg = angleNext;
+                            const angleEndTargetDeg = anglePrev; // Visually, arc starts from prev and goes to next (backwards)
+                            totalSweepDeg = (angleStartDeg - angleEndTargetDeg + 360) % 360;
+                            // Fallback for N > 2 if sweep is 0 unexpectedly
+                            if (totalSweepDeg === 0 && angleStartDeg === angleEndTargetDeg && progress > 0) {
+                                totalSweepDeg = 360;
+                            }
+                        }
+                        const currentSweepAmount = progress * totalSweepDeg;
+                        theta1Deg = angleStartDeg - currentSweepAmount; // Arc data starts here
+                        theta2Deg = angleStartDeg;                   // Arc data ends here
+                    }
+                } else { // N === 1 (since N=0 is guarded at the function start)
+                    // For a single node, sweep a full circle starting from the top.
+                    theta1Deg = -90;
+                    totalSweepDeg = 360;
+                    theta2Deg = theta1Deg + progress * totalSweepDeg;
+                }
+
+                // Draw the arc if the sweep is significant
+                if (Math.abs(progress * totalSweepDeg) > 1e-3) {
+                    const startPoint = pointOnCircle(outerPos.x, outerPos.y, arcOuterRadius, theta1Deg);
+                    const endPoint = pointOnCircle(outerPos.x, outerPos.y, arcOuterRadius, theta2Deg);
+
+                    const actualSweepAngle = progress * totalSweepDeg;
+                    // largeArcFlag: 1 if arc sweep is > 180 degrees.
+                    // For exactly 360 degrees, SVG needs largeArcFlag=1 if start/end points are identical.
+                    // The original logic: Math.abs(actualSweepAngle) >= 360 ? 1 : (Math.abs(actualSweepAngle) > 180 ? 1 : 0) handles this well.
+                    const largeArcFlag = Math.abs(actualSweepAngle) >= 360 ? 1 : (Math.abs(actualSweepAngle) > 180 ? 1 : 0);
+                    
+                    // sweepFlagArc: 1 for positive angle direction (typically counter-clockwise).
+                    // All our totalSweepDeg are positive magnitudes, and theta calculations respect direction.
+                    let sweepFlagArc = 1;
+                    if (N === 1 && type === "Bwd") {
+                        sweepFlagArc = 0; // For N=1 and "Bwd" type, sweep Clockwise
+                    }
+
+                    const pathData = `M ${startPoint.x} ${startPoint.y} A ${arcOuterRadius} ${arcOuterRadius} 0 ${largeArcFlag} ${sweepFlagArc} ${endPoint.x} ${endPoint.y}`;
+                    computeArc.setAttribute('d', pathData);
+                    computeArc.setAttribute('stroke', device.compute.color || 'gray');
+                    computeArc.setAttribute('visibility', 'visible');
+                } else {
+                    computeArc.setAttribute('visibility', 'hidden');
+                }
+            } else if (computeArc) { computeArc.setAttribute('visibility', 'hidden'); }
         }
         // ... end of existing updateSVG logic
 
@@ -844,29 +935,312 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Torus Plot Functions (Unchanged) ---
     function linspace(start, end, num) { if (num <= 1) return [start]; const step = (end - start) / (num - 1); const arr = []; for (let i = 0; i < num; i++) { arr.push(start + i * step); } return arr; }
     function hslToRgbString(h, s, l) { s = 0.75; l = 0.65; let r, g, b; if (s === 0) { r = g = b = l; } else { const hue2rgb = (p, q, t) => { if (t < 0) t += 1; if (t > 1) t -= 1; if (t < 1 / 6) return p + (q - p) * 6 * t; if (t < 1 / 2) return q; if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6; return p; }; const q = l < 0.5 ? l * (1 + s) : l + s - l * s; const p = 2 * l - q; h /= 360; r = hue2rgb(p, q, h + 1 / 3); g = hue2rgb(p, q, h); b = hue2rgb(p, q, h - 1 / 3); } const to255 = x => Math.round(x * 255); return `rgb(${to255(r)},${to255(g)},${to255(b)})`; }
-    function drawTorusPlot(N_slices, M_nodes_per_slice) { if (!torusPlotContainer) return; const R_major = 4.0; const r_minor = 1.0; const twist_factor = 1; const phi_slices = linspace(0, 2 * Math.PI, N_slices + 1).slice(0, N_slices); const theta_nodes_base = linspace(0, 2 * Math.PI, M_nodes_per_slice + 1).slice(0, M_nodes_per_slice); const nodes = []; const all_x = []; const all_y = []; const all_z = []; const node_colors = []; const slice_labels = []; const face_i = []; const face_j = []; const face_k = []; const node_wire_colors_rgb = []; for (let j = 0; j < M_nodes_per_slice; j++) { const hue = (j * 360 / M_nodes_per_slice) % 360; node_wire_colors_rgb.push(hslToRgbString(hue, 0.75, 0.65)); } for (let k = 0; k < N_slices; k++) { const phi = phi_slices[k]; const slice_nodes_coords = []; let sum_x = 0, sum_y = 0, sum_z = 0; const baseVertexIndex = k * M_nodes_per_slice; for (let j = 0; j < M_nodes_per_slice; j++) { const theta_base = theta_nodes_base[j]; const theta_twisted = theta_base + twist_factor * phi; const radius_factor = R_major + r_minor * Math.cos(theta_twisted); const x = radius_factor * Math.cos(phi); const y = radius_factor * Math.sin(phi); const z = r_minor * Math.sin(theta_twisted); slice_nodes_coords.push([x, y, z]); all_x.push(x); all_y.push(y); all_z.push(z); node_colors.push(node_wire_colors_rgb[j]); sum_x += x; sum_y += y; sum_z += z; } nodes.push(slice_nodes_coords); const center_x = sum_x / M_nodes_per_slice; const center_y = sum_y / M_nodes_per_slice; const center_z = sum_z / M_nodes_per_slice; slice_labels.push({ x: center_x, y: center_y, z: center_z, text: k.toString(), font: { color: 'darkgreen', size: 9 }, showarrow: false, }); if (M_nodes_per_slice >= 3) { const v0_idx = baseVertexIndex + 0; for (let m = 0; m < M_nodes_per_slice - 2; m++) { const v1_idx = baseVertexIndex + (m + 1); const v2_idx = baseVertexIndex + (m + 2); face_i.push(v0_idx); face_j.push(v1_idx); face_k.push(v2_idx); } } } const traces = []; if (face_i.length > 0) { traces.push({ type: 'mesh3d', x: all_x, y: all_y, z: all_z, i: face_i, j: face_j, k: face_k, color: 'black', opacity: 0.3, flatshading: true, hoverinfo: 'none', showlegend: false }); } traces.push({ x: all_x, y: all_y, z: all_z, mode: 'markers', type: 'scatter3d', marker: { color: node_colors, size: 6, symbol: 'circle', line: { color: 'black', width: 1.5 }, opacity: 1.0 }, showlegend: false, hoverinfo: 'none' }); for (let j = 0; j < M_nodes_per_slice; j++) { const wire_x = []; const wire_y = []; const wire_z = []; for (let k = 0; k < N_slices; k++) { if (nodes && nodes[k] && nodes[k][j] && nodes[k][j].length === 3) { wire_x.push(nodes[k][j][0]); wire_y.push(nodes[k][j][1]); wire_z.push(nodes[k][j][2]); } } if (nodes && nodes[0] && nodes[0][j] && nodes[0][j].length === 3) { wire_x.push(nodes[0][j][0]); wire_y.push(nodes[0][j][1]); wire_z.push(nodes[0][j][2]); } traces.push({ x: wire_x, y: wire_y, z: wire_z, mode: 'lines', type: 'scatter3d', name: `Seq. ${j}`, line: { color: node_wire_colors_rgb[j], width: 2 }, hoverinfo: 'none', showlegend: true }); }
-        const layout = { title: { text: `<b>Model Stages: ${N_slices}<br>(Hypothetical) Concurrent Rings: ${M_nodes_per_slice}</b>`, x: 0.5, xanchor: 'center', font: { size: 16, family: 'sans-serif' } }, showlegend: true, legend: { title: { text: '' }, x: 0, xanchor: 'left', y: 1, yanchor: 'top' }, margin: { l: 10, r: 10, b: 10, t: 30 }, scene: { xaxis: { visible: false, showgrid: false, zeroline: false, automargin: true }, yaxis: { visible: false, showgrid: false, zeroline: false, automargin: true }, zaxis: { visible: false, showgrid: false, zeroline: false, automargin: true }, aspectmode: 'data', camera: { eye: { x: 1.25, y: 1.25, z: 1.25 } }, bgcolor: 'rgba(0,0,0,0)', annotations: slice_labels }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)' };
+    
+    function drawTorusPlot(N_slices, M_nodes_per_slice) { 
+        if (!torusPlotContainer) {
+            return;
+        }
+
+        // Handle special case of N_slices = 2, should draw a cyclinder instead of a torus
+        if (N_slices === 2) {
+            // Call the dedicated function for the N_slices = 2 cylinder case
+            drawCylinderForTwoSlices(M_nodes_per_slice, torusPlotContainer);
+            return;
+        }
+    
+
+        const R_major = 4.0; 
+        const r_minor = 1.0; 
+        const twist_factor = 1; 
+        const phi_slices = linspace(0, 2 * Math.PI, N_slices + 1).slice(0, N_slices); 
+        const theta_nodes_base = linspace(0, 2 * Math.PI, M_nodes_per_slice + 1).slice(0, M_nodes_per_slice); 
+        const nodes = []; 
+        const all_x = []; 
+        const all_y = []; 
+        const all_z = []; 
+        const node_colors = []; 
+        const slice_labels = []; 
+        const face_i = []; 
+        const face_j = []; 
+        const face_k = []; 
+        const node_wire_colors_rgb = []; 
+        for (let j = 0; j < M_nodes_per_slice; j++) { 
+            const hue = (j * 360 / M_nodes_per_slice) % 360; 
+            node_wire_colors_rgb.push(hslToRgbString(hue, 0.75, 0.65)); 
+        } 
+        for (let k = 0; k < N_slices; k++) { 
+            const phi = phi_slices[k]; 
+            const slice_nodes_coords = []; 
+            let sum_x = 0, sum_y = 0, sum_z = 0; 
+            const baseVertexIndex = k * M_nodes_per_slice; 
+            for (let j = 0; j < M_nodes_per_slice; j++) { 
+                const theta_base = theta_nodes_base[j]; 
+                const theta_twisted = theta_base + twist_factor * phi; 
+                const radius_factor = R_major + r_minor * Math.cos(theta_twisted); 
+                const x = radius_factor * Math.cos(phi); 
+                const y = radius_factor * Math.sin(phi); 
+                const z = r_minor * Math.sin(theta_twisted); 
+                slice_nodes_coords.push([x, y, z]); 
+                all_x.push(x); 
+                all_y.push(y); 
+                all_z.push(z); 
+                node_colors.push(node_wire_colors_rgb[j]); 
+                sum_x += x; 
+                sum_y += y; 
+                sum_z += z; 
+            } 
+            nodes.push(slice_nodes_coords); 
+            const center_x = sum_x / M_nodes_per_slice; 
+            const center_y = sum_y / M_nodes_per_slice; 
+            const center_z = sum_z / M_nodes_per_slice; 
+            slice_labels.push({ x: center_x, y: center_y, z: center_z, 
+                                text: k.toString(), font: { color: 'darkgreen', size: 14 }, showarrow: false, }); 
+            if (M_nodes_per_slice >= 3) {  
+                const v0_idx = baseVertexIndex + 0; 
+                for (let m = 0; m < M_nodes_per_slice - 2; m++) { 
+                    const v1_idx = baseVertexIndex + (m + 1); 
+                    const v2_idx = baseVertexIndex + (m + 2); 
+                    face_i.push(v0_idx); 
+                    face_j.push(v1_idx); 
+                    face_k.push(v2_idx); 
+                } 
+            } 
+        } 
+        const traces = []; 
+        if (face_i.length > 0) { 
+            traces.push({ type: 'mesh3d', x: all_x, y: all_y, z: all_z, 
+                            i: face_i, j: face_j, k: face_k, 
+                            color: 'black', opacity: 0.3, flatshading: true, hoverinfo: 'none', showlegend: false }); 
+        } 
+        traces.push({ x: all_x, y: all_y, z: all_z, mode: 'markers', type: 'scatter3d', 
+                        marker: { color: node_colors, size: 6, symbol: 'circle', line: { color: 'black', width: 1.5 }, opacity: 1.0 }, 
+                        showlegend: false, hoverinfo: 'none' }); 
+        
+        let legendTitle = '';
+        for (let j = 0; j < M_nodes_per_slice; j++) { 
+            const wire_x = []; 
+            const wire_y = []; 
+            const wire_z = []; 
+            for (let k = 0; k < N_slices; k++) { 
+                if (nodes && nodes[k] && nodes[k][j] && nodes[k][j].length === 3) { 
+                    wire_x.push(nodes[k][j][0]); 
+                    wire_y.push(nodes[k][j][1]); 
+                    wire_z.push(nodes[k][j][2]); 
+                } 
+            } 
+            if (nodes && nodes[0] && nodes[0][j] && nodes[0][j].length === 3) { 
+                wire_x.push(nodes[0][j][0]); 
+                wire_y.push(nodes[0][j][1]); 
+                wire_z.push(nodes[0][j][2]); 
+            } 
+            traces.push({ x: wire_x, y: wire_y, z: wire_z, 
+                            mode: 'lines', type: 'scatter3d', name: `Seq. ${j}`, 
+                             line: { color: node_wire_colors_rgb[j], width: 3 }, hoverinfo: 'none', showlegend: true }); 
+        } 
+         
+        const layout = {
+            title: {
+                text: `<b>Model Stages: ${N_slices}<br>(Hypothetical) Concurrent Rings: ${M_nodes_per_slice}</b>`,
+                x: 0.5, xanchor: 'center', font: { size: 16, family: 'sans-serif' }
+            },
+            showlegend: true,
+            legend: { title: { text: legendTitle }, x: 0, xanchor: 'left', y: 1, yanchor: 'top', bgcolor: 'rgba(255,255,255,0.7)' },
+            margin: { l: 0, r: 0, b: 0, t: 40 },
+            scene: {
+                xaxis: { visible: false, showgrid: false, zeroline: false, automargin: true },
+                yaxis: { visible: false, showgrid: false, zeroline: false, automargin: true },
+                zaxis: { visible: false, showgrid: false, zeroline: false, automargin: true },
+                aspectmode: 'data',
+                camera: { eye: { x: 1.5, y: 1.5, z: 1.0 } },
+                bgcolor: 'rgba(0,0,0,0)',
+                annotations: slice_labels
+            },
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(0,0,0,0)'
+        };
+    
         Plotly.newPlot(torusPlotContainer, traces, layout, { responsive: true });
     }
+
+    function drawCylinderForTwoSlices(M_nodes_per_slice, plotContainerElement) {
+        if (!plotContainerElement) {
+            console.error("Plot container element not provided for drawCylinderForTwoSlices.");
+            return;
+        }
+    
+        const cylinder_radius = 1.0;
+        const cylinder_height = 4.0;
+        
+        const newSliceLabelFontSize = 14; // Increased font size for slice labels
+    
+        const theta_nodes = linspace(0, 2 * Math.PI, M_nodes_per_slice + 1).slice(0, M_nodes_per_slice);
+    
+        const all_x = [];
+        const all_y = [];
+        const all_z = [];
+        const node_colors_per_sequence = [];
+    
+        // Arrays for face indices: one for sides, one for caps
+        const face_i_sides = [], face_j_sides = [], face_k_sides = [];
+        const face_i_caps = [], face_j_caps = [], face_k_caps = [];
+    
+    
+        for (let j = 0; j < M_nodes_per_slice; j++) {
+            const hue = (j * 360 / M_nodes_per_slice) % 360;
+            node_colors_per_sequence.push(hslToRgbString(hue, 0.75, 0.65));
+        }
+    
+        const nodes_slice_coords = [[], []];
+    
+        const z0 = -cylinder_height / 2;
+        for (let j = 0; j < M_nodes_per_slice; j++) {
+            const theta = theta_nodes[j];
+            const x = cylinder_radius * Math.cos(theta);
+            const y = cylinder_radius * Math.sin(theta);
+            nodes_slice_coords[0].push([x, y, z0]);
+            all_x.push(x); all_y.push(y); all_z.push(z0);
+        }
+    
+        const z1 = cylinder_height / 2;
+        for (let j = 0; j < M_nodes_per_slice; j++) {
+            const theta = theta_nodes[j];
+            const x = cylinder_radius * Math.cos(theta);
+            const y = cylinder_radius * Math.sin(theta);
+            nodes_slice_coords[1].push([x, y, z1]);
+            all_x.push(x); all_y.push(y); all_z.push(z1);
+        }
+    
+        const marker_node_colors = [];
+        for (let i = 0; i < 2; i++) {
+            for (let j = 0; j < M_nodes_per_slice; j++) {
+                marker_node_colors.push(node_colors_per_sequence[j]);
+            }
+        }
+    
+        // Create faces for the cylinder SIDES
+        for (let j = 0; j < M_nodes_per_slice; j++) {
+            const next_j = (j + 1) % M_nodes_per_slice;
+            const idx_s0_j = j;
+            const idx_s0_next_j = next_j;
+            const idx_s1_j = j + M_nodes_per_slice;
+            const idx_s1_next_j = next_j + M_nodes_per_slice;
+    
+            // These faces are for the sides. We will not use them for the shaded mesh.
+            // If you needed a transparent mesh for sides, you'd use these.
+            // face_i_sides.push(idx_s0_j, idx_s0_next_j);
+            // face_j_sides.push(idx_s0_next_j, idx_s1_next_j);
+            // face_k_sides.push(idx_s1_j, idx_s1_j);
+        }
+    
+        // Create faces for the cylinder CAPS (bottom and top)
+        // Bottom cap (slice 0)
+        if (M_nodes_per_slice >= 3) {
+            for (let j = 1; j < M_nodes_per_slice - 1; j++) {
+                face_i_caps.push(0);
+                face_j_caps.push(j);
+                face_k_caps.push(j + 1);
+            }
+        }
+        // Top cap (slice 1)
+        if (M_nodes_per_slice >= 3) {
+            const base_idx_s1 = M_nodes_per_slice;
+            for (let j = 1; j < M_nodes_per_slice - 1; j++) {
+                face_i_caps.push(base_idx_s1 + 0);
+                face_j_caps.push(base_idx_s1 + j);
+                face_k_caps.push(base_idx_s1 + j + 1);
+            }
+        }
+    
+        const traces = [];
+    
+        // Cylinder CAP mesh (shaded)
+        if (face_i_caps.length > 0) {
+            traces.push({
+                type: 'mesh3d',
+                x: all_x, y: all_y, z: all_z,
+                i: face_i_caps, j: face_j_caps, k: face_k_caps, // Use only cap faces
+                color: 'black', opacity: 0.3, // Adjust opacity as needed
+                flatshading: true, hoverinfo: 'none', showlegend: false
+            });
+        }
+    
+        // Node markers (same as before)
+        traces.push({
+            x: all_x, y: all_y, z: all_z,
+            mode: 'markers', type: 'scatter3d',
+            marker: {
+                color: marker_node_colors, size: 6, symbol: 'circle',
+                line: { color: 'black', width: 1.5 }, opacity: 1.0
+            },
+            showlegend: false, hoverinfo: 'none'
+        });
+    
+        // Lines connecting corresponding nodes (cylinder height lines - "shared links")
+        for (let j = 0; j < M_nodes_per_slice; j++) {
+            traces.push({
+                x: [nodes_slice_coords[0][j][0], nodes_slice_coords[1][j][0]],
+                y: [nodes_slice_coords[0][j][1], nodes_slice_coords[1][j][1]],
+                z: [nodes_slice_coords[0][j][2], nodes_slice_coords[1][j][2]],
+                mode: 'lines', type: 'scatter3d',
+                name: `Seq. ${j}`,
+                line: { color: node_colors_per_sequence[j], width: 3 },
+                hoverinfo: 'none', showlegend: true
+            });
+        }
+    
+        // Lines for the circular edges of the cylinder caps
+        [[nodes_slice_coords[0], "Bottom Cap Edge"], [nodes_slice_coords[1], "Top Cap Edge"]].forEach(cap_data => {
+            const cap_nodes = cap_data[0];
+            const cap_x = cap_nodes.map(n => n[0]);
+            const cap_y = cap_nodes.map(n => n[1]);
+            const cap_z = cap_nodes.map(n => n[2]);
+            if (M_nodes_per_slice > 1) {
+                cap_x.push(cap_nodes[0][0]);
+                cap_y.push(cap_nodes[0][1]);
+                cap_z.push(cap_nodes[0][2]);
+            }
+            traces.push({
+                x: cap_x, y: cap_y, z: cap_z,
+                mode: 'lines', type: 'scatter3d', name: cap_data[1],
+                line: { color: 'dimgray', width: 1.5 },
+                hoverinfo: 'none', showlegend: false
+            });
+        });
+    
+        // Slice labels with increased font size
+        const slice_labels = [
+            { x: 0, y: 0, z: z0, text: '0', font: { color: 'darkgreen', size: newSliceLabelFontSize }, showarrow: false},
+            { x: 0, y: 0, z: z1, text: '1', font: { color: 'darkgreen', size: newSliceLabelFontSize }, showarrow: false}
+        ];
+    
+        const layout = {
+            title: {
+                text: `<b>Model Stages: 2<br>(Hypothetical) Concurrent Rings: ${M_nodes_per_slice}</b>`,
+                x: 0.5, xanchor: 'center', font: { size: 16, family: 'sans-serif' }
+            },
+            showlegend: true,
+            legend: { title: { text: '' }, x: 0, xanchor: 'left', y: 1, yanchor: 'top', bgcolor: 'rgba(255,255,255,0.7)' },
+            margin: { l: 0, r: 0, b: 0, t: 40 },
+            scene: {
+                xaxis: { visible: false, showgrid: false, zeroline: false, automargin: true },
+                yaxis: { visible: false, showgrid: false, zeroline: false, automargin: true },
+                zaxis: { visible: false, showgrid: false, zeroline: false, automargin: true },
+                aspectmode: 'data',
+                camera: { eye: { x: 1.5, y: 1.5, z: 1.0 } },
+                bgcolor: 'rgba(0,0,0,0)',
+                annotations: slice_labels
+            },
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(0,0,0,0)'
+        };
+    
+        Plotly.newPlot(plotContainerElement, traces, layout, { responsive: true });
+    }
+
     function showTorusPlot() { if (torusPlotContainer && horizontalResizer) { const parentHeight = torusPlotContainer.parentElement.clientHeight; const resizerHeight = horizontalResizer.offsetHeight || 8; const availableHeight = parentHeight - resizerHeight; const initialTopPercent = 0.60; let initialTopPx = Math.max(minPaneHeight, Math.floor(availableHeight * initialTopPercent)); let initialBottomPx = Math.max(minPaneHeight, availableHeight - initialTopPx); if (initialTopPx + initialBottomPx > availableHeight) { initialBottomPx = availableHeight - initialTopPx; if (initialBottomPx < minPaneHeight) { initialBottomPx = minPaneHeight; initialTopPx = availableHeight - initialBottomPx; } } if (svgContainer) { svgContainer.style.height = `${initialTopPx}px`; } torusPlotContainer.style.height = `${initialBottomPx}px`; torusPlotContainer.style.display = 'block'; horizontalResizer.style.display = 'block'; if (torusPlotInitialized) { requestAnimationFrame(() => { try { Plotly.Plots.resize(torusPlotContainer); } catch (e) { console.warn("Plotly resize failed in showTorusPlot (rAF):", e); } }); } } }
     function hideTorusPlot() { if (torusPlotContainer && horizontalResizer) { torusPlotContainer.style.display = 'none'; horizontalResizer.style.display = 'none'; if(svgContainer) svgContainer.style.height = ''; torusPlotContainer.style.height = ''; try { Plotly.purge(torusPlotContainer); } catch (e) { console.warn("Could not purge torus plot.", e); } } }
 
-    // --- Page Visibility API ---
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-            console.log("Main: Tab is now visible.");
-            // When tab becomes visible, ensure the SVG reflects the latest known state.
-            // requestAnimationFrame ensures this happens smoothly before the next paint.
-            if (simulationInitialized && simulationState && !isResetting) {
-                window.requestAnimationFrame(() => {
-                    updateSVG(simulationState);
-                    syncAnimationHeaderVisibility(); // Also sync header
-                });
-            }
-        } else {
-            console.log("Main: Tab is now hidden. SVG updates will pause via requestAnimationFrame throttling.");
-        }
-    });
+    
 
     // --- Initial Setup on Page Load ---
     if (memoryLegendArea) memoryLegendArea.style.display = 'none';
