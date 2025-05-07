@@ -1095,7 +1095,7 @@ class SimulationRunner:
         self.TO_PRINT = False # Hardcode for now
 
         # --- Extract and Calculate Parameters (Keep logic) ---
-        self.cycle_rate_micros = params.get('cycle_rate_micros', 1000)
+        self.cycle_rate_micros = params.get('cycle_rate_micros', 2000)
         self.N = params.get('N', 8)
         self.seqlen = params.get('seqlen', 64) * (1 << 10)
         self.max_attended_tokens = params.get('max_attended_tokens', 100) * (1 << 10)
@@ -1252,7 +1252,6 @@ class SimulationRunner:
         ## and becomes issue over network, working with 50-100 micros is good locally,
         ## (where it is smoother and can much faster without dealing with net latency)
         ## but using longer to look better for other clients
-        self.default_micros_per_cycle = 1000
         self.cycles_per_second = 1e6 / self.cycle_rate_micros
 
         self.flops_per_attn_chunk_mult = 2 * self.chunk_size * self.model_dim
