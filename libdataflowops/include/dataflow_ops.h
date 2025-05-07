@@ -194,19 +194,21 @@ int dataflow_submit_default_rms_norm_noscale_bwd_x(Dataflow_Handle * handle, int
 
 int dataflow_submit_default_rope(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, 
-						uint64_t N, int model_dim, int head_dim, int num_kv_heads, int theta,
+						int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta,
 						int * seq_positions, void * X_q, void * X_k);
 
 int dataflow_submit_default_rope_bwd_x(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype bwd_dt, 
-						uint64_t N, int model_dim, int head_dim, int num_kv_heads, int theta,
+						int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta,
 						int * seq_positions, void * dX_q, void * dX_k);
 
 
+/*
 int dataflow_submit_default_copy_to_seq_context(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, 
 						uint64_t N, int total_tokens, int kv_dim, 
 						void * X_k, void * X_v, int * seq_positions, uint64_t * seq_context_ptrs, int * seq_context_sizes);
+*/
 
 
 // From moe_ops.c

@@ -407,11 +407,9 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	int head_dim = (transformer_block -> config).head_dim;
 
 
-	uint64_t N = (uint64_t) total_q * (uint64_t) model_dim;
-
 	ret = dataflow_submit_default_rope(dataflow_handle, compute_stream_id, 
 						fwd_dt, 
-						N, model_dim, head_dim, num_kv_heads, (transformer_block -> config).theta,
+						total_q, model_dim, head_dim, num_kv_heads, (transformer_block -> config).theta,
 						batch_attention_config -> seq_positions, working_activations -> x_q, working_activations -> x_k_local);
 	if (ret){
 		fprintf(stderr, "Error: failed to submit rope...\n");
@@ -1463,7 +1461,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 
 	ret = dataflow_submit_default_rope_bwd_x(dataflow_handle, compute_stream_id,
 						bwd_dt,
-						(uint64_t)total_q * (uint64_t)model_dim,
+						total_q,
 						model_dim,
 						(transformer_block -> config).head_dim,
 						(transformer_block -> config).num_kv_heads,

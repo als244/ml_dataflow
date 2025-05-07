@@ -35,9 +35,11 @@ int dataflow_set_op_skeleton(Op_Skeleton * skeleton, char * op_name, DataflowDat
 	else if (strcmp(op_name, "default_rope_bwd_x") == 0) {
 		dataflow_set_default_rope_bwd_x_skeleton(skeleton, bwd_dt);
 	}
+	/*
 	else if (strcmp(op_name, "default_copy_to_seq_context") == 0) {
 		dataflow_set_default_copy_to_seq_context_skeleton(skeleton, fwd_dt);
 	}
+	*/
 	else if (strcmp(op_name, "default_select_experts") == 0) {
 		dataflow_set_default_select_experts_skeleton(skeleton, fwd_dt);
 	}
@@ -584,7 +586,7 @@ void dataflow_set_default_rope_skeleton(Op_Skeleton * skeleton, DataflowDatatype
 
 	DataflowDatatype * arg_dtypes = skeleton_header -> arg_dtypes;
 
-	arg_dtypes[0] = DATAFLOW_UINT64_SCALAR;
+	arg_dtypes[0] = DATAFLOW_INT_SCALAR;
 	arg_dtypes[1] = DATAFLOW_INT_SCALAR;
 	arg_dtypes[2] = DATAFLOW_INT_SCALAR;
 	arg_dtypes[3] = DATAFLOW_INT_SCALAR;
@@ -619,7 +621,7 @@ void dataflow_set_default_rope_bwd_x_skeleton(Op_Skeleton * skeleton, DataflowDa
 
 	DataflowDatatype * arg_dtypes = skeleton_header -> arg_dtypes;
 
-	arg_dtypes[0] = DATAFLOW_UINT64_SCALAR;
+	arg_dtypes[0] = DATAFLOW_INT_SCALAR;
 	arg_dtypes[1] = DATAFLOW_INT_SCALAR;
 	arg_dtypes[2] = DATAFLOW_INT_SCALAR;
 	arg_dtypes[3] = DATAFLOW_INT_SCALAR;
@@ -635,6 +637,7 @@ void dataflow_set_default_rope_bwd_x_skeleton(Op_Skeleton * skeleton, DataflowDa
 	dataflow_do_fingerprinting(skeleton_header, sizeof(Op_Skeleton_Header), (skeleton -> identifier).fingerprint);
 }
 
+/*
 void dataflow_set_default_copy_to_seq_context_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype){
 
 	Op_Skeleton_Header * skeleton_header = &(skeleton -> header);
@@ -670,43 +673,7 @@ void dataflow_set_default_copy_to_seq_context_skeleton(Op_Skeleton * skeleton, D
 	dataflow_do_fingerprinting(skeleton_header, sizeof(Op_Skeleton_Header), (skeleton -> identifier).fingerprint);
 
 }
-
-void dataflow_set_default_select_experts_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype){
-
-	Op_Skeleton_Header * skeleton_header = &(skeleton -> header);
-
-	char op_nickname[MAX_OP_NICKNAME_SIZE];
-
-	sprintf(op_nickname, "%s_%s", "default_select_experts", dataflow_datatype_as_string(fwd_datatype));
-
-	// MAX nicknmae size is set to 255 with 256 allocated space...
-	strncpy(skeleton_header -> op_nickname, op_nickname, MAX_OP_NICKNAME_SIZE);
-	// last character must be null no matter what, if nickname is less than null bytes were added prior
-	(skeleton_header -> op_nickname)[MAX_OP_NICKNAME_SIZE] = '\0'; 
-
-	int num_args = 9;
-
-	skeleton_header -> num_args = num_args;
-
-	DataflowDatatype * arg_dtypes = skeleton_header -> arg_dtypes;
-
-	arg_dtypes[0] = DATAFLOW_INT_SCALAR;
-	arg_dtypes[1] = DATAFLOW_INT_SCALAR;
-	arg_dtypes[2] = DATAFLOW_INT_SCALAR;
-	arg_dtypes[3] = fwd_datatype;
-	arg_dtypes[4] = fwd_datatype;
-	arg_dtypes[5] = DATAFLOW_UINT16;
-	arg_dtypes[6] = DATAFLOW_INT;
-	arg_dtypes[7] = DATAFLOW_INT;
-	arg_dtypes[8] = DATAFLOW_INT;
-
-	for (int i = num_args; i < MAX_OP_ARGS; i++){
-		arg_dtypes[i] = DATAFLOW_NONE;
-	}
-
-	dataflow_do_fingerprinting(skeleton_header, sizeof(Op_Skeleton_Header), (skeleton -> identifier).fingerprint);
-
-}
+*/
 
 void dataflow_set_default_swiglu_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype){
 
@@ -836,4 +803,47 @@ void dataflow_set_default_cross_entropy_loss_skeleton(Op_Skeleton * skeleton, Da
 	}
 
 	dataflow_do_fingerprinting(skeleton_header, sizeof(Op_Skeleton_Header), (skeleton -> identifier).fingerprint);
+}
+
+
+
+
+
+// MoE Kernels underway...
+
+void dataflow_set_default_select_experts_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype){
+
+	Op_Skeleton_Header * skeleton_header = &(skeleton -> header);
+
+	char op_nickname[MAX_OP_NICKNAME_SIZE];
+
+	sprintf(op_nickname, "%s_%s", "default_select_experts", dataflow_datatype_as_string(fwd_datatype));
+
+	// MAX nicknmae size is set to 255 with 256 allocated space...
+	strncpy(skeleton_header -> op_nickname, op_nickname, MAX_OP_NICKNAME_SIZE);
+	// last character must be null no matter what, if nickname is less than null bytes were added prior
+	(skeleton_header -> op_nickname)[MAX_OP_NICKNAME_SIZE] = '\0'; 
+
+	int num_args = 9;
+
+	skeleton_header -> num_args = num_args;
+
+	DataflowDatatype * arg_dtypes = skeleton_header -> arg_dtypes;
+
+	arg_dtypes[0] = DATAFLOW_INT_SCALAR;
+	arg_dtypes[1] = DATAFLOW_INT_SCALAR;
+	arg_dtypes[2] = DATAFLOW_INT_SCALAR;
+	arg_dtypes[3] = fwd_datatype;
+	arg_dtypes[4] = fwd_datatype;
+	arg_dtypes[5] = DATAFLOW_UINT16;
+	arg_dtypes[6] = DATAFLOW_INT;
+	arg_dtypes[7] = DATAFLOW_INT;
+	arg_dtypes[8] = DATAFLOW_INT;
+
+	for (int i = num_args; i < MAX_OP_ARGS; i++){
+		arg_dtypes[i] = DATAFLOW_NONE;
+	}
+
+	dataflow_do_fingerprinting(skeleton_header, sizeof(Op_Skeleton_Header), (skeleton -> identifier).fingerprint);
+
 }

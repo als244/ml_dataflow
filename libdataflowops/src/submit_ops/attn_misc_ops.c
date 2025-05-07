@@ -2,7 +2,7 @@
 
 int dataflow_submit_default_rope(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, 
-						uint64_t N, int model_dim, int head_dim, int num_kv_heads, int theta,
+						int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta,
 						int * seq_positions, void * X_q, void * X_k){
 
 	int ret;
@@ -13,7 +13,7 @@ int dataflow_submit_default_rope(Dataflow_Handle * handle, int stream_id,
 
 	void ** op_args = rope_op.op_args;
 
-	op_args[0] = &N;
+	op_args[0] = &num_tokens;
 	op_args[1] = &model_dim;
 	op_args[2] = &head_dim;
 	op_args[3] = &num_kv_heads;
@@ -34,7 +34,7 @@ int dataflow_submit_default_rope(Dataflow_Handle * handle, int stream_id,
 
 int dataflow_submit_default_rope_bwd_x(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype bwd_dt, 
-						uint64_t N, int model_dim, int head_dim, int num_kv_heads, int theta,
+						int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta,
 						int * seq_positions, void * dX_q, void * dX_k){
 
 	int ret;
@@ -45,7 +45,7 @@ int dataflow_submit_default_rope_bwd_x(Dataflow_Handle * handle, int stream_id,
 
 	void ** op_args = rope_bwd_op.op_args;
 
-	op_args[0] = &N;
+	op_args[0] = &num_tokens;
 	op_args[1] = &model_dim;
 	op_args[2] = &head_dim;
 	op_args[3] = &num_kv_heads;
@@ -66,6 +66,7 @@ int dataflow_submit_default_rope_bwd_x(Dataflow_Handle * handle, int stream_id,
 
 
 
+/*
 int dataflow_submit_default_copy_to_seq_context(Dataflow_Handle * handle, int stream_id, 
 						DataflowDatatype fwd_dt, 
 						uint64_t N, int total_tokens, int kv_dim, 
@@ -96,8 +97,7 @@ int dataflow_submit_default_copy_to_seq_context(Dataflow_Handle * handle, int st
 	}
 
 	return 0;
-
-
 }
+*/
 
 
