@@ -20,15 +20,16 @@ int main(int argc, char * argv[]){
 	int ctx_id = 0;
 	unsigned int ctx_flags = CU_CTX_SCHED_BLOCKING_SYNC | CU_CTX_MAP_HOST;
 
-	int num_streams = 4;
-	int opt_stream_prios[4] = {0, 0, 0, 0};
-	char * opt_stream_names[4] = {"Inbound", "Compute", "Outbound", "Peer"};
+	int num_streams = 5;
+	int opt_stream_prios[5] = {0, 0, 0, 0, 0};
+	char * opt_stream_names[5] = {"Inbound", "Compute", "Outbound", "Peer", "Host Ops"};
 
 
 	int inbound_stream_id = 0;
 	int compute_stream_id = 1;
 	int outbound_stream_id = 2;
 	int peer_stream_id = 3;
+	int host_stream_id = 4;
 
 	ret = dataflow_init_handle(&dataflow_handle, compute_type, device_id, 
 			ctx_id, ctx_flags, 
