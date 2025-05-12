@@ -263,6 +263,7 @@ extern "C" {
                         int num_q_heads, int num_kv_heads, int head_dim,
                         void * x_q, void * x_k, void * x_v,
                         void * x_attn_out, float * softmax_lse,
+                        int is_causal,
                         uint64_t workspaceBytes, void * workspace);
 
     // attn_bwd_workspace:
@@ -320,5 +321,6 @@ extern "C" {
                             void * x_attn_out, float * softmax_lse, 
                             void * dx_out, 
                             void * dx_q, void * dx_k, void * dx_v,
+                            int is_causal,
                             uint64_t workspaceBytes, void * workspace);
 }

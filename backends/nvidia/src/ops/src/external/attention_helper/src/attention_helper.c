@@ -42,8 +42,10 @@ int flash3_attention_fwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * 
 	void * x_attn_out = *((void **) op_args[16]);
 	float * softmax_lse = *((float **) op_args[17]);
 
-	uint64_t workspaceBytes = *((uint64_t *) op_args[18]);
-	void * workspace = *((void **) op_args[19]);
+	int is_causal = *((int *)(op_args[18]));
+
+	uint64_t workspaceBytes = *((uint64_t *) op_args[19]);
+	void * workspace = *((void **) op_args[20]);
 
 	int ret = flash3_fwd_wrapper(stream, arch, sm_count,
 									flash_dtype_as_int,
@@ -53,6 +55,7 @@ int flash3_attention_fwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * 
 									num_q_heads, num_kv_heads, head_dim,
 									x_q, x_k, x_v,
 									x_attn_out, softmax_lse,
+									is_causal,
 									workspaceBytes, workspace);
 
 
@@ -130,9 +133,11 @@ int flash3_attention_bwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * 
 	void * dx_k = *((void **) op_args[20]);
 	void * dx_v = *((void **) op_args[21]);
 
-	uint64_t workspaceBytes = *((uint64_t *) op_args[22]);
+	int is_causal = *((int *)(op_args[22]));
 
-	void * workspace = *((void **) op_args[23]);
+	uint64_t workspaceBytes = *((uint64_t *) op_args[23]);
+
+	void * workspace = *((void **) op_args[24]);
 
 	int ret = flash3_bwd_wrapper(stream, arch, sm_count,
 									flash_dtype_as_int,
@@ -144,6 +149,7 @@ int flash3_attention_bwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * 
 									x_attn_out, softmax_lse,
 									dx_out,
 									dx_q, dx_k, dx_v,
+									is_causal,
 									workspaceBytes, workspace);
 
 

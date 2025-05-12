@@ -193,7 +193,7 @@ extern "C" {
     //   (or set fully yourself)
     int set_flash3_fwd_workspace(Flash_fwd_params &params,
                                     void * attn_workspace,
-                                    uint64_t * ret_used_workspace_size){
+                                    uint64_t * ret_used_workspace_size, void ** ret_set_to_zero_start, size_t * ret_set_to_zero_size){
 
 
         int total_q = params.total_q;
@@ -252,6 +252,9 @@ extern "C" {
         
         // reset back to null now
         params.num_splits_dynamic_ptr = NULL;
+
+        void * set_to_zero_start = cur_attn_workspace;
+        size_t set_to_zero_size = 0;
         
         if ((needs_sem) || (to_use_dynamic_split)) {
             if (needs_sem){
@@ -263,6 +266,7 @@ extern "C" {
                 params.tile_count_semaphore = (int *) cur_attn_workspace;
                 cur_attn_workspace += sizeof(int);
                 used_workspace_size += sizeof(int);
+                set_to_zero_size += sizeof(int);
             }
 
             if (to_use_dynamic_split){
@@ -274,12 +278,21 @@ extern "C" {
                 params.num_splits_dynamic_ptr = (int *) cur_attn_workspace;
                 cur_attn_workspace += params.b * sizeof(int);
                 used_workspace_size += params.b * sizeof(int);
+                set_to_zero_size += params.b * sizeof(int);
             }
         }
 
 
         if (ret_used_workspace_size){
             *ret_used_workspace_size = used_workspace_size;
+        }
+
+        if (ret_set_to_zero_start){
+            *ret_set_to_zero_start = set_to_zero_start;
+        }
+
+        if (ret_set_to_zero_size){
+            *ret_set_to_zero_size = set_to_zero_size;
         }
 
         return 0;
@@ -290,7 +303,7 @@ extern "C" {
     //   (or set fully yourself)
     int set_flash3_bwd_workspace(Flash_bwd_params &params,
                                     void * attn_bwd_workspace,
-                                    uint64_t * ret_used_workspace_size){
+                                    uint64_t * ret_used_workspace_size, void ** ret_set_to_zero_start, size_t * ret_set_to_zero_size){
 
 
        
@@ -369,11 +382,16 @@ extern "C" {
         cur_attn_workspace += softmax_size;
         used_workspace_size += softmax_size;
 
+     
+
         uint64_t dq_accum_size = num_q_heads * total_q_padded_rounded * head_dim_rounded * sizeof(float);
         params.dq_accum_ptr = cur_attn_workspace;
         cur_attn_workspace += dq_accum_size;
         used_workspace_size += dq_accum_size;
         
+
+        void * set_to_zero_start = cur_attn_workspace;
+        size_t set_to_zero_size = 0;
 
         params.dk_accum_ptr = NULL;
         params.dv_accum_ptr = NULL;
@@ -384,20 +402,23 @@ extern "C" {
 
             cur_attn_workspace += dkv_accum_size;
             used_workspace_size += dkv_accum_size;
+            set_to_zero_size += dkv_accum_size;
 
             params.dv_accum_ptr = cur_attn_workspace;
             cur_attn_workspace += dkv_accum_size;
             used_workspace_size += dkv_accum_size;
+            set_to_zero_size += dkv_accum_size;
         }
         
 
+        
         uint64_t dq_sem_size =  ((seqlen_q + kBlockM - 1) / (kBlockM)) * num_seqs * num_q_heads * sizeof(int);
 
 
         params.dq_semaphore = (int *) cur_attn_workspace;
         cur_attn_workspace += dq_sem_size;
         used_workspace_size += dq_sem_size;
-        
+        set_to_zero_size += dq_sem_size;
 
         params.dk_semaphore = NULL;
         params.dv_semaphore = NULL;
@@ -409,14 +430,24 @@ extern "C" {
 
             cur_attn_workspace += dkv_sem_size;
             used_workspace_size += dkv_sem_size;
+            set_to_zero_size += dkv_sem_size;
 
             params.dv_semaphore = (int *) cur_attn_workspace;
             cur_attn_workspace += dkv_sem_size;
             used_workspace_size += dkv_sem_size;
+            set_to_zero_size += dkv_sem_size;
         }
         
         if (ret_used_workspace_size){
             *ret_used_workspace_size = used_workspace_size;
+        }
+
+        if (ret_set_to_zero_start){
+            *ret_set_to_zero_start = set_to_zero_start;
+        }
+
+        if (ret_set_to_zero_size){
+            *ret_set_to_zero_size = set_to_zero_size;
         }
 
         return 0;
@@ -430,7 +461,8 @@ extern "C" {
                         int * k_seq_offsets, int * k_seq_lens, int max_seqlen_k,
                         int num_q_heads, int num_kv_heads, int head_dim,
                         void * x_q, void * x_k, void * x_v,
-                        void * x_attn_out, void * softmax_lse) {
+                        void * x_attn_out, void * softmax_lse, 
+                        int is_causal) {
 
         int model_dim = num_q_heads * head_dim;
         int kv_dim = num_kv_heads * head_dim;
@@ -573,7 +605,7 @@ extern "C" {
 
         params.rp_dropout = 1.0f;
     
-        params.is_causal = true;
+        params.is_causal = is_causal;
         params.is_local = false;
         params.window_size_left = -1;
         params.window_size_right = -1;
@@ -619,6 +651,7 @@ extern "C" {
                         int num_q_heads, int num_kv_heads, int head_dim,
                         void * x_q, void * x_k, void * x_v,
                         void * x_attn_out, float * softmax_lse,
+                        int is_causal,
                         uint64_t workspaceBytes, void * workspace) {
 
         
@@ -635,7 +668,8 @@ extern "C" {
                                     k_seq_offsets, k_seq_lens, max_seqlen_k,
                                     num_q_heads, num_kv_heads, head_dim,
                                     x_q, x_k, x_v,
-                                    x_attn_out, (void *) softmax_lse);
+                                    x_attn_out, (void *) softmax_lse,
+                                    is_causal);
 
         if (ret){
             fprintf(stderr, "Error: setting flash3 fwd params failed...\n");
@@ -645,7 +679,9 @@ extern "C" {
 
 
         uint64_t used_workspace_size = 0;
-        ret = set_flash3_fwd_workspace(params, workspace, &used_workspace_size);
+        void * set_to_zero_start = NULL;
+        size_t set_to_zero_size = 0;
+        ret = set_flash3_fwd_workspace(params, workspace, &used_workspace_size, &set_to_zero_start, &set_to_zero_size);
         if (ret){
             fprintf(stderr, "Error: setting flash3_fwd params failed...\n");
             return -1;
@@ -654,6 +690,16 @@ extern "C" {
         if (used_workspace_size > workspaceBytes){
             fprintf(stderr, "Error: attention fwd failed because not enough workspace. Supplied %lu bytes, but requires %lu...\n", workspaceBytes, used_workspace_size);
             return -1;
+        }
+
+
+        CUresult res;
+        if (set_to_zero_start){
+            res = cuMemsetD8Async((CUdeviceptr) set_to_zero_start, 0, set_to_zero_size, stream);
+            if (res != CUDA_SUCCESS){
+                fprintf(stderr, "Error: cuMemset within flash3_fwd_wrapper failed...\n");
+                return -1;
+            }
         }
 
         // copying from Original source...
@@ -688,6 +734,7 @@ extern "C" {
                             void * x_attn_out, float * softmax_lse, 
                             void * dx_out, 
                             void * dx_q, void * dx_k, void * dx_v,
+                            int is_causal,
                             uint64_t workspaceBytes, void * workspace) {
         
 
@@ -713,7 +760,8 @@ extern "C" {
                                     k_seq_offsets, k_seq_lens, max_seqlen_k,
                                     num_q_heads, num_kv_heads, head_dim,
                                     x_q, x_k, x_v,
-                                    x_attn_out, (void *)softmax_lse);
+                                    x_attn_out, (void *)softmax_lse,
+                                    is_causal);
 
         if (ret){
             fprintf(stderr, "Error: setting flash3 fwd params during bwd failed...\n");
@@ -751,7 +799,9 @@ extern "C" {
 
 
         uint64_t used_workspace_size = 0;
-        ret = set_flash3_bwd_workspace(params, workspace, &used_workspace_size);
+        void * set_to_zero_start = NULL;
+        size_t set_to_zero_size = 0;
+        ret = set_flash3_bwd_workspace(params, workspace, &used_workspace_size, &set_to_zero_start, &set_to_zero_size);
         if (ret){
             fprintf(stderr, "Error: setting flash3 bwd workspace failed...\n");
             return -1;
@@ -761,6 +811,15 @@ extern "C" {
             fprintf(stderr, "Error: attention bwd failed because not enough workspace. Supplied %lu bytes, but requires %lu...\n", workspaceBytes, used_workspace_size);
             return -1;
         }
+
+        CUresult res;
+        if (set_to_zero_start){
+            res = cuMemsetD8Async((CUdeviceptr) set_to_zero_start, 0, set_to_zero_size, stream);
+            if (res != CUDA_SUCCESS){
+                fprintf(stderr, "Error: cuMemset within flash3_bwd_wrapper failed...\n");
+                return -1;
+            }
+        }   
 
         run_mha_bwd(params, stream);
 

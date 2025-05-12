@@ -2,11 +2,11 @@
 #include "dataflow_transformer.h"
 
 // toggle to print out before submitting any ops...
-#define TO_PRINT 0
+#define TO_PRINT 1
 
 // meta-toggle required to be set to 1 to save any data
 // when set to 0, nothing will be saved
-#define TO_SAVE_DATA 0
+#define TO_SAVE_DATA 1
 
 
 // DETERMINES WHAT DATA TO SAVE...
@@ -438,12 +438,14 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	}
 
 	// ensure workspace is zerod out beforehand....
-
+	// doing this within attention kernel itself now because only some parts of workspace need to be zeroed out
+	/*
 	ret = (dataflow_handle -> set_mem)(dataflow_handle, compute_stream_id, kernelWorkspace, 0, kernelWorkspaceBytes);
 	if (ret){
 		fprintf(stderr, "Error: unable to set attention workspace mem to 0 before submitting...\n");
 		return -1;
 	}
+	*/
 
 	void * q_seq_offsets = batch_attention_config -> q_seq_offsets;
 	void * q_seq_lens = batch_attention_config -> q_seq_lens;
@@ -501,6 +503,9 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 		}
 	}
 
+
+	int is_causal = 1;
+
 	ret = dataflow_submit_attention(dataflow_handle, compute_stream_id,
 						 fwd_dt, 
 						 num_seqs, total_q, total_k,
@@ -509,6 +514,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 						 num_q_heads, num_kv_heads, head_dim,
 						 working_activations -> x_q, x_k_global, x_v_global,
 						 working_activations -> x_attn_out, working_activations -> softmax_lse, 
+						 is_causal,
 						 kernelWorkspaceBytes, kernelWorkspace);
 	if (ret){
 		fprintf(stderr, "Error: failed to submit attention...\n");
@@ -1328,12 +1334,14 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 
 
 	// ensure workspace is zerod out beforehand....
-
+	// doing this within attention kernel itself now because only some parts of workspace need to be zeroed out
+	/*
 	ret = (dataflow_handle -> set_mem)(dataflow_handle, compute_stream_id, kernelWorkspace, 0, kernelWorkspaceBytes);
 	if (ret){
 		fprintf(stderr, "Error: unable to set attention workspace mem to 0 before submitting...\n");
 		return -1;
 	}
+	*/
 
 	if (TO_PRINT){
 		printf("Submitting attention bwd to get dX for output of W_q (+ rope), W_k (+ rope), and W_v...\n");
@@ -1346,6 +1354,8 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 		return -1;
 	}
 	*/
+
+	int is_causal = 1;
 
 	// 7. Backprop through attention
 	ret = dataflow_submit_attention_bwd(dataflow_handle, compute_stream_id,
@@ -1369,6 +1379,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 							working_activations -> x_q,   // dQ output
 							bwd_context -> x_k,  // dK output (full context key grads)
 							bwd_context -> x_v, // dV output (full context grads)
+							is_causal,
 							kernelWorkspaceBytes, kernelWorkspace);
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit attention backward...\n");
