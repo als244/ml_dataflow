@@ -285,6 +285,7 @@ int main(int argc, char * argv[]){
 		cur_host_mem += aligned_size;
 	}
 
+
 	int num_dev_blocks = n_layers;
 
 	Transformer_Block ** blocks = malloc(num_dev_blocks * sizeof(Transformer_Block *));
@@ -1044,27 +1045,13 @@ int main(int argc, char * argv[]){
 
 		printf("\n\nSubmitting layer #0 for chunk #%d...\n\n", i);
 
-		cur_activations = activations[i];
-
 		// set the context
 		seq_batches[i] -> context = &(fwd_contexts[0]);
-
-		ret = dataflow_submit_transformer_block(&dataflow_handle, compute_stream_id, 
-								&(block_transitions[2 * i]), 
-								blocks[0], 
-								cur_activations, 
-								&(block_transitions[2 * i + 1]));
-
-		if (ret){
-			fprintf(stderr, "Error: failed to submit transformer block...\n");
-			return -1;
-		}
-
 
 	}
 
 	// 2.) DOING CORE BLOCKS...
-	for (int k = 1; k < n_layers; k++){
+	for (int k = 0; k < n_layers; k++){
 		for (int i = 0; i < num_chunks; i++){
 			
 			printf("\n\nSubmitting transformer for chunk #%d, block #%d...!\n\n", i, k);
@@ -1085,7 +1072,14 @@ int main(int argc, char * argv[]){
 				fprintf(stderr, "Error: failed to submit transformer block for chunk #%d, block #%d...\n", i, k);
 				return -1;
 			}
+
+			// send back activation buffer for next layer...
+
 		}
+
+		// prefetch next layer...
+
+
 	}
 
 	// 3.) NOW DOING HEAD, FOR NOW IN REVERSE ORDER...
@@ -1130,14 +1124,9 @@ int main(int argc, char * argv[]){
 		seq_batches[i] -> context = bwd_context;
 	}
 
-	for (int k = n_layers - 1; k >= 0; k--){
+	// send back gradient for head and run optimizer...
 
-		// need to ensure that grad context is zeroed out before starting each layer...
-		ret = dataflow_handle.set_mem(&dataflow_handle, compute_stream_id, bwd_context -> contextBuffer, 0, bwd_context -> contextBufferBytes);
-		if (ret){
-			fprintf(stderr, "Error: failed to zero out grad context for layer #%d...\n", k);
-			return -1;
-		}
+	for (int k = n_layers - 1; k >= 0; k--){
 
 		for (int i = num_chunks - 1; i >= 0; i--){
 
@@ -1160,6 +1149,8 @@ int main(int argc, char * argv[]){
 				return -1;
 			}
 
+			// start prefetch for next layer...
+
 			
 			printf("\n\nSubmitting bwd_w for chunk #%d, block #%d...\n\n", i, k);
 
@@ -1176,7 +1167,13 @@ int main(int argc, char * argv[]){
 				fprintf(stderr, "Error: failed to submit transformer block bwd_w for chunk #%d, block #%d...\n", i, k);
 				return -1;
 			}
+
+			// start prefetch for next activation buffer...
+
+
 		}
+
+		// send back gradient to host, and run optimizer...
 	}
 
 
@@ -1193,6 +1190,8 @@ int main(int argc, char * argv[]){
 			return -1;
 		}
 	}
+
+	// run optimizer on embedding
 	
 
 	printf("Finished enqueueing all dataflow operations! Waiting to sync...\n\n");

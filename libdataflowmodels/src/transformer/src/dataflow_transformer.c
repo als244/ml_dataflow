@@ -2,11 +2,11 @@
 #include "dataflow_transformer.h"
 
 // toggle to print out before submitting any ops...
-#define TO_PRINT 0
+#define TO_PRINT 1
 
 // meta-toggle required to be set to 1 to save any data
 // when set to 0, nothing will be saved
-#define TO_SAVE_DATA 0
+#define TO_SAVE_DATA 1
 
 
 // DETERMINES WHAT DATA TO SAVE...
@@ -1457,6 +1457,19 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 			fprintf(stderr, "Error: failed to save x_attn_v_local_inp file...\n");
 			return -1;
 		}
+	}
+
+	// ensure that we zero out the graidnet context before the next layer...
+	ret = (dataflow_handle -> set_mem)(dataflow_handle, compute_stream_id, x_k_global_src, 0, (uint64_t) total_q * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to zero out k grad context for layer #%d...\n", layer_id);
+		return -1;
+	}
+
+	ret = (dataflow_handle -> set_mem)(dataflow_handle, compute_stream_id, x_v_global_src, 0, (uint64_t) total_q * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to zero out v grad context for layer #%d...\n", layer_id);
+		return -1;
 	}
 
 
