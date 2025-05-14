@@ -618,11 +618,11 @@ int main(int argc, char * argv[]){
 
 	// CONTEXT AND GRAD CONTEXTS!
 
-	int total_tokens = 2048;
+	int total_tokens = 8833;
 	int num_seqs = 1;
 
 
-	int max_tokens_per_chunk = 2048;
+	int max_tokens_per_chunk = 8833;
 	int num_chunks = MY_CEIL(total_tokens, max_tokens_per_chunk);
 	
 	
@@ -630,18 +630,20 @@ int main(int argc, char * argv[]){
 
 	uint32_t * sys_token_ids = malloc(total_tokens * sizeof(uint32_t));
 
-	fp = fopen("../data/token_ids_uint32.dat", "rb");
+	fp = fopen("../data/prompt_attn_paper_8833_tok_uint32.dat", "rb");
 	if (!fp){
-		fprintf(stderr, "Error: failed to open data/token_ids_uint32.dat...\n");
+		fprintf(stderr, "Error: failed to open data/prompt_attn_paper_8833_tok_uint32.dat...\n");
 		return -1;
 	}
 
 	read_els = fread(sys_token_ids, sizeof(uint32_t), total_tokens, fp);
 	if (read_els != total_tokens){
-		fprintf(stderr, "Error: failed to read token_id_uint32.dat, read_els: %zu, expected: %d\n", read_els, total_tokens);
+		fprintf(stderr, "Error: failed to read prompt_attn_paper_8833_tok_uint32.dat, read_els: %zu, expected: %d\n", read_els, total_tokens);
 		return -1;
 	}
 	fclose(fp);
+
+	// writing back in same dir as other data for clarity...
 
 	FILE * f_token_ids = fopen("test_transformer_data/token_ids_uint32.dat", "wb");
 	if (!f_token_ids){
@@ -660,15 +662,15 @@ int main(int argc, char * argv[]){
 
 	uint32_t * sys_labels = malloc(total_tokens * sizeof(uint32_t));
 
-	fp = fopen("../data/labels_uint32.dat", "rb");
+	fp = fopen("../data/prompt_attn_paper_8833_labels_uint32.dat", "rb");
 	if (!fp){
-		fprintf(stderr, "Error: failed to open data/labels_uint32.dat...\n");
+		fprintf(stderr, "Error: failed to open data/prompt_attn_paper_8833_labels_uint32.dat...\n");
 		return -1;
 	}
 
 	read_els = fread(sys_labels, sizeof(uint32_t), total_tokens, fp);
 	if (read_els != total_tokens){
-		fprintf(stderr, "Error: failed to read labels_uint32.dat, read_els: %zu, expected: %d\n", read_els, total_tokens);
+		fprintf(stderr, "Error: failed to read prompt_attn_paper_8833_labels_uint32.dat, read_els: %zu, expected: %d\n", read_els, total_tokens);
 		return -1;
 	}
 	fclose(fp);
@@ -987,7 +989,7 @@ int main(int argc, char * argv[]){
 	}
 
 
-	int num_saved_activation_buffers = 2;
+	int num_saved_activation_buffers = 8;
 
 	Seq_Batch_Saved_Activations * saved_activations = malloc(num_saved_activation_buffers * sizeof(Seq_Batch_Saved_Activations));
 	if (!saved_activations){
