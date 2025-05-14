@@ -12,12 +12,12 @@ void CUDA_CB cuda_post_sem_callback(CUstream stream, CUresult status, void * dat
 
 
 // Can use this instead of callback functionality by launching it as a host function in appropriate stream...
-void CUDA_CB cuda_post_sem(void * data) {
+void CUDA_CB post_sem_callback(void * _sem_to_post) {
 
 	// this serves as the CUhostFn type 
 	// within cu_host_func_launch
 
-	sem_t * sem_to_post = (sem_t *) data;
+	sem_t * sem_to_post = (sem_t *) _sem_to_post;
 
 	int ret = sem_post(sem_to_post);
 	if (ret){

@@ -1435,13 +1435,6 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 		return -1;
 	}
 
-	// Update the cur_tokens_populated...
-	bwd_context -> cur_tokens_populated += total_q;
-
-	if (bwd_context -> cur_tokens_populated == bwd_context -> total_context_tokens){
-		bwd_context -> cur_tokens_populated = 0;
-	}
-
 
 	if (TO_SAVE_DATA && TO_SAVE_BWD_LAYER && ((BWD_LAYER_ID_TO_SAVE == -1) || (layer_id == BWD_LAYER_ID_TO_SAVE))){
 		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_attn_k_local_inp", working_activations -> x_k_local, total_q, kv_dim, bwd_dt);
@@ -1470,6 +1463,13 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	if (ret){
 		fprintf(stderr, "Error: failed to zero out v grad context for layer #%d...\n", layer_id);
 		return -1;
+	}
+
+	// Update the cur_tokens_populated...
+	bwd_context -> cur_tokens_populated += total_q;
+
+	if (bwd_context -> cur_tokens_populated == bwd_context -> total_context_tokens){
+		bwd_context -> cur_tokens_populated = 0;
 	}
 
 

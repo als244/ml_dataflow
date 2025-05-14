@@ -60,4 +60,6 @@ struct cuda_function {
 
 typedef int (*Cuda_Set_Func_Attribute)(Dataflow_Handle * dataflow_handle, Cuda_Function * cuda_function);
 
+void CUDA_CB post_sem_callback(void * _sem_to_post);
+
 #endif

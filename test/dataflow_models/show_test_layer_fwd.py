@@ -25,7 +25,7 @@ t_inp = torch.from_numpy(np_inp).view(torch.bfloat16)
 t_out = torch.from_numpy(np_out).view(torch.bfloat16)
 
 
-print("LAYER ID {layer_id}")
+print(f"LAYER ID {layer_id}")
 print("-----INPUT-----")
 print(t_inp)
 print("\n")

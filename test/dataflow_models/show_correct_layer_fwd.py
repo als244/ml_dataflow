@@ -15,7 +15,7 @@ t_inp = torch.load(layer_inp_path)
 t_out = torch.load(layer_out_path)
 
 
-print("LAYER ID {layer_id}")
+print(f"LAYER ID {layer_id}")
 print("-----INPUT-----")
 print(t_inp)
 print("\n")
