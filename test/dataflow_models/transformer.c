@@ -226,6 +226,9 @@ int main(int argc, char * argv[]){
 
 	cur_dev_mem += embedding_table -> embedding_table_size;
 
+	// ensure alignment for matmuls..
+	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
+
 	printf("Copying embedding table to device...\n");
 
 	ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, embedding_table -> embedding_table, sys_embedding_table -> embedding_table, embedding_table -> embedding_table_size);
@@ -318,6 +321,9 @@ int main(int argc, char * argv[]){
 
 		cur_dev_mem += aligned_size;
 
+		// ensure alignment for matmuls..
+		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
+
 		// copy sys block to dev block
 
 		printf("Submitting inbound transfer for dev transformer block #%d...\n", i);
@@ -403,6 +409,9 @@ int main(int argc, char * argv[]){
 
 	cur_dev_mem += combined_head_size;
 
+	// ensure alignment for matmuls..
+	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
+
 	printf("Submitting inbound transfer for dev head...\n");
 
 	ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, head -> buffer, sys_head -> buffer, combined_head_size);
@@ -484,6 +493,9 @@ int main(int argc, char * argv[]){
 		}
 
 		cur_dev_mem += aligned_size;
+
+		// ensure alignment for matmuls..
+		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 	}
 
 	sem_t * is_grad_block_ready = malloc(num_dev_block_grads * sizeof(sem_t));
@@ -541,6 +553,9 @@ int main(int argc, char * argv[]){
 	}
 
 	cur_dev_mem += grad_embedding_table -> embedding_table_size;
+
+	// ensure alignment for matmuls..
+	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 	
 	
 
@@ -603,6 +618,9 @@ int main(int argc, char * argv[]){
 
 
 	cur_dev_mem += combined_head_bwd_size;
+
+	// ensure alignment for matmuls..
+	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 	
 	
@@ -768,9 +786,9 @@ int main(int argc, char * argv[]){
 
 		cur_dev_mem += metadata_buffer_size;
 
-		if ((dev_alignment > 0) && ((uint64_t) cur_dev_mem % dev_alignment != 0)) {
-			cur_dev_mem += dev_alignment - ((uint64_t) cur_dev_mem % dev_alignment);
-		}
+
+		// ensure alignment for matmuls..
+		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 		
 
@@ -854,6 +872,8 @@ int main(int argc, char * argv[]){
 	fwd_context -> x_v = fwd_context -> x_k + (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_size;
 
 	cur_dev_mem += context_buffer_size;
+	// ensure alignment for matmuls..
+	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 
 	uint64_t context_buffer_bwd_size = 2 * (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_bwd_size;
@@ -868,6 +888,8 @@ int main(int argc, char * argv[]){
 	(bwd_context) -> x_v = (bwd_context) -> x_k + (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_bwd_size;
 
 	cur_dev_mem += context_buffer_bwd_size;
+	// ensure alignment for matmuls..
+	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 	
 	/*
@@ -923,6 +945,9 @@ int main(int argc, char * argv[]){
 		block_transitions[i].X = cur_dev_mem;
 		block_transitions[i].seq_batch = seq_batches[i / 2];
 		cur_dev_mem += block_transition_size;
+
+		// ensure alignment for matmuls..
+		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 	}
 
 	// SAME KERNEL WORKSPACE ACROSS ALL COMPUTATIONS!
@@ -930,6 +955,9 @@ int main(int argc, char * argv[]){
 	uint64_t kernelWorkspaceBytes = 1UL << 28;
 	void * kernelWorkspace = cur_dev_mem;
 	cur_dev_mem += kernelWorkspaceBytes;
+
+	// ensure alignment for matmuls..
+	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 	// each block transition needs to fill in:
 
@@ -959,6 +987,9 @@ int main(int argc, char * argv[]){
 	activation_workspace -> kernelWorkspaceBytes = kernelWorkspaceBytes;
 
 	cur_dev_mem += activation_workspace_size;
+
+	// ensure alignment for matmuls..
+	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 
 
@@ -1009,6 +1040,8 @@ int main(int argc, char * argv[]){
 		}
 
 		cur_dev_mem += saved_activations_buffer_size;
+		// ensure alignment for matmuls..
+		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 		// only the grad activations will have a recomputed activations buffer...
 		saved_activations[i].recomputed_activations = NULL;
@@ -1102,6 +1135,9 @@ int main(int argc, char * argv[]){
 
 	cur_dev_mem += grad_activations_buffer_size;
 
+	// ensure alignment for matmuls..
+	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
+
 
 
 	// RECOMPUTED ACTIVATIONS BUFFER SPACE FOR RE-CALCULATING NORM VALUES...
@@ -1193,6 +1229,9 @@ int main(int argc, char * argv[]){
 
 	model_output -> logits = cur_dev_mem;
 	cur_dev_mem += logits_size;
+
+	// ensure alignment for matmuls..
+	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 
 	// EACH MODEL OUTPUT STRUCT NEEDS TO BE FILLED IN WITH:
