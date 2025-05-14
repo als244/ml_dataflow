@@ -1127,6 +1127,9 @@ int main(int argc, char * argv[]){
 
 	cur_dev_mem += recomputed_activations_buffer_size;
 
+	// ensure alignment for matmuls..
+	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
+
 	// set the recomputed activations buffer in grad activations...
 	grad_saved_activations -> recomputed_activations = recomputed_activations;
 
@@ -1154,12 +1157,19 @@ int main(int argc, char * argv[]){
 	head_activations -> head_norm_out = head_activations -> buffer;
 	uint64_t head_norm_out_size = (uint64_t) max_tokens_per_chunk * (uint64_t) model_dim * (uint64_t) block_dt_size;
 	cur_dev_mem += head_norm_out_size;
+	// ensure alignment for matmuls..
+	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 	head_activations -> head_norm_rms_vals = cur_dev_mem;
 	uint64_t head_norm_rms_vals_size = (uint64_t) max_tokens_per_chunk * (uint64_t) sizeof(float);
 	cur_dev_mem += head_norm_rms_vals_size;
+	// ensure alignment for matmuls..
+	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 	head_activations -> head_out = cur_dev_mem;
 	uint64_t head_out_size = (uint64_t) max_tokens_per_chunk * (uint64_t) vocab_size * (uint64_t) block_dt_size;
 	cur_dev_mem += head_out_size;
+	// ensure alignment for matmuls..
+	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
+
 	head_activations -> kernelWorkspace = kernelWorkspace;
 	head_activations -> kernelWorkspaceBytes = kernelWorkspaceBytes;
 
