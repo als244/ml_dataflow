@@ -61,31 +61,58 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
     saved_activations_offsets -> x_inp = cur_offset;
     cur_offset += total_tokens * model_dim * dt_size;
 
+    // Align offset to 256 bytes
+    cur_offset = (cur_offset + 255) & ~255UL;
+
     saved_activations_offsets -> attn_norm_rms_vals = cur_offset;
     cur_offset += total_tokens * sizeof(float);
+
+    // Align offset to 256 bytes
+    cur_offset = (cur_offset + 255) & ~255UL;
 
     saved_activations_offsets -> x_q = cur_offset;
     cur_offset += total_tokens * model_dim * dt_size;
 
+    // Align offset to 256 bytes
+    cur_offset = (cur_offset + 255) & ~255UL;
+
     saved_activations_offsets -> x_k_local = cur_offset;
     cur_offset += total_tokens * kv_dim * dt_size;
 
+    // Align offset to 256 bytes
+    cur_offset = (cur_offset + 255) & ~255UL;
+
     saved_activations_offsets -> x_v_local = cur_offset;
     cur_offset += total_tokens * kv_dim * dt_size;
+
+    // Align offset to 256 bytes
+    cur_offset = (cur_offset + 255) & ~255UL;
 
     int num_q_heads = (block_config -> num_q_heads);
 
     saved_activations_offsets -> softmax_lse = cur_offset;
     cur_offset += total_tokens * num_q_heads * sizeof(float);
 
+    // Align offset to 256 bytes
+    cur_offset = (cur_offset + 255) & ~255UL;
+
     saved_activations_offsets -> x_attn_out = cur_offset;
     cur_offset += total_tokens * model_dim * dt_size;
+
+    // Align offset to 256 bytes
+    cur_offset = (cur_offset + 255) & ~255UL;
 
     saved_activations_offsets -> x_o = cur_offset;
     cur_offset += total_tokens * model_dim * dt_size;
 
+    // Align offset to 256 bytes
+    cur_offset = (cur_offset + 255) & ~255UL;
+
     saved_activations_offsets -> ffn_norm_rms_vals = cur_offset;
     cur_offset += total_tokens * sizeof(float);
+
+    // Align offset to 256 bytes
+    cur_offset = (cur_offset + 255) & ~255UL;
 
     int num_local_experts = saved_activations_offsets -> num_local_experts;
         // need to allocate space for saved activations offsets...
@@ -105,8 +132,14 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
         (saved_activations_offsets -> x_1)[0] = cur_offset;
         cur_offset += total_tokens * ffn_dim * dt_size;
 
+        // Align offset to 256 bytes
+        cur_offset = (cur_offset + 255) & ~255UL;
+
         (saved_activations_offsets -> x_3)[0] = cur_offset;
         cur_offset += total_tokens * ffn_dim * dt_size;
+
+        // Align offset to 256 bytes
+        cur_offset = (cur_offset + 255) & ~255UL;
 
         saved_activations_offsets -> total_size = cur_offset;
         return;
@@ -125,12 +158,20 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
     saved_activations_offsets -> num_tokens_per_expert = cur_offset;
     cur_offset += num_local_experts * sizeof(int);
 
+    // Align offset to 256 bytes
+    cur_offset = (cur_offset + 255) & ~255UL;
+
     saved_activations_offsets -> token_to_experts_mapping = cur_offset;
     cur_offset += max_total_local_expert_tokens * sizeof(int);
+
+    // Align offset to 256 bytes
+    cur_offset = (cur_offset + 255) & ~255UL;
 
     saved_activations_offsets -> experts_to_tokens_mapping = cur_offset;
     cur_offset += max_total_local_expert_tokens * sizeof(int);
 
+    // Align offset to 256 bytes
+    cur_offset = (cur_offset + 255) & ~255UL;
 
 
     // Now cannot pre-parition the expert workspaces...
@@ -139,7 +180,14 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
 
 
     cur_offset += 2 * max_total_local_expert_tokens * ffn_dim * dt_size;
+
+    // Align offset to 256 bytes
+    cur_offset = (cur_offset + 255) & ~255UL;
+
     cur_offset += max_total_local_expert_tokens * model_dim * dt_size;
+
+    // Align offset to 256 bytes
+    cur_offset = (cur_offset + 255) & ~255UL;
 
     saved_activations_offsets -> total_size = cur_offset;
     
@@ -519,3 +567,4 @@ uint64_t get_seq_batch_activation_workspace_buffer_size(Seq_Batch * seq_batch, T
 
     return activation_workspace_size;
 }
+
