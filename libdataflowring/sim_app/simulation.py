@@ -1142,9 +1142,10 @@ class SimulationRunner:
                 self.prev_train_chunks[i] = prev_train_chunk
                 self.total_train_chunks += 1
                 prev_train_chunk = i
-            self.is_train_chunks[self.total_chunks - 1] = True
-            self.prev_train_chunks[self.total_chunks - 1] = prev_train_chunk
-            self.total_train_chunks += 1
+	    if (prev_train_chunk != self.total_chunks - 1):
+            	self.is_train_chunks[self.total_chunks - 1] = True
+            	self.prev_train_chunks[self.total_chunks - 1] = prev_train_chunk
+            	self.total_train_chunks += 1
         elif self.train_chunk_distribution == "Suffix":
             total_train_chunks_estimate = math.ceil(self.total_chunks * self.train_token_ratio) if self.train_token_ratio > 0 else self.total_chunks
             start_train_chunk = self.total_chunks - total_train_chunks_estimate
