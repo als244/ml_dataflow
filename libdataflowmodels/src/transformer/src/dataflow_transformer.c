@@ -27,7 +27,10 @@
 #define BWD_LAYER_ID_TO_SAVE -1
 
 
-#define TO_SAVE_MODEL_GRADS 1
+#define TO_SAVE_MODEL_GRADS 0
+
+// only save the model grads when chunk id 0 finishes (then layer grad is complete)
+#define TO_SAVE_MODEL_GRAD_CHUNK_ID 0
 
 
 
@@ -913,7 +916,7 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
         return ret;
     }
 
-	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS && TO_SAVE_MODEL_GRAD_CHUNK_ID == chunk_id){
 		ret = save_file(dataflow_handle, compute_stream_id, -1, -1, -1, true, "w_head", grad_transformer_head -> w_head, embedding_size, vocab_size, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head w_head file...\n");
@@ -1014,7 +1017,7 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
         return ret;
     }
 
-	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS && TO_SAVE_MODEL_GRAD_CHUNK_ID == chunk_id){
 		ret = save_file(dataflow_handle, compute_stream_id, -1, -1, -1, true, "w_head_norm", grad_transformer_head -> w_head_norm, 1, embedding_size, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head w_head_norm file...\n");
@@ -1291,7 +1294,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 		return -1;
 	}
 
-	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS && TO_SAVE_MODEL_GRAD_CHUNK_ID == chunk_id){
 		ret = save_file(dataflow_handle, compute_stream_id, layer_id, -1, -1, true, "w_ffn_norm", grad_weights -> w_ffn_norm, 1, model_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head w_ffn_norm file...\n");
@@ -1646,7 +1649,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 		return -1;
 	}
 
-	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS && TO_SAVE_MODEL_GRAD_CHUNK_ID == chunk_id){
 		ret = save_file(dataflow_handle, compute_stream_id, layer_id, -1, -1, true, "w_attn_norm", grad_weights -> w_attn_norm, 1, model_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head w_attn_norm file...\n");
@@ -1675,6 +1678,7 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
     DataflowDatatype compute_dt = (grad_weights -> config).compute_dt;
 
     Seq_Batch * seq_batch = grad_stream -> seq_batch;
+	int chunk_id = seq_batch -> chunk_id;
 
 	Seq_Batch_Attention_Config * batch_attention_config = &(seq_batch -> attention_config);
     int num_seqs = seq_batch -> attention_config.num_seqs;
@@ -1731,7 +1735,7 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
         return -1;
     }
 
-	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS && TO_SAVE_MODEL_GRAD_CHUNK_ID == chunk_id){
 		ret = save_file(dataflow_handle, compute_stream_id, layer_id, -1, -1, true, "w_2", (grad_weights -> w_2)[0], ffn_dim, model_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head w_2 file...\n");
@@ -1758,7 +1762,7 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
         return -1;
     }
 
-	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS && TO_SAVE_MODEL_GRAD_CHUNK_ID == chunk_id){
 		ret = save_file(dataflow_handle, compute_stream_id, layer_id, -1, -1, true, "w_1", (grad_weights -> w_1)[0], model_dim, ffn_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head w_1 file...\n");
@@ -1783,7 +1787,7 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
         return -1;
     }
 
-	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS && TO_SAVE_MODEL_GRAD_CHUNK_ID == chunk_id){
 		ret = save_file(dataflow_handle, compute_stream_id, layer_id, -1, -1, true, "w_3", (grad_weights -> w_3)[0], model_dim, ffn_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head w_3 file...\n");
@@ -1811,7 +1815,7 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
         return -1;
     }
 
-	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS && TO_SAVE_MODEL_GRAD_CHUNK_ID == chunk_id){
 		ret = save_file(dataflow_handle, compute_stream_id, layer_id, -1, -1, true, "w_o", grad_weights -> w_o, model_dim, model_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head w_o file...\n");
@@ -1838,7 +1842,7 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
         return -1;
     }
 
-	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS && TO_SAVE_MODEL_GRAD_CHUNK_ID == chunk_id){
 		ret = save_file(dataflow_handle, compute_stream_id, layer_id, -1, -1, true, "w_v", grad_weights -> w_v, model_dim, kv_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head w_v file...\n");
@@ -1863,7 +1867,7 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
         return -1;
     }
 
-	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS && TO_SAVE_MODEL_GRAD_CHUNK_ID == chunk_id){
 		ret = save_file(dataflow_handle, compute_stream_id, layer_id, -1, -1, true, "w_k", grad_weights -> w_k, model_dim, kv_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head w_k file...\n");
@@ -1889,7 +1893,7 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
         return -1;
     }
 
-	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS){
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS && TO_SAVE_MODEL_GRAD_CHUNK_ID == chunk_id){
 		ret = save_file(dataflow_handle, compute_stream_id, layer_id, -1, -1, true, "w_q", grad_weights -> w_q, model_dim, model_dim, bwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save head w_q file...\n");
