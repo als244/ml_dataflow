@@ -637,10 +637,14 @@ int main(int argc, char * argv[]){
 	// CONTEXT AND GRAD CONTEXTS!
 
 	int total_tokens = 8833;
+
+	// see if round number makes a difference...
+	total_tokens = 8192;
 	int num_seqs = 1;
 
 
 	int max_tokens_per_chunk = 8833;
+	max_tokens_per_chunk = 8192;
 	int num_chunks = MY_CEIL(total_tokens, max_tokens_per_chunk);
 	
 	
