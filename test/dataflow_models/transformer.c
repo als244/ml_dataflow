@@ -73,8 +73,8 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
-	// 22 GB...	
-	size_t dev_size_bytes = 19 * (1UL << 30);
+		
+	size_t dev_size_bytes = 77 * (1UL << 30);
 
 	int dev_alignment = 256;
 
@@ -291,7 +291,7 @@ int main(int argc, char * argv[]){
 	}
 
 
-	int num_dev_blocks = 2;
+	int num_dev_blocks = 32;
 
 	Transformer_Block ** blocks = malloc(num_dev_blocks * sizeof(Transformer_Block *));
 	if (!blocks){
@@ -1024,7 +1024,7 @@ int main(int argc, char * argv[]){
 	}
 
 
-	int num_saved_activation_buffers = 8;
+	int num_saved_activation_buffers = 16;
 
 	Seq_Batch_Saved_Activations * saved_activations = malloc(num_saved_activation_buffers * sizeof(Seq_Batch_Saved_Activations));
 	if (!saved_activations){
@@ -1037,6 +1037,12 @@ int main(int argc, char * argv[]){
 	for (int i = 0; i < num_saved_activation_buffers; i++){
 
 		saved_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batches[(i % num_chunks)]);
+		
+		if (i == 0){
+			printf("Saved Activations buffer size: %lu\n\n", saved_activations_buffer_size);
+		
+		}
+
 		ret = bind_seq_batch_saved_activations_buffer(seq_batches[(i % num_chunks)], &(saved_activations[i]), cur_dev_mem, saved_activations_buffer_size, i);
 		if (ret){
 			fprintf(stderr, "Error: failed to bind seq_batch saved_activations buffer...\n");
