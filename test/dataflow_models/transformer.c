@@ -2,7 +2,13 @@
 #include "dataflow_seq_batch.h"
 #include "cuda_dataflow_handle.h"
 #include "register_ops.h"
+#include "host_ops.h"
 
+// these shoudl be auto-cofigured, testing manually for now...
+// could also take in as command line argument...
+#define NUM_DEV_BLOCKS 4
+#define NUM_DEV_ACTIVATION_SLOTS 16
+#define NUM_ADAM_THREADS 12
 
 
 int main(int argc, char * argv[]){
@@ -31,7 +37,7 @@ int main(int argc, char * argv[]){
 	int compute_stream_id = 1;
 	int outbound_stream_id = 2;
 	int peer_stream_id = 3;
-	int host_stream_id = 4;
+	int host_ops_stream_id = 4;
 	int inbound_fwd_ctx_stream_id = 5;
 	ret = dataflow_init_handle(&dataflow_handle, compute_type, device_id, 
 			ctx_id, ctx_flags, 
@@ -95,24 +101,32 @@ int main(int argc, char * argv[]){
 
 	// for GeForce cards FP16 is double performance of BF16 because can use FP16 compute...
 	//DataflowDatatype block_dt = DATAFLOW_FP16;
-	//DataflowDatatype block_dt_bwd = DATAFLOW_FP16;
+	//DataflowDatatype block_bwd_dt = DATAFLOW_FP16;
 
 	DataflowDatatype block_dt = DATAFLOW_BF16;
-	DataflowDatatype block_dt_bwd = DATAFLOW_BF16;
+	DataflowDatatype block_bwd_dt = block_dt;
 
 	size_t block_dt_size = dataflow_sizeof_element(block_dt);
-	size_t block_dt_bwd_size = dataflow_sizeof_element(block_dt_bwd);
+	size_t block_bwd_dt_size = dataflow_sizeof_element(block_bwd_dt);
 
 	// for matmul accumulations...
 	// on Geforce using FP16 gets double perf,
 	// on datacenter cards should use DATAFLOW_FP32
 	//DataflowDatatype compute_dt = DATAFLOW_FP16;
-	//DataflowDatatype compute_dt_bwd = DATAFLOW_FP16;
+	//DataflowDatatype compute_bwd_dt = compute_dt;
 
 
 	// however for BF dataftype, requires FP32 compute...
 	DataflowDatatype compute_dt = DATAFLOW_FP32;
-	DataflowDatatype compute_dt_bwd = DATAFLOW_FP32;
+	DataflowDatatype compute_bwd_dt = compute_dt;
+
+
+	// optimizer data types...
+	DataflowDatatype opt_mean_dt = block_dt;
+	DataflowDatatype opt_var_dt = block_dt;
+
+	size_t opt_mean_dt_size = dataflow_sizeof_element(opt_mean_dt);
+	size_t opt_var_dt_size = dataflow_sizeof_element(opt_var_dt);
 
 
 	DataflowNormalizationType norm_type = DATAFLOW_RMSNORM;
@@ -199,43 +213,10 @@ int main(int argc, char * argv[]){
 	cur_host_mem += sys_embedding_table -> embedding_table_size;
 
 
-	FILE * fp = fopen("../data/8B/embed/tok_embeddings.weight", "rb");
-	if (!fp){
-		fprintf(stderr, "Error: failed to open data/embed/tok_embedding.weight...\n");
-		return -1;
-	}
 
-	size_t read_els = fread(sys_embedding_table -> embedding_table, block_dt_size, embedding_table_els, fp);
-	if (read_els != embedding_table_els){
-		fprintf(stderr, "Error: failed to read tok_embedding.weight, read_els: %zu, expected: %lu\n", read_els, embedding_table_els);
-		return -1;
-	}
-
-	fclose(fp);
 
 	
-	Transformer_Embedding_Table * embedding_table = malloc(sizeof(Transformer_Embedding_Table));
-	if (!embedding_table){
-		fprintf(stderr, "Error: failed to allocate embedding_table...\n");
-		return -1;
-	}
-
-	embedding_table -> config = embedding_config;
-	embedding_table -> embedding_table_size = (uint64_t) vocab_size * (uint64_t) model_dim * block_dt_size;
-	embedding_table -> embedding_table = cur_dev_mem;
-
-	cur_dev_mem += embedding_table -> embedding_table_size;
-
-	// ensure alignment for matmuls..
-	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
-
-	printf("Copying embedding table to device...\n");
-
-	ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, embedding_table -> embedding_table, sys_embedding_table -> embedding_table, embedding_table -> embedding_table_size);
-	if (ret){
-		fprintf(stderr, "Error: failed to submit inbound transfer for embedding table...\n");
-		return -1;
-	}
+	
 
 	printf("Preparing all sys transformer blocks...\n");
 
@@ -260,12 +241,80 @@ int main(int argc, char * argv[]){
 		}
 	}
 
-	uint64_t raw_size = get_transformer_block_raw_size(sys_blocks[0]);
-	uint64_t aligned_size = get_transformer_block_aligned_size(sys_blocks[0]);
 
-	printf("\nTransformer Block Sizes (bytes):\n\tRaw: %lu\n\tAligned (%d): %lu\n\n", raw_size, pointer_alignment, aligned_size);
+	Transformer_Head * sys_head = malloc(sizeof(Transformer_Head));
+	if (!sys_head){
+		fprintf(stderr, "Error: failed to allocate sys_head...\n");
+		return -1;
+	}
+	
+	sys_head -> fwd_dt = block_dt;
+	sys_head -> bwd_dt = block_bwd_dt;
+	sys_head -> compute_dt = compute_dt;
+	sys_head -> eps = eps;
+	sys_head -> embedding_config = embedding_config;
 
-	printf("Binding all sys transformer blocks...\n");
+	sys_head -> buffer = cur_host_mem;
+	sys_head -> w_head_norm = sys_head -> buffer;
+	sys_head -> w_head = sys_head -> w_head_norm + (uint64_t) model_dim * (uint64_t) block_dt_size;
+
+	// model dim els for norm + model dim * vocab size els for head projection
+	uint64_t combined_head_els = (uint64_t) model_dim * ((uint64_t) 1 + (uint64_t) vocab_size);
+	uint64_t combined_head_size = combined_head_els * block_dt_size;
+
+	cur_host_mem += combined_head_size;
+
+
+	uint64_t raw_block_size = get_transformer_block_raw_size(sys_blocks[0]);
+	uint64_t aligned_block_size = get_transformer_block_aligned_size(sys_blocks[0]);
+
+	uint64_t all_blocks_size = aligned_block_size * n_layers;
+	uint64_t all_model_size = sys_embedding_table -> embedding_table_size + all_blocks_size + combined_head_size;
+
+	printf("\nTransformer Block Size (bytes):\n\tRaw: %lu\n\tSize With Matrix Alignment (%d): %lu\n\n", raw_block_size, pointer_alignment, aligned_block_size);
+
+	printf("\n\n\nModel Sizing (bytes):\n\tEmbedding: %lu\n\tBlock: %lu\n\t\tTotal: %lu\n\tHead: %lu\nTOTAL MODEL SIZE: %lu\n\n\n", sys_embedding_table -> embedding_table_size, aligned_block_size, all_blocks_size, combined_head_size, all_model_size);
+
+	
+
+	// number of elements to pass into optimizer...
+
+	uint64_t embedding_num_els = (uint64_t) vocab_size * (uint64_t) model_dim;
+	uint64_t block_num_els = raw_block_size / block_dt_size;
+	uint64_t block_num_aligned_els = aligned_block_size / block_dt_size;
+	uint64_t all_blocks_num_els = block_num_els * n_layers;
+	uint64_t head_num_els = (uint64_t) model_dim * ((uint64_t) 1 + (uint64_t) vocab_size);
+
+	uint64_t all_model_num_els = embedding_num_els + all_blocks_num_els + head_num_els;
+
+	printf("\n\n\nModel Parameter Counts:\n\tEmbedding: %lu\n\tBlock: %lu\n\t\tTotal: %lu\n\tHead: %lu\nTOTAL MODEL PARAMETERS: %lu\n\n\n", embedding_num_els, block_num_els, all_blocks_num_els, head_num_els, all_model_num_els);
+
+
+	// Loading in from checkpoint...
+
+	printf("\n\nLOADING MODEL FROM CHECKPOINT...\n");
+
+
+	printf("Loading embedding table...\n");
+	FILE * fp = fopen("../data/8B/embed/tok_embeddings.weight", "rb");
+	if (!fp){
+		fprintf(stderr, "Error: failed to open data/embed/tok_embedding.weight...\n");
+		return -1;
+	}
+
+	size_t read_els = fread(sys_embedding_table -> embedding_table, block_dt_size, embedding_table_els, fp);
+	if (read_els != embedding_table_els){
+		fprintf(stderr, "Error: failed to read tok_embedding.weight, read_els: %zu, expected: %lu\n", read_els, embedding_table_els);
+		return -1;
+	}
+
+	fclose(fp);
+
+
+
+	
+
+	printf("Binding/Loading all sys transformer blocks...\n");
 
 	char * layer_base_path = "../data/8B/layers";
 
@@ -287,11 +336,193 @@ int main(int argc, char * argv[]){
 			return -1;
 		}
 
-		cur_host_mem += aligned_size;
+		cur_host_mem += aligned_block_size;
 	}
 
 
-	int num_dev_blocks = 4;
+
+	printf("Loading head...\n");
+
+
+	fp = fopen("../data/8B/head/combined_head.weight", "rb");
+	if (!fp){
+		fprintf(stderr, "Error: failed to open data/head/combined_head.weight...\n");
+		return -1;
+	}
+
+	read_els = fread(sys_head -> buffer, block_dt_size, combined_head_els, fp);
+	if (read_els != combined_head_els) {
+		fprintf(stderr, "Error: failed to read combined_head.weight, read_els: %zu, expected: %lu\n", read_els, combined_head_els);
+		return -1;
+	}
+
+	fclose(fp);
+
+
+	// HANDLING OPTIMIZER (assuming same dtype as block for now)...
+
+
+	// Embedding opt state...
+
+	Transformer_Embedding_Table * sys_opt_mean_embedding_table = malloc(sizeof(Transformer_Embedding_Table));
+	if (!sys_opt_mean_embedding_table){
+		fprintf(stderr, "Error: failed to allocate sys_opt_mean_embedding_table...\n");
+		return -1;
+	}
+
+	sys_opt_mean_embedding_table -> config = embedding_config;
+	sys_opt_mean_embedding_table -> embedding_table_size = (uint64_t) vocab_size * (uint64_t) model_dim * opt_mean_dt_size;
+	sys_opt_mean_embedding_table -> embedding_table = cur_host_mem;
+
+	cur_host_mem += sys_opt_mean_embedding_table -> embedding_table_size;
+
+	
+	
+	Transformer_Embedding_Table * sys_opt_var_embedding_table = malloc(sizeof(Transformer_Embedding_Table));
+	if (!sys_opt_var_embedding_table){
+		fprintf(stderr, "Error: failed to allocate sys_opt_var_embedding_table...\n");
+		return -1;
+	}
+
+	sys_opt_var_embedding_table -> config = embedding_config;
+	sys_opt_var_embedding_table -> embedding_table_size = (uint64_t) vocab_size * (uint64_t) model_dim * opt_var_dt_size;
+	sys_opt_var_embedding_table -> embedding_table = cur_host_mem;
+
+	cur_host_mem += sys_opt_var_embedding_table -> embedding_table_size;
+
+	// Blocks opt state
+
+	Transformer_Block ** sys_opt_mean_blocks = malloc(n_layers * sizeof(Transformer_Block *));
+	if (!sys_opt_mean_blocks){
+		fprintf(stderr, "Error: failed to allocate sys_opt_mean_blocks...\n");
+		return -1;
+	}
+
+	Transformer_Block ** sys_opt_var_blocks = malloc(n_layers * sizeof(Transformer_Block *));
+	if (!sys_opt_var_blocks){
+		fprintf(stderr, "Error: failed to allocate sys_opt_var_blocks...\n");
+		return -1;
+	}
+
+	for (int i = 0; i < n_layers; i++){
+		sys_opt_mean_blocks[i] = init_transformer_block(i, opt_mean_dt, compute_dt,
+														norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
+														eps, theta,
+														num_q_heads, num_kv_heads, head_dim,
+														ffn_dim,
+														moe_config,
+														pointer_alignment);
+		if (!sys_opt_mean_blocks[i]){
+			fprintf(stderr, "Error: failed to init sys_opt_mean_block #%d...\n", i);
+			return -1;
+		}
+
+		ret = bind_transformer_block(cur_host_mem, sys_opt_mean_blocks[i]);
+		if (ret){
+			fprintf(stderr, "Error: failed to bind sys_opt_mean_block #%d...\n", i);
+			return -1;
+		}
+
+		cur_host_mem += aligned_block_size;
+
+		memset(sys_opt_mean_blocks[i] -> buffer, 0, aligned_block_size);
+		
+
+		sys_opt_var_blocks[i] = init_transformer_block(i, opt_var_dt, compute_dt,
+														norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
+														eps, theta,
+														num_q_heads, num_kv_heads, head_dim,
+														ffn_dim,
+														moe_config,
+														pointer_alignment);
+		if (!sys_opt_var_blocks[i]){
+			fprintf(stderr, "Error: failed to init sys_opt_var_block #%d...\n", i);
+			return -1;
+		}
+
+		ret = bind_transformer_block(cur_host_mem, sys_opt_var_blocks[i]);
+		if (ret){
+			fprintf(stderr, "Error: failed to bind sys_opt_var_block #%d...\n", i);
+			return -1;
+		}
+
+		memset(sys_opt_var_blocks[i] -> buffer, 0, aligned_block_size);
+
+		cur_host_mem += aligned_block_size;
+	}
+
+
+	// Head opt state
+
+	Transformer_Head * sys_opt_mean_head = malloc(sizeof(Transformer_Head));
+	if (!sys_opt_mean_head){
+		fprintf(stderr, "Error: failed to allocate sys_opt_mean_head...\n");
+		return -1;
+	}
+
+	sys_opt_mean_head -> fwd_dt = block_dt;
+	sys_opt_mean_head -> bwd_dt = block_bwd_dt;
+	sys_opt_mean_head -> compute_dt = compute_dt;
+	sys_opt_mean_head -> eps = eps;
+	sys_opt_mean_head -> embedding_config = embedding_config;
+	sys_opt_mean_head -> buffer = cur_host_mem;
+	sys_opt_mean_head -> w_head_norm = sys_opt_mean_head -> buffer;
+	sys_opt_mean_head -> w_head = sys_opt_mean_head -> w_head_norm + (uint64_t) model_dim * (uint64_t) opt_mean_dt_size;
+
+	cur_host_mem += combined_head_size;
+
+
+	Transformer_Head * sys_opt_var_head = malloc(sizeof(Transformer_Head));
+	if (!sys_opt_var_head){
+		fprintf(stderr, "Error: failed to allocate sys_opt_var_head...\n");
+		return -1;
+	}
+
+	sys_opt_var_head -> fwd_dt = block_dt;
+	sys_opt_var_head -> bwd_dt = block_bwd_dt;
+	sys_opt_var_head -> compute_dt = compute_dt;
+	sys_opt_var_head -> eps = eps;
+	sys_opt_var_head -> embedding_config = embedding_config;
+	sys_opt_var_head -> buffer = cur_host_mem;
+	sys_opt_var_head -> w_head_norm = sys_opt_var_head -> buffer;
+	sys_opt_var_head -> w_head = sys_opt_var_head -> w_head_norm + (uint64_t) model_dim * (uint64_t) opt_var_dt_size;
+
+	cur_host_mem += combined_head_size;
+	
+	
+	
+
+
+
+
+	// PARTIONING DEVICE MEMORY...!!!
+
+	Transformer_Embedding_Table * embedding_table = malloc(sizeof(Transformer_Embedding_Table));
+	if (!embedding_table){
+		fprintf(stderr, "Error: failed to allocate embedding_table...\n");
+		return -1;
+	}
+
+	embedding_table -> config = embedding_config;
+	embedding_table -> embedding_table_size = (uint64_t) vocab_size * (uint64_t) model_dim * block_dt_size;
+	embedding_table -> embedding_table = cur_dev_mem;
+
+	cur_dev_mem += embedding_table -> embedding_table_size;
+
+	// ensure alignment for matmuls..
+	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
+
+	printf("Copying embedding table to device...\n");
+
+	ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, embedding_table -> embedding_table, sys_embedding_table -> embedding_table, embedding_table -> embedding_table_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit inbound transfer for embedding table...\n");
+		return -1;
+	}
+
+
+
+	int num_dev_blocks = NUM_DEV_BLOCKS;
 
 	Transformer_Block ** blocks = malloc(num_dev_blocks * sizeof(Transformer_Block *));
 	if (!blocks){
@@ -319,7 +550,7 @@ int main(int argc, char * argv[]){
 			return -1;
 		}
 
-		cur_dev_mem += aligned_size;
+		cur_dev_mem += aligned_block_size;
 
 		// ensure alignment for matmuls..
 		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
@@ -328,7 +559,7 @@ int main(int argc, char * argv[]){
 
 		printf("Submitting inbound transfer for dev transformer block #%d...\n", i);
 
-		ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, blocks[i] -> buffer, sys_blocks[i] -> buffer, aligned_size);
+		ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, blocks[i] -> buffer, sys_blocks[i] -> buffer, aligned_block_size);
 		if (ret){
 			fprintf(stderr, "Error: failed to submit inbound transfer for transformer block #%d...\n", i);
 			return -1;
@@ -353,43 +584,6 @@ int main(int argc, char * argv[]){
 
 	// Loading head...
 
-	printf("Loading head...\n");
-
-	Transformer_Head * sys_head = malloc(sizeof(Transformer_Head));
-	if (!sys_head){
-		fprintf(stderr, "Error: failed to allocate sys_head...\n");
-		return -1;
-	}
-	
-	sys_head -> fwd_dt = block_dt;
-	sys_head -> bwd_dt = block_dt_bwd;
-	sys_head -> compute_dt = compute_dt;
-	sys_head -> eps = eps;
-	sys_head -> embedding_config = embedding_config;
-
-	sys_head -> buffer = cur_host_mem;
-	sys_head -> w_head_norm = sys_head -> buffer;
-	sys_head -> w_head = sys_head -> w_head_norm + (uint64_t) model_dim * (uint64_t) block_dt_size;
-
-	// model dim els for norm + model dim * vocab size els for head projection
-	uint64_t combined_head_els = (uint64_t) model_dim * ((uint64_t) 1 + (uint64_t) vocab_size);
-	uint64_t combined_head_size = combined_head_els * block_dt_size;
-
-	cur_host_mem += combined_head_size;
-
-	fp = fopen("../data/8B/head/combined_head.weight", "rb");
-	if (!fp){
-		fprintf(stderr, "Error: failed to open data/head/combined_head.weight...\n");
-		return -1;
-	}
-
-	read_els = fread(sys_head -> buffer, block_dt_size, combined_head_els, fp);
-	if (read_els != combined_head_els) {
-		fprintf(stderr, "Error: failed to read combined_head.weight, read_els: %zu, expected: %lu\n", read_els, combined_head_els);
-		return -1;
-	}
-
-	fclose(fp);
 
 
 	Transformer_Head * head = malloc(sizeof(Transformer_Head));
@@ -432,7 +626,7 @@ int main(int argc, char * argv[]){
 	}
 
 	for (int i = 0; i < n_layers; i++){
-		sys_grad_blocks[i] = init_transformer_block(i, block_dt_bwd, compute_dt_bwd,
+		sys_grad_blocks[i] = init_transformer_block(i, block_bwd_dt, compute_bwd_dt,
 														norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
 														eps, theta,
 														num_q_heads, num_kv_heads, head_dim,
@@ -451,9 +645,9 @@ int main(int argc, char * argv[]){
 			return -1;
 		}
 
-		memset(sys_grad_blocks[i] -> buffer, 0, aligned_size);
+		memset(sys_grad_blocks[i] -> buffer, 0, aligned_block_size);
 
-		cur_host_mem += aligned_size;
+		cur_host_mem += aligned_block_size;
 	}
 
 
@@ -467,7 +661,7 @@ int main(int argc, char * argv[]){
 	}
 
 	for (int i = 0; i < num_dev_block_grads; i++){
-		grad_blocks[i] = init_transformer_block(i, block_dt_bwd, compute_dt_bwd,
+		grad_blocks[i] = init_transformer_block(i, block_bwd_dt, compute_bwd_dt,
 														norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
 														eps, theta,
 														num_q_heads, num_kv_heads, head_dim,
@@ -486,13 +680,13 @@ int main(int argc, char * argv[]){
 			return -1;
 		}
 
-		ret = dataflow_handle.set_mem(&dataflow_handle, inbound_stream_id, grad_blocks[i] -> buffer, 0, aligned_size);
+		ret = dataflow_handle.set_mem(&dataflow_handle, inbound_stream_id, grad_blocks[i] -> buffer, 0, aligned_block_size);
 		if (ret){
 			fprintf(stderr, "Error: failed to set mem to 0 for grad block #%d...\n", i);
 			return -1;
 		}
 
-		cur_dev_mem += aligned_size;
+		cur_dev_mem += aligned_block_size;
 
 		// ensure alignment for matmuls..
 		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
@@ -520,7 +714,7 @@ int main(int argc, char * argv[]){
 	}
 
 	sys_grad_embedding_table -> config = embedding_config;
-	sys_grad_embedding_table -> embedding_table_size = (uint64_t) vocab_size * (uint64_t) model_dim * block_dt_bwd_size;
+	sys_grad_embedding_table -> embedding_table_size = (uint64_t) vocab_size * (uint64_t) model_dim * block_bwd_dt_size;
 	sys_grad_embedding_table -> embedding_table = cur_host_mem;
 	
 	
@@ -543,7 +737,7 @@ int main(int argc, char * argv[]){
 	}
 
 	grad_embedding_table -> config = embedding_config;
-	grad_embedding_table -> embedding_table_size = (uint64_t) vocab_size * (uint64_t) model_dim * block_dt_bwd_size;
+	grad_embedding_table -> embedding_table_size = (uint64_t) vocab_size * (uint64_t) model_dim * block_bwd_dt_size;
 	grad_embedding_table -> embedding_table = cur_dev_mem;
 
 	ret = dataflow_handle.set_mem(&dataflow_handle, inbound_stream_id, grad_embedding_table -> embedding_table, 0, grad_embedding_table -> embedding_table_size);
@@ -561,7 +755,7 @@ int main(int argc, char * argv[]){
 
 	// Head Gradients
 
-	uint64_t combined_head_bwd_size = combined_head_els * block_dt_bwd_size;
+	uint64_t combined_head_bwd_size = combined_head_els * block_bwd_dt_size;
 
 	Transformer_Head * sys_grad_head = malloc(sizeof(Transformer_Head));
 	if (!sys_grad_head){
@@ -570,13 +764,13 @@ int main(int argc, char * argv[]){
 	}
 
 	sys_grad_head -> fwd_dt = block_dt;
-	sys_grad_head -> bwd_dt = block_dt_bwd;
+	sys_grad_head -> bwd_dt = block_bwd_dt;
 	sys_grad_head -> compute_dt = compute_dt;
 	sys_grad_head -> eps = eps;
 	sys_grad_head -> embedding_config = embedding_config;
 	sys_grad_head -> buffer = cur_host_mem;
 	sys_grad_head -> w_head_norm = sys_grad_head -> buffer;
-	sys_grad_head -> w_head = sys_grad_head -> w_head_norm + (uint64_t) model_dim * (uint64_t) block_dt_bwd_size;
+	sys_grad_head -> w_head = sys_grad_head -> w_head_norm + (uint64_t) model_dim * (uint64_t) block_bwd_dt_size;
 
 
 	ret = dataflow_handle.set_mem(&dataflow_handle, inbound_stream_id, sys_grad_head -> buffer, 0, combined_head_bwd_size);
@@ -599,13 +793,13 @@ int main(int argc, char * argv[]){
 	}
 
 	grad_head -> fwd_dt = block_dt;
-	grad_head -> bwd_dt = block_dt_bwd;
+	grad_head -> bwd_dt = block_bwd_dt;
 	grad_head -> compute_dt = compute_dt;
 	grad_head -> eps = eps;
 	grad_head -> embedding_config = embedding_config;
 	grad_head -> buffer = cur_dev_mem;
 	grad_head -> w_head_norm = grad_head -> buffer;
-	grad_head -> w_head = grad_head -> w_head_norm + (uint64_t) model_dim * (uint64_t) block_dt_bwd_size;
+	grad_head -> w_head = grad_head -> w_head_norm + (uint64_t) model_dim * (uint64_t) block_bwd_dt_size;
 
 	
 
@@ -880,7 +1074,7 @@ int main(int argc, char * argv[]){
 	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 
-	uint64_t context_buffer_bwd_size = 2 * (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_bwd_size;
+	uint64_t context_buffer_bwd_size = 2 * (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_bwd_dt_size;
 	
 	(bwd_context) -> contextBuffer = cur_dev_mem;
 	(bwd_context) -> contextBufferBytes = context_buffer_bwd_size;
@@ -889,7 +1083,7 @@ int main(int argc, char * argv[]){
 	(bwd_context) -> total_context_tokens = total_tokens;
 
 	(bwd_context) -> x_k = cur_dev_mem;
-	(bwd_context) -> x_v = (bwd_context) -> x_k + (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_bwd_size;
+	(bwd_context) -> x_v = (bwd_context) -> x_k + (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_bwd_dt_size;
 
 	cur_dev_mem += context_buffer_bwd_size;
 	// ensure alignment for matmuls..
@@ -1024,7 +1218,7 @@ int main(int argc, char * argv[]){
 	}
 
 
-	int num_saved_activation_buffers = 16;
+	int num_saved_activation_buffers = NUM_DEV_ACTIVATION_SLOTS;
 
 	Seq_Batch_Saved_Activations * saved_activations = malloc(num_saved_activation_buffers * sizeof(Seq_Batch_Saved_Activations));
 	if (!saved_activations){
@@ -1227,7 +1421,7 @@ int main(int argc, char * argv[]){
 	// PREPARING SPECIAL MODEL OUTPUT STRUCT...
 
 
-	uint64_t logits_size = (uint64_t) max_tokens_per_chunk * (uint64_t) vocab_size * block_dt_bwd_size;
+	uint64_t logits_size = (uint64_t) max_tokens_per_chunk * (uint64_t) vocab_size * block_bwd_dt_size;
 	void * sys_logits = cur_host_mem;
 	cur_host_mem += logits_size;
 
@@ -1250,6 +1444,19 @@ int main(int argc, char * argv[]){
 
 	Transformer_Block_Activations * cur_activations;
 	Seq_Batch_Saved_Activations * cur_fwd_activations;
+
+
+	int num_adam_threads = NUM_ADAM_THREADS;
+
+
+	// ADAM OPTIMIZER PARAMS...
+
+	// learning rate should have a set schedule...
+	float lr = 1e-4;
+	float beta1 = 0.9;
+	float beta2 = 0.999;
+	float weight_decay = 1e-3;
+	float epsilon = 1e-8;
 
 
 
@@ -1296,6 +1503,7 @@ int main(int argc, char * argv[]){
 	Transformer_Block * working_block;
 
 	int final_saved_act_buffer_ind = -1;
+	
 
 	for (int k = 0; k < n_layers; k++){
 
@@ -1426,7 +1634,7 @@ int main(int argc, char * argv[]){
 				return -1;
 			}
 
-			ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, blocks[replacement_layer_ind] -> buffer, sys_blocks[next_layer_id] -> buffer, aligned_size);
+			ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, blocks[replacement_layer_ind] -> buffer, sys_blocks[next_layer_id] -> buffer, aligned_block_size);
 			if (ret){
 				fprintf(stderr, "Error: failed to submit inbound transfer for transformer block #%d...\n", next_layer_id);
 				return -1;
@@ -1516,6 +1724,34 @@ int main(int argc, char * argv[]){
 	}
 	
 	// Now should get state of the outbound stream and set it as dependency for the host_ops stream and submit the optimizer op....
+
+	cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
+	if (!cur_stream_state){
+		fprintf(stderr, "Error: failed to get stream state for head...\n");
+		return -1;
+	}
+
+	ret = dataflow_handle.submit_dependency(&dataflow_handle, host_ops_stream_id, cur_stream_state);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit dependency to submit optimizer op...\n");
+		return -1;
+	}
+
+	// speicfying adam host functio as adam_step_host and passing this function address 
+	// which will be submitted to the host ops stream...
+	ret = dataflow_submit_adam_step_host(&dataflow_handle, host_ops_stream_id, 
+                        &adam_step_host,
+						block_dt, block_bwd_dt, 
+                        opt_mean_dt, opt_var_dt,
+                        n_layers, lr, beta1, beta2, weight_decay, epsilon,
+						num_adam_threads, head_num_els, 
+                        sys_head -> buffer, sys_grad_head -> buffer, sys_opt_mean_head -> buffer, sys_opt_var_head -> buffer);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit adam step host for head...\n");
+		return -1;
+	}
+	
+	
 
 	// send back gradient for head and run optimizer..
 	
@@ -1781,7 +2017,7 @@ int main(int argc, char * argv[]){
 				return -1;
 			}
 
-			ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, blocks[replacement_layer_ind] -> buffer, sys_blocks[next_layer_id] -> buffer, aligned_size);
+			ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, blocks[replacement_layer_ind] -> buffer, sys_blocks[next_layer_id] -> buffer, aligned_block_size);
 			if (ret){
 				fprintf(stderr, "Error: failed to submit inbound transfer for block #%d...\n", next_layer_id);
 				return -1;
@@ -1814,7 +2050,8 @@ int main(int argc, char * argv[]){
 			}
 		}
 
-		
+		// send back gradient to host, and run optimizer...
+
 		// SENDING BACK GRAD BLOCK...
 
 		printf("[Bwd] Sending back grad block for layer id %d at index %d...\n\n", k, working_grad_block_ind);
@@ -1825,16 +2062,19 @@ int main(int argc, char * argv[]){
 			return -1;
 		}
 
-		// THIS SHOULD BE AN ADDITION, NOT A REPLACEMENT...
+		// THIS SHOULD BE AN ADDITION, NOT A REPLACEMENT..
+		// THUS SHOULD HAVE A TEMP POOL OF GRAD BUFFERS ON HOST TO TRANSFER TO
+		// AND THEN MAKE SURE TO ADD THESE TO EXISTING GRAD BUFFERS ON HOST
+		// AND THEN MAKE THE BUFFER IN POOL AVAILABLE AGAIN...
 
-		ret = (dataflow_handle.submit_outbound_transfer)(&dataflow_handle, outbound_stream_id, sys_grad_blocks[k] -> buffer, working_grad_block -> buffer, aligned_size);
+		ret = (dataflow_handle.submit_outbound_transfer)(&dataflow_handle, outbound_stream_id, sys_grad_blocks[k] -> buffer, working_grad_block -> buffer, aligned_block_size);
 		if (ret){
 			fprintf(stderr, "Error: failed to submit outbound transfer to send grad block #%d to host...\n", k);
 			return -1;
 		}
 
 		// After completing, can reset the grad buffer for next use...
-		ret = (dataflow_handle.set_mem)(&dataflow_handle, outbound_stream_id, working_grad_block -> buffer, 0, aligned_size);
+		ret = (dataflow_handle.set_mem)(&dataflow_handle, outbound_stream_id, working_grad_block -> buffer, 0, aligned_block_size);
 		if (ret){
 			fprintf(stderr, "Error: failed to set mem for grad block #%d...\n", k);
 			return -1;
@@ -1854,7 +2094,35 @@ int main(int argc, char * argv[]){
 			working_grad_block_ind = num_dev_block_grads - 1;
 		}
 
-		// send back gradient to host, and run optimizer...
+		// Calling optimizer step...
+
+		cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
+		if (!cur_stream_state){
+			fprintf(stderr, "Error: failed to get stream state for head...\n");
+			return -1;
+		}
+
+		ret = dataflow_handle.submit_dependency(&dataflow_handle, host_ops_stream_id, cur_stream_state);
+		if (ret){
+			fprintf(stderr, "Error: failed to submit dependency to submit optimizer op...\n");
+			return -1;
+		}
+
+		// speicfying adam host functio as adam_step_host and passing this function address 
+		// which will be submitted to the host ops stream...
+		ret = dataflow_submit_adam_step_host(&dataflow_handle, host_ops_stream_id, 
+							&adam_step_host,
+							block_dt, block_bwd_dt, 
+							opt_mean_dt, opt_var_dt,
+							k, lr, beta1, beta2, weight_decay, epsilon,
+							num_adam_threads, head_num_els, 
+							sys_blocks[k] -> buffer, sys_grad_blocks[k] -> buffer, sys_opt_mean_blocks[k] -> buffer, sys_opt_var_blocks[k] -> buffer);
+		if (ret){
+			fprintf(stderr, "Error: failed to submit adam step host for block #%d...\n", k);
+			return -1;
+		}
+
+		
 	}
 
 
@@ -1891,15 +2159,42 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
-	// TODO: run optimizer on embedding
+	// Calling optimizer step...
+
+	cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
+	if (!cur_stream_state){
+		fprintf(stderr, "Error: failed to get stream state for head...\n");
+		return -1;
+	}
+
+	ret = dataflow_handle.submit_dependency(&dataflow_handle, host_ops_stream_id, cur_stream_state);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit dependency to submit optimizer op...\n");
+		return -1;
+	}
+	
+
+	// speicfying adam host functio as adam_step_host and passing this function address 
+	// which will be submitted to the host ops stream...
+	ret = dataflow_submit_adam_step_host(&dataflow_handle, host_ops_stream_id, 
+							&adam_step_host,
+							block_dt, block_bwd_dt, 
+							opt_mean_dt, opt_var_dt,
+							-1, lr, beta1, beta2, weight_decay, epsilon,
+							num_adam_threads, head_num_els, 
+							sys_embedding_table -> embedding_table, sys_grad_embedding_table -> embedding_table, sys_opt_mean_embedding_table -> embedding_table, sys_opt_var_embedding_table -> embedding_table);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit adam step embedding layer...\n");
+		return -1;
+	}
 	
 
 
 	printf("Finished enqueueing all dataflow operations! Waiting to sync...\n\n");
 
-	ret = dataflow_handle.sync_stream(&dataflow_handle, outbound_stream_id);
+	ret = dataflow_handle.sync_stream(&dataflow_handle, host_ops_stream_id);
 	if (ret){
-		fprintf(stderr, "Error: failed to sync outbound stream...\n");
+		fprintf(stderr, "Error: failed to sync host ops stream at end of transformer...\n");
 		return -1;
 	}
 

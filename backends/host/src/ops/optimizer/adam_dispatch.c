@@ -12,25 +12,28 @@ int adam_step_host(void * _op){
 	
 	DataflowDatatype * arg_dtypes = (skeleton -> header).arg_dtypes;
 
-	DataflowDatatype param_dt = arg_dtypes[7];
-	DataflowDatatype grad_dt = arg_dtypes[8];
-	DataflowDatatype mean_dt = arg_dtypes[9];
-	DataflowDatatype var_dt = arg_dtypes[10];
+	DataflowDatatype param_dt = arg_dtypes[8];
+	DataflowDatatype grad_dt = arg_dtypes[9];
+	DataflowDatatype mean_dt = arg_dtypes[10];
+	DataflowDatatype var_dt = arg_dtypes[11];
 
 	void ** op_args = op -> op_args;
 
 	int num_threads = *((int *) op_args[0]);
 	uint64_t num_els = *((uint64_t *) op_args[1]);
-	float lr = *((float *) op_args[2]);
-	float beta1 = *((float *) op_args[3]);
-	float beta2 = *((float *) op_args[4]);
-	float weight_decay = *((float *) op_args[5]);
-	float epsilon = *((float *) op_args[6]);
+	int layer_id = *((int *) op_args[2]);
+	float lr = *((float *) op_args[3]);
+	float beta1 = *((float *) op_args[4]);
+	float beta2 = *((float *) op_args[5]);
+	float weight_decay = *((float *) op_args[6]);
+	float epsilon = *((float *) op_args[7]);
 
-	void * param = *((void **) op_args[7]);
-	void * grad = *((void **) op_args[8]);
-	void * mean = *((void **) op_args[9]);
-	void * var = *((void **) op_args[10]);
+	void * param = *((void **) op_args[8]);
+	void * grad = *((void **) op_args[9]);
+	void * mean = *((void **) op_args[10]);
+	void * var = *((void **) op_args[11]);
+
+	printf("[Adam Dispatcher] Optimizing Layer ID: %d...\n\n", layer_id);
 
 	 if (__builtin_cpu_supports("avx512f")){
         return do_adam_step_host_avx512(param_dt, grad_dt, mean_dt, var_dt, num_threads, num_els, lr, beta1, beta2, weight_decay, epsilon, param, grad, mean, var);

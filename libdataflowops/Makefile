@@ -9,7 +9,7 @@ ALL_INCLUDE_DIRS = -I${DATAFLOW_LIB_INCLUDE_DIR} -I${SELF_INCLUDE_DIR}
 
 DATAFLOW_SET_OPS_OBJS = objs/set_op_skeletons.o
 
-DATAFLOW_SUBMIT_OPS_OBJS = objs/attention_op.o objs/attn_misc_ops.o objs/matmul_op.o objs/mlp_misc_ops.o objs/moe_ops.o objs/norm_ops.o objs/preprocess_ops.o objs/loss_misc_ops.o
+DATAFLOW_SUBMIT_OPS_OBJS = objs/attention_op.o objs/attn_misc_ops.o objs/matmul_op.o objs/mlp_misc_ops.o objs/moe_ops.o objs/norm_ops.o objs/preprocess_ops.o objs/loss_misc_ops.o objs/optimizer_ops.o
 
 DATAFLOW_OP_OBJS = ${DATAFLOW_SET_OPS_OBJS} ${DATAFLOW_SUBMIT_OPS_OBJS}
 
@@ -49,6 +49,9 @@ objs/preprocess_ops.o: src/submit_ops/preprocess_ops.c
 
 objs/loss_misc_ops.o: src/submit_ops/loss_misc_ops.c
 	${CC} ${CFLAGS} ${ALL_INCLUDE_DIRS} -c $< -o $@	
+
+objs/optimizer_ops.o: src/submit_ops/optimizer_ops.c
+	${CC} ${CFLAGS} ${ALL_INCLUDE_DIRS} -c $< -o $@
 
 
 ## set ops objs

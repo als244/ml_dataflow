@@ -259,7 +259,7 @@ int dataflow_submit_adam_step_host(Dataflow_Handle * handle, int stream_id,
                         void * adam_host_func,
 						DataflowDatatype param_dt, DataflowDatatype grad_dt, 
                         DataflowDatatype mean_dt, DataflowDatatype var_dt,
-                        float lr, float beta1, float beta2, float weight_decay, float epsilon,
+                        int layer_id, float lr, float beta1, float beta2, float weight_decay, float epsilon,
 						int num_threads, uint64_t num_els, 
                         void * param, void * grad, void * mean, void * var);
 

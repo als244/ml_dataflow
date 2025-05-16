@@ -871,7 +871,7 @@ void dataflow_set_default_adam_step_skeleton(Op_Skeleton * skeleton,
 	// last character must be null no matter what, if nickname is less than null bytes were added prior
 	(skeleton_header -> op_nickname)[MAX_OP_NICKNAME_SIZE] = '\0';
 	
-	int num_args = 11;
+	int num_args = 12;
 
 	skeleton_header -> num_args = num_args;
 
@@ -881,24 +881,26 @@ void dataflow_set_default_adam_step_skeleton(Op_Skeleton * skeleton,
 	arg_dtypes[0] = DATAFLOW_INT_SCALAR;
 	// num_els
 	arg_dtypes[1] = DATAFLOW_UINT64_SCALAR;
+	// layer_id
+	arg_dtypes[2] = DATAFLOW_INT_SCALAR;
 	// lr
-	arg_dtypes[2] = DATAFLOW_FP32_SCALAR;
-	// beta1
 	arg_dtypes[3] = DATAFLOW_FP32_SCALAR;
-	// beta2
+	// beta1
 	arg_dtypes[4] = DATAFLOW_FP32_SCALAR;
-	// weight_decay
+	// beta2
 	arg_dtypes[5] = DATAFLOW_FP32_SCALAR;
-	// epsilon
+	// weight_decay
 	arg_dtypes[6] = DATAFLOW_FP32_SCALAR;
+	// epsilon
+	arg_dtypes[7] = DATAFLOW_FP32_SCALAR;
 	// param
-	arg_dtypes[7] = param_dt;
+	arg_dtypes[8] = param_dt;
 	// grad
-	arg_dtypes[8] = grad_dt;
+	arg_dtypes[9] = grad_dt;
 	// mean
-	arg_dtypes[9] = mean_dt;
+	arg_dtypes[10] = mean_dt;
 	// var
-	arg_dtypes[10] = var_dt;
+	arg_dtypes[11] = var_dt;
 
 	for (int i = num_args; i < MAX_OP_ARGS; i++){
 		arg_dtypes[i] = DATAFLOW_NONE;
