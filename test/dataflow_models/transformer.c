@@ -1606,7 +1606,7 @@ int main(int argc, char * argv[]){
 	// CRTICIAL TODO: right now we aren't doing any accumulation of gradients, 
 	// so if this isn't 1 the math is wrong..
 	// but can still simulate more realsitic perf by setting this to a higher value...
-	int seqs_per_step = 1;
+	int seqs_per_step = 20;
 
 
 	// Simulating training loop...
@@ -1615,9 +1615,12 @@ int main(int argc, char * argv[]){
 	int num_train_seqs = 20;
 
 
+	int seq_in_step = 0;
+
+
 	for (int s = 0; s < num_train_seqs; s++){
 
-		if ((seqs_per_step != 0) && ((s % seqs_per_step == 0) || (s == (num_train_seqs - 1)))){
+		if ((seqs_per_step != 0) && (((seq_in_step + 1) % seqs_per_step == 0) || (s == (num_train_seqs - 1))) ) {
 			is_opt_step = 1;
 		}
 		else{
@@ -2411,7 +2414,12 @@ int main(int argc, char * argv[]){
 			working_layer_ind = 0;
 			replacement_layer_ind = 0;
 
+			seq_in_step = 0;
+
 			// next layer id alreays gets reset at the beginning of the forward pass...
+		}
+		else{
+			seq_in_step += 1;
 		}
 	}
 	
