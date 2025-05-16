@@ -1097,33 +1097,64 @@ class SimulationRunner:
         # --- Extract and Calculate Parameters (Keep logic) ---
         self.cycle_rate_micros = params.get('cycle_rate_micros', 2000)
         self.N = params.get('N', 8)
-        self.seqlen = params.get('seqlen', 64) * (1 << 10)
-        self.max_attended_tokens = params.get('max_attended_tokens', 100) * (1 << 10)
+        self.seqlen = params.get('seqlen', 128) * (1 << 10)
+        self.max_attended_tokens = params.get('max_attended_tokens', 128) * (1 << 10)
         self.train_token_ratio = params.get('train_token_ratio', 1)
-        self.min_chunk_size = params.get('min_chunk_size', 1024)
+        self.min_chunk_size = params.get('min_chunk_size', 8192)
         self.train_chunk_distribution = params.get('train_chunk_distribution', "Uniform")
-        self.bitwidth = params.get('bitwidth', 16)
+        self.bitwidth = params.get('bitwidth', 8)
         self.total_layers = params.get('total_layers', 64) # Store non-head count
-        self.vocab_size = params.get('vocab_size', 151646)
-        self.model_dim = params.get('model_dim', 5120)
-        self.kv_dim = params.get('kv_dim', 640) # Recalculate kv_dim based on this
+        self.vocab_size = params.get('vocab_size', 128290)
+        self.model_dim = params.get('model_dim', 7168)
+        self.kv_dim = params.get('kv_dim', 512) # Recalculate kv_dim based on this
         self.num_experts = params.get('num_experts', 1)
         self.active_experts = params.get('active_experts', 1)
-        self.expert_dim = params.get('expert_dim', 27648)
+        self.expert_dim = params.get('expert_dim', 2048)
         self.attn_type = params.get('attn_type', "Exact")
         self.max_device_memory_bytes = params.get('max_device_memory_bytes', 8 * (1 << 30))
-        self.hardware_max_flops = params.get('hardware_max_flops', 989 * 1e12)
-        self.hardware_mem_bw_bytes_sec = params.get('hardware_mem_bw_bytes_sec', 3.35 * (1 << 40)) # Typo fixed TB/s -> GB/s -> B/s
+        self.hardware_max_flops = params.get('hardware_max_flops', 1989 * 1e12)
+        self.hardware_mem_bw_bytes_sec = params.get('hardware_mem_bw_bytes_sec', 3350 * 1e9) # Typo fixed TB/s -> GB/s -> B/s
         self.matmul_efficiency = params.get('matmul_efficiency', 0.7)
-        self.attn_efficiency = params.get('attn_efficiency', 0.55)
+        self.attn_fwd_efficiency = params.get('attn_fwd_efficiency', 0.55)
+        self.attn_bwd_efficiency = params.get('attn_bwd_efficiency', 0.25)
         self.home_bw_gbit_sec = params.get('home_bw_gbit_sec', 400)
         self.peer_bw_gbit_sec = params.get('peer_bw_gbit_sec', 100)
         self.chunk_type = params.get('chunk_type', "Equal Data")
         # --- Derived Parameters (Keep logic) ---
         self.dtype_bytes = self.bitwidth / 8.0 if self.bitwidth > 0 else 2.0
 
-        self.hw_compute_bound = self.hardware_max_flops / self.hardware_mem_bw_bytes_sec if self.hardware_mem_bw_bytes_sec > 0 else float('inf')
-        self.chunk_size = self.min_chunk_size
+        self.hw_compute_bound = 2 * self.hardware_max_flops / self.hardware_mem_bw_bytes_sec if self.hardware_mem_bw_bytes_sec > 0 else float('inf')
+        
+        #print(f"Hardware Compute Bound: {self.hw_compute_bound}")
+        
+        ## determine chunk size based on arithmetic intensity of expert
+
+        ## avg. expert has M value of: (num_chunks * active_experts * chunk_size) / (num_experts)
+        ## and K value of: model_dim
+        ## and N value of: expert_dim
+
+        ## matmul arithmetic intensity is then given by:
+        ## matmul_arith = (2 * M * K * N) / (dtype_bytes * ((M * K) + (M * N) + (K * N)))
+
+        ## we want matmul_arith >= hw_compute_bound
+        ## solve for M:
+        ## M >= (hw_compute_bound * dtype_bytes * K * N)) / (2 * K * N - hw_compute_bound * dtype_bytes * (K + N))
+
+        ## Now let's solve for chunk_size:
+        ## chunk_size >= active_experts * (hw_compute_bound * dtype_bytes * model_dim * expert_dim)) / (2 * model_dim * expert_dim - hw_compute_bound * dtype_bytes * (model_dim + expert_dim))
+
+        ## Let's round up to the nearest multiple of 256
+
+        chunk_size_base = math.ceil(self.active_experts * (self.hw_compute_bound * self.dtype_bytes * self.model_dim * self.expert_dim)) / (2 * self.model_dim * self.expert_dim - self.hw_compute_bound * self.dtype_bytes * (self.model_dim + self.expert_dim))
+
+        #print(f"Based on hw compute bound of {self.hw_compute_bound} FLOS/byte, along with FFN dims of {self.model_dim} x {self.expert_dim}, the base chunk size is {chunk_size_base}")
+        if chunk_size_base < self.min_chunk_size:
+            #print(f"Min chunk size is {self.min_chunk_size}, so using that instead...")
+            chunk_size_base = self.min_chunk_size
+
+        chunk_multiple = 256
+
+        self.chunk_size = round_up_to_multiple(chunk_size_base, chunk_multiple)
 
         self.total_chunks = math.ceil(self.seqlen / self.chunk_size) if self.chunk_size > 0 else 0
         train_chunk_freq = math.ceil(1 / self.train_token_ratio) if self.train_token_ratio > 0 else self.total_chunks
@@ -1285,7 +1316,8 @@ class SimulationRunner:
 
         safe_flops = self.hardware_max_flops if self.hardware_max_flops > 0 else 1.0
         safe_matmul_eff = self.matmul_efficiency if self.matmul_efficiency > 0 else 1.0
-        safe_attn_eff = self.attn_efficiency if self.attn_efficiency > 0 else 1.0
+        safe_attn_fwd_eff = self.attn_fwd_efficiency if self.attn_fwd_efficiency > 0 else 1.0
+        safe_attn_bwd_eff = self.attn_bwd_efficiency if self.attn_bwd_efficiency > 0 else 1.0
         
           # Head FLOPS: fwd + bwd (assuming bwd similar to fwd)
         head_flops = 2 * (2 * self.chunk_size * self.model_dim * self.vocab_size)
@@ -1296,10 +1328,17 @@ class SimulationRunner:
 
         # BwdW time based on matmul part only
         bwdW_flops = self.base_flops_per_layer_matmul
+        bwdW_time = bwdW_flops / (safe_flops * safe_matmul_eff)
         self.bwdWTimeSec = bwdW_flops / (safe_flops * safe_matmul_eff)
         self.true_bwdWCycles = self.bwdWTimeSec * self.cycles_per_second
         self.bwdWFrames = max(1,round(self.bwdWTimeSec * self.cycles_per_second))
 
+        self.fwd_attn_time = 0
+        self.fwd_matmul_time = 0
+        self.head_time = 0
+        self.bwd_x_attn_time = 0
+        self.bwd_x_matmul_time = 0
+        self.bwd_w_time = 0
 
         prev_seq_len = 0
         for i in range(self.total_chunks):
@@ -1329,7 +1368,10 @@ class SimulationRunner:
                 self.total_fwd_matmul_flops += (self.total_layers - 1) * self.base_flops_per_layer_matmul
 
             matmul_time = self.base_flops_per_layer_matmul / (safe_flops * safe_matmul_eff)
-            attn_time = attn_flops / (safe_flops * safe_attn_eff)
+            attn_time = attn_flops / (safe_flops * safe_attn_fwd_eff)
+            self.fwd_attn_time += self.total_layers * attn_time
+            self.fwd_matmul_time += self.total_layers * matmul_time
+
             self.computation_times_sec[i] = matmul_time + attn_time
             if i == 0:
                 self.true_first_chunk_cycles = self.computation_times_sec[i] * self.cycles_per_second
@@ -1350,7 +1392,15 @@ class SimulationRunner:
 
                 self.total_bwd_flops += self.total_layers * (bwd_x_flops + bwd_w_flops)
 
-                bwd_x_time = matmul_time + 2.5 * attn_time # Bwd Attn is 2x Fwd Attn
+                bwd_attn_time = (2.5 * attn_flops) / (safe_flops * safe_attn_bwd_eff)
+
+                bwd_x_time = matmul_time + bwd_attn_time # Bwd Attn is 2x Fwd Attn
+
+                self.bwd_x_attn_time += self.total_layers * bwd_attn_time
+                self.bwd_x_matmul_time += self.total_layers * matmul_time
+
+                self.bwd_w_time += self.total_layers * self.bwdWTimeSec
+
                 self.computation_times_sec_bwd[i] = bwd_x_time
                 self.computation_times_frames_bwd[i] = max(1,round(bwd_x_time * self.cycles_per_second))
                 self.total_compute_cycles += self.total_layers * self.computation_times_frames_bwd[i]
@@ -1374,6 +1424,9 @@ class SimulationRunner:
 
                 self.total_head_flops += head_flops
 
+                head_time = head_flops / (safe_flops * safe_matmul_eff)
+                self.head_time += head_time
+
             else:
                 self.computation_times_sec_bwd[i] = 0
                 self.computation_times_frames_bwd[i] = 0
@@ -1387,6 +1440,23 @@ class SimulationRunner:
         self.total_fwd_matmul_pct = (self.total_fwd_matmul_flops / self.total_flops) * 100
         self.total_bwd_attn_pct = (self.total_bwd_attn_flops / self.total_flops) * 100
         self.total_bwd_matmul_pct = (self.total_bwd_matmul_flops / self.total_flops) * 100
+
+        self.bwd_x_time = self.bwd_x_attn_time + self.bwd_x_matmul_time
+        
+        self.total_time = self.fwd_attn_time + self.fwd_matmul_time + self.head_time + self.bwd_x_time + self.bwd_w_time
+
+        self.total_fwd_time = self.fwd_attn_time + self.fwd_matmul_time
+        self.total_fwd_time_pct = self.total_fwd_time / self.total_time * 100
+
+        self.total_bwd_x_time_pct = (self.bwd_x_time / self.total_time) * 100
+
+        self.total_bwd_w_time_pct = (self.bwd_w_time / self.total_time) * 100
+
+        self.total_fwd_attn_time_pct = (self.fwd_attn_time / self.total_time) * 100
+        self.total_fwd_matmul_time_pct = (self.fwd_matmul_time / self.total_time) * 100
+        self.total_bwd_x_attn_time_pct = (self.bwd_x_attn_time / self.total_time) * 100
+        self.total_bwd_x_matmul_time_pct = (self.bwd_x_matmul_time / self.total_time) * 100
+        self.total_head_time_pct = (self.head_time / self.total_time) * 100
 
 
         # --- Calculate Transfer Times (Keep logic) ---
@@ -1495,6 +1565,11 @@ class SimulationRunner:
         ffn_active_params =  self.model_dim + 3 * self.active_experts * (self.model_dim * self.expert_dim)
         total_active_params = embed_params + self.total_layers * (attn_block_params + ffn_active_params) + head_params
 
+        if self.chunk_size > self.min_chunk_size:
+            chunk_size_str = f" (To Reach Compute-Bound)\n"
+        else:
+            chunk_size_str = f""
+
         text = (
           f"# Model Parameters: {total_model_params / (1e9):0.2f} B\n"
           f"     # Active: {total_active_params / (1e9):0.2f} B\n\n"
@@ -1503,19 +1578,18 @@ class SimulationRunner:
           f"- Parameters: {train_model_size / (1 << 30):.2f} GB\n"
           f"- Gradients: {train_gradient_size / (1 << 30):.2f} GB\n"
           f"- Opt. State: {(2 * train_model_size) / (1 << 30):.2f} GB\n\n"
-          f"Data: \n"
-          f" Train Chunks\n"
-          f"  - Block Inputs: {(train_block_inputs) / (1 << 30):.2f} GB\n"
-          f"  - Seq. Context: {(train_context_size) / (1 << 30):.2f} GB\n"
-          f"  - Attn Outputs: {(train_attn_output_size) / (1 << 30):.2f} GB\n"
-          f"  - Other Activs.: {(train_remain_activation_size) / (1 << 30):.2f} GB\n"
-          f" Non-Train Chunks\n"
-          f"  - Seq. Context: {(non_train_context_size) / (1 << 30):.2f} GB\n\n"
-          f"TOTAL: {aggregate_memory_size / (1 << 30):.2f} GB\n\n\n"
+          f"Data (Generated from Fwd):\n"
+          f"- Block Inputs: {(train_block_inputs) / (1 << 30):.2f} GB\n"
+          f"- Seq. Context: {(train_context_size) / (1 << 30):.2f} GB\n"
+          f"- Attn Outputs: {(train_attn_output_size) / (1 << 30):.2f} GB\n"
+          f"- Other Activs: {(train_remain_activation_size) / (1 << 30):.2f} GB\n\n"
+          f"TOTAL:\n"
+          f"- Attn Critical: {(train_block_inputs + train_context_size + train_attn_output_size) / (1 << 30):.2f} GB\n"
+          f"- All: {aggregate_memory_size / (1 << 30):.2f} GB\n\n\n"
           f"--- DATAFLOW CONFIG ---\n\n"
           f"Chunk Size: {self.chunk_size}\n"
-          f" - Total Chunks: {self.total_chunks}\n"
-          f"  - Train Chunks: {self.total_train_chunks}\n\n"
+          f"{chunk_size_str}"
+          f"- Total Chunks: {self.total_chunks}\n\n"
           f"* TOTAL PER-DEVICE MEMORY *\n"
           f" - {typical_device_memory_size / (1 << 30):.2f} GB\n\n\n"
           f"* TOTAL PER-HOME SPACE *\n"
@@ -1615,25 +1689,37 @@ class SimulationRunner:
 
         lower_bounds_time_str = self.format_time_from_sec(lower_bound_seconds)
 
+        self.total_time_str = self.format_time_from_sec(self.total_time)
+
         text = (
             f"--- DISCOVERED CONSTANTS ---\n\n"
             f"Compute Constants:\n"
             f" - Theo. Compute: {int(self.hardware_max_flops / 1e12)} TFLOPs\n"
-            f" - Memory BW: {int(self.hardware_mem_bw_bytes_sec / (1 << 30))} GB/s\n"
+            f" - Memory BW: {int(self.hardware_mem_bw_bytes_sec / 1e9)} GB/s\n"
             f" - Peak Matmul Eff.: {self.matmul_efficiency}\n"
-            f" - Peak Attention Eff.: {self.attn_efficiency}\n\n"
+            f" - Peak Attention Fwd Eff.: {self.attn_fwd_efficiency}\n"
+            f" - Peak Attention Bwd Eff.: {self.attn_bwd_efficiency}\n\n"
             f"Communication Constants:\n"
             f" - D2H BW: {self.home_bw_gbit_sec} (Gb/s)\n"
             f" - P2P BW: {self.peer_bw_gbit_sec} (Gb/s)\n\n\n"
             f"--- FULL FLOP OVERVIEW ---\n\n"    
             f"Total FLOPs: {self.total_flops:.2e}\n"
-            f"  - FWD: {self.total_fwd_flops:.2e} ({fwd_pct:.1f}%)\n"
-            f"    - Attn: {self.total_fwd_attn_pct:.1f}%\n"
-            f"    - Matmul: {self.total_fwd_matmul_pct:.1f}%\n"
-            f"  - Head: {self.total_head_flops:.2e} ({head_pct:.1f}%)\n"
-            f"  - BWD: {self.total_bwd_flops:.2e} ({bwd_pct:.1f}%)\n"
-            f"    - Attn: {self.total_bwd_attn_pct:.1f}%\n"
-            f"    - Matmul: {self.total_bwd_matmul_pct:.1f}%\n\n\n"
+            f" - FWD: {self.total_fwd_flops:.2e} ({fwd_pct:.1f}%)\n"
+            f"   - Attn: {self.total_fwd_attn_pct:.1f}%\n"
+            f"   - Matmul: {self.total_fwd_matmul_pct:.1f}%\n"
+            f" - Head: {self.total_head_flops:.2e} ({head_pct:.1f}%)\n"
+            f" - BWD: {self.total_bwd_flops:.2e} ({bwd_pct:.1f}%)\n"
+            f"   - Attn: {self.total_bwd_attn_pct:.1f}%\n"
+            f"   - Matmul: {self.total_bwd_matmul_pct:.1f}%\n\n\n"
+            f"Total Time: {self.total_time_str}\n"
+            f" - FWD: {self.total_fwd_time_pct:.1f}%\n"
+            f"  - Attn: {self.total_fwd_attn_time_pct:.1f}%\n"
+            f"  - Matmul: {self.total_fwd_matmul_time_pct:.1f}%\n"
+            f" - Head: {self.total_head_time_pct:.1f}%\n"
+            f" - BWD X: {self.total_bwd_x_time_pct:.1f}%\n"
+            f"  - Attn: {self.total_bwd_x_attn_time_pct:.1f}%\n"
+            f"  - Matmul: {self.total_bwd_x_matmul_time_pct:.1f}%\n"
+            f" - BWD W: {self.total_bwd_w_time_pct:.1f}%\n\n\n"
             f"--- DERIVED SIM CONFIG ---\n\n"
             f"Cycle Rate:\n"
             f" - {1e6/self.cycles_per_second:.1f} us/cycle\n\n"
@@ -1662,8 +1748,7 @@ class SimulationRunner:
             f" - Head: {self.headTransferFrames}\n"
             f"Chunk Info\n"
             f" - Activation Save/Fetch: {self.savedActivationsFrames}\n"
-            f" - Block Transitions: {blockTransitionCyclesText}\n"
-            f" - Ctx Updates: {contextTransferCycleText}"
+            f" - Block Transitions: {blockTransitionCyclesText}"
         )
 
         return textwrap.dedent(text)
