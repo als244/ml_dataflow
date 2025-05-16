@@ -256,7 +256,7 @@ int dataflow_submit_default_cross_entropy_loss(Dataflow_Handle * handle, int str
 // Require user to pass in host function pointer...
 
 int dataflow_submit_adam_step_host(Dataflow_Handle * handle, int stream_id, 
-                        void * adam_host_func,
+                        void * adam_host_func, Op * op_buffer,
 						DataflowDatatype param_dt, DataflowDatatype grad_dt, 
                         DataflowDatatype mean_dt, DataflowDatatype var_dt,
                         int layer_id, float lr, float beta1, float beta2, float weight_decay, float epsilon,

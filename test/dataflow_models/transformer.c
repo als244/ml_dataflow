@@ -1482,6 +1482,10 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
+
+	// EACH MODEL OUTPUT STRUCT NEEDS TO BE FILLED IN WITH:
+	// model_output -> seq_batch = seq_batches[i];
+
 	model_output -> logits = cur_dev_mem;
 	cur_dev_mem += logits_size;
 	used_dev_mem += logits_size;
@@ -1524,8 +1528,6 @@ int main(int argc, char * argv[]){
 
 
 
-	// EACH MODEL OUTPUT STRUCT NEEDS TO BE FILLED IN WITH:
-	// model_output -> seq_batch = seq_batches[i];
 
 
 	Transformer_Block_Activations * cur_activations;
@@ -1533,6 +1535,15 @@ int main(int argc, char * argv[]){
 
 
 	int num_adam_threads = NUM_ADAM_THREADS;
+
+	// Ensuring that arguments to the host functions remain intact...
+	// these are populated within the dataflowops helper functions...
+	// + 2 for the head and embedding
+	Op * adam_op_buffers = calloc(n_layers + 2, sizeof(Op));
+	if (!adam_op_buffers){
+		fprintf(stderr, "Error: failed to allocate adam_op_buffers...\n");
+		return -1;
+	}
 
 
 	// ADAM OPTIMIZER PARAMS...
@@ -1826,7 +1837,7 @@ int main(int argc, char * argv[]){
 	// speicfying adam host functio as adam_step_host and passing this function address 
 	// which will be submitted to the host ops stream...
 	ret = dataflow_submit_adam_step_host(&dataflow_handle, host_ops_stream_id, 
-                        &adam_step_host,
+                        &adam_step_host, &(adam_op_buffers[n_layers + 1]),
 						block_dt, block_bwd_dt, 
                         opt_mean_dt, opt_var_dt,
                         n_layers, lr, beta1, beta2, weight_decay, epsilon,
@@ -2197,7 +2208,7 @@ int main(int argc, char * argv[]){
 		// speicfying adam host functio as adam_step_host and passing this function address 
 		// which will be submitted to the host ops stream...
 		ret = dataflow_submit_adam_step_host(&dataflow_handle, host_ops_stream_id, 
-							&adam_step_host,
+							&adam_step_host, &(adam_op_buffers[k + 1]),
 							block_dt, block_bwd_dt, 
 							opt_mean_dt, opt_var_dt,
 							k, lr, beta1, beta2, weight_decay, epsilon,
@@ -2263,7 +2274,7 @@ int main(int argc, char * argv[]){
 	// speicfying adam host functio as adam_step_host and passing this function address 
 	// which will be submitted to the host ops stream...
 	ret = dataflow_submit_adam_step_host(&dataflow_handle, host_ops_stream_id, 
-							&adam_step_host,
+							&adam_step_host, &(adam_op_buffers[0]),
 							block_dt, block_bwd_dt, 
 							opt_mean_dt, opt_var_dt,
 							-1, lr, beta1, beta2, weight_decay, epsilon,
