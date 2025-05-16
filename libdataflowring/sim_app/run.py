@@ -22,7 +22,7 @@ server_session = Session(app)
 
 def parse_parameters(form_data):
     """ Safely parses form data into simulation parameters. (Unchanged) """
-     params = {}
+    params = {}
     # ... (keep existing parsing logic - ensure it matches SimulationRunner needs) ...
     params['cycle_rate_micros'] = form_data.get('cycle_rate_micros', default=2000, type=int)
     params['min_chunk_size'] = form_data.get('min_chunk_size', default=8192, type=int)
