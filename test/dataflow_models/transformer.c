@@ -7,7 +7,7 @@
 // these shoudl be auto-cofigured, testing manually for now...
 // could also take in as command line argument...
 #define NUM_DEV_BLOCKS 2
-#define NUM_DEV_ACTIVATION_SLOTS 16
+#define NUM_DEV_ACTIVATION_SLOTS 12
 #define NUM_ADAM_THREADS 12
 
 #define HOST_MEM_GB 100
@@ -1014,9 +1014,11 @@ int main(int argc, char * argv[]){
 		}
 
 		cur_dev_mem += metadata_buffer_size;
+		used_dev_mem += metadata_buffer_size;
 
 
 		// ensure alignment for matmuls..
+		used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 		
@@ -1494,6 +1496,21 @@ int main(int argc, char * argv[]){
 	printf("Setup Complete!\n\n");
 
 	printf("\nMEMORY USAGE (GB):\n\tHost: %.3f\n\tDevice: %.3f\n\n\n\n", (float) used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) used_dev_mem / (1024.0 * 1024.0 * 1024.0));
+
+	if ((used_host_mem > host_size_bytes) || (used_dev_mem > dev_size_bytes)) {
+		fprintf(stderr, "ERROR. Cannot run with current configuration of %d dev parameter blocks and %d dev activation slots...\n", NUM_DEV_BLOCKS, NUM_DEV_ACTIVATION_SLOTS);
+		
+		if (used_host_mem > host_size_bytes){
+			fprintf(stderr, "\nHost Memory Overflow: Have %.3f bytes allocated, but requires %.3f bytes with current setting...\n", (float) used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) host_size_bytes / (1024.0 * 1024.0 * 1024.0));
+		}
+
+		if (used_dev_mem > dev_size_bytes){
+			fprintf(stderr, "\nDevice Memory Overflow: Have %.3f bytes allocated, but requires %.3f bytes with current setting...\n", (float) used_dev_mem / (1024.0 * 1024.0 * 1024.0), (float) dev_size_bytes / (1024.0 * 1024.0 * 1024.0));
+		}
+		
+		return -1;
+	}
+
 
 	// TRAINING LOOP BELOW....
 
