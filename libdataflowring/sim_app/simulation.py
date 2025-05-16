@@ -533,28 +533,28 @@ class Device:
         if is_fwd:
             computation_type_str = "Fwd"
             has_deps = has_weight and has_input_transition and has_act_buffer_space and has_outbound_trans_space
-            if not has_weight: missing_items.append("Weight")
-            if not has_input_transition: missing_items.append("Act. Stream")
+            if not has_weight: missing_items.append("No Weight")
+            if not has_input_transition: missing_items.append("No Act. Stream")
             if not has_act_buffer_space: missing_items.append("Congested (Act.)")
-            if not has_outbound_trans_space: missing_items.append("Congested Trans.)")
+            if not has_outbound_trans_space: missing_items.append("Congested (Trans.)")
         elif is_head:
             computation_type_str = "Head"
             has_deps = has_weight and has_input_transition and has_outbound_trans_space
-            if not has_weight: missing_items.append("Weight")
-            if not has_input_transition: missing_items.append("Act. Stream")
+            if not has_weight: missing_items.append("No Weight")
+            if not has_input_transition: missing_items.append("No Act. Stream")
             if not has_outbound_trans_space: missing_items.append("Congested (Trans.)")
         elif bX:
             computation_type_str = "Bwd X"
             has_deps = has_weight and has_input_transition and has_fwd_activation and has_context and has_outbound_trans_space
-            if not has_weight: missing_items.append("Weight")
-            if not has_input_transition: missing_items.append("Grad. Stream")
-            if not has_fwd_activation: missing_items.append("Fwd Act.")
-            if not has_context: missing_items.append(f"Ctx (Chunk: {missing_ctx_chunk})")
+            if not has_weight: missing_items.append("No Weight")
+            if not has_input_transition: missing_items.append("No Grad. Stream")
+            if not has_fwd_activation: missing_items.append("No Fwd Act.")
+            if not has_context: missing_items.append(f"No Ctx (Chunk: {missing_ctx_chunk})")
             if not has_outbound_trans_space: missing_items.append("Congested (Trans.)")
         elif bW:
             computation_type_str = "Bwd W"
             has_deps = has_fwd_activation # Simplest dependency
-            if not has_fwd_activation: missing_items.append("Fwd Act.")
+            if not has_fwd_activation: missing_items.append("No Fwd Act.")
 
         # --- Update State based on Dependencies ---
         if has_deps:
@@ -601,7 +601,7 @@ class Device:
                 # print(f"T={T}, Dev {self.device_id}: STALL -> Waiting for C{cid},L{lid},{computation_type_str}. Missing: {missing_items}") # Optional Log
 
             self.is_computing = False
-            self.stall_reason = "Missing:\n" + "\n".join(missing_items)
+            self.stall_reason = "Blocked by:\n" + "\n".join(missing_items)
             # UPDATE STATUS TEXT FOR FRONTEND
             self.computing_status_text = f"STALL:\n{computation_type_str}\nC{cid},L{lid}"
             self.current_computation_type = None
