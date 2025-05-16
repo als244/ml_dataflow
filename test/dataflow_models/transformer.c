@@ -6,10 +6,12 @@
 
 // these shoudl be auto-cofigured, testing manually for now...
 // could also take in as command line argument...
-#define NUM_DEV_BLOCKS 4
+#define NUM_DEV_BLOCKS 2
 #define NUM_DEV_ACTIVATION_SLOTS 16
 #define NUM_ADAM_THREADS 12
 
+#define HOST_MEM_GB 100
+#define DEV_MEM_GB 20
 
 int main(int argc, char * argv[]){
 
@@ -59,7 +61,7 @@ int main(int argc, char * argv[]){
 	void * host_mem;
 
 	int host_alignment = 4096;
-	size_t host_size_bytes = 1UL << 36;
+	size_t host_size_bytes = HOST_MEM_GB * (1UL << 30);
 
 	printf("Allocating host memory of size: %lu...\n", host_size_bytes);
 
@@ -80,7 +82,7 @@ int main(int argc, char * argv[]){
 	}
 
 		
-	size_t dev_size_bytes = 19 * (1UL << 30);
+	size_t dev_size_bytes = DEV_MEM_GB * (1UL << 30);
 
 	int dev_alignment = 256;
 
@@ -95,6 +97,9 @@ int main(int argc, char * argv[]){
 
 	void * cur_host_mem = host_mem;
 	void * cur_dev_mem = dev_mem;
+
+	size_t used_host_mem = 0;
+	size_t used_dev_mem = 0;
 
 
 	// Preparing model...
@@ -211,7 +216,7 @@ int main(int argc, char * argv[]){
 	sys_embedding_table -> embedding_table = cur_host_mem;
 
 	cur_host_mem += sys_embedding_table -> embedding_table_size;
-
+	used_host_mem += sys_embedding_table -> embedding_table_size;
 
 
 
@@ -220,11 +225,17 @@ int main(int argc, char * argv[]){
 
 	printf("Preparing all sys transformer blocks...\n");
 
+	
+
 	Transformer_Block ** sys_blocks = malloc(n_layers * sizeof(Transformer_Block *));
 	if (!sys_blocks){
 		fprintf(stderr, "Error: failed to allocate sys_blocks...\n");
 		return -1;
 	}
+
+
+	uint64_t raw_block_size;
+	uint64_t aligned_block_size;
 	
 	for (int i = 0; i < n_layers; i++){
 		sys_blocks[i] = init_transformer_block(i, block_dt, compute_dt,
@@ -239,6 +250,21 @@ int main(int argc, char * argv[]){
 			fprintf(stderr, "Error: failed to init transformer block...\n");
 			return -1;
 		}
+
+		if (i == 0){
+			raw_block_size = get_transformer_block_raw_size(sys_blocks[i]);
+			aligned_block_size = get_transformer_block_aligned_size(sys_blocks[i]);
+		}
+
+		printf("Binding sys transformer block #%d...\n", i);
+		ret = bind_transformer_block(cur_host_mem, sys_blocks[i]);
+		if (ret){
+			fprintf(stderr, "Error: failed to bind transformer block #%d...\n", i);
+			return -1;
+		}
+
+		cur_host_mem += aligned_block_size;
+		used_host_mem += aligned_block_size;
 	}
 
 
@@ -263,10 +289,8 @@ int main(int argc, char * argv[]){
 	uint64_t combined_head_size = combined_head_els * block_dt_size;
 
 	cur_host_mem += combined_head_size;
+	used_host_mem += combined_head_size;
 
-
-	uint64_t raw_block_size = get_transformer_block_raw_size(sys_blocks[0]);
-	uint64_t aligned_block_size = get_transformer_block_aligned_size(sys_blocks[0]);
 
 	uint64_t all_blocks_size = aligned_block_size * n_layers;
 	uint64_t all_model_size = sys_embedding_table -> embedding_table_size + all_blocks_size + combined_head_size;
@@ -314,18 +338,13 @@ int main(int argc, char * argv[]){
 
 	
 
-	printf("Binding/Loading all sys transformer blocks...\n");
+	printf("Loading all sys transformer blocks...\n");
 
 	char * layer_base_path = "../data/8B/layers";
 
 	char layer_path[PATH_MAX];
 	for (int i = 0; i < n_layers; i++){
-		printf("Binding sys transformer block #%d...\n", i);
-		ret = bind_transformer_block(cur_host_mem, sys_blocks[i]);
-		if (ret){
-			fprintf(stderr, "Error: failed to bind transformer block #%d...\n", i);
-		return -1;
-		}
+		
 
 		sprintf(layer_path, "%s/%d/combined_layer.weight", layer_base_path, i);
 
@@ -335,8 +354,6 @@ int main(int argc, char * argv[]){
 			fprintf(stderr, "Error: failed to load transformer block #%d from: %s...\n", i, layer_path);
 			return -1;
 		}
-
-		cur_host_mem += aligned_block_size;
 	}
 
 
@@ -375,7 +392,7 @@ int main(int argc, char * argv[]){
 	sys_opt_mean_embedding_table -> embedding_table = cur_host_mem;
 
 	cur_host_mem += sys_opt_mean_embedding_table -> embedding_table_size;
-
+	used_host_mem += sys_opt_mean_embedding_table -> embedding_table_size;
 	
 	
 	Transformer_Embedding_Table * sys_opt_var_embedding_table = malloc(sizeof(Transformer_Embedding_Table));
@@ -389,7 +406,7 @@ int main(int argc, char * argv[]){
 	sys_opt_var_embedding_table -> embedding_table = cur_host_mem;
 
 	cur_host_mem += sys_opt_var_embedding_table -> embedding_table_size;
-
+	used_host_mem += sys_opt_var_embedding_table -> embedding_table_size;
 	// Blocks opt state
 
 	Transformer_Block ** sys_opt_mean_blocks = malloc(n_layers * sizeof(Transformer_Block *));
@@ -424,6 +441,7 @@ int main(int argc, char * argv[]){
 		}
 
 		cur_host_mem += aligned_block_size;
+		used_host_mem += aligned_block_size;
 
 		memset(sys_opt_mean_blocks[i] -> buffer, 0, aligned_block_size);
 		
@@ -449,6 +467,7 @@ int main(int argc, char * argv[]){
 		memset(sys_opt_var_blocks[i] -> buffer, 0, aligned_block_size);
 
 		cur_host_mem += aligned_block_size;
+		used_host_mem += aligned_block_size;
 	}
 
 
@@ -470,7 +489,7 @@ int main(int argc, char * argv[]){
 	sys_opt_mean_head -> w_head = sys_opt_mean_head -> w_head_norm + (uint64_t) model_dim * (uint64_t) opt_mean_dt_size;
 
 	cur_host_mem += combined_head_size;
-
+	used_host_mem += combined_head_size;
 
 	Transformer_Head * sys_opt_var_head = malloc(sizeof(Transformer_Head));
 	if (!sys_opt_var_head){
@@ -488,7 +507,7 @@ int main(int argc, char * argv[]){
 	sys_opt_var_head -> w_head = sys_opt_var_head -> w_head_norm + (uint64_t) model_dim * (uint64_t) opt_var_dt_size;
 
 	cur_host_mem += combined_head_size;
-	
+	used_host_mem += combined_head_size;
 	
 	
 
@@ -508,8 +527,10 @@ int main(int argc, char * argv[]){
 	embedding_table -> embedding_table = cur_dev_mem;
 
 	cur_dev_mem += embedding_table -> embedding_table_size;
-
+	used_dev_mem += embedding_table -> embedding_table_size;
 	// ensure alignment for matmuls..
+
+	used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 	printf("Copying embedding table to device...\n");
@@ -551,8 +572,10 @@ int main(int argc, char * argv[]){
 		}
 
 		cur_dev_mem += aligned_block_size;
+		used_dev_mem += aligned_block_size;
 
 		// ensure alignment for matmuls..
+		used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 		// copy sys block to dev block
@@ -602,8 +625,10 @@ int main(int argc, char * argv[]){
 	head -> w_head = head -> w_head_norm + (uint64_t) model_dim * (uint64_t) block_dt_size;
 
 	cur_dev_mem += combined_head_size;
+	used_dev_mem += combined_head_size;
 
 	// ensure alignment for matmuls..
+	used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 	printf("Submitting inbound transfer for dev head...\n");
@@ -648,6 +673,7 @@ int main(int argc, char * argv[]){
 		memset(sys_grad_blocks[i] -> buffer, 0, aligned_block_size);
 
 		cur_host_mem += aligned_block_size;
+		used_host_mem += aligned_block_size;
 	}
 
 
@@ -687,8 +713,10 @@ int main(int argc, char * argv[]){
 		}
 
 		cur_dev_mem += aligned_block_size;
+		used_dev_mem += aligned_block_size;
 
 		// ensure alignment for matmuls..
+		used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 	}
 
@@ -725,7 +753,7 @@ int main(int argc, char * argv[]){
 	}
 
 	cur_host_mem += sys_grad_embedding_table -> embedding_table_size;
-
+	used_host_mem += sys_grad_embedding_table -> embedding_table_size;
 	
 	
 
@@ -747,8 +775,9 @@ int main(int argc, char * argv[]){
 	}
 
 	cur_dev_mem += grad_embedding_table -> embedding_table_size;
-
+	used_dev_mem += grad_embedding_table -> embedding_table_size;
 	// ensure alignment for matmuls..
+	used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 	
 	
@@ -781,7 +810,7 @@ int main(int argc, char * argv[]){
 
 
 	cur_host_mem += combined_head_bwd_size;
-	
+	used_host_mem += combined_head_bwd_size;
 	
 	
 
@@ -812,8 +841,10 @@ int main(int argc, char * argv[]){
 
 
 	cur_dev_mem += combined_head_bwd_size;
+	used_dev_mem += combined_head_bwd_size;
 
 	// ensure alignment for matmuls..
+	used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 	
@@ -1070,7 +1101,9 @@ int main(int argc, char * argv[]){
 	fwd_context -> x_v = fwd_context -> x_k + (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_size;
 
 	cur_dev_mem += context_buffer_size;
+	used_dev_mem += context_buffer_size;
 	// ensure alignment for matmuls..
+	used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 
@@ -1086,7 +1119,9 @@ int main(int argc, char * argv[]){
 	(bwd_context) -> x_v = (bwd_context) -> x_k + (uint64_t) total_tokens * (uint64_t) kv_dim * (uint64_t) block_bwd_dt_size;
 
 	cur_dev_mem += context_buffer_bwd_size;
+	used_dev_mem += context_buffer_bwd_size;
 	// ensure alignment for matmuls..
+	used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 	
@@ -1139,12 +1174,14 @@ int main(int argc, char * argv[]){
 		sys_block_transitions[i].X = cur_host_mem;
 		sys_block_transitions[i].seq_batch = seq_batches[i / 2];
 		cur_host_mem += block_transition_size;
-
+		used_host_mem += block_transition_size;
 		block_transitions[i].X = cur_dev_mem;
 		block_transitions[i].seq_batch = seq_batches[i / 2];
 		cur_dev_mem += block_transition_size;
+		used_dev_mem += block_transition_size;
 
 		// ensure alignment for matmuls..
+		used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 	}
 
@@ -1153,8 +1190,9 @@ int main(int argc, char * argv[]){
 	uint64_t kernelWorkspaceBytes = 1UL << 28;
 	void * kernelWorkspace = cur_dev_mem;
 	cur_dev_mem += kernelWorkspaceBytes;
-
-	// ensure alignment for matmuls..
+	used_dev_mem += kernelWorkspaceBytes;
+	// ensure alignment for matmuls..	
+	used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 	// each block transition needs to fill in:
@@ -1185,8 +1223,9 @@ int main(int argc, char * argv[]){
 	activation_workspace -> kernelWorkspaceBytes = kernelWorkspaceBytes;
 
 	cur_dev_mem += activation_workspace_size;
-
+	used_dev_mem += activation_workspace_size;
 	// ensure alignment for matmuls..
+	used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 
@@ -1213,7 +1252,7 @@ int main(int argc, char * argv[]){
 		}
 
 		cur_host_mem += saved_activations_buffer_size;
-
+		used_host_mem += saved_activations_buffer_size;
 		sys_saved_activations[i].recomputed_activations = NULL;
 	}
 
@@ -1244,7 +1283,9 @@ int main(int argc, char * argv[]){
 		}
 
 		cur_dev_mem += saved_activations_buffer_size;
+		used_dev_mem += saved_activations_buffer_size;
 		// ensure alignment for matmuls..
+		used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 		// only the grad activations will have a recomputed activations buffer...
@@ -1338,8 +1379,9 @@ int main(int argc, char * argv[]){
 	}
 
 	cur_dev_mem += grad_activations_buffer_size;
-
+	used_dev_mem += grad_activations_buffer_size;
 	// ensure alignment for matmuls..
+	used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 
@@ -1366,8 +1408,9 @@ int main(int argc, char * argv[]){
 	}
 
 	cur_dev_mem += recomputed_activations_buffer_size;
-
+	used_dev_mem += recomputed_activations_buffer_size;
 	// ensure alignment for matmuls..
+	used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 	// set the recomputed activations buffer in grad activations...
@@ -1397,17 +1440,23 @@ int main(int argc, char * argv[]){
 	head_activations -> head_norm_out = head_activations -> buffer;
 	uint64_t head_norm_out_size = (uint64_t) max_tokens_per_chunk * (uint64_t) model_dim * (uint64_t) block_dt_size;
 	cur_dev_mem += head_norm_out_size;
+	used_dev_mem += head_norm_out_size;
 	// ensure alignment for matmuls..
+	used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 	head_activations -> head_norm_rms_vals = cur_dev_mem;
 	uint64_t head_norm_rms_vals_size = (uint64_t) max_tokens_per_chunk * (uint64_t) sizeof(float);
 	cur_dev_mem += head_norm_rms_vals_size;
+	used_dev_mem += head_norm_rms_vals_size;
 	// ensure alignment for matmuls..
+	used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 	head_activations -> head_out = cur_dev_mem;
 	uint64_t head_out_size = (uint64_t) max_tokens_per_chunk * (uint64_t) vocab_size * (uint64_t) block_dt_size;
 	cur_dev_mem += head_out_size;
+	used_dev_mem += head_out_size;
 	// ensure alignment for matmuls..
+	used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 	head_activations -> kernelWorkspace = kernelWorkspace;
@@ -1424,7 +1473,7 @@ int main(int argc, char * argv[]){
 	uint64_t logits_size = (uint64_t) max_tokens_per_chunk * (uint64_t) vocab_size * block_bwd_dt_size;
 	void * sys_logits = cur_host_mem;
 	cur_host_mem += logits_size;
-
+	used_host_mem += logits_size;
 	Transformer_Model_Output * model_output = malloc(sizeof(Transformer_Model_Output));
 	if (!model_output){
 		fprintf(stderr, "Error: failed to allocate model_output...\n");
@@ -1433,9 +1482,29 @@ int main(int argc, char * argv[]){
 
 	model_output -> logits = cur_dev_mem;
 	cur_dev_mem += logits_size;
-
+	used_dev_mem += logits_size;
 	// ensure alignment for matmuls..
+	used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
+
+
+
+
+
+	printf("Setup Complete!\n\n");
+
+	printf("\nMEMORY USAGE (GB):\n\tHost: %.3f\n\tDevice: %.3f\n\n\n\n", (float) used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) used_dev_mem / (1024.0 * 1024.0 * 1024.0));
+
+	// TRAINING LOOP BELOW....
+
+
+
+
+
+
+
+
+
 
 
 	// EACH MODEL OUTPUT STRUCT NEEDS TO BE FILLED IN WITH:
