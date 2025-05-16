@@ -25,7 +25,30 @@ typedef struct Adam_Host_Op_Args{
     void * var;
 } Adam_Host_Op_Args;
 
+typedef struct Host_Set_Mem_Args{
+    void * ptr;
+    size_t size_bytes;
+    int value;
+} Host_Set_Mem_Args;
+
+typedef struct Host_Add_Args{
+    DataflowDatatype A_dt;
+    DataflowDatatype B_dt;
+    DataflowDatatype C_dt;
+    void * A;
+    void * B;
+    void * C;
+    int num_threads;
+    int layer_id;
+    size_t num_els;
+} Host_Add_Args;
+
+int set_mem_host(void * _host_set_mem_args);
+
+int add_host(void * _host_add_args);
 
 int adam_step_host(void * _adam_host_op_args);
+
+
 
 #endif

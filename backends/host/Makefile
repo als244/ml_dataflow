@@ -16,9 +16,16 @@ HOST_OPS_SRC_DIR = src/ops
 
 HOST_OPS_OBJ_DIR = ${HOST_OPS_SRC_DIR}/objs
 
+MEMORY_SRC_DIR = ${HOST_OPS_SRC_DIR}/memory
+ADD_SRC_DIR = ${HOST_OPS_SRC_DIR}/add
 OPTIMIZER_SRC_DIR = ${HOST_OPS_SRC_DIR}/optimizer
 
-HOST_OPS_OBJS = ${HOST_OPS_OBJ_DIR}/adam_dispatch.o ${HOST_OPS_OBJ_DIR}/adam_step.o ${HOST_OPS_OBJ_DIR}/adam_step_avx512.o
+
+MEMORY_OBJS = ${HOST_OPS_OBJ_DIR}/set_mem.o
+ADD_OBJS = ${HOST_OPS_OBJ_DIR}/add_dispatch.o ${HOST_OPS_OBJ_DIR}/add.o ${HOST_OPS_OBJ_DIR}/add_avx512.o
+OPTIMIZER_OBJS = ${HOST_OPS_OBJ_DIR}/adam_dispatch.o ${HOST_OPS_OBJ_DIR}/adam_step.o ${HOST_OPS_OBJ_DIR}/adam_step_avx512.o
+
+HOST_OPS_OBJS = ${MEMORY_OBJS} ${ADD_OBJS} ${OPTIMIZER_OBJS}
 
 HOST_OPS_LIB = lib/libdataflow_hostops.so
 
@@ -34,6 +41,20 @@ create_dirs:
 ${HOST_OPS_LIB}: ${HOST_OPS_OBJS}
 	${CC} ${CFLAGS} -shared ${ALL_INCLUDES} $^ -o $@ ${ALL_LIB_DEPENDS}
 
+
+## memory related ops
+${HOST_OPS_OBJ_DIR}/set_mem.o: ${MEMORY_SRC_DIR}/set_mem.c
+	${CC} ${CFLAGS} ${ALL_INCLUDES} -c $< -o $@
+
+## add related ops
+${HOST_OPS_OBJ_DIR}/add_dispatch.o: ${ADD_SRC_DIR}/add_dispatch.c
+	${CC} ${CFLAGS} ${ALL_INCLUDES} -c $< -o $@
+
+${HOST_OPS_OBJ_DIR}/add.o: ${ADD_SRC_DIR}/add.c
+	${CC} ${CFLAGS} ${ALL_INCLUDES} -c $< -o $@
+
+${HOST_OPS_OBJ_DIR}/add_avx512.o: ${ADD_SRC_DIR}/add_avx512.c
+	${CC} ${CFLAGS} ${AVX512_FLAGS} ${ALL_INCLUDES} -c $< -o $@
 
 ## optimizer ops
 
