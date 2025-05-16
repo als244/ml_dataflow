@@ -1536,14 +1536,34 @@ int main(int argc, char * argv[]){
 
 	int num_adam_threads = NUM_ADAM_THREADS;
 
+
+	// Dealing with gradient accumulation, optimization, and resetting memory...
+
 	// Ensuring that arguments to the host functions remain intact...
 	// these are populated within the dataflowops helper functions...
 	// + 2 for the head and embedding
+
+
+	Add_Host_Op_Args * add_op_buffers = calloc(n_layers + 2, sizeof(Add_Host_Op_Args));
+	if (!add_op_buffers){
+		fprintf(stderr, "Error: failed to allocate add_op_buffers...\n");
+		return -1;
+	}
+	
+	
 	Adam_Host_Op_Args * adam_op_buffers = calloc(n_layers + 2, sizeof(Adam_Host_Op_Args));
 	if (!adam_op_buffers){
 		fprintf(stderr, "Error: failed to allocate adam_op_buffers...\n");
 		return -1;
 	}
+
+	Set_Mem_Host_Op_Args * set_mem_op_buffers = calloc(n_layers + 2, sizeof(Set_Mem_Host_Op_Args));
+	if (!set_mem_op_buffers){
+		fprintf(stderr, "Error: failed to allocate set_mem_op_buffers...\n");
+		return -1;
+	}
+
+
 
 
 	// ADAM OPTIMIZER PARAMS...
@@ -1606,22 +1626,26 @@ int main(int argc, char * argv[]){
 	// CRTICIAL TODO: right now we aren't doing any accumulation of gradients, 
 	// so if this isn't 1 the math is wrong..
 	// but can still simulate more realsitic perf by setting this to a higher value...
-	int seqs_per_step = 20;
+	int seqs_per_step = 2;
 
 
 	// Simulating training loop...
 	// Don't have the dataset loading properly ready yet...
 	// just setting here for simulating perf...
-	int num_train_seqs = 20;
+	int num_train_seqs = 2;
 
 
 	int seq_in_step = 0;
+
+	int cur_step = 0;
 
 
 	for (int s = 0; s < num_train_seqs; s++){
 
 		if ((seqs_per_step != 0) && (((seq_in_step + 1) % seqs_per_step == 0) || (s == (num_train_seqs - 1))) ) {
+			printf("\n\n[Step %d] Will perform optimizer step after working through current seq (#%d of %d)...\n\n", cur_step, s + 1, num_train_seqs);
 			is_opt_step = 1;
+			cur_step++;
 		}
 		else{
 			is_opt_step = 0;
@@ -1634,7 +1658,7 @@ int main(int argc, char * argv[]){
 		// for layer 0 we include the embedding table...
 
 		for (int i = 0; i < num_chunks; i++){
-			printf("\n\nSubmitting embedding for chunk #%d...\n\n", i);
+			printf("\n\nSubmitting embedding for seq #%d, chunk #%d...\n\n", s, i);
 			
 			model_input -> seq_batch = seq_batches[i];
 
@@ -1646,8 +1670,6 @@ int main(int argc, char * argv[]){
 				fprintf(stderr, "Error: failed to submit transformer embedding...\n");
 				return -1;
 			}
-
-			printf("\n\nSubmitting layer #0 for chunk #%d...\n\n", i);
 
 			// set the context
 			seq_batches[i] -> context = fwd_context;
@@ -1674,7 +1696,7 @@ int main(int argc, char * argv[]){
 
 			for (int i = 0; i < num_chunks; i++){
 				
-				printf("\n\nSubmitting transformer for chunk #%d, block #%d...!\n\n", i, k);
+				printf("\n\nSubmitting fwd block %d for seq #%d, chunk #%d...!\n\n", k, s, i);
 
 				sem_wait(&(is_saved_activation_ready[working_act_buffer_ind]));
 
@@ -1694,7 +1716,7 @@ int main(int argc, char * argv[]){
 										&(block_transitions[2 * i + ((k + 1) % 2)])) ;
 
 				if (ret){
-					fprintf(stderr, "Error: failed to submit transformer block for chunk #%d, block #%d...\n", i, k);
+					fprintf(stderr, "Error: failed to submit transformer block for seq #%d, chunk #%d, block #%d...\n", s, i, k);
 					return -1;
 				}
 
@@ -1703,7 +1725,7 @@ int main(int argc, char * argv[]){
 
 				cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, compute_stream_id);
 				if (!cur_stream_state){
-					fprintf(stderr, "Error: failed to get stream state for chunk id #%d's, layer id #%d's activations...\n", i, k);
+					fprintf(stderr, "Error: failed to get stream state for seq #%d, chunk #%d, layer id #%d's activations...\n", s, i, k);
 					return -1;
 				}
 
@@ -1725,12 +1747,12 @@ int main(int argc, char * argv[]){
 
 					// ensure depedency is set...
 
-					printf("Sending chunk id #%d's, layer id #%d's activations to host (act #%d of %d)...\n\n", i, k, cur_act, total_acts);
+					printf("Sending seq #%d, chunk #%d, layer id #%d's activations to host (act #%d of %d)...\n\n", s, i, k, cur_act, total_acts);
 
 
 					ret = dataflow_handle.submit_dependency(&dataflow_handle, outbound_stream_id, cur_stream_state);
 					if (ret){
-						fprintf(stderr, "Error: failed to submit dependency to send chunk id #%d's, layer id #%d's activations to host...\n", i, k);
+						fprintf(stderr, "Error: failed to submit dependency to send seq #%d, chunk #%d, layer id #%d's activations to host...\n", s, i, k);
 						return -1;
 					}
 
@@ -1740,21 +1762,21 @@ int main(int argc, char * argv[]){
 																	cur_activations -> working_activations -> savedActivationsBufferBytes);
 
 					if (ret){
-						fprintf(stderr, "Error: failed to submit outbound transfer to send chunk id #%d's, layer id #%d's activations to host...\n", i, k);
+						fprintf(stderr, "Error: failed to submit outbound transfer to send seq #%d, chunk #%d, layer id #%d's activations to host...\n", s, i, k);
 						return -1;
 					}
 
 					// add back 
 					ret = (dataflow_handle.submit_host_op)(&dataflow_handle, post_sem_callback, (void *) &(is_saved_activation_ready[working_act_buffer_ind]), outbound_stream_id);
 					if (ret){
-						fprintf(stderr, "Error: failed to submit host op to enqueue chunk id #%d's, layer id #%d's activations...\n", i, k);
+						fprintf(stderr, "Error: failed to submit host op to enqueue seq #%d, chunk #%d, layer id #%d's activations...\n", s, i, k);
 						return -1;
 					}
 
 					printf("Submitting host op to enqueue act index %d sys activations as home...\n\n", k * num_chunks + i);
 					ret = (dataflow_handle.submit_host_op)(&dataflow_handle, post_sem_callback, (void *) &(is_saved_act_home[k * num_chunks + i]), outbound_stream_id);
 					if (ret){
-						fprintf(stderr, "Error: failed to submit host op to enqueue chunk id #%d's, layer id #%d's activations as home...\n", i, k);
+						fprintf(stderr, "Error: failed to submit host op to enqueue seq #%d, chunk #%d, layer id #%d's activations as home...\n", s, i, k);
 						return -1;
 					}
 
@@ -1818,7 +1840,7 @@ int main(int argc, char * argv[]){
 
 
 		for (int i = num_chunks - 1; i >= 0; i--){
-			printf("\n\nSubmitting head for chunk #%d...\n\n", i);
+			printf("\n\nSubmitting head for seq #%d, chunk #%d...\n\n", s, i);
 
 
 			final_block_output_transition = &(block_transitions[2 * i + (n_layers % 2)]);
@@ -1828,7 +1850,7 @@ int main(int argc, char * argv[]){
 			// ensure grad stream is zeroed out...
 			ret = dataflow_handle.set_mem(&dataflow_handle, compute_stream_id, grad_stream_from_head -> X, 0, block_transition_size);
 			if (ret){
-				fprintf(stderr, "Error: failed to zero out grad stream for chunk #%d before head...\n", i);
+				fprintf(stderr, "Error: failed to zero out grad stream for seq #%d, chunk #%d before head...\n", s, i);
 				return -1;
 			}
 
@@ -1855,6 +1877,7 @@ int main(int argc, char * argv[]){
 		}
 
 		// Send back grad head to host...
+		printf("\n\nSending grad head to host for seq #%d...\n\n", s);
 
 		cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, compute_stream_id);
 		if (!cur_stream_state){
@@ -1867,6 +1890,8 @@ int main(int argc, char * argv[]){
 			fprintf(stderr, "Error: failed to submit dependency to send head to host...\n");
 			return -1;
 		}
+
+		// MAJOR TODO: the destination should be part of a pool of buffers on the host that will then be added to existing grad buffers on host...
 
 		ret = (dataflow_handle.submit_outbound_transfer)(&dataflow_handle, outbound_stream_id, sys_grad_head -> buffer, grad_head -> buffer, combined_head_bwd_size);
 		if (ret){
@@ -1902,6 +1927,28 @@ int main(int argc, char * argv[]){
 				fprintf(stderr, "Error: failed to submit adam step host for head...\n");
 				return -1;
 			}
+
+			// Reset gradient accumulation buffer to 0...
+			ret = dataflow_submit_set_mem_host(&dataflow_handle, host_ops_stream_id, 
+                        &set_mem_host, &(set_mem_op_buffers[n_layers + 1]),
+                        sys_grad_head -> buffer, combined_head_bwd_size, 0);
+
+			if (ret){
+				fprintf(stderr, "Error: failed to submit set mem host for grad head...\n");
+				return -1;
+			}
+		}
+		else{
+			// Need to accumlate head gradients...
+
+			// MAJOR TODO: Implement this...
+
+			/* int dataflow_submit_add_host(Dataflow_Handle * handle, int stream_id, 
+                        void * add_host_func, Add_Host_Op_Args * op_buffer,
+                        DataflowDatatype A_dt, DataflowDatatype B_dt, DataflowDatatype C_dt,
+                        int num_threads, size_t num_els, void * A, void * B, void * C);
+			*/
+
 		}
 		
 
@@ -1941,6 +1988,11 @@ int main(int argc, char * argv[]){
 			printf("\n\n[Bwd] Waiting for layer id #%d to be ready...\n\n", k);
 
 			sem_wait(&(is_block_ready[k]));
+
+			// if we are less than num dev blocks we will need this going forwards, so set to ready...
+			if (k < num_dev_blocks){
+				sem_post(&(is_block_ready[k]));
+			}
 
 			printf("\n\n[Bwd] Layer id #%d is ready! Submitting ops...\n\n", k);
 
@@ -1986,7 +2038,7 @@ int main(int argc, char * argv[]){
 				grad_activations -> working_activations -> seq_batch = seq_batches[i];
 
 			
-				printf("\n\nSubmitting bwd_x for chunk #%d, block #%d...\n\n", i, k);
+				printf("\n\nSubmitting bwd_x for seq #%d, chunk #%d, block #%d...\n\n", s, i, k);
 
 				ret = dataflow_submit_transformer_block_bwd_x(&dataflow_handle, compute_stream_id,
 									working_block, 
@@ -1997,7 +2049,7 @@ int main(int argc, char * argv[]){
 									&(block_transitions[2 * i + ((k + 1) % 2)]));
 
 				if (ret){
-					fprintf(stderr, "Error: failed to submit transformer block bwd_x for chunk #%d, block #%d...\n", i, k);
+					fprintf(stderr, "Error: failed to submit transformer block bwd_x for seq #%d, chunk #%d, block #%d...\n", s, i, k);
 					return -1;
 				}
 
@@ -2079,7 +2131,7 @@ int main(int argc, char * argv[]){
 				// could prefetch next layer weights here, but doing this after the bwd w is done for cleanliness...
 
 				
-				printf("\n\nSubmitting bwd_w for chunk #%d, block #%d...\n\n", i, k);
+				printf("\n\nSubmitting bwd_w for seq #%d, chunk #%d, block #%d...\n\n", s, i, k);
 
 				// utilizing the newly populated grad_activations struct
 				// to update the grad_weights...
@@ -2091,7 +2143,7 @@ int main(int argc, char * argv[]){
 									working_grad_block);
 
 				if (ret){
-					fprintf(stderr, "Error: failed to submit transformer block bwd_w for chunk #%d, block #%d...\n", i, k);
+					fprintf(stderr, "Error: failed to submit transformer block bwd_w for seq #%d, chunk #%d, block #%d...\n", s, i, k);
 					return -1;
 				}
 
@@ -2137,6 +2189,10 @@ int main(int argc, char * argv[]){
 					}
 
 					cur_fwd_prefetch_act_ind -= 1;
+				}
+				// otherwise we can just overwrite this buffer during the next fwd pass...
+				else{
+					sem_post(&(is_saved_activation_ready[working_act_buffer_ind]));
 				}
 
 				if (working_act_buffer_ind > 0){
@@ -2203,7 +2259,7 @@ int main(int argc, char * argv[]){
 
 			// SENDING BACK GRAD BLOCK...
 
-			printf("[Bwd] Sending back grad block for layer id %d at index %d...\n\n", k, working_grad_block_ind);
+			printf("[Bwd] Sending back grad block for seq #%d, layer id %d at index %d...\n\n", s, k, working_grad_block_ind);
 
 			ret = dataflow_handle.submit_dependency(&dataflow_handle, outbound_stream_id, cur_stream_state);
 			if (ret){
@@ -2211,10 +2267,7 @@ int main(int argc, char * argv[]){
 				return -1;
 			}
 
-			// THIS SHOULD BE AN ADDITION, NOT A REPLACEMENT..
-			// THUS SHOULD HAVE A TEMP POOL OF GRAD BUFFERS ON HOST TO TRANSFER TO
-			// AND THEN MAKE SURE TO ADD THESE TO EXISTING GRAD BUFFERS ON HOST
-			// AND THEN MAKE THE BUFFER IN POOL AVAILABLE AGAIN...
+			// MAJOR TODO: the destination should be part of a pool of buffers on the host that will then be added to existing grad buffers on host...
 
 			ret = (dataflow_handle.submit_outbound_transfer)(&dataflow_handle, outbound_stream_id, sys_grad_blocks[k] -> buffer, working_grad_block -> buffer, aligned_block_size);
 			if (ret){
@@ -2271,12 +2324,38 @@ int main(int argc, char * argv[]){
 					fprintf(stderr, "Error: failed to submit adam step host for block #%d...\n", k);
 					return -1;
 				}
+
+				// Reset gradient accumulation buffer to 0...
+				ret = dataflow_submit_set_mem_host(&dataflow_handle, host_ops_stream_id, 
+                        &set_mem_host, &(set_mem_op_buffers[k + 1]),
+                        sys_grad_blocks[k] -> buffer, aligned_block_size, 0);
+
+				if (ret){
+					fprintf(stderr, "Error: failed to submit set mem host for grad block #%d...\n", k);
+					return -1;
+				}
+			}
+			else{
+				// Call add host op to accumulate gradients, 
+				// but need to have an additionally workign pool of gradients
+				// so there isn't dependency on the host op before being able to reuse the
+				// dev grad buffer...
+
+
+
+				// MAJOR TODO: Implement this...
+
+				/* int dataflow_submit_add_host(Dataflow_Handle * handle, int stream_id, 
+                        void * add_host_func, Add_Host_Op_Args * op_buffer,
+                        DataflowDatatype A_dt, DataflowDatatype B_dt, DataflowDatatype C_dt,
+                        int num_threads, size_t num_els, void * A, void * B, void * C);
+				*/	
 			}
 		}
 
 
 		for (int i = num_chunks - 1; i >= 0; i--){
-			printf("\n\nSubmitting embedding bwd_w for chunk #%d...\n\n", i);
+			printf("\n\nSubmitting embedding bwd_w for seq #%d, chunk #%d...\n\n", s, i);
 
 			// layer 0'ths output grad stream will be at index 1 (for given chunk)
 			ret = dataflow_submit_transformer_embedding_bwd_w(&dataflow_handle, compute_stream_id,
@@ -2284,10 +2363,16 @@ int main(int argc, char * argv[]){
 												grad_embedding_table);
 
 			if (ret){
-				fprintf(stderr, "Error: failed to submit transformer embedding bwd_w for chunk #%d...\n", i);
+				fprintf(stderr, "Error: failed to submit transformer embedding bwd_w for seq #%d, chunk #%d...\n", s, i);
 				return -1;
 			}
 		}
+
+
+		// FINSIHED FWD + BWD PASS FOR SEQ #%d...
+
+		printf("\n\nFINISHED FWD + BWD PASS FOR SEQ #%d...\n\n", s);
+
 
 
 		cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, compute_stream_id);
@@ -2301,6 +2386,8 @@ int main(int argc, char * argv[]){
 			fprintf(stderr, "Error: failed to submit dependency to send embedding table to host...\n");
 			return -1;
 		}
+
+		// MAJOR TODO: the destination should be part of a pool of buffers on the host that will then be added to existing grad buffers on host...
 
 		ret = (dataflow_handle.submit_outbound_transfer)(&dataflow_handle, outbound_stream_id, sys_grad_embedding_table -> embedding_table, grad_embedding_table -> embedding_table, sys_grad_embedding_table -> embedding_table_size);
 		if (ret){
@@ -2340,14 +2427,24 @@ int main(int argc, char * argv[]){
 				return -1;
 			}
 
+			// ENSURE THAT ALL UPDATES HAVE COMPLETED BEFORE LOADING BACK...
 			cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, host_ops_stream_id);
 			if (!cur_stream_state){
 				fprintf(stderr, "Error: failed to get stream state for head...\n");
 				return -1;
 			}
 
+			// Reset gradient accumulation buffer to 0...
+			ret = dataflow_submit_set_mem_host(&dataflow_handle, host_ops_stream_id, 
+                        &set_mem_host, &(set_mem_op_buffers[0]),
+                        grad_embedding_table -> embedding_table, grad_embedding_table -> embedding_table_size, 0);
 
-			// ENSURE THAT ALL UPDATES HAVE COMPLETED BEFORE LOADING BACK...
+			if (ret){
+				fprintf(stderr, "Error: failed to submit set mem host for embedding table...\n");
+				return -1;
+			}
+
+			
 
 			printf("Submitting dependency to load updated layers after step...\n\n");
 
@@ -2364,6 +2461,7 @@ int main(int argc, char * argv[]){
 				fprintf(stderr, "Error: failed to submit inbound transfer to load updated blocks...\n");
 				return -1;
 			}
+
 
 			ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, head -> buffer, sys_head -> buffer, combined_head_size);
 			if (ret){
@@ -2419,6 +2517,19 @@ int main(int argc, char * argv[]){
 			// next layer id alreays gets reset at the beginning of the forward pass...
 		}
 		else{
+
+			// Need to accumlate embedding gradients...
+
+			// MAJOR TODO: Implement this...
+
+			/* int dataflow_submit_add_host(Dataflow_Handle * handle, int stream_id, 
+                        void * add_host_func, Add_Host_Op_Args * op_buffer,
+                        DataflowDatatype A_dt, DataflowDatatype B_dt, DataflowDatatype C_dt,
+                        int num_threads, size_t num_els, void * A, void * B, void * C);
+			*/	
+
+
+
 			seq_in_step += 1;
 		}
 	}
