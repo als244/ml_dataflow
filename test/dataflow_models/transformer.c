@@ -1626,13 +1626,13 @@ int main(int argc, char * argv[]){
 	// CRTICIAL TODO: right now we aren't doing any accumulation of gradients, 
 	// so if this isn't 1 the math is wrong..
 	// but can still simulate more realsitic perf by setting this to a higher value...
-	int seqs_per_step = 2;
+	int seqs_per_step = 10;
 
 
 	// Simulating training loop...
 	// Don't have the dataset loading properly ready yet...
 	// just setting here for simulating perf...
-	int num_train_seqs = 2;
+	int num_train_seqs = 10;
 
 
 	int seq_in_step = 0;
@@ -1643,7 +1643,7 @@ int main(int argc, char * argv[]){
 	for (int s = 0; s < num_train_seqs; s++){
 
 		if ((seqs_per_step != 0) && (((seq_in_step + 1) % seqs_per_step == 0) || (s == (num_train_seqs - 1))) ) {
-			printf("\n\n[Step %d] Will perform optimizer step after working through current seq (#%d of %d)...\n\n", cur_step, s + 1, num_train_seqs);
+			printf("\n\n[Step %d] Will perform optimizer step after working through current seq (#%d of %d)...\n\n", cur_step, s, num_train_seqs);
 			is_opt_step = 1;
 			cur_step++;
 		}
@@ -2437,7 +2437,7 @@ int main(int argc, char * argv[]){
 			// Reset gradient accumulation buffer to 0...
 			ret = dataflow_submit_set_mem_host(&dataflow_handle, host_ops_stream_id, 
                         &set_mem_host, &(set_mem_op_buffers[0]),
-                        grad_embedding_table -> embedding_table, grad_embedding_table -> embedding_table_size, 0);
+                        sys_grad_embedding_table -> embedding_table, sys_grad_embedding_table -> embedding_table_size, 0);
 
 			if (ret){
 				fprintf(stderr, "Error: failed to submit set mem host for embedding table...\n");
