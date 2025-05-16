@@ -2,7 +2,7 @@ CC = gcc
 DEV_CFLAGS = -g -fPIC
 BUILD_CFLAGS = -O3 -fPIC
 
-CFLAGS = ${BUILD_CFLAGS}
+CFLAGS = ${DEV_CFLAGS}
 
 DATAFLOW_INCLUDE_DIR = ${CURDIR}/../../libdataflow/include
 
