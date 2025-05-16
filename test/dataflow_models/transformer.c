@@ -1501,11 +1501,11 @@ int main(int argc, char * argv[]){
 		fprintf(stderr, "ERROR. Cannot run with current configuration of %d dev parameter blocks and %d dev activation slots...\n", NUM_DEV_BLOCKS, NUM_DEV_ACTIVATION_SLOTS);
 		
 		if (used_host_mem > host_size_bytes){
-			fprintf(stderr, "\nHost Memory Overflow: Have %.3f bytes allocated, but requires %.3f bytes with current setting...\n", (float) used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) host_size_bytes / (1024.0 * 1024.0 * 1024.0));
+			fprintf(stderr, "\nHost Memory Overflow: Have %.3f GB allocated, but requires %.3f GB with current setting...\n", (float) used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) host_size_bytes / (1024.0 * 1024.0 * 1024.0));
 		}
 
 		if (used_dev_mem > dev_size_bytes){
-			fprintf(stderr, "\nDevice Memory Overflow: Have %.3f bytes allocated, but requires %.3f bytes with current setting...\n", (float) used_dev_mem / (1024.0 * 1024.0 * 1024.0), (float) dev_size_bytes / (1024.0 * 1024.0 * 1024.0));
+			fprintf(stderr, "\nDevice Memory Overflow: Have %.3f GB allocated, but requires %.3f GB with current setting...\n", (float) used_dev_mem / (1024.0 * 1024.0 * 1024.0), (float) dev_size_bytes / (1024.0 * 1024.0 * 1024.0));
 		}
 		
 		return -1;
