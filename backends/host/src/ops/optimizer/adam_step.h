@@ -1,3 +1,6 @@
+#ifndef ADAM_STEP_H
+#define ADAM_STEP_H
+
 #include "host_ops.h"
 
 typedef struct {
@@ -31,3 +34,5 @@ int do_adam_step_host_avx512(DataflowDatatype param_dt, DataflowDatatype grad_dt
                              int num_threads,
                              uint64_t num_els, float lr, float beta1, float beta2, float weight_decay, float epsilon,
                              void * param, void * grad, void * mean, void * var);
+
+#endif

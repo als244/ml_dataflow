@@ -305,7 +305,7 @@ int main(int argc, char * argv[]){
 
 	uint64_t embedding_num_els = (uint64_t) vocab_size * (uint64_t) model_dim;
 	uint64_t block_num_els = raw_block_size / block_dt_size;
-	uint64_t block_num_aligned_els = aligned_block_size / block_dt_size;
+	uint64_t block_aligned_num_els = aligned_block_size / block_dt_size;
 	uint64_t all_blocks_num_els = block_num_els * n_layers;
 	uint64_t head_num_els = (uint64_t) model_dim * ((uint64_t) 1 + (uint64_t) vocab_size);
 
@@ -1539,7 +1539,7 @@ int main(int argc, char * argv[]){
 	// Ensuring that arguments to the host functions remain intact...
 	// these are populated within the dataflowops helper functions...
 	// + 2 for the head and embedding
-	Op * adam_op_buffers = calloc(n_layers + 2, sizeof(Op));
+	Adam_Host_Op_Args * adam_op_buffers = calloc(n_layers + 2, sizeof(Adam_Host_Op_Args));
 	if (!adam_op_buffers){
 		fprintf(stderr, "Error: failed to allocate adam_op_buffers...\n");
 		return -1;
@@ -1840,8 +1840,8 @@ int main(int argc, char * argv[]){
                         &adam_step_host, &(adam_op_buffers[n_layers + 1]),
 						block_dt, block_bwd_dt, 
                         opt_mean_dt, opt_var_dt,
-                        n_layers, lr, beta1, beta2, weight_decay, epsilon,
-						num_adam_threads, head_num_els, 
+                        num_adam_threads, n_layers, head_num_els, 
+						lr, beta1, beta2, weight_decay, epsilon,
                         sys_head -> buffer, sys_grad_head -> buffer, sys_opt_mean_head -> buffer, sys_opt_var_head -> buffer);
 	if (ret){
 		fprintf(stderr, "Error: failed to submit adam step host for head...\n");
@@ -2211,8 +2211,8 @@ int main(int argc, char * argv[]){
 							&adam_step_host, &(adam_op_buffers[k + 1]),
 							block_dt, block_bwd_dt, 
 							opt_mean_dt, opt_var_dt,
-							k, lr, beta1, beta2, weight_decay, epsilon,
-							num_adam_threads, head_num_els, 
+							num_adam_threads, k, block_aligned_num_els, 
+							lr, beta1, beta2, weight_decay, epsilon,
 							sys_blocks[k] -> buffer, sys_grad_blocks[k] -> buffer, sys_opt_mean_blocks[k] -> buffer, sys_opt_var_blocks[k] -> buffer);
 		if (ret){
 			fprintf(stderr, "Error: failed to submit adam step host for block #%d...\n", k);
@@ -2277,8 +2277,8 @@ int main(int argc, char * argv[]){
 							&adam_step_host, &(adam_op_buffers[0]),
 							block_dt, block_bwd_dt, 
 							opt_mean_dt, opt_var_dt,
-							-1, lr, beta1, beta2, weight_decay, epsilon,
-							num_adam_threads, head_num_els, 
+							num_adam_threads, -1, head_num_els,
+							lr, beta1, beta2, weight_decay, epsilon,  
 							sys_embedding_table -> embedding_table, sys_grad_embedding_table -> embedding_table, sys_opt_mean_embedding_table -> embedding_table, sys_opt_var_embedding_table -> embedding_table);
 	if (ret){
 		fprintf(stderr, "Error: failed to submit adam step embedding layer...\n");

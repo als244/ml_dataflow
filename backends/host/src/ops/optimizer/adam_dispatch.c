@@ -4,34 +4,30 @@
 // only takes one argument as parameter as 
 // this is typically called by (-> submit_host_op)
 // dataflow api function
-int adam_step_host(void * _op){
+int adam_step_host(void * _adam_host_op_args){
 
-	Op * op = (Op *) _op;
+	Adam_Host_Op_Args * adam_host_op_args = (Adam_Host_Op_Args *) _adam_host_op_args;
 
-	Op_Skeleton * skeleton = &(op -> op_skeleton);
-	
-	DataflowDatatype * arg_dtypes = (skeleton -> header).arg_dtypes;
+	DataflowDatatype param_dt = adam_host_op_args -> param_dt;
+	DataflowDatatype grad_dt = adam_host_op_args -> grad_dt;
+	DataflowDatatype mean_dt = adam_host_op_args -> mean_dt;
+	DataflowDatatype var_dt = adam_host_op_args -> var_dt;
 
-	DataflowDatatype param_dt = arg_dtypes[8];
-	DataflowDatatype grad_dt = arg_dtypes[9];
-	DataflowDatatype mean_dt = arg_dtypes[10];
-	DataflowDatatype var_dt = arg_dtypes[11];
+	// unlike other ops, these are not references but rather op values themselves...
 
-	void ** op_args = op -> op_args;
+	int num_threads = adam_host_op_args -> num_threads;
+	uint64_t num_els = adam_host_op_args -> num_els;
+	int layer_id = adam_host_op_args -> layer_id;
+	float lr = adam_host_op_args -> lr;
+	float beta1 = adam_host_op_args -> beta1;
+	float beta2 = adam_host_op_args -> beta2;
+	float weight_decay = adam_host_op_args -> weight_decay;
+	float epsilon = adam_host_op_args -> epsilon;
 
-	int num_threads = *((int *) op_args[0]);
-	uint64_t num_els = *((uint64_t *) op_args[1]);
-	int layer_id = *((int *) op_args[2]);
-	float lr = *((float *) op_args[3]);
-	float beta1 = *((float *) op_args[4]);
-	float beta2 = *((float *) op_args[5]);
-	float weight_decay = *((float *) op_args[6]);
-	float epsilon = *((float *) op_args[7]);
-
-	void * param = *((void **) op_args[8]);
-	void * grad = *((void **) op_args[9]);
-	void * mean = *((void **) op_args[10]);
-	void * var = *((void **) op_args[11]);
+	void * param = adam_host_op_args -> param;
+	void * grad = adam_host_op_args -> grad;
+	void * mean = adam_host_op_args -> mean;
+	void * var = adam_host_op_args -> var;
 
 	printf("[Adam Dispatcher] Optimizing Layer ID: %d...\n\n", layer_id);
 
