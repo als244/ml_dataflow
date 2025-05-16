@@ -1158,18 +1158,18 @@ class SimulationRunner:
                 self.prev_train_chunks[i] = i - 1
                 self.total_train_chunks += 1
                 
-        self.attn_block_size_bytes = self.dtype_bytes * (2 * self.model_dim * self.model_dim + 2 * self.model_dim * self.kv_dim)
-        self.ffn_block_size_bytes = self.dtype_bytes * (3 * self.model_dim * self.expert_dim * self.num_experts)
+        self.attn_block_size_bytes = self.dtype_bytes * (self.model_dim + (2 * self.model_dim * self.model_dim + 2 * self.model_dim * self.kv_dim))
+        self.ffn_block_size_bytes = self.dtype_bytes * (self.model_dim + (3 * self.model_dim * self.expert_dim * self.num_experts))
         self.layer_size_bytes = self.attn_block_size_bytes + self.ffn_block_size_bytes
 
         # 4 * for input/query/attn output/proj_output, 2 * for keys/values
         self.attn_activation_bytes = self.dtype_bytes * (4 * (self.model_dim * self.chunk_size) + 2 * (self.kv_dim * self.chunk_size))
-        self.ffn_activation_bytes = self.dtype_bytes * self.active_experts * (2 * self.chunk_size * self.expert_dim)
+        self.ffn_activation_bytes = self.dtype_bytes * (self.active_experts * (2 * self.chunk_size * self.expert_dim))
         self.activation_size_bytes = self.attn_activation_bytes + self.ffn_activation_bytes
 
         self.chunk_context_size_bytes = 2 * (self.chunk_size * self.kv_dim * self.dtype_bytes)
         self.output_size_bytes = self.dtype_bytes * (self.model_dim * self.chunk_size)
-        self.head_layer_size_bytes = self.dtype_bytes * (self.vocab_size * self.model_dim)
+        self.head_layer_size_bytes = self.dtype_bytes * (self.model_dim + (self.vocab_size * self.model_dim))
 
         self.per_layer_full_context_size = self.total_chunks * self.chunk_context_size_bytes
 
@@ -1434,7 +1434,7 @@ class SimulationRunner:
     # --- Legend Text Creation (Keep for stats calculation, text can be sent to frontend) ---
     def _create_memory_legend_text(self):
         # Keep calculation logic, return the text string
-        train_model_size = (self.layer_size_bytes * self.total_layers + self.head_layer_size_bytes)
+        train_model_size = (self.vocab_size * self.model_dim * self.dtype_bytes) + (self.layer_size_bytes * self.total_layers) + self.head_layer_size_bytes
         train_activation_size = (self.total_train_chunks * self.activation_size_bytes * self.total_layers) # Based on non-head layers
         train_context_size = self.total_train_chunks * self.chunk_context_size_bytes * self.total_layers
         train_block_inputs = self.total_train_chunks * self.chunk_size * self.model_dim * self.total_layers * self.dtype_bytes
