@@ -1,9 +1,7 @@
 #include "host_ops.h"
 
-int set_mem_host(void * _host_set_mem_args){
-    Host_Set_Mem_Args * args = (Host_Set_Mem_Args *) _host_set_mem_args;
+int set_mem_host(void * _set_mem_host_op_args){
+    Set_Mem_Host_Op_Args * args = (Set_Mem_Host_Op_Args *) _set_mem_host_op_args;
     memset(args -> ptr, args -> value, args -> size_bytes);
     return 0;
 }
-
-// should have add function here...

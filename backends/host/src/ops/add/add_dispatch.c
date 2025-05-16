@@ -1,7 +1,7 @@
 #include "add.h"
 
-int add_host(void * _host_add_args){
-    Host_Add_Args * args = (Host_Add_Args *) _host_add_args;
+int add_host(void * _add_host_op_args){
+    Add_Host_Op_Args * args = (Add_Host_Op_Args *) _add_host_op_args;
 
     // need to dispatch to a scalar, avx2, avx512, etc...
 
