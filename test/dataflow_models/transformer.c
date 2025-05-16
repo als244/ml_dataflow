@@ -2008,6 +2008,7 @@ int main(int argc, char * argv[]){
 			working_block -> layer_id = k;
 
 			// Ensure we have a fresh gradient buffer to work over...
+			printf("\n\n[Bwd] Waiting for grad block workspace to be ready...\n\n");
 
 			sem_wait(&(is_grad_block_ready[working_grad_block_ind]));
 
@@ -2034,6 +2035,8 @@ int main(int argc, char * argv[]){
 			for (int i = num_chunks - 1; i >= 0; i--){
 
 				// ensure that we have the correct activations ready...
+				printf("\n\n[Bwd] Waiting for fwd activations of chunk #%d to be ready...\n\n", i);
+				
 				sem_wait(&(is_fwd_activations_ready[k * num_chunks + i]));
 
 				sem_wait(&(is_saved_activation_ready[working_act_buffer_ind]));
