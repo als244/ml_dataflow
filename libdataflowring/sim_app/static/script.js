@@ -686,6 +686,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (ringArrow && ringLabel && device.peer && device.peer.progress > 1e-6 && N > 1) { const progress = Math.min(1.0, device.peer.progress); const peerId = device.peer.target_peer; if (peerId >= 0 && peerId < N && peerId !== i && nodePositions.outer[peerId]) { const targetPos = nodePositions.outer[peerId]; const startPos = outerPos; const dx = targetPos.x - startPos.x; const dy = targetPos.y - startPos.y; const dist = Math.hypot(dx, dy); const startAngleRad = Math.atan2(dy, dx); const startEdge = pointOnCircle(startPos.x, startPos.y, outerNodeRadius, startAngleRad * 180 / Math.PI); const endAngleRad = Math.atan2(-dy, -dx); const endEdge = pointOnCircle(targetPos.x, targetPos.y, outerNodeRadius, endAngleRad * 180 / Math.PI); const currentEdgeX = startEdge.x + (endEdge.x - startEdge.x) * progress; const currentEdgeY = startEdge.y + (endEdge.y - startEdge.y) * progress; const sweepFlag = device.peer.direction > 0 ? 1 : 0; let arcRadius = dist * 0.6; if (Math.hypot(currentEdgeX - startEdge.x, currentEdgeY - startEdge.y) > 1e-3) { const pathData = `M ${startEdge.x} ${startEdge.y} A ${arcRadius} ${arcRadius} 0 0 ${sweepFlag} ${currentEdgeX} ${currentEdgeY}`; ringArrow.setAttribute('d', pathData); ringArrow.setAttribute('stroke', device.peer.color || 'indigo'); ringArrow.setAttribute('visibility', 'visible'); const midX = (startEdge.x + currentEdgeX) / 2; const midY = (startEdge.y + currentEdgeY) / 2; const vecCenterX = midX - centerX; const vecCenterY = midY - effectiveCenterY; const vecCenterMag = Math.hypot(vecCenterX, vecCenterY); const outX = vecCenterMag > 1e-6 ? vecCenterX / vecCenterMag : 0; const outY = vecCenterMag > 1e-6 ? vecCenterY / vecCenterMag : 0; const labelOffsetMag = labelOffsetDistance * 2.0; const labelX = midX + outX * labelOffsetMag; const labelY = midY + outY * labelOffsetMag; updateMultiLineText(ringLabel, device.peer.label || '', labelX, labelY, transferLabelFontSize); ringLabel.setAttribute('fill', device.peer.color || 'indigo'); ringLabel.setAttribute('visibility', 'visible'); } else { ringArrow.setAttribute('visibility', 'hidden'); ringLabel.setAttribute('visibility', 'hidden'); } } else { ringArrow.setAttribute('visibility', 'hidden'); ringLabel.setAttribute('visibility', 'hidden'); } } else if (ringArrow && ringLabel) { ringArrow.setAttribute('visibility', 'hidden'); ringLabel.setAttribute('visibility', 'hidden'); }
             const computeArc = svgElements[`${deviceId}_compute_arc`];
             if (computeArc && device.compute && device.compute.progress > 1e-6) {
+
+               
+
                 const progress = Math.min(1.0, device.compute.progress);
                 const type = device.compute.type;
                 const arcOuterRadius = outerNodeRadius * computeArcRadiusScale;
@@ -746,10 +749,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 } else { // N === 1 (since N=0 is guarded at the function start)
                     // For a single node, sweep a full circle starting from the top.
-                    theta1Deg = -90;
                     totalSweepDeg = 360;
-                    theta2Deg = theta1Deg + progress * totalSweepDeg;
+
+                    if (type === "Bwd X" || type === "Bwd W") {
+                        // For N=1, if CCW tip progression is desired for ALL types (including Bwd):
+                        theta2Deg = -90; // Arc *starts* at the top for N=1
+                        theta1Deg = theta2Deg - progress * totalSweepDeg; // Tip (theta2Deg) moves CCW
+                    } else {
+                        // For N=1, if CW tip progression is desired for ALL types (including Fwd):
+                        theta1Deg = -90; // Arc *starts* at the top for N=1
+                        theta2Deg = theta1Deg + progress * totalSweepDeg; // Tip (theta2Deg) moves CW
+                    }
                 }
+
+
 
                 // Draw the arc if the sweep is significant
                 if (Math.abs(progress * totalSweepDeg) > 1e-3) {
@@ -765,11 +778,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     // sweepFlagArc: 1 for positive angle direction (typically counter-clockwise).
                     // All our totalSweepDeg are positive magnitudes, and theta calculations respect direction.
                     let sweepFlagArc = 1;
-                    if (N === 1 && type === "Bwd") {
-                        sweepFlagArc = 0; // For N=1 and "Bwd" type, sweep Clockwise
-                    }
-
+                    
                     const pathData = `M ${startPoint.x} ${startPoint.y} A ${arcOuterRadius} ${arcOuterRadius} 0 ${largeArcFlag} ${sweepFlagArc} ${endPoint.x} ${endPoint.y}`;
+                    
                     computeArc.setAttribute('d', pathData);
                     computeArc.setAttribute('stroke', device.compute.color || 'gray');
                     computeArc.setAttribute('visibility', 'visible');
