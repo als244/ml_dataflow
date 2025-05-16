@@ -35,7 +35,7 @@ all: create_dirs ${HOST_OPS_LIB}
 
 ## ensure folder for build objs
 create_dirs:
-	mkdir -p ${HOST_OPS_OBJ_DIR}
+	mkdir -p lib && mkdir -p ${HOST_OPS_OBJ_DIR}
 
 ## library for training programs to link to
 ${HOST_OPS_LIB}: ${HOST_OPS_OBJS}
