@@ -1556,34 +1556,6 @@ int main(int argc, char * argv[]){
 	float epsilon = 1e-8;
 
 
-
-	// 1.) DOING EMBEDDDING....
-
-	// for layer 0 we include the embedding table...
-
-	for (int i = 0; i < num_chunks; i++){
-		printf("\n\nSubmitting embedding for chunk #%d...\n\n", i);
-		
-		model_input -> seq_batch = seq_batches[i];
-
-		ret = dataflow_submit_transformer_embedding(&dataflow_handle, compute_stream_id,
-											model_input,
-											embedding_table,
-											&(block_transitions[2 * i]));
-		if (ret){
-			fprintf(stderr, "Error: failed to submit transformer embedding...\n");
-			return -1;
-		}
-
-		printf("\n\nSubmitting layer #0 for chunk #%d...\n\n", i);
-
-		// set the context
-		seq_batches[i] -> context = fwd_context;
-
-	}
-
-	// 2.) DOING CORE BLOCKS...
-
 	void * sys_activation_home;
 	void * cur_stream_state;
 
@@ -1600,275 +1572,19 @@ int main(int argc, char * argv[]){
 	Transformer_Block * working_block;
 
 	int final_saved_act_buffer_ind = -1;
-	
 
-	for (int k = 0; k < n_layers; k++){
-
-		// Ensure layer is ready before submitting ops...
-
-		printf("\n\n[Fwd] Waiting for layer id #%d to be ready...\n\n", k);
-
-		sem_wait(&(is_block_ready[k]));
-
-		printf("\n\n[Fwd] Layer id #%d is ready! Submitting ops...\n\n", k);
-
-		working_block = blocks[working_layer_ind];
-		working_block -> layer_id = k;
-
-		for (int i = 0; i < num_chunks; i++){
-			
-			printf("\n\nSubmitting transformer for chunk #%d, block #%d...!\n\n", i, k);
-
-			sem_wait(&(is_saved_activation_ready[working_act_buffer_ind]));
-
-			cur_activations = activations[k * num_chunks + i];
-
-			cur_activations -> working_activations = &(saved_activations[working_act_buffer_ind]);
-			cur_activations -> working_activations -> layer_id = k;
-			cur_activations -> working_activations -> seq_batch = seq_batches[i];
-
-			// set the context
-			seq_batches[i] -> context = fwd_context;
-
-			ret = dataflow_submit_transformer_block(&dataflow_handle, compute_stream_id, 
-									&(block_transitions[2 * i + (k % 2)]), 
-									working_block, 
-									cur_activations, 
-									&(block_transitions[2 * i + ((k + 1) % 2)])) ;
-
-			if (ret){
-				fprintf(stderr, "Error: failed to submit transformer block for chunk #%d, block #%d...\n", i, k);
-				return -1;
-			}
-
-
-			// ENSURE WE SAVE THE STATE AFTER ALL OPS HAVE BEEN QUEUED...
-
-			cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, compute_stream_id);
-			if (!cur_stream_state){
-				fprintf(stderr, "Error: failed to get stream state for chunk id #%d's, layer id #%d's activations...\n", i, k);
-				return -1;
-			}
-
-		
-
-			/* TODO WHEN DEALING WITH NON-TRAIN CHUNKS...
-			if (k < (n_layers - 1)){
-				// send back the context that is needed during bwd pass (all chunks)
-				// if last layer than already has correct context set...
-
-				
-			}
-			*/
-
-			// send back activation buffer needed during bwd pass...
-
-			// otherwise we have the correct activations saved on device and don't need to send back...
-			if (cur_act < (total_acts - num_saved_activation_buffers)) {
-
-				// ensure depedency is set...
-
-				printf("Sending chunk id #%d's, layer id #%d's activations to host (act #%d of %d)...\n\n", i, k, cur_act, total_acts);
-
-
-				ret = dataflow_handle.submit_dependency(&dataflow_handle, outbound_stream_id, cur_stream_state);
-				if (ret){
-					fprintf(stderr, "Error: failed to submit dependency to send chunk id #%d's, layer id #%d's activations to host...\n", i, k);
-					return -1;
-				}
-
-				sys_activation_home = sys_saved_activations[k * num_chunks + i].savedActivationsBuffer;
-
-				ret = (dataflow_handle.submit_outbound_transfer)(&dataflow_handle, outbound_stream_id, sys_activation_home, cur_activations -> working_activations -> savedActivationsBuffer, 
-																cur_activations -> working_activations -> savedActivationsBufferBytes);
-
-				if (ret){
-					fprintf(stderr, "Error: failed to submit outbound transfer to send chunk id #%d's, layer id #%d's activations to host...\n", i, k);
-					return -1;
-				}
-
-				// add back 
-				ret = (dataflow_handle.submit_host_op)(&dataflow_handle, post_sem_callback, (void *) &(is_saved_activation_ready[working_act_buffer_ind]), outbound_stream_id);
-				if (ret){
-					fprintf(stderr, "Error: failed to submit host op to enqueue chunk id #%d's, layer id #%d's activations...\n", i, k);
-					return -1;
-				}
-
-				printf("Submitting host op to enqueue act index %d sys activations as home...\n\n", k * num_chunks + i);
-				ret = (dataflow_handle.submit_host_op)(&dataflow_handle, post_sem_callback, (void *) &(is_saved_act_home[k * num_chunks + i]), outbound_stream_id);
-				if (ret){
-					fprintf(stderr, "Error: failed to submit host op to enqueue chunk id #%d's, layer id #%d's activations as home...\n", i, k);
-					return -1;
-				}
-
-
-				final_saved_act_buffer_ind = k * num_chunks + i;
-			}
-			// otherwise we are close to turning around and will save it on device until we reverse...
-			else{
-				sem_post(&(is_fwd_activations_ready[k * num_chunks + i]));
-				sem_post(&(is_saved_activation_ready[working_act_buffer_ind]));
-			}
-
-
-			cur_act++;
-
-			// ensure we don't increment on the final activation...
-			if ((k < (n_layers - 1)) || (i < (num_chunks - 1))){
-				working_act_buffer_ind = (working_act_buffer_ind + 1) % num_saved_activation_buffers;
-			}
-		}
-
-
-		// prefetch next layer...
-		if (next_layer_id < n_layers){
-
-			printf("\n\nPrefetching next layer id #%d (replacing layer at index %d)...\n\n", next_layer_id, replacement_layer_ind);
-
-			ret = dataflow_handle.submit_dependency(&dataflow_handle, inbound_stream_id, cur_stream_state);
-			if (ret){
-				fprintf(stderr, "Error: failed to submit dependency to prefetch next layer...\n");
-				return -1;
-			}
-
-			ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, blocks[replacement_layer_ind] -> buffer, sys_blocks[next_layer_id] -> buffer, aligned_block_size);
-			if (ret){
-				fprintf(stderr, "Error: failed to submit inbound transfer for transformer block #%d...\n", next_layer_id);
-				return -1;
-			}
-
-			ret = dataflow_handle.submit_host_op(&dataflow_handle, post_sem_callback, (void *) &(is_block_ready[next_layer_id]), inbound_stream_id);
-			if (ret){
-				fprintf(stderr, "Error: failed to submit host op to enqueue is_block_ready for next layer...\n");
-				return -1;
-			}
-			
-			// ensure the last layer will be the first one to be used during bwds, don't increment past it...
-			if (next_layer_id < (n_layers - 1)){
-				replacement_layer_ind = (replacement_layer_ind + 1) % num_dev_blocks;
-				
-			}
-			next_layer_id++;
-		}
-
-		// don't move past the the last block as this will be the first one to be used during bwds...
-		if (k < (n_layers - 1)){
-			working_layer_ind = (working_layer_ind + 1) % num_dev_blocks;
-		}
-	}
-
-	// 3.) NOW DOING HEAD, FOR NOW IN REVERSE ORDER...
 
 	Transformer_Block_Transition * final_block_output_transition;
 
 	Transformer_Block_Transition * grad_stream_from_head;
 
-	for (int i = num_chunks - 1; i >= 0; i--){
-		printf("\n\nSubmitting head for chunk #%d...\n\n", i);
 
+	int working_grad_block_ind;
+	int cur_fwd_prefetch_act_ind;
 
-		final_block_output_transition = &(block_transitions[2 * i + (n_layers % 2)]);
-
-		grad_stream_from_head = &(block_transitions[2 * i + ((n_layers - 1) % 2)]);
-
-		// ensure grad stream is zeroed out...
-		ret = dataflow_handle.set_mem(&dataflow_handle, compute_stream_id, grad_stream_from_head -> X, 0, block_transition_size);
-		if (ret){
-			fprintf(stderr, "Error: failed to zero out grad stream for chunk #%d before head...\n", i);
-			return -1;
-		}
-
-		model_output -> seq_batch = seq_batches[i];
-		head_activations -> num_tokens = seq_batches[i] -> total_tokens;
-	
-		ret = dataflow_submit_transformer_head(&dataflow_handle, compute_stream_id,
-												final_block_output_transition, head,
-												head_activations, 
-												model_output,
-												// during interference these would be NULL
-												grad_head,
-												grad_stream_from_head);
-
-
-		if (ret){
-			fprintf(stderr, "Error: failed to submit transformer head...\n");
-			return -1;
-		}
-
-		// Ensure that this seq batch's context will refere the bwd context,
-		// in order to correctly backprop through the block...
-		seq_batches[i] -> context = bwd_context;
-	}
-
-	// Send back grad head to host...
-
-	cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, compute_stream_id);
-	if (!cur_stream_state){
-		fprintf(stderr, "Error: failed to get stream state for head...\n");
-		return -1;
-	}
-	
-	ret = dataflow_handle.submit_dependency(&dataflow_handle, outbound_stream_id, cur_stream_state);
-	if (ret){
-		fprintf(stderr, "Error: failed to submit dependency to send head to host...\n");
-		return -1;
-	}
-
-	ret = (dataflow_handle.submit_outbound_transfer)(&dataflow_handle, outbound_stream_id, sys_grad_head -> buffer, grad_head -> buffer, combined_head_bwd_size);
-	if (ret){
-		fprintf(stderr, "Error: failed to submit outbound transfer to send head to host...\n");
-		return -1;
-	}
-	
-	// Now should get state of the outbound stream and set it as dependency for the host_ops stream and submit the optimizer op....
-
-	cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
-	if (!cur_stream_state){
-		fprintf(stderr, "Error: failed to get stream state for head...\n");
-		return -1;
-	}
-
-	ret = dataflow_handle.submit_dependency(&dataflow_handle, host_ops_stream_id, cur_stream_state);
-	if (ret){
-		fprintf(stderr, "Error: failed to submit dependency to submit optimizer op...\n");
-		return -1;
-	}
-
-	// speicfying adam host functio as adam_step_host and passing this function address 
-	// which will be submitted to the host ops stream...
-	ret = dataflow_submit_adam_step_host(&dataflow_handle, host_ops_stream_id, 
-                        &adam_step_host, &(adam_op_buffers[n_layers + 1]),
-						block_dt, block_bwd_dt, 
-                        opt_mean_dt, opt_var_dt,
-                        num_adam_threads, n_layers, head_num_els, 
-						lr, beta1, beta2, weight_decay, epsilon,
-                        sys_head -> buffer, sys_grad_head -> buffer, sys_opt_mean_head -> buffer, sys_opt_var_head -> buffer);
-	if (ret){
-		fprintf(stderr, "Error: failed to submit adam step host for head...\n");
-		return -1;
-	}
-	
-	
-
-	// send back gradient for head and run optimizer..
-	
-	// RESET NEXT LAYER ID TO THE LAST FORWARD BLOCK WE DON"T HAVE...!
-	next_layer_id = n_layers - 1 - num_dev_blocks;
-	int working_grad_block_ind = num_dev_block_grads - 1;
-	int cur_fwd_prefetch_act_ind = final_saved_act_buffer_ind;
-
-	// working_layer_ind and replacement_layer_ind should be properly set correctly poniting at last block, now working opposite direction...
-
-	// ensure that we set the correct layers to be ready (that are already sitting from the fwd pass)
-
-	for (int i = n_layers - 1; i > n_layers - 1 - num_dev_blocks; i--){
-		sem_post(&(is_block_ready[i]));
-	}
 
 	void * fwd_x_k_global = fwd_context -> x_k;
 	void * fwd_x_v_global = fwd_context -> x_v;
-
-	int cur_global_token_replacement_ind = 0;
 
 	void * global_fwd_ctx_k_dest;
 	void * global_fwd_ctx_v_dest;
@@ -1878,83 +1594,504 @@ int main(int argc, char * argv[]){
 	int cur_tokens;
 	int fwd_ctx_tokens_replaced;
 
+	int cur_global_token_replacement_ind;
+
 	Seq_Batch_Saved_Activations * prior_layer_sys_saved_activations;
 	int prior_layer_dev_saved_act_ind;
 	Seq_Batch_Saved_Activations * prior_layer_dev_saved_activations;
 
-	for (int k = n_layers - 1; k >= 0; k--){
+	int is_opt_step;
 
-		// Ensure we have forward layer...
+	// after how many sequences should we do an optimizer step...
+	// CRTICIAL TODO: right now we aren't doing any accumulation of gradients, 
+	// so if this isn't 1 the math is wrong..
+	// but can still simulate more realsitic perf by setting this to a higher value...
+	int seqs_per_step = 1;
 
-		printf("\n\n[Bwd] Waiting for layer id #%d to be ready...\n\n", k);
 
-		sem_wait(&(is_block_ready[k]));
+	// Simulating training loop...
+	// Don't have the dataset loading properly ready yet...
+	// just setting here for simulating perf...
+	int num_train_seqs = 20;
 
-		printf("\n\n[Bwd] Layer id #%d is ready! Submitting ops...\n\n", k);
 
-		working_block = blocks[working_layer_ind];
-		working_block -> layer_id = k;
+	for (int s = 0; s < num_train_seqs; s++){
 
-		// Ensure we have a fresh gradient buffer to work over...
-
-		sem_wait(&(is_grad_block_ready[working_grad_block_ind]));
-
-		working_grad_block = grad_blocks[working_grad_block_ind];
-
-		working_grad_block -> layer_id = k;
-
-		fwd_ctx_tokens_replaced = 0;
-
-		// ensure fwd context is populated correctly before doing backprop
-		// for the last block this already is, but then all prior blocks do replacements...
-		cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, inbound_fwd_ctx_stream_id);
-		if (!cur_stream_state){
-			fprintf(stderr, "Error: failed to get stream state for fwd context...\n");
-			return -1;
+		if ((seqs_per_step != 0) && ((s % seqs_per_step == 0) || (s == (num_train_seqs - 1)))){
+			is_opt_step = 1;
+		}
+		else{
+			is_opt_step = 0;
 		}
 
-		ret = dataflow_handle.submit_dependency(&dataflow_handle, compute_stream_id, cur_stream_state);
-		if (ret){
-			fprintf(stderr, "Error: failed to submit dependency to for compute stream to wait on fwd context transfers...\n");
-			return -1;
-		}
-		
-		for (int i = num_chunks - 1; i >= 0; i--){
+		// FWD PASS...
 
-			// ensure that we have the correct activations ready...
-			sem_wait(&(is_fwd_activations_ready[k * num_chunks + i]));
+		// 1.) DOING EMBEDDDING....
 
-			sem_wait(&(is_saved_activation_ready[working_act_buffer_ind]));
+		// for layer 0 we include the embedding table...
+
+		for (int i = 0; i < num_chunks; i++){
+			printf("\n\nSubmitting embedding for chunk #%d...\n\n", i);
 			
-			cur_fwd_activations = &(saved_activations[working_act_buffer_ind]);
-			cur_fwd_activations -> layer_id = k;
-			cur_fwd_activations -> seq_batch = seq_batches[i];
+			model_input -> seq_batch = seq_batches[i];
 
-			grad_activations -> working_activations -> layer_id = k;
-			grad_activations -> working_activations -> seq_batch = seq_batches[i];
-
-		
-			printf("\n\nSubmitting bwd_x for chunk #%d, block #%d...\n\n", i, k);
-
-			ret = dataflow_submit_transformer_block_bwd_x(&dataflow_handle, compute_stream_id,
-								working_block, 
-								&(block_transitions[2 * i + (k % 2)]), 
-								cur_fwd_activations, fwd_context,
-								grad_activations,
-								working_grad_block,
-								&(block_transitions[2 * i + ((k + 1) % 2)]));
-
+			ret = dataflow_submit_transformer_embedding(&dataflow_handle, compute_stream_id,
+												model_input,
+												embedding_table,
+												&(block_transitions[2 * i]));
 			if (ret){
-				fprintf(stderr, "Error: failed to submit transformer block bwd_x for chunk #%d, block #%d...\n", i, k);
+				fprintf(stderr, "Error: failed to submit transformer embedding...\n");
 				return -1;
 			}
 
-			// prefetch fwd context for next layer...
-			// the bwds context being reset to 0 occurs in the bwd_x op...
+			printf("\n\nSubmitting layer #0 for chunk #%d...\n\n", i);
 
-			cur_tokens = seq_batches[i] -> total_tokens;
+			// set the context
+			seq_batches[i] -> context = fwd_context;
 
-			if (k > 0){
+		}
+
+		// 2.) DOING CORE BLOCKS...
+
+		// reset what the next layer to fetch going forwards is...
+		next_layer_id = num_dev_blocks;
+
+		for (int k = 0; k < n_layers; k++){
+
+			// Ensure layer is ready before submitting ops...
+
+			printf("\n\n[Fwd] Waiting for layer id #%d to be ready...\n\n", k);
+
+			sem_wait(&(is_block_ready[k]));
+
+			printf("\n\n[Fwd] Layer id #%d is ready! Submitting ops...\n\n", k);
+
+			working_block = blocks[working_layer_ind];
+			working_block -> layer_id = k;
+
+			for (int i = 0; i < num_chunks; i++){
+				
+				printf("\n\nSubmitting transformer for chunk #%d, block #%d...!\n\n", i, k);
+
+				sem_wait(&(is_saved_activation_ready[working_act_buffer_ind]));
+
+				cur_activations = activations[k * num_chunks + i];
+
+				cur_activations -> working_activations = &(saved_activations[working_act_buffer_ind]);
+				cur_activations -> working_activations -> layer_id = k;
+				cur_activations -> working_activations -> seq_batch = seq_batches[i];
+
+				// set the context
+				seq_batches[i] -> context = fwd_context;
+
+				ret = dataflow_submit_transformer_block(&dataflow_handle, compute_stream_id, 
+										&(block_transitions[2 * i + (k % 2)]), 
+										working_block, 
+										cur_activations, 
+										&(block_transitions[2 * i + ((k + 1) % 2)])) ;
+
+				if (ret){
+					fprintf(stderr, "Error: failed to submit transformer block for chunk #%d, block #%d...\n", i, k);
+					return -1;
+				}
+
+
+				// ENSURE WE SAVE THE STATE AFTER ALL OPS HAVE BEEN QUEUED...
+
+				cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, compute_stream_id);
+				if (!cur_stream_state){
+					fprintf(stderr, "Error: failed to get stream state for chunk id #%d's, layer id #%d's activations...\n", i, k);
+					return -1;
+				}
+
+			
+
+				/* TODO WHEN DEALING WITH NON-TRAIN CHUNKS...
+				if (k < (n_layers - 1)){
+					// send back the context that is needed during bwd pass (all chunks)
+					// if last layer than already has correct context set...
+
+					
+				}
+				*/
+
+				// send back activation buffer needed during bwd pass...
+
+				// otherwise we have the correct activations saved on device and don't need to send back...
+				if (cur_act < (total_acts - num_saved_activation_buffers)) {
+
+					// ensure depedency is set...
+
+					printf("Sending chunk id #%d's, layer id #%d's activations to host (act #%d of %d)...\n\n", i, k, cur_act, total_acts);
+
+
+					ret = dataflow_handle.submit_dependency(&dataflow_handle, outbound_stream_id, cur_stream_state);
+					if (ret){
+						fprintf(stderr, "Error: failed to submit dependency to send chunk id #%d's, layer id #%d's activations to host...\n", i, k);
+						return -1;
+					}
+
+					sys_activation_home = sys_saved_activations[k * num_chunks + i].savedActivationsBuffer;
+
+					ret = (dataflow_handle.submit_outbound_transfer)(&dataflow_handle, outbound_stream_id, sys_activation_home, cur_activations -> working_activations -> savedActivationsBuffer, 
+																	cur_activations -> working_activations -> savedActivationsBufferBytes);
+
+					if (ret){
+						fprintf(stderr, "Error: failed to submit outbound transfer to send chunk id #%d's, layer id #%d's activations to host...\n", i, k);
+						return -1;
+					}
+
+					// add back 
+					ret = (dataflow_handle.submit_host_op)(&dataflow_handle, post_sem_callback, (void *) &(is_saved_activation_ready[working_act_buffer_ind]), outbound_stream_id);
+					if (ret){
+						fprintf(stderr, "Error: failed to submit host op to enqueue chunk id #%d's, layer id #%d's activations...\n", i, k);
+						return -1;
+					}
+
+					printf("Submitting host op to enqueue act index %d sys activations as home...\n\n", k * num_chunks + i);
+					ret = (dataflow_handle.submit_host_op)(&dataflow_handle, post_sem_callback, (void *) &(is_saved_act_home[k * num_chunks + i]), outbound_stream_id);
+					if (ret){
+						fprintf(stderr, "Error: failed to submit host op to enqueue chunk id #%d's, layer id #%d's activations as home...\n", i, k);
+						return -1;
+					}
+
+
+					final_saved_act_buffer_ind = k * num_chunks + i;
+				}
+				// otherwise we are close to turning around and will save it on device until we reverse...
+				else{
+					sem_post(&(is_fwd_activations_ready[k * num_chunks + i]));
+					sem_post(&(is_saved_activation_ready[working_act_buffer_ind]));
+				}
+
+
+				cur_act++;
+
+				// ensure we don't increment on the final activation...
+				if ((k < (n_layers - 1)) || (i < (num_chunks - 1))){
+					working_act_buffer_ind = (working_act_buffer_ind + 1) % num_saved_activation_buffers;
+				}
+			}
+
+
+			// prefetch next layer...
+			if (next_layer_id < n_layers){
+
+				printf("\n\nPrefetching next layer id #%d (replacing layer at index %d)...\n\n", next_layer_id, replacement_layer_ind);
+
+				ret = dataflow_handle.submit_dependency(&dataflow_handle, inbound_stream_id, cur_stream_state);
+				if (ret){
+					fprintf(stderr, "Error: failed to submit dependency to prefetch next layer...\n");
+					return -1;
+				}
+
+				ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, blocks[replacement_layer_ind] -> buffer, sys_blocks[next_layer_id] -> buffer, aligned_block_size);
+				if (ret){
+					fprintf(stderr, "Error: failed to submit inbound transfer for transformer block #%d...\n", next_layer_id);
+					return -1;
+				}
+
+				ret = dataflow_handle.submit_host_op(&dataflow_handle, post_sem_callback, (void *) &(is_block_ready[next_layer_id]), inbound_stream_id);
+				if (ret){
+					fprintf(stderr, "Error: failed to submit host op to enqueue is_block_ready for next layer...\n");
+					return -1;
+				}
+				
+				// ensure the last layer will be the first one to be used during bwds, don't increment past it...
+				if (next_layer_id < (n_layers - 1)){
+					replacement_layer_ind = (replacement_layer_ind + 1) % num_dev_blocks;
+					
+				}
+				next_layer_id++;
+			}
+
+			// don't move past the the last block as this will be the first one to be used during bwds...
+			if (k < (n_layers - 1)){
+				working_layer_ind = (working_layer_ind + 1) % num_dev_blocks;
+			}
+		}
+
+		// 3.) NOW DOING HEAD, FOR NOW IN REVERSE ORDER...
+
+
+		for (int i = num_chunks - 1; i >= 0; i--){
+			printf("\n\nSubmitting head for chunk #%d...\n\n", i);
+
+
+			final_block_output_transition = &(block_transitions[2 * i + (n_layers % 2)]);
+
+			grad_stream_from_head = &(block_transitions[2 * i + ((n_layers - 1) % 2)]);
+
+			// ensure grad stream is zeroed out...
+			ret = dataflow_handle.set_mem(&dataflow_handle, compute_stream_id, grad_stream_from_head -> X, 0, block_transition_size);
+			if (ret){
+				fprintf(stderr, "Error: failed to zero out grad stream for chunk #%d before head...\n", i);
+				return -1;
+			}
+
+			model_output -> seq_batch = seq_batches[i];
+			head_activations -> num_tokens = seq_batches[i] -> total_tokens;
+		
+			ret = dataflow_submit_transformer_head(&dataflow_handle, compute_stream_id,
+													final_block_output_transition, head,
+													head_activations, 
+													model_output,
+													// during interference these would be NULL
+													grad_head,
+													grad_stream_from_head);
+
+
+			if (ret){
+				fprintf(stderr, "Error: failed to submit transformer head...\n");
+				return -1;
+			}
+
+			// Ensure that this seq batch's context will refere the bwd context,
+			// in order to correctly backprop through the block...
+			seq_batches[i] -> context = bwd_context;
+		}
+
+		// Send back grad head to host...
+
+		cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, compute_stream_id);
+		if (!cur_stream_state){
+			fprintf(stderr, "Error: failed to get stream state for head...\n");
+			return -1;
+		}
+		
+		ret = dataflow_handle.submit_dependency(&dataflow_handle, outbound_stream_id, cur_stream_state);
+		if (ret){
+			fprintf(stderr, "Error: failed to submit dependency to send head to host...\n");
+			return -1;
+		}
+
+		ret = (dataflow_handle.submit_outbound_transfer)(&dataflow_handle, outbound_stream_id, sys_grad_head -> buffer, grad_head -> buffer, combined_head_bwd_size);
+		if (ret){
+			fprintf(stderr, "Error: failed to submit outbound transfer to send head to host...\n");
+			return -1;
+		}
+		
+		// Now should get state of the outbound stream and set it as dependency for the host_ops stream and submit the optimizer op....
+
+		if (is_opt_step) {
+			cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
+			if (!cur_stream_state){
+				fprintf(stderr, "Error: failed to get stream state for head...\n");
+				return -1;
+			}
+
+			ret = dataflow_handle.submit_dependency(&dataflow_handle, host_ops_stream_id, cur_stream_state);
+			if (ret){
+				fprintf(stderr, "Error: failed to submit dependency to submit optimizer op...\n");
+				return -1;
+			}
+
+			// speicfying adam host functio as adam_step_host and passing this function address 
+			// which will be submitted to the host ops stream...
+			ret = dataflow_submit_adam_step_host(&dataflow_handle, host_ops_stream_id, 
+								&adam_step_host, &(adam_op_buffers[n_layers + 1]),
+								block_dt, block_bwd_dt, 
+								opt_mean_dt, opt_var_dt,
+								num_adam_threads, n_layers, head_num_els, 
+								lr, beta1, beta2, weight_decay, epsilon,
+								sys_head -> buffer, sys_grad_head -> buffer, sys_opt_mean_head -> buffer, sys_opt_var_head -> buffer);
+			if (ret){
+				fprintf(stderr, "Error: failed to submit adam step host for head...\n");
+				return -1;
+			}
+		}
+		
+
+
+
+
+
+
+		// BACKWARDS PASS...
+		
+
+		// send back gradient for head and run optimizer..
+		
+		// RESET NEXT LAYER ID TO THE LAST FORWARD BLOCK WE DON"T HAVE...!
+		next_layer_id = n_layers - 1 - num_dev_blocks;
+		working_grad_block_ind = num_dev_block_grads - 1;
+		cur_fwd_prefetch_act_ind = final_saved_act_buffer_ind;
+
+		// working_layer_ind and replacement_layer_ind should be properly set correctly poniting at last block, now working opposite direction...
+
+		// ensure that we set the correct layers to be ready (that are already sitting from the fwd pass)
+
+		for (int i = n_layers - 1; i > n_layers - 1 - num_dev_blocks; i--){
+			sem_post(&(is_block_ready[i]));
+		}
+
+
+
+		cur_global_token_replacement_ind = 0;
+
+
+
+		for (int k = n_layers - 1; k >= 0; k--){
+
+			// Ensure we have forward layer...
+
+			printf("\n\n[Bwd] Waiting for layer id #%d to be ready...\n\n", k);
+
+			sem_wait(&(is_block_ready[k]));
+
+			printf("\n\n[Bwd] Layer id #%d is ready! Submitting ops...\n\n", k);
+
+			working_block = blocks[working_layer_ind];
+			working_block -> layer_id = k;
+
+			// Ensure we have a fresh gradient buffer to work over...
+
+			sem_wait(&(is_grad_block_ready[working_grad_block_ind]));
+
+			working_grad_block = grad_blocks[working_grad_block_ind];
+
+			working_grad_block -> layer_id = k;
+
+			fwd_ctx_tokens_replaced = 0;
+
+			// ensure fwd context is populated correctly before doing backprop
+			// for the last block this already is, but then all prior blocks do replacements...
+			cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, inbound_fwd_ctx_stream_id);
+			if (!cur_stream_state){
+				fprintf(stderr, "Error: failed to get stream state for fwd context...\n");
+				return -1;
+			}
+
+			ret = dataflow_handle.submit_dependency(&dataflow_handle, compute_stream_id, cur_stream_state);
+			if (ret){
+				fprintf(stderr, "Error: failed to submit dependency to for compute stream to wait on fwd context transfers...\n");
+				return -1;
+			}
+			
+			for (int i = num_chunks - 1; i >= 0; i--){
+
+				// ensure that we have the correct activations ready...
+				sem_wait(&(is_fwd_activations_ready[k * num_chunks + i]));
+
+				sem_wait(&(is_saved_activation_ready[working_act_buffer_ind]));
+				
+				cur_fwd_activations = &(saved_activations[working_act_buffer_ind]);
+				cur_fwd_activations -> layer_id = k;
+				cur_fwd_activations -> seq_batch = seq_batches[i];
+
+				grad_activations -> working_activations -> layer_id = k;
+				grad_activations -> working_activations -> seq_batch = seq_batches[i];
+
+			
+				printf("\n\nSubmitting bwd_x for chunk #%d, block #%d...\n\n", i, k);
+
+				ret = dataflow_submit_transformer_block_bwd_x(&dataflow_handle, compute_stream_id,
+									working_block, 
+									&(block_transitions[2 * i + (k % 2)]), 
+									cur_fwd_activations, fwd_context,
+									grad_activations,
+									working_grad_block,
+									&(block_transitions[2 * i + ((k + 1) % 2)]));
+
+				if (ret){
+					fprintf(stderr, "Error: failed to submit transformer block bwd_x for chunk #%d, block #%d...\n", i, k);
+					return -1;
+				}
+
+				// prefetch fwd context for next layer...
+				// the bwds context being reset to 0 occurs in the bwd_x op...
+
+				cur_tokens = seq_batches[i] -> total_tokens;
+
+				if (k > 0){
+
+					cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, compute_stream_id);
+					if (!cur_stream_state){
+						fprintf(stderr, "Error: failed to get stream state for grad block #%d...\n", k);
+						return -1;
+					}
+
+					ret = dataflow_handle.submit_dependency(&dataflow_handle, inbound_fwd_ctx_stream_id, cur_stream_state);
+					if (ret){
+						fprintf(stderr, "Error: failed to submit dependency to prefetch fwd context for next layer...\n");
+						return -1;
+					}
+
+
+					cur_global_token_replacement_ind = fwd_context -> total_context_tokens - fwd_ctx_tokens_replaced - cur_tokens;
+
+					global_fwd_ctx_k_dest = fwd_x_k_global + ((uint64_t) cur_global_token_replacement_ind * (uint64_t) kv_dim * (uint64_t) block_dt_size);
+					global_fwd_ctx_v_dest = fwd_x_v_global + ((uint64_t) cur_global_token_replacement_ind * (uint64_t) kv_dim * (uint64_t) block_dt_size);
+
+					// if we know that the prior layer's saved activations are waiting on the host
+					// they might already prefetched or on way, but easier this way...
+					if (((k - 1) * num_chunks + i) <= final_saved_act_buffer_ind){
+
+						sem_wait(&(is_saved_act_home[(k - 1) * num_chunks + i]));
+						sem_post(&(is_saved_act_home[(k - 1) * num_chunks + i]));
+
+						prior_layer_sys_saved_activations = &(sys_saved_activations[(k - 1) * num_chunks + i]);
+
+						ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_fwd_ctx_stream_id, global_fwd_ctx_k_dest, prior_layer_sys_saved_activations -> x_k_local, cur_tokens * kv_dim * block_dt_size);
+						if (ret){
+							fprintf(stderr, "Error: failed to submit inbound transfer to prefetch fwd context for next layer...\n");
+							return -1;
+						}
+
+						ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_fwd_ctx_stream_id, global_fwd_ctx_v_dest, prior_layer_sys_saved_activations -> x_v_local, cur_tokens * kv_dim * block_dt_size);
+						if (ret){
+							fprintf(stderr, "Error: failed to submit inbound transfer to prefetch fwd context for next layer...\n");
+							return -1;
+						}
+					}
+					// otherwise the context is only on the device so we can just copy it...
+					else{
+
+						if (num_chunks <= working_act_buffer_ind){
+							prior_layer_dev_saved_act_ind = working_act_buffer_ind - num_chunks;
+						}
+						// need to wrap around...
+						else{
+							prior_layer_dev_saved_act_ind = num_saved_activation_buffers - (num_chunks - working_act_buffer_ind);
+						}
+
+						prior_layer_dev_saved_activations = &(saved_activations[prior_layer_dev_saved_act_ind]);
+
+						ret = dataflow_handle.submit_peer_transfer(&dataflow_handle, inbound_fwd_ctx_stream_id, global_fwd_ctx_k_dest, prior_layer_dev_saved_activations -> x_k_local, cur_tokens * kv_dim * block_dt_size);
+						if (ret){
+							fprintf(stderr, "Error: failed to submit peer transfer to prefetch fwd context for next layer...\n");
+							return -1;
+						}
+
+						ret = dataflow_handle.submit_peer_transfer(&dataflow_handle, inbound_fwd_ctx_stream_id, global_fwd_ctx_v_dest, prior_layer_dev_saved_activations -> x_v_local, cur_tokens * kv_dim * block_dt_size);
+						if (ret){
+							fprintf(stderr, "Error: failed to submit peer transfer to prefetch fwd context for next layer...\n");
+							return -1;
+						}
+					}
+
+					fwd_ctx_tokens_replaced += cur_tokens;
+				}
+
+				// could prefetch next layer weights here, but doing this after the bwd w is done for cleanliness...
+
+				
+				printf("\n\nSubmitting bwd_w for chunk #%d, block #%d...\n\n", i, k);
+
+				// utilizing the newly populated grad_activations struct
+				// to update the grad_weights...
+
+				ret = dataflow_submit_transformer_block_bwd_w(&dataflow_handle, compute_stream_id,
+									&(block_transitions[2 * i + (k % 2)]),
+									cur_fwd_activations, 
+									grad_activations, 
+									working_grad_block);
+
+				if (ret){
+					fprintf(stderr, "Error: failed to submit transformer block bwd_w for chunk #%d, block #%d...\n", i, k);
+					return -1;
+				}
+
 
 				cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, compute_stream_id);
 				if (!cur_stream_state){
@@ -1962,87 +2099,51 @@ int main(int argc, char * argv[]){
 					return -1;
 				}
 
-				ret = dataflow_handle.submit_dependency(&dataflow_handle, inbound_fwd_ctx_stream_id, cur_stream_state);
-				if (ret){
-					fprintf(stderr, "Error: failed to submit dependency to prefetch fwd context for next layer...\n");
-					return -1;
-				}
+				// start prefetch for next activation buffer...
 
+				if (cur_fwd_prefetch_act_ind >= 0){
 
-				cur_global_token_replacement_ind = fwd_context -> total_context_tokens - fwd_ctx_tokens_replaced - cur_tokens;
-
-				global_fwd_ctx_k_dest = fwd_x_k_global + ((uint64_t) cur_global_token_replacement_ind * (uint64_t) kv_dim * (uint64_t) block_dt_size);
-				global_fwd_ctx_v_dest = fwd_x_v_global + ((uint64_t) cur_global_token_replacement_ind * (uint64_t) kv_dim * (uint64_t) block_dt_size);
-
-				// if we know that the prior layer's saved activations are waiting on the host
-				// they might already prefetched or on way, but easier this way...
-				if (((k - 1) * num_chunks + i) <= final_saved_act_buffer_ind){
-
-					sem_wait(&(is_saved_act_home[(k - 1) * num_chunks + i]));
-					sem_post(&(is_saved_act_home[(k - 1) * num_chunks + i]));
-
-					prior_layer_sys_saved_activations = &(sys_saved_activations[(k - 1) * num_chunks + i]);
-
-					ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_fwd_ctx_stream_id, global_fwd_ctx_k_dest, prior_layer_sys_saved_activations -> x_k_local, cur_tokens * kv_dim * block_dt_size);
+					ret = dataflow_handle.submit_dependency(&dataflow_handle, inbound_stream_id, cur_stream_state);
 					if (ret){
-						fprintf(stderr, "Error: failed to submit inbound transfer to prefetch fwd context for next layer...\n");
+						fprintf(stderr, "Error: failed to submit dependency to prefetch next activation buffer...\n");
 						return -1;
 					}
 
-					ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_fwd_ctx_stream_id, global_fwd_ctx_v_dest, prior_layer_sys_saved_activations -> x_v_local, cur_tokens * kv_dim * block_dt_size);
+					// ensuring the saved activation made it home before prefetching......
+					sem_wait(&(is_saved_act_home[cur_fwd_prefetch_act_ind]));
+					sem_post(&(is_saved_act_home[cur_fwd_prefetch_act_ind]));
+
+
+					// overwriting the contents at working_act_buffer_ind....
+					ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, cur_fwd_activations -> savedActivationsBuffer, sys_saved_activations[cur_fwd_prefetch_act_ind].savedActivationsBuffer, sys_saved_activations[cur_fwd_prefetch_act_ind].savedActivationsBufferBytes);
 					if (ret){
-						fprintf(stderr, "Error: failed to submit inbound transfer to prefetch fwd context for next layer...\n");
+						fprintf(stderr, "Error: failed to submit inbound transfer to prefetch next activation buffer...\n");
 						return -1;
 					}
+
+					ret = dataflow_handle.submit_host_op(&dataflow_handle, post_sem_callback, (void *) &(is_fwd_activations_ready[cur_fwd_prefetch_act_ind]), inbound_stream_id);
+					if (ret){
+						fprintf(stderr, "Error: failed to submit host op to enqueue is_fwd_activations_ready for next activation buffer...\n");
+						return -1;
+					}
+
+					ret = dataflow_handle.submit_host_op(&dataflow_handle, post_sem_callback, (void *) &(is_saved_activation_ready[working_act_buffer_ind]), inbound_stream_id);
+					if (ret){
+						fprintf(stderr, "Error: failed to submit host op to enqueue is_saved_activation_ready for next activation buffer...\n");
+						return -1;
+					}
+
+					cur_fwd_prefetch_act_ind -= 1;
 				}
-				// otherwise the context is only on the device so we can just copy it...
+
+				if (working_act_buffer_ind > 0){
+					working_act_buffer_ind -= 1;
+				}
 				else{
-
-					if (num_chunks <= working_act_buffer_ind){
-						prior_layer_dev_saved_act_ind = working_act_buffer_ind - num_chunks;
-					}
-					// need to wrap around...
-					else{
-						prior_layer_dev_saved_act_ind = num_saved_activation_buffers - (num_chunks - working_act_buffer_ind);
-					}
-
-					prior_layer_dev_saved_activations = &(saved_activations[prior_layer_dev_saved_act_ind]);
-
-					ret = dataflow_handle.submit_peer_transfer(&dataflow_handle, inbound_fwd_ctx_stream_id, global_fwd_ctx_k_dest, prior_layer_dev_saved_activations -> x_k_local, cur_tokens * kv_dim * block_dt_size);
-					if (ret){
-						fprintf(stderr, "Error: failed to submit peer transfer to prefetch fwd context for next layer...\n");
-						return -1;
-					}
-
-					ret = dataflow_handle.submit_peer_transfer(&dataflow_handle, inbound_fwd_ctx_stream_id, global_fwd_ctx_v_dest, prior_layer_dev_saved_activations -> x_v_local, cur_tokens * kv_dim * block_dt_size);
-					if (ret){
-						fprintf(stderr, "Error: failed to submit peer transfer to prefetch fwd context for next layer...\n");
-						return -1;
-					}
+					working_act_buffer_ind = num_saved_activation_buffers - 1;
 				}
 
-				fwd_ctx_tokens_replaced += cur_tokens;
 			}
-
-			// could prefetch next layer weights here, but doing this after the bwd w is done for cleanliness...
-
-			
-			printf("\n\nSubmitting bwd_w for chunk #%d, block #%d...\n\n", i, k);
-
-			// utilizing the newly populated grad_activations struct
-			// to update the grad_weights...
-
-			ret = dataflow_submit_transformer_block_bwd_w(&dataflow_handle, compute_stream_id,
-                                &(block_transitions[2 * i + (k % 2)]),
-                                cur_fwd_activations, 
-                                grad_activations, 
-                                working_grad_block);
-
-			if (ret){
-				fprintf(stderr, "Error: failed to submit transformer block bwd_w for chunk #%d, block #%d...\n", i, k);
-				return -1;
-			}
-
 
 			cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, compute_stream_id);
 			if (!cur_stream_state){
@@ -2050,239 +2151,268 @@ int main(int argc, char * argv[]){
 				return -1;
 			}
 
-			// start prefetch for next activation buffer...
+			// PREFETCHING NEXT (= PREVIOUS) FORWARD BLOCK...
 
-			if (cur_fwd_prefetch_act_ind >= 0){
+			if (next_layer_id >= 0){
+
+				printf("[Bwd] Prefetching block layer id %d into slot %d...\n\n", next_layer_id, replacement_layer_ind);
 
 				ret = dataflow_handle.submit_dependency(&dataflow_handle, inbound_stream_id, cur_stream_state);
 				if (ret){
-					fprintf(stderr, "Error: failed to submit dependency to prefetch next activation buffer...\n");
+					fprintf(stderr, "Error: failed to submit dependency to prefetch block #%d...\n", next_layer_id);
 					return -1;
 				}
 
-				// ensuring the saved activation made it home before prefetching......
-				sem_wait(&(is_saved_act_home[cur_fwd_prefetch_act_ind]));
-				sem_post(&(is_saved_act_home[cur_fwd_prefetch_act_ind]));
-
-
-				// overwriting the contents at working_act_buffer_ind....
-				ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, cur_fwd_activations -> savedActivationsBuffer, sys_saved_activations[cur_fwd_prefetch_act_ind].savedActivationsBuffer, sys_saved_activations[cur_fwd_prefetch_act_ind].savedActivationsBufferBytes);
+				ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, blocks[replacement_layer_ind] -> buffer, sys_blocks[next_layer_id] -> buffer, aligned_block_size);
 				if (ret){
-					fprintf(stderr, "Error: failed to submit inbound transfer to prefetch next activation buffer...\n");
+					fprintf(stderr, "Error: failed to submit inbound transfer for block #%d...\n", next_layer_id);
 					return -1;
 				}
 
-				ret = dataflow_handle.submit_host_op(&dataflow_handle, post_sem_callback, (void *) &(is_fwd_activations_ready[cur_fwd_prefetch_act_ind]), inbound_stream_id);
+				ret = dataflow_handle.submit_host_op(&dataflow_handle, post_sem_callback, (void *) &(is_block_ready[next_layer_id]), inbound_stream_id);
 				if (ret){
-					fprintf(stderr, "Error: failed to submit host op to enqueue is_fwd_activations_ready for next activation buffer...\n");
+					fprintf(stderr, "Error: failed to submit host op to enqueue is_block_ready for next block...\n");
 					return -1;
 				}
 
-				ret = dataflow_handle.submit_host_op(&dataflow_handle, post_sem_callback, (void *) &(is_saved_activation_ready[working_act_buffer_ind]), inbound_stream_id);
-				if (ret){
-					fprintf(stderr, "Error: failed to submit host op to enqueue is_saved_activation_ready for next activation buffer...\n");
-					return -1;
+				if (next_layer_id > 0){
+					if (replacement_layer_ind > 0){
+						replacement_layer_ind -= 1;
+					}
+					else{
+						replacement_layer_ind = num_dev_blocks - 1;
+					}
 				}
-
-				cur_fwd_prefetch_act_ind -= 1;
+				next_layer_id--;
 			}
 
-			if (working_act_buffer_ind > 0){
-				working_act_buffer_ind -= 1;
+			// in case we immediate follow up with another forward pass, don't move past the first layer...
+			if (k > 0){
+				if (working_layer_ind > 0){
+					working_layer_ind -= 1;
+				}
+				else{
+					working_layer_ind = num_dev_blocks - 1;
+				}
+			}
+
+			// send back gradient to host, and run optimizer...
+
+			// SENDING BACK GRAD BLOCK...
+
+			printf("[Bwd] Sending back grad block for layer id %d at index %d...\n\n", k, working_grad_block_ind);
+
+			ret = dataflow_handle.submit_dependency(&dataflow_handle, outbound_stream_id, cur_stream_state);
+			if (ret){
+				fprintf(stderr, "Error: failed to submit dependency to send grad block #%d to host...\n", k);
+				return -1;
+			}
+
+			// THIS SHOULD BE AN ADDITION, NOT A REPLACEMENT..
+			// THUS SHOULD HAVE A TEMP POOL OF GRAD BUFFERS ON HOST TO TRANSFER TO
+			// AND THEN MAKE SURE TO ADD THESE TO EXISTING GRAD BUFFERS ON HOST
+			// AND THEN MAKE THE BUFFER IN POOL AVAILABLE AGAIN...
+
+			ret = (dataflow_handle.submit_outbound_transfer)(&dataflow_handle, outbound_stream_id, sys_grad_blocks[k] -> buffer, working_grad_block -> buffer, aligned_block_size);
+			if (ret){
+				fprintf(stderr, "Error: failed to submit outbound transfer to send grad block #%d to host...\n", k);
+				return -1;
+			}
+
+			// After completing, can reset the grad buffer for next use...
+			ret = (dataflow_handle.set_mem)(&dataflow_handle, outbound_stream_id, working_grad_block -> buffer, 0, aligned_block_size);
+			if (ret){
+				fprintf(stderr, "Error: failed to set mem for grad block #%d...\n", k);
+				return -1;
+			}
+
+			ret = (dataflow_handle.submit_host_op)(&dataflow_handle, post_sem_callback, (void *) &(is_grad_block_ready[working_grad_block_ind]), outbound_stream_id);
+			if (ret){
+				fprintf(stderr, "Error: failed to submit host op to enqueue is_grad_block_ready for next grad block...\n");
+				return -1;
+			}
+
+
+			if (working_grad_block_ind > 0){
+				working_grad_block_ind -= 1;
 			}
 			else{
-				working_act_buffer_ind = num_saved_activation_buffers - 1;
+				working_grad_block_ind = num_dev_block_grads - 1;
 			}
 
+			// Calling optimizer step...
+
+			if (is_opt_step) {
+				cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
+				if (!cur_stream_state){
+					fprintf(stderr, "Error: failed to get stream state for head...\n");
+					return -1;
+				}
+
+				ret = dataflow_handle.submit_dependency(&dataflow_handle, host_ops_stream_id, cur_stream_state);
+				if (ret){
+					fprintf(stderr, "Error: failed to submit dependency to submit optimizer op...\n");
+					return -1;
+				}
+
+				// speicfying adam host functio as adam_step_host and passing this function address 
+				// which will be submitted to the host ops stream...
+				ret = dataflow_submit_adam_step_host(&dataflow_handle, host_ops_stream_id, 
+									&adam_step_host, &(adam_op_buffers[k + 1]),
+									block_dt, block_bwd_dt, 
+									opt_mean_dt, opt_var_dt,
+									num_adam_threads, k, block_aligned_num_els, 
+									lr, beta1, beta2, weight_decay, epsilon,
+									sys_blocks[k] -> buffer, sys_grad_blocks[k] -> buffer, sys_opt_mean_blocks[k] -> buffer, sys_opt_var_blocks[k] -> buffer);
+				if (ret){
+					fprintf(stderr, "Error: failed to submit adam step host for block #%d...\n", k);
+					return -1;
+				}
+			}
 		}
+
+
+		for (int i = num_chunks - 1; i >= 0; i--){
+			printf("\n\nSubmitting embedding bwd_w for chunk #%d...\n\n", i);
+
+			// layer 0'ths output grad stream will be at index 1 (for given chunk)
+			ret = dataflow_submit_transformer_embedding_bwd_w(&dataflow_handle, compute_stream_id,
+												&(block_transitions[2 * i + 1]),
+												grad_embedding_table);
+
+			if (ret){
+				fprintf(stderr, "Error: failed to submit transformer embedding bwd_w for chunk #%d...\n", i);
+				return -1;
+			}
+		}
+
 
 		cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, compute_stream_id);
 		if (!cur_stream_state){
-			fprintf(stderr, "Error: failed to get stream state for grad block #%d...\n", k);
+			fprintf(stderr, "Error: failed to get stream state for embedding table...\n");
 			return -1;
 		}
-
-		// PREFETCHING NEXT (= PREVIOUS) FORWARD BLOCK...
-
-		if (next_layer_id >= 0){
-
-			printf("[Bwd] Prefetching block layer id %d into slot %d...\n\n", next_layer_id, replacement_layer_ind);
-
-			ret = dataflow_handle.submit_dependency(&dataflow_handle, inbound_stream_id, cur_stream_state);
-			if (ret){
-				fprintf(stderr, "Error: failed to submit dependency to prefetch block #%d...\n", next_layer_id);
-				return -1;
-			}
-
-			ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, blocks[replacement_layer_ind] -> buffer, sys_blocks[next_layer_id] -> buffer, aligned_block_size);
-			if (ret){
-				fprintf(stderr, "Error: failed to submit inbound transfer for block #%d...\n", next_layer_id);
-				return -1;
-			}
-
-			ret = dataflow_handle.submit_host_op(&dataflow_handle, post_sem_callback, (void *) &(is_block_ready[next_layer_id]), inbound_stream_id);
-			if (ret){
-				fprintf(stderr, "Error: failed to submit host op to enqueue is_block_ready for next block...\n");
-				return -1;
-			}
-
-			if (next_layer_id > 0){
-				if (replacement_layer_ind > 0){
-					replacement_layer_ind -= 1;
-				}
-				else{
-					replacement_layer_ind = num_dev_blocks - 1;
-				}
-			}
-			next_layer_id--;
-		}
-
-		// in case we immediate follow up with another forward pass, don't move past the first layer...
-		if (k > 0){
-			if (working_layer_ind > 0){
-				working_layer_ind -= 1;
-			}
-			else{
-				working_layer_ind = num_dev_blocks - 1;
-			}
-		}
-
-		// send back gradient to host, and run optimizer...
-
-		// SENDING BACK GRAD BLOCK...
-
-		printf("[Bwd] Sending back grad block for layer id %d at index %d...\n\n", k, working_grad_block_ind);
-
+		
 		ret = dataflow_handle.submit_dependency(&dataflow_handle, outbound_stream_id, cur_stream_state);
 		if (ret){
-			fprintf(stderr, "Error: failed to submit dependency to send grad block #%d to host...\n", k);
+			fprintf(stderr, "Error: failed to submit dependency to send embedding table to host...\n");
 			return -1;
 		}
 
-		// THIS SHOULD BE AN ADDITION, NOT A REPLACEMENT..
-		// THUS SHOULD HAVE A TEMP POOL OF GRAD BUFFERS ON HOST TO TRANSFER TO
-		// AND THEN MAKE SURE TO ADD THESE TO EXISTING GRAD BUFFERS ON HOST
-		// AND THEN MAKE THE BUFFER IN POOL AVAILABLE AGAIN...
-
-		ret = (dataflow_handle.submit_outbound_transfer)(&dataflow_handle, outbound_stream_id, sys_grad_blocks[k] -> buffer, working_grad_block -> buffer, aligned_block_size);
+		ret = (dataflow_handle.submit_outbound_transfer)(&dataflow_handle, outbound_stream_id, sys_grad_embedding_table -> embedding_table, grad_embedding_table -> embedding_table, sys_grad_embedding_table -> embedding_table_size);
 		if (ret){
-			fprintf(stderr, "Error: failed to submit outbound transfer to send grad block #%d to host...\n", k);
+			fprintf(stderr, "Error: failed to submit outbound transfer to send embedding table to host...\n");
 			return -1;
-		}
-
-		// After completing, can reset the grad buffer for next use...
-		ret = (dataflow_handle.set_mem)(&dataflow_handle, outbound_stream_id, working_grad_block -> buffer, 0, aligned_block_size);
-		if (ret){
-			fprintf(stderr, "Error: failed to set mem for grad block #%d...\n", k);
-			return -1;
-		}
-
-		ret = (dataflow_handle.submit_host_op)(&dataflow_handle, post_sem_callback, (void *) &(is_grad_block_ready[working_grad_block_ind]), outbound_stream_id);
-		if (ret){
-			fprintf(stderr, "Error: failed to submit host op to enqueue is_grad_block_ready for next grad block...\n");
-			return -1;
-		}
-
-
-		if (working_grad_block_ind > 0){
-			working_grad_block_ind -= 1;
-		}
-		else{
-			working_grad_block_ind = num_dev_block_grads - 1;
 		}
 
 		// Calling optimizer step...
 
-		cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
-		if (!cur_stream_state){
-			fprintf(stderr, "Error: failed to get stream state for head...\n");
-			return -1;
+
+		if (is_opt_step) {
+
+			cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
+			if (!cur_stream_state){
+				fprintf(stderr, "Error: failed to get stream state for head...\n");
+				return -1;
+			}
+
+			ret = dataflow_handle.submit_dependency(&dataflow_handle, host_ops_stream_id, cur_stream_state);
+			if (ret){
+				fprintf(stderr, "Error: failed to submit dependency to submit optimizer op...\n");
+				return -1;
+			}
+			
+
+			// speicfying adam host functio as adam_step_host and passing this function address 
+			// which will be submitted to the host ops stream...
+			ret = dataflow_submit_adam_step_host(&dataflow_handle, host_ops_stream_id, 
+									&adam_step_host, &(adam_op_buffers[0]),
+									block_dt, block_bwd_dt, 
+									opt_mean_dt, opt_var_dt,
+									num_adam_threads, -1, head_num_els,
+									lr, beta1, beta2, weight_decay, epsilon,  
+									sys_embedding_table -> embedding_table, sys_grad_embedding_table -> embedding_table, sys_opt_mean_embedding_table -> embedding_table, sys_opt_var_embedding_table -> embedding_table);
+			if (ret){
+				fprintf(stderr, "Error: failed to submit adam step embedding layer...\n");
+				return -1;
+			}
+
+			cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, host_ops_stream_id);
+			if (!cur_stream_state){
+				fprintf(stderr, "Error: failed to get stream state for head...\n");
+				return -1;
+			}
+
+
+			// ENSURE THAT ALL UPDATES HAVE COMPLETED BEFORE LOADING BACK...
+
+			printf("Submitting dependency to load updated layers after step...\n\n");
+
+			ret = dataflow_handle.submit_dependency(&dataflow_handle, inbound_stream_id, cur_stream_state);
+			if (ret){
+				fprintf(stderr, "Error: failed to submit dependency to load updated blocks...\n");
+				return -1;
+			}
+
+			// For now assumes we always have embedding table and head on device for simplicity...
+
+			ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, embedding_table -> embedding_table, sys_embedding_table -> embedding_table, embedding_table -> embedding_table_size);
+			if (ret){
+				fprintf(stderr, "Error: failed to submit inbound transfer to load updated blocks...\n");
+				return -1;
+			}
+
+			ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, head -> buffer, sys_head -> buffer, combined_head_size);
+			if (ret){
+				fprintf(stderr, "Error: failed to submit inbound transfer to load updated blocks...\n");
+				return -1;
+			}
+
+			// make the compute stream wait for these to be ready (really only need embedding table, but easier to just have head be ready as well)...
+			cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, inbound_stream_id);
+			if (!cur_stream_state){
+				fprintf(stderr, "Error: failed to get stream state for head...\n");
+				return -1;
+			}
+
+			ret = dataflow_handle.submit_dependency(&dataflow_handle, compute_stream_id, cur_stream_state);
+			if (ret){
+				fprintf(stderr, "Error: failed to submit dependency to load updated blocks...\n");
+				return -1;
+			}
+			
+			
+			// now the compute stream will wait for the blocks to be ready as they arrive...
+
+			for (int i = 0; i < num_dev_blocks; i++){
+
+				printf("Setting block #%d as non-ready so it will wait for it to be loaded back during next forward pass...\n\n", i);
+
+				sem_wait(&(is_block_ready[i]));
+
+				ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, blocks[i] -> buffer, sys_blocks[i] -> buffer, aligned_block_size);
+				if (ret){
+					fprintf(stderr, "Error: failed to submit inbound transfer to load updated blocks...\n");
+					return -1;
+				}
+
+				// at this point we should have all of the forward blocks posted as ready, but we need to mark them as not because we are going to retrieve the updated blocks...
+				ret = dataflow_handle.submit_host_op(&dataflow_handle, post_sem_callback, (void *) &(is_block_ready[i]), inbound_stream_id);
+				if (ret){
+					fprintf(stderr, "Error: failed to submit host op to enqueue is_block_ready for next block...\n");
+					return -1;
+				}
+				
+			}
+
+			// reset the indices of where working / replace inds are...
+			// (might've gotten out of wack if non-divisble number of layers/num_dev_block size...)
+
+			working_layer_ind = 0;
+			replacement_layer_ind = 0;
+
+			// next layer id alreays gets reset at the beginning of the forward pass...
 		}
-
-		ret = dataflow_handle.submit_dependency(&dataflow_handle, host_ops_stream_id, cur_stream_state);
-		if (ret){
-			fprintf(stderr, "Error: failed to submit dependency to submit optimizer op...\n");
-			return -1;
-		}
-
-		// speicfying adam host functio as adam_step_host and passing this function address 
-		// which will be submitted to the host ops stream...
-		ret = dataflow_submit_adam_step_host(&dataflow_handle, host_ops_stream_id, 
-							&adam_step_host, &(adam_op_buffers[k + 1]),
-							block_dt, block_bwd_dt, 
-							opt_mean_dt, opt_var_dt,
-							num_adam_threads, k, block_aligned_num_els, 
-							lr, beta1, beta2, weight_decay, epsilon,
-							sys_blocks[k] -> buffer, sys_grad_blocks[k] -> buffer, sys_opt_mean_blocks[k] -> buffer, sys_opt_var_blocks[k] -> buffer);
-		if (ret){
-			fprintf(stderr, "Error: failed to submit adam step host for block #%d...\n", k);
-			return -1;
-		}
-
-		
-	}
-
-
-	for (int i = num_chunks - 1; i >= 0; i--){
-		printf("\n\nSubmitting embedding bwd_w for chunk #%d...\n\n", i);
-
-		// layer 0'ths output grad stream will be at index 1 (for given chunk)
-		ret = dataflow_submit_transformer_embedding_bwd_w(&dataflow_handle, compute_stream_id,
-											&(block_transitions[2 * i + 1]),
-											grad_embedding_table);
-
-		if (ret){
-			fprintf(stderr, "Error: failed to submit transformer embedding bwd_w for chunk #%d...\n", i);
-			return -1;
-		}
-	}
-
-
-	cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, compute_stream_id);
-	if (!cur_stream_state){
-		fprintf(stderr, "Error: failed to get stream state for embedding table...\n");
-		return -1;
-	}
-	
-	ret = dataflow_handle.submit_dependency(&dataflow_handle, outbound_stream_id, cur_stream_state);
-	if (ret){
-		fprintf(stderr, "Error: failed to submit dependency to send embedding table to host...\n");
-		return -1;
-	}
-
-	ret = (dataflow_handle.submit_outbound_transfer)(&dataflow_handle, outbound_stream_id, sys_grad_embedding_table -> embedding_table, grad_embedding_table -> embedding_table, sys_grad_embedding_table -> embedding_table_size);
-	if (ret){
-		fprintf(stderr, "Error: failed to submit outbound transfer to send embedding table to host...\n");
-		return -1;
-	}
-
-	// Calling optimizer step...
-
-	cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
-	if (!cur_stream_state){
-		fprintf(stderr, "Error: failed to get stream state for head...\n");
-		return -1;
-	}
-
-	ret = dataflow_handle.submit_dependency(&dataflow_handle, host_ops_stream_id, cur_stream_state);
-	if (ret){
-		fprintf(stderr, "Error: failed to submit dependency to submit optimizer op...\n");
-		return -1;
-	}
-	
-
-	// speicfying adam host functio as adam_step_host and passing this function address 
-	// which will be submitted to the host ops stream...
-	ret = dataflow_submit_adam_step_host(&dataflow_handle, host_ops_stream_id, 
-							&adam_step_host, &(adam_op_buffers[0]),
-							block_dt, block_bwd_dt, 
-							opt_mean_dt, opt_var_dt,
-							num_adam_threads, -1, head_num_els,
-							lr, beta1, beta2, weight_decay, epsilon,  
-							sys_embedding_table -> embedding_table, sys_grad_embedding_table -> embedding_table, sys_opt_mean_embedding_table -> embedding_table, sys_opt_var_embedding_table -> embedding_table);
-	if (ret){
-		fprintf(stderr, "Error: failed to submit adam step embedding layer...\n");
-		return -1;
 	}
 	
 
