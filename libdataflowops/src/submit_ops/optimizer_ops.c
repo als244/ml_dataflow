@@ -1,5 +1,34 @@
 #include "dataflow_ops.h"
 
+int dataflow_submit_add_host(Dataflow_Handle * handle, int stream_id, 
+                        void * add_host_func, Add_Host_Op_Args * op_buffer,
+                        DataflowDatatype A_dt, DataflowDatatype B_dt, DataflowDatatype C_dt,
+                        int num_threads, size_t num_els, void * A, void * B, void * C){
+
+    int ret;
+    
+    op_buffer -> A_dt = A_dt;
+    op_buffer -> B_dt = B_dt;
+    op_buffer -> C_dt = C_dt;
+
+    op_buffer -> num_threads = num_threads;
+    op_buffer -> num_els = num_els;
+
+    op_buffer -> A = A;
+    op_buffer -> B = B;
+    op_buffer -> C = C;
+    
+    ret = (handle -> submit_host_op)(handle, add_host_func, op_buffer, stream_id);
+    if (ret){
+        fprintf(stderr, "Error: failed to submit add host op...\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+
+
 int dataflow_submit_adam_step_host(Dataflow_Handle * handle, int stream_id, 
                         void * adam_host_func, Adam_Host_Op_Args * op_buffer,
 						DataflowDatatype param_dt, DataflowDatatype grad_dt, 
@@ -47,6 +76,25 @@ int dataflow_submit_adam_step_host(Dataflow_Handle * handle, int stream_id,
     
 }
 
+
+int dataflow_submit_set_mem_host(Dataflow_Handle * handle, int stream_id, 
+                        void * set_mem_host_func, Set_Mem_Host_Op_Args * op_buffer,
+                        void * ptr, size_t size_bytes, int value){
+
+    int ret;
+
+    op_buffer -> ptr = ptr;
+    op_buffer -> size_bytes = size_bytes;
+    op_buffer -> value = value;
+
+    ret = (handle -> submit_host_op)(handle, set_mem_host_func, op_buffer, stream_id);
+    if (ret){
+        fprintf(stderr, "Error: failed to submit set mem host op...\n");
+        return -1;
+    }
+
+    return 0;
+}
 
 
 

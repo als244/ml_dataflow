@@ -256,6 +256,12 @@ int dataflow_submit_default_cross_entropy_loss(Dataflow_Handle * handle, int str
 
 // Require user to pass in host function pointer...
 
+// these are within optimizer_ops.c
+int dataflow_submit_add_host(Dataflow_Handle * handle, int stream_id, 
+                        void * add_host_func, Add_Host_Op_Args * op_buffer,
+                        DataflowDatatype A_dt, DataflowDatatype B_dt, DataflowDatatype C_dt,
+                        int num_threads, size_t num_els, void * A, void * B, void * C);
+
 int dataflow_submit_adam_step_host(Dataflow_Handle * handle, int stream_id, 
                         void * adam_host_func, Adam_Host_Op_Args * op_buffer,
 						DataflowDatatype param_dt, DataflowDatatype grad_dt, 
@@ -263,6 +269,14 @@ int dataflow_submit_adam_step_host(Dataflow_Handle * handle, int stream_id,
                         int num_threads, int layer_id, uint64_t num_els, 
                         float lr, float beta1, float beta2, float weight_decay, float epsilon,
                         void * param, void * grad, void * mean, void * var);
+
+
+int dataflow_submit_set_mem_host(Dataflow_Handle * handle, int stream_id, 
+                        void * set_mem_host_func, Set_Mem_Host_Op_Args * op_buffer,
+                        void * ptr, size_t size_bytes, int value);
+
+
+
 
 
 #endif
