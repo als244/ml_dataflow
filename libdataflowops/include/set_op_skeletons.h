@@ -46,6 +46,14 @@ void dataflow_set_default_swiglu_bwd_x_skeleton(Op_Skeleton * skeleton, Dataflow
 void dataflow_set_default_softmax_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype, DataflowDatatype bwd_datatype);
 void dataflow_set_default_cross_entropy_loss_skeleton(Op_Skeleton * skeleton, DataflowDatatype bwd_datatype);
 
+
+
+
+void dataflow_set_default_adam_step_skeleton(Op_Skeleton * skeleton, 
+													DataflowDatatype param_dt, DataflowDatatype grad_dt, 
+													DataflowDatatype mean_dt, DataflowDatatype var_dt);
+
+
 // moE kernels underway...
 void dataflow_set_default_select_experts_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype);
 

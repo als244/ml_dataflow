@@ -74,7 +74,7 @@ int main(int argc, char * argv[]){
 	}
 
 		
-	size_t dev_size_bytes = 77 * (1UL << 30);
+	size_t dev_size_bytes = 19 * (1UL << 30);
 
 	int dev_alignment = 256;
 
@@ -291,7 +291,7 @@ int main(int argc, char * argv[]){
 	}
 
 
-	int num_dev_blocks = 32;
+	int num_dev_blocks = 4;
 
 	Transformer_Block ** blocks = malloc(num_dev_blocks * sizeof(Transformer_Block *));
 	if (!blocks){

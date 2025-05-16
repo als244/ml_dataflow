@@ -62,15 +62,16 @@ struct dataflow_handle {
 	int num_ops;
 	Dataflow_Table op_table;
 	
-
 	// Backend Required Functions...
 
 	// 0.) OPS Functionality
 
 	// returns number of functions added to op table
 	// or -1 if error loading native/external code filename, or for native code, if error loading native code config lib
-	int (*register_native_code)(Dataflow_Handle * dataflow_handle, char * native_code_filename, char * native_code_config_lib_filename, 
-								int num_funcs, Op_Skeleton * func_op_skeletons, char ** func_symbols, char ** func_set_launch_symbols, char ** func_init_symbols);
+	int (*register_native_code)(Dataflow_Handle * dataflow_handle, char * native_code_filename, 
+								char * native_code_config_lib_filename, int num_funcs, 
+								Op_Skeleton * func_op_skeletons, char ** func_symbols,
+								 char ** func_set_launch_symbols, char ** func_init_symbols);
 	int (*register_external_code)(Dataflow_Handle * dataflow_handle, char * external_code_filename, int num_funcs, 
 								Op_Skeleton * func_op_skeletons, char ** func_symbols, char ** func_init_symbols);
 
