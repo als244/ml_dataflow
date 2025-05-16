@@ -1267,12 +1267,21 @@ class SimulationRunner:
         self.computation_times_sec_bwd = {}
         self.computation_times_frames_bwd = {}
         self.computation_times_frames_last_block = {}
+        self.total_fwd_attn_flops = 0
+        self.total_fwd_matmul_flops = 0
+        self.total_bwd_attn_flops = 0
+        self.total_bwd_matmul_flops = 0
         self.total_fwd_flops = 0
         self.total_bwd_flops = 0
         self.total_head_flops = 0
         self.total_attn_flops = 0
         self.total_matmul_flops = 0
         self.total_compute_cycles = 0
+
+        self.total_fwd_attn_pct = 0
+        self.total_fwd_matmul_pct = 0
+        self.total_bwd_attn_pct = 0
+        self.total_bwd_matmul_pct = 0
 
         safe_flops = self.hardware_max_flops if self.hardware_max_flops > 0 else 1.0
         safe_matmul_eff = self.matmul_efficiency if self.matmul_efficiency > 0 else 1.0
@@ -1301,7 +1310,7 @@ class SimulationRunner:
             attn_flops = self.flops_per_attn_chunk_mult * cur_seq_len
 
             self.total_attn_flops += self.total_layers * attn_flops
-           
+          
 
             layer_flops_fwd = self.base_flops_per_layer_matmul + attn_flops
 
@@ -1311,9 +1320,13 @@ class SimulationRunner:
             if is_train_chunk:
                 self.total_matmul_flops += self.total_layers * self.base_flops_per_layer_matmul
                 self.total_fwd_flops += self.total_layers * layer_flops_fwd
+                self.total_fwd_attn_flops += self.total_layers * attn_flops
+                self.total_fwd_matmul_flops += self.total_layers * self.base_flops_per_layer_matmul
             else:
                 self.total_matmul_flops += (self.total_layers - 1) * self.base_flops_per_layer_matmul
                 self.total_fwd_flops += self.total_layers * layer_flops_fwd - self.base_flops_per_layer_matmul
+                self.total_fwd_attn_flops += self.total_layers * attn_flops
+                self.total_fwd_matmul_flops += (self.total_layers - 1) * self.base_flops_per_layer_matmul
 
             matmul_time = self.base_flops_per_layer_matmul / (safe_flops * safe_matmul_eff)
             attn_time = attn_flops / (safe_flops * safe_attn_eff)
@@ -1345,8 +1358,15 @@ class SimulationRunner:
 
                 # Accumulate FLOP types for BWD
                 self.total_attn_flops += self.total_layers * 2.5 * attn_flops # For BwdX
+                
+                self.total_bwd_attn_flops += self.total_layers * 2.5 * attn_flops # For BwdX
+
+
                 self.total_matmul_flops += self.total_layers * (self.base_flops_per_layer_matmul) # For BwdX Matmul part
                 self.total_matmul_flops += self.total_layers * bwd_w_flops # For BwdW
+
+                self.total_bwd_matmul_flops += self.total_layers * (self.base_flops_per_layer_matmul) # For BwdX Matmul part
+                self.total_bwd_matmul_flops += self.total_layers * bwd_w_flops # For BwdW
 
                 # Add Head compute cycles only once per training chunk
                 self.total_compute_cycles += self.headFrames
@@ -1359,6 +1379,14 @@ class SimulationRunner:
                 self.computation_times_frames_bwd[i] = 0
 
             prev_seq_len = cur_seq_len
+
+        # --- Total FLOPS (Final Calculation) ---
+        self.total_flops = self.total_fwd_flops + self.total_bwd_flops + self.total_head_flops
+
+        self.total_fwd_attn_pct = (self.total_fwd_attn_flops / self.total_flops) * 100
+        self.total_fwd_matmul_pct = (self.total_fwd_matmul_flops / self.total_flops) * 100
+        self.total_bwd_attn_pct = (self.total_bwd_attn_flops / self.total_flops) * 100
+        self.total_bwd_matmul_pct = (self.total_bwd_matmul_flops / self.total_flops) * 100
 
 
         # --- Calculate Transfer Times (Keep logic) ---
@@ -1392,9 +1420,6 @@ class SimulationRunner:
         else:
             self.activationTransitionFrames = max(1,round(transition_transfer_time_sec * self.cycles_per_second))
 
-
-        # --- Total FLOPS (Final Calculation) ---
-        self.total_flops = self.total_fwd_flops + self.total_bwd_flops + self.total_head_flops
 
         # --- Simulation State ---
         self.all_devices = {}
@@ -1523,6 +1548,30 @@ class SimulationRunner:
         )
             
         return textwrap.dedent(text)
+    
+    def format_time_from_sec(self, seconds):
+
+        # Thresholds for conversion
+        MINUTE = 60
+        HOUR = 60 * MINUTE
+        DAY = 24 * HOUR
+
+        if seconds < 1:
+            milliseconds = seconds * 1000
+            if milliseconds < 0.01 and milliseconds != 0: # handle very small non-zero values
+                return f"{milliseconds:.2e} Millis" # use scientific notation for very small ms
+            return f"{milliseconds:.2f} Millis"
+        elif seconds < MINUTE:
+            return f"{seconds:.2f} Secs"
+        elif seconds < HOUR:
+            minutes = seconds / MINUTE
+            return f"{minutes:.2f} Mins"
+        elif seconds < DAY:
+            hours = seconds / HOUR
+            return f"{hours:.2f} Hrs"
+        else:
+            days = seconds / DAY
+            return f"{days:.2f} Days"
 
     def _create_compute_legend_text(self):
         # Keep calculation logic, return the text string
@@ -1561,6 +1610,11 @@ class SimulationRunner:
         if self.first_train_chunk != 0:
             first_train_chunk_str = f"C{self.first_train_chunk} => [{self.first_train_chunk * self.chunk_size}, {(self.first_train_chunk + 1) * self.chunk_size})\n"
 
+        lower_bound_cycles = math.ceil(self.total_compute_cycles / self.N)
+        lower_bound_seconds = lower_bound_cycles / self.cycles_per_second
+
+        lower_bounds_time_str = self.format_time_from_sec(lower_bound_seconds)
+
         text = (
             f"--- DISCOVERED CONSTANTS ---\n\n"
             f"Compute Constants:\n"
@@ -1574,15 +1628,18 @@ class SimulationRunner:
             f"--- FULL FLOP OVERVIEW ---\n\n"    
             f"Total FLOPs: {self.total_flops:.2e}\n"
             f"  - FWD: {self.total_fwd_flops:.2e} ({fwd_pct:.1f}%)\n"
+            f"    - Attn: {self.total_fwd_attn_pct:.1f}%\n"
+            f"    - Matmul: {self.total_fwd_matmul_pct:.1f}%\n"
             f"  - Head: {self.total_head_flops:.2e} ({head_pct:.1f}%)\n"
             f"  - BWD: {self.total_bwd_flops:.2e} ({bwd_pct:.1f}%)\n"
-            f" - Overall Matmul: {matmul_pct:.1f}%\n"
-            f" - Overall Attn: {attn_pct:.1f}%\n\n\n"
+            f"    - Attn: {self.total_bwd_attn_pct:.1f}%\n"
+            f"    - Matmul: {self.total_bwd_matmul_pct:.1f}%\n\n\n"
             f"--- DERIVED SIM CONFIG ---\n\n"
             f"Cycle Rate:\n"
             f" - {1e6/self.cycles_per_second:.1f} us/cycle\n\n"
             f"* RUNTIME LOWER-BOUND * \n"
-            f" - {math.ceil(self.total_compute_cycles / self.N)} Cycles\n\n"
+            f" - {lower_bound_cycles} Cycles\n"
+            f" - {lower_bounds_time_str}\n\n"
             f"* THROUGHPUT UPPER-BOUND * \n" 
             f" - {math.ceil(self.total_flops / (self.total_compute_cycles / self.cycles_per_second) / 1e12)} TFLOPS\n\n\n\n"
             f"--- COMPUTE CYCLES ---\n\n"
