@@ -4,10 +4,9 @@
 #define TO_PRINT 1
 
 
+// Just for testing...
 #define TO_SAVE_RESULTS 0
-
 #define TOTAL_LAYERS 16
-
 #define DATA_SAVE_DIR "test_transformer_data"
 
 static int save_file(int layer_id, char * filename, void * ptr, uint64_t num_els, DataflowDatatype dt) {
@@ -60,6 +59,8 @@ static int save_file(int layer_id, char * filename, void * ptr, uint64_t num_els
 // dataflow api function
 int adam_step_host(void * _adam_host_op_args){
 
+	int ret;
+
 	Adam_Host_Op_Args * adam_host_op_args = (Adam_Host_Op_Args *) _adam_host_op_args;
 
 	DataflowDatatype param_dt = adam_host_op_args -> param_dt;
@@ -100,11 +101,16 @@ int adam_step_host(void * _adam_host_op_args){
 	}
 
 	 if (__builtin_cpu_supports("avx512f")){
-        return do_adam_step_host_avx512(param_dt, grad_dt, mean_dt, var_dt, num_threads, num_els, lr, beta1, beta2, weight_decay, epsilon, param, grad, mean, var);
+        ret = do_adam_step_host_avx512(param_dt, grad_dt, mean_dt, var_dt, num_threads, num_els, lr, beta1, beta2, weight_decay, epsilon, param, grad, mean, var);
     }
     else{
-        return do_adam_step_host(param_dt, grad_dt, mean_dt, var_dt, num_threads, num_els, lr, beta1, beta2, weight_decay, epsilon, param, grad, mean, var);
+        ret = do_adam_step_host(param_dt, grad_dt, mean_dt, var_dt, num_threads, num_els, lr, beta1, beta2, weight_decay, epsilon, param, grad, mean, var);
     }
+
+	if (ret){
+		fprintf(stderr, "Error: failed to do adam step...\n");
+		return -1;
+	}
 
 	if (TO_SAVE_RESULTS){
 
@@ -116,4 +122,6 @@ int adam_step_host(void * _adam_host_op_args){
 		save_file(layer_id, "mean_post_step", mean, num_els, mean_dt);
 		save_file(layer_id, "var_post_step", var, num_els, var_dt);
 	}
+
+	return 0;
 }

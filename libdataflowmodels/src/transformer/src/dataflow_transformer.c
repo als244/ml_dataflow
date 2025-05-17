@@ -2,6 +2,7 @@
 #include "dataflow_transformer.h"
 
 // toggle to print out before submitting any ops...
+// verbose printing of each op
 #define TO_PRINT 0
 
 // meta-toggle required to be set to 1 to save any data
@@ -27,7 +28,9 @@
 #define BWD_LAYER_ID_TO_SAVE -1
 
 
-#define TO_SAVE_MODEL_GRADS 0
+// during test the adam step (on host) also saves the model grads within optimizer_states/<layer_id>/grad_pre_step.dat
+
+#define TO_SAVE_MODEL_GRADS 1
 
 // only save the model grads when chunk id 0 finishes (then layer grad is complete)
 #define TO_SAVE_MODEL_GRAD_CHUNK_ID 0

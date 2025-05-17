@@ -12,8 +12,8 @@
 #define NUM_DEV_BLOCK_GRADS 2
 #define NUM_SYS_GRAD_RESULTS 2
 
-#define NUM_ADD_THREADS 12	
-#define NUM_ADAM_THREADS 12	
+#define NUM_ADD_THREADS 16	
+#define NUM_ADAM_THREADS 16	
 
 #define HOST_MEM_GB 100
 #define DEV_MEM_GB 20
