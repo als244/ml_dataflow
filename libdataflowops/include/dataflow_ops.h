@@ -3,7 +3,6 @@
 
 #include "dataflow.h"
 #include "set_op_skeletons.h"
-#include "host_ops.h"
 
 
 // CORE COMPUTE FUNCTIONS!
