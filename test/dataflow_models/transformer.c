@@ -6,8 +6,8 @@
 
 // these shoudl be auto-cofigured, testing manually for now...
 // could also take in as command line argument...
-#define NUM_DEV_BLOCKS 2
-#define NUM_DEV_ACTIVATION_SLOTS 12
+#define NUM_DEV_BLOCKS 4
+#define NUM_DEV_ACTIVATION_SLOTS 16
 
 #define NUM_DEV_BLOCK_GRADS 2
 #define NUM_SYS_GRAD_RESULTS 2
@@ -27,6 +27,15 @@
 
 #define TOKEN_IDS_PATH "../data/2048_token_ids_uint32.dat"
 #define TOKEN_LABELS_PATH "../data/2048_labels_uint32.dat"
+
+
+// number of seqs to process before calling optimizer step...
+// (i.e. how many times gradients are accumulated before optimizer step)
+#define NUM_SEQS_PER_STEP 1
+
+// right now only testing with 1 sequence, but can have this sequence do fwd/bwd repeats
+// just for perf testing...
+#define NUM_TOTAL_SEQ_LAPS 1
 
 int main(int argc, char * argv[]){
 
@@ -1725,13 +1734,13 @@ int main(int argc, char * argv[]){
 	// CRTICIAL TODO: right now we aren't doing any accumulation of gradients, 
 	// so if this isn't 1 the math is wrong..
 	// but can still simulate more realsitic perf by setting this to a higher value...
-	int seqs_per_step = 10;
+	int seqs_per_step = NUM_SEQS_PER_STEP;
 
 
 	// Simulating training loop...
 	// Don't have the dataset loading properly ready yet...
 	// just setting here for simulating perf...
-	int num_train_seqs = 10;
+	int num_train_seqs = NUM_TOTAL_SEQ_LAPS;
 
 
 	int seq_in_step = 0;
@@ -2036,7 +2045,7 @@ int main(int argc, char * argv[]){
 		ret = dataflow_submit_add_host(&dataflow_handle, host_ops_stream_id, 
 											&add_host, &(add_op_buffers[n_layers + 1]),
 											block_bwd_dt, block_bwd_dt, block_bwd_dt,
-											num_add_threads, block_num_els, 
+											num_add_threads, n_layers, block_num_els, 
 											sys_grad_head -> buffer, working_sys_grad_result, sys_grad_head -> buffer,
 											1.0, 1.0);
 		if (ret){
@@ -2443,7 +2452,7 @@ int main(int argc, char * argv[]){
 			ret = dataflow_submit_add_host(&dataflow_handle, host_ops_stream_id, 
 											&add_host, &(add_op_buffers[k + 1]),
 											block_bwd_dt, block_bwd_dt, block_bwd_dt,
-											num_add_threads, block_num_els, 
+											num_add_threads, k, block_num_els, 
 											sys_grad_blocks[k] -> buffer, working_sys_grad_result, sys_grad_blocks[k] -> buffer,
 											1.0, 1.0);
 			if (ret){
@@ -2586,7 +2595,7 @@ int main(int argc, char * argv[]){
 		ret = dataflow_submit_add_host(&dataflow_handle, host_ops_stream_id, 
 											&add_host, &(add_op_buffers[0]),
 											block_bwd_dt, block_bwd_dt, block_bwd_dt,
-											num_add_threads, block_num_els, 
+											num_add_threads, -1, block_num_els, 
 											sys_grad_embedding_table -> embedding_table, working_sys_grad_result, sys_grad_embedding_table -> embedding_table,
 											1.0, 1.0);
 		if (ret){
@@ -2609,7 +2618,7 @@ int main(int argc, char * argv[]){
 								&adam_step_host, &(adam_op_buffers[0]),
 								block_dt, block_bwd_dt, 
 								opt_mean_dt, opt_var_dt,
-								num_adam_threads, n_layers, head_num_els, 
+								num_adam_threads, -1, head_num_els, 
 								lr, beta1, beta2, weight_decay, epsilon,
 								sys_embedding_table -> embedding_table, sys_grad_embedding_table -> embedding_table, sys_opt_mean_embedding_table -> embedding_table, sys_opt_var_embedding_table -> embedding_table);
 			if (ret){

@@ -3,7 +3,7 @@
 int dataflow_submit_add_host(Dataflow_Handle * handle, int stream_id, 
                         void * add_host_func, Add_Host_Op_Args * op_buffer,
                         DataflowDatatype A_dt, DataflowDatatype B_dt, DataflowDatatype C_dt,
-                        int num_threads, size_t num_els, void * A, void * B, void * C,
+                        int num_threads, int layer_id, size_t num_els, void * A, void * B, void * C,
                         float alpha, float beta){
 
     int ret;
@@ -13,6 +13,7 @@ int dataflow_submit_add_host(Dataflow_Handle * handle, int stream_id,
     op_buffer -> C_dt = C_dt;
 
     op_buffer -> num_threads = num_threads;
+    op_buffer -> layer_id = layer_id;
     op_buffer -> num_els = num_els;
 
     op_buffer -> A = A;

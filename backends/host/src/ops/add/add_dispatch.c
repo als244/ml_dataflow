@@ -1,5 +1,8 @@
 #include "add.h"
 
+#define TO_PRINT 1
+
+
 int add_host(void * _add_host_op_args){
     Add_Host_Op_Args * args = (Add_Host_Op_Args *) _add_host_op_args;
 
@@ -25,7 +28,9 @@ int add_host(void * _add_host_op_args){
     
     // Now call the add dispatcher...
 
-    printf("[AddDispatcher] Accumulating Gradients for Layer ID: %d...\n\n", layer_id);
+    if (TO_PRINT){
+        printf("[Add Dispatcher] Accumulating Gradients for Layer ID: %d...\n\n", layer_id);
+    }
 
 	if (__builtin_cpu_supports("avx512f")){
         return do_add_host_avx512(A_dt, B_dt, C_dt, num_threads, num_els, A, B, C, alpha, beta);
