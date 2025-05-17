@@ -41,7 +41,6 @@ create_data_dirs:
 		mkdir -p test_transformer_data/optimizer_states/layers/$$i; \
 		mkdir -p correct_transformer_data/layers_fwd/$$i; \
 		mkdir -p correct_transformer_data/layers_bwd/$$i; \
-		mkdir -p correct_transformer_data/model_grads/layers/$$i; \
 		i=$$(($$i + 1)); \
     	done; \
 	mkdir -p test_transformer_data/head_fwd; \
@@ -55,7 +54,6 @@ create_data_dirs:
 	mkdir -p correct_transformer_data/head_fwd; \
 	mkdir -p correct_transformer_data/head_bwd; \
 	mkdir -p correct_transformer_data/model_grads; \
-	mkdir -p correct_transformer_data/model_grad; \
 	mkdir -p correct_transformer_data/optimizer_states; \
 	mkdir -p profiling
 
