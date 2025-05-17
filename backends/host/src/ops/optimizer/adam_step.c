@@ -362,7 +362,7 @@ int do_adam_step_host(DataflowDatatype param_dt, DataflowDatatype grad_dt, Dataf
         return -1;
     }
 
-    void * (*adam_step_func)(void * _adam_thread_arg);
+    void * (*adam_step_func)(void * _adam_worker_args);
 
     if (param_dt == DATAFLOW_FP32){
         adam_step_func = thread_func_adam_step_fp32;

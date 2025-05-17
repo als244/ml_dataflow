@@ -18,6 +18,9 @@ int add_host(void * _add_host_op_args){
     DataflowDatatype B_dt = args -> B_dt;
     DataflowDatatype C_dt = args -> C_dt;
 
+    float alpha = args -> alpha;
+    float beta = args -> beta;
+
 
     
     // Now call the add dispatcher...
@@ -25,10 +28,10 @@ int add_host(void * _add_host_op_args){
     printf("[AddDispatcher] Accumulating Gradients for Layer ID: %d...\n\n", layer_id);
 
 	if (__builtin_cpu_supports("avx512f")){
-        return do_add_host_avx512(A_dt, B_dt, C_dt, num_threads, num_els, A, B, C);
+        return do_add_host_avx512(A_dt, B_dt, C_dt, num_threads, num_els, A, B, C, alpha, beta);
     }
     else{
-        return do_add_host(A_dt, B_dt, C_dt, num_threads, num_els, A, B, C);
+        return do_add_host(A_dt, B_dt, C_dt, num_threads, num_els, A, B, C, alpha, beta);
     }
     
     // not getting here    

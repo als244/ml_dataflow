@@ -29,7 +29,20 @@ int do_adam_step_host(DataflowDatatype param_dt, DataflowDatatype grad_dt, Dataf
                              uint64_t num_els, float lr, float beta1, float beta2, float weight_decay, float epsilon,
                              void * param, void * grad, void * mean, void * var);
 
+
+
+
+
 // form adam_step_avx512.c
+
+// in case of fp16 dtypes, this toggles if we want to do fp16 arithmetic for adam step
+// saves on memory bandwidth because doing twice as many operations for same number 
+// load insructions (for fp16: loading 512 elements instead of 256 elements)
+
+// if this flag is toggled the fp16 elements are loaded and converted to fp32 before doing the adam step
+// (better for precision, but likely not worth the extra memory bandwidth)
+#define USE_AVX512_FP16_ARITHMETIC_FOR_ADAM_STEP 1
+
 int do_adam_step_host_avx512(DataflowDatatype param_dt, DataflowDatatype grad_dt, DataflowDatatype mean_dt, DataflowDatatype var_dt,
                              int num_threads,
                              uint64_t num_els, float lr, float beta1, float beta2, float weight_decay, float epsilon,

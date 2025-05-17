@@ -3,7 +3,8 @@
 int dataflow_submit_add_host(Dataflow_Handle * handle, int stream_id, 
                         void * add_host_func, Add_Host_Op_Args * op_buffer,
                         DataflowDatatype A_dt, DataflowDatatype B_dt, DataflowDatatype C_dt,
-                        int num_threads, size_t num_els, void * A, void * B, void * C){
+                        int num_threads, size_t num_els, void * A, void * B, void * C,
+                        float alpha, float beta){
 
     int ret;
     
@@ -17,7 +18,10 @@ int dataflow_submit_add_host(Dataflow_Handle * handle, int stream_id,
     op_buffer -> A = A;
     op_buffer -> B = B;
     op_buffer -> C = C;
-    
+
+    op_buffer -> alpha = alpha;
+    op_buffer -> beta = beta;
+
     ret = (handle -> submit_host_op)(handle, add_host_func, op_buffer, stream_id);
     if (ret){
         fprintf(stderr, "Error: failed to submit add host op...\n");

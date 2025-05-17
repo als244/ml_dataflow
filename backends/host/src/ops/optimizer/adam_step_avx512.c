@@ -168,6 +168,19 @@ static inline uint16_t float32_to_float16_scalar(float f_val) {
     return (sign_fp16 << 15) | (uint16_t)(exp_fp16_biased << 10) | man_fp16;
 }
 
+// Scalar conversion helpers using _Float16 and memcpy
+static inline _Float16 u16_to_f16_scalar(uint16_t val_bits) {
+    _Float16 f16_val;
+    memcpy(&f16_val, &val_bits, sizeof(f16_val));
+    return f16_val;
+}
+
+static inline uint16_t f16_to_u16_scalar(_Float16 f16_val) {
+    uint16_t u16_bits;
+    memcpy(&u16_bits, &f16_val, sizeof(u16_bits));
+    return u16_bits;
+}
+
 static void * thread_func_adam_step_avx512_fp32(void * _adam_worker_args){
 
     Adam_Worker_Args * adam_worker_args = (Adam_Worker_Args *) _adam_worker_args;
@@ -445,6 +458,131 @@ static void * thread_func_adam_step_avx512_fp16(void * _adam_worker_args){
     return NULL;
 }
 
+static void * thread_func_adam_step_avx512_fp16_native(void * _adam_worker_args){
+    Adam_Worker_Args * adam_worker_args = (Adam_Worker_Args *) _adam_worker_args;
+
+    uint16_t * restrict base_param_ptr = (uint16_t *) adam_worker_args->param;
+    uint16_t * restrict base_grad_ptr  = (uint16_t *) adam_worker_args->grad;
+    uint16_t * restrict base_mean_ptr  = (uint16_t *) adam_worker_args->mean;
+    uint16_t * restrict base_var_ptr   = (uint16_t *) adam_worker_args->var;
+
+    size_t start_index_for_thread = adam_worker_args->start_ind;
+    size_t num_elements_for_thread = adam_worker_args->num_els;
+
+    // Convert float hyperparams to _Float16 scalar type
+    _Float16 lr_f16             = (_Float16)adam_worker_args->lr;
+    _Float16 beta1_f16          = (_Float16)adam_worker_args->beta1;
+    _Float16 beta2_f16          = (_Float16)adam_worker_args->beta2;
+    _Float16 weight_decay_f16   = (_Float16)adam_worker_args->weight_decay;
+    _Float16 epsilon_f16        = (_Float16)adam_worker_args->epsilon;
+
+    _Float16 one_f16 = (_Float16)1.0f; // For clarity
+    _Float16 one_minus_beta1_f16 = one_f16 - beta1_f16;
+    _Float16 one_minus_beta2_f16 = one_f16 - beta2_f16;
+
+    // Broadcast _Float16 hyperparams to __m512h vectors
+    __m512h lr_vec_ph             = _mm512_set1_ph(lr_f16);
+    __m512h beta1_vec_ph          = _mm512_set1_ph(beta1_f16);
+    __m512h beta2_vec_ph          = _mm512_set1_ph(beta2_f16);
+    __m512h one_minus_beta1_vec_ph = _mm512_set1_ph(one_minus_beta1_f16);
+    __m512h one_minus_beta2_vec_ph = _mm512_set1_ph(one_minus_beta2_f16);
+    __m512h wd_vec_ph             = _mm512_set1_ph(weight_decay_f16);
+    __m512h eps_vec_ph            = _mm512_set1_ph(epsilon_f16);
+
+    const int vec_len = 32; // 32 FP16 elements in __m512h
+    size_t i_local = 0;
+    // Corrected loop limit calculation
+    size_t limit = (num_elements_for_thread / vec_len) * vec_len;
+
+
+    for (i_local = 0; i_local < limit; i_local += vec_len) {
+        size_t current_global_idx = start_index_for_thread + i_local;
+
+        // Load 32 FP16 values directly into __m512h
+        __m512h param_ph = _mm512_loadu_ph((const void*)(base_param_ptr + current_global_idx));
+        __m512h grad_ph  = _mm512_loadu_ph((const void*)(base_grad_ptr + current_global_idx));
+        __m512h mean_ph  = _mm512_loadu_ph((const void*)(base_mean_ptr + current_global_idx));
+        __m512h var_ph   = _mm512_loadu_ph((const void*)(base_var_ptr + current_global_idx));
+
+        // Perform Adam updates using native FP16 arithmetic
+        // Note: adam_worker_args->weight_decay is float, compare it directly.
+        if (adam_worker_args->weight_decay != 0.0f) {
+            // grad_effective = grad + weight_decay * param
+            grad_ph = _mm512_fmadd_ph(wd_vec_ph, param_ph, grad_ph);
+        }
+        
+        // Update biased first moment estimate: m_t = beta1 * m_{t-1} + (1 - beta1) * g_t
+        mean_ph = _mm512_mul_ph(mean_ph, beta1_vec_ph);
+        mean_ph = _mm512_fmadd_ph(grad_ph, one_minus_beta1_vec_ph, mean_ph);
+        
+        // Update biased second raw moment estimate: v_t = beta2 * v_{t-1} + (1 - beta2) * (g_t)^2
+        __m512h grad_sq_ph = _mm512_mul_ph(grad_ph, grad_ph);
+        var_ph = _mm512_mul_ph(var_ph, beta2_vec_ph);
+        var_ph = _mm512_fmadd_ph(grad_sq_ph, one_minus_beta2_vec_ph, var_ph);
+        
+        // Bias correction would typically be applied here if t is passed or bias_correction factors are precomputed:
+        // float bc1 = adam_worker_args->bias_correction1; // e.g., 1.0f / (1.0f - powf(beta1, t))
+        // float bc2 = adam_worker_args->bias_correction2; // e.g., 1.0f / (1.0f - powf(beta2, t))
+        // __m512h bc1_vec_ph = _mm512_set1_ph((_Float16)bc1);
+        // __m512h bc2_vec_ph = _mm512_set1_ph((_Float16)bc2);
+        // __m512h mean_hat_ph = _mm512_mul_ph(mean_ph, bc1_vec_ph); // Or div if bias_correction is 1-beta^t
+        // __m512h var_hat_ph  = _mm512_mul_ph(var_ph,  bc2_vec_ph);
+
+        // For this example, assuming mean_ph and var_ph are already bias-corrected, or correction is outside.
+        // If not, they should be mean_hat_ph and var_hat_ph below.
+
+        // Compute update: param_update = lr * m_t / (sqrt(v_t) + epsilon)
+        __m512h var_sqrt_ph = _mm512_sqrt_ph(var_ph); // Native FP16 sqrt
+        __m512h denom_ph = _mm512_add_ph(var_sqrt_ph, eps_vec_ph);
+        __m512h update_ratio_ph = _mm512_div_ph(mean_ph, denom_ph); // Native FP16 div
+        __m512h param_update_ph = _mm512_mul_ph(lr_vec_ph, update_ratio_ph);
+        
+        // Apply update: p_t = p_{t-1} - param_update
+        param_ph = _mm512_sub_ph(param_ph, param_update_ph);
+
+        // Store updated FP16 values
+        _mm512_storeu_ph((void*)(base_param_ptr + current_global_idx), param_ph);
+        _mm512_storeu_ph((void*)(base_mean_ptr + current_global_idx), mean_ph);
+        _mm512_storeu_ph((void*)(base_var_ptr + current_global_idx), var_ph);
+    }
+
+    // Scalar remainder loop using _Float16 arithmetic
+    for (; i_local < num_elements_for_thread; ++i_local) {
+        size_t current_global_idx = start_index_for_thread + i_local;
+
+        _Float16 p_f16 = u16_to_f16_scalar(base_param_ptr[current_global_idx]);
+        _Float16 g_f16 = u16_to_f16_scalar(base_grad_ptr[current_global_idx]);
+        _Float16 m_f16 = u16_to_f16_scalar(base_mean_ptr[current_global_idx]);
+        _Float16 v_f16 = u16_to_f16_scalar(base_var_ptr[current_global_idx]);
+
+        if (adam_worker_args->weight_decay != 0.0f) {
+             g_f16 = g_f16 + weight_decay_f16 * p_f16;
+        }
+        
+        m_f16 = beta1_f16 * m_f16 + one_minus_beta1_f16 * g_f16;
+        _Float16 g_sq_f16 = g_f16 * g_f16;
+        v_f16 = beta2_f16 * v_f16 + one_minus_beta2_f16 * g_sq_f16;
+        
+        // Scalar sqrt: convert to float, sqrtf, convert back to _Float16 for safety/availability.
+        // If your <math.h> + compiler fully support _Float16 math functions like sqrtf16, you can use them.
+        _Float16 v_sqrt_f16 = (_Float16)sqrtf((float)v_f16); 
+        _Float16 denom_f16 = v_sqrt_f16 + epsilon_f16;
+        _Float16 param_update_f16;
+        if (denom_f16 == (_Float16)0.0f) { // Avoid division by zero
+            param_update_f16 = (_Float16)0.0f;
+        } else {
+            param_update_f16 = lr_f16 * m_f16 / denom_f16;
+        }
+        
+        p_f16 = p_f16 - param_update_f16;
+
+        base_param_ptr[current_global_idx] = f16_to_u16_scalar(p_f16);
+        base_mean_ptr[current_global_idx]  = f16_to_u16_scalar(m_f16);
+        base_var_ptr[current_global_idx]   = f16_to_u16_scalar(v_f16);
+    }
+    return NULL;
+}
+
 static void * thread_func_adam_step_avx512_fp8e4m3(void * _adam_worker_args) {
 
     Adam_Worker_Args * adam_worker_args = (Adam_Worker_Args *) _adam_worker_args;
@@ -484,7 +622,7 @@ int do_adam_step_host_avx512(DataflowDatatype param_dt, DataflowDatatype grad_dt
         return -1;
     }
 
-    void * (*adam_step_func)(void * _adam_thread_arg);
+    void * (*adam_step_func)(void * _adam_worker_args);
 
     if (param_dt == DATAFLOW_FP32){
         adam_step_func = thread_func_adam_step_avx512_fp32;
@@ -493,7 +631,12 @@ int do_adam_step_host_avx512(DataflowDatatype param_dt, DataflowDatatype grad_dt
         adam_step_func = thread_func_adam_step_avx512_bf16;
     }
     else if (param_dt == DATAFLOW_FP16){
-        adam_step_func = thread_func_adam_step_avx512_fp16;
+        if (USE_AVX512_FP16_ARITHMETIC_FOR_ADAM_STEP){
+            adam_step_func = thread_func_adam_step_avx512_fp16_native;
+        }
+        else{
+            adam_step_func = thread_func_adam_step_avx512_fp16;
+        }
     }
     /* Not ready for fp8 yet
     else if (param_dt == DATAFLOW_FP8E4M3){
