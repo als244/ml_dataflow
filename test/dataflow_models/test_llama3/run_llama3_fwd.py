@@ -57,6 +57,10 @@ print(f"Finished Initialized Model!\n\tRuntime: {time_ms} ms\n")
 llama_model = Llama(base_model, llama_tokenizer)
 
 example_prompt_2048 = open("prompt_2048.txt", "r").read()
+example_prompt_4096 = open("prompt_4096.txt", "r").read()
+example_prompt_8192 = open("prompt_8192.txt", "r").read()
+example_prompt_transformer_paper = open("prompt_attn_all_you_need.md", "r").read()
+
 
 N_PROMPTS = 1
 prompts = [example_prompt_2048]

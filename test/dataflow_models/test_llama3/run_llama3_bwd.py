@@ -5,11 +5,23 @@ import json
 
 from llama3_tokenizer import Tokenizer
 from llama3_model import ModelArgs, Transformer, TransformerBlock, Attention, FeedForward
+
+import torch.optim as optim
+
 import time
 import functools
 import numpy as np
 import random
 import os
+
+
+
+##
+
+BWD_SAVE_DIR = "/mnt/storage/research/ml_dataflow/correct_transformer_data"
+
+
+
 SEED = 0
 
 ## python convert_llama_weights_to_hf.py --input_dir /mnt/storage/models/llama3/meta_checkpoints/8B_inst --model_size 8B --output_dir . --llama_version 3.1
@@ -57,8 +69,8 @@ print(f"Finished Initialized Model!\n\tRuntime: {time_ms} ms\n")
 
 device = torch.device("cuda:0")
 
-token_id_file = "token_ids_uint32.dat"
-token_labels_file = "labels_uint32.dat"
+token_id_file = "2048_token_ids_uint32.dat"
+token_labels_file = "2048_labels_uint32.dat"
 np_inp_tokens = np.fromfile(token_id_file, dtype=np.uint32)
 np_labels = np.fromfile(token_labels_file, dtype=np.uint32)
 
@@ -72,9 +84,7 @@ model.to(device)
 
 
 
-##
 
-BWD_SAVE_DIR = "/mnt/storage/research/ml_dataflow/correct_transformer_data"
 
 def save_gradient_hook(module, grad_input, grad_output, layer_id, module_name):
     """
@@ -125,6 +135,32 @@ def save_gradient_hook(module, grad_input, grad_output, layer_id, module_name):
          # but grad_input[0] corresponding to the main data tensor 'x' should exist.
         print(f"  WARNING: grad_input[0] is None or invalid for layer {layer_id} [{module_name}]")
 
+def save_specific_gradient_hook(module, grad_input, grad_output, identifier):
+    """
+    Hook specifically designed to capture grad_input[0] (gradient w.r.t. input activation).
+    """
+    print(f"Hook triggered for identifier: {identifier}")
+    if grad_input is not None and len(grad_input) > 0 and grad_input[0] is not None:
+        grad = grad_input[0].detach().cpu()
+        print(f"  Capturing gradient w.r.t. input for '{identifier}'. Shape: {grad.shape}, Dtype: {grad.dtype}")
+        captured_gradients[identifier] = grad
+        # Optional: Save directly here if preferred
+        # grad_path = f"{BWD_SAVE_DIR}/{identifier}_grad_input.pt"
+        # os.makedirs(os.path.dirname(grad_path), exist_ok=True)
+        # try:
+        #     torch.save(grad, grad_path)
+        #     print(f"  Saved gradient to {grad_path}")
+        # except Exception as e:
+        #     print(f"  ERROR saving gradient for {identifier}: {e}")
+    else:
+        print(f"  WARNING: grad_input[0] is None or invalid for '{identifier}'")
+
+
+
+
+
+
+
 
 
 
@@ -169,25 +205,7 @@ print(f"Total hooks registered: {total_hooks}")
 
 captured_gradients = {}
 
-def save_specific_gradient_hook(module, grad_input, grad_output, identifier):
-    """
-    Hook specifically designed to capture grad_input[0] (gradient w.r.t. input activation).
-    """
-    print(f"Hook triggered for identifier: {identifier}")
-    if grad_input is not None and len(grad_input) > 0 and grad_input[0] is not None:
-        grad = grad_input[0].detach().cpu()
-        print(f"  Capturing gradient w.r.t. input for '{identifier}'. Shape: {grad.shape}, Dtype: {grad.dtype}")
-        captured_gradients[identifier] = grad
-        # Optional: Save directly here if preferred
-        # grad_path = f"{BWD_SAVE_DIR}/{identifier}_grad_input.pt"
-        # os.makedirs(os.path.dirname(grad_path), exist_ok=True)
-        # try:
-        #     torch.save(grad, grad_path)
-        #     print(f"  Saved gradient to {grad_path}")
-        # except Exception as e:
-        #     print(f"  ERROR saving gradient for {identifier}: {e}")
-    else:
-        print(f"  WARNING: grad_input[0] is None or invalid for '{identifier}'")
+
 
 if hasattr(model, 'output') and isinstance(model.output, nn.Module):
     print("Registering hook for final projection layer input gradient...")
@@ -199,52 +217,10 @@ if hasattr(model, 'output') and isinstance(model.output, nn.Module):
 else:
     print("WARNING: Could not find 'model.output' or it's not an nn.Module. Cannot register hook.")
 
-last_layer = model.layers[10]
-last_ff_layer = last_layer.feed_forward
-
-hook_ffn_norm = functools.partial(save_specific_gradient_hook, identifier="final_ffn_norm")
-handle_ffn_norm = last_layer.ffn_norm.register_full_backward_hook(hook_ffn_norm)
-hook_handles.append(handle_ffn_norm)
-
-# Register hook for w1.weight
-hook_w1 = functools.partial(save_specific_gradient_hook, identifier="final_w1_inp")
-handle_w1 = last_ff_layer.w1.register_full_backward_hook(hook_w1)
-hook_handles.append(handle_w1)
-
-
-# Register hook for w2.weight
-hook_w2 = functools.partial(save_specific_gradient_hook, identifier="final_w2_inp")
-handle_w2 = last_ff_layer.w2.register_full_backward_hook(hook_w2)
-hook_handles.append(handle_w2)
-print("  Registered hook on last_ff_layer.w2.weight")
-
-# Register hook for w3.weight
-hook_w3 = functools.partial(save_specific_gradient_hook, identifier="final_w3_inp")
-handle_w3 = last_ff_layer.w3.register_full_backward_hook(hook_w3)
-hook_handles.append(handle_w3)
-print("  Registered hook on last_ff_layer.w3.weight")
 
 
 
-last_attn_layer = last_layer.attention
-
-hook_wq = functools.partial(save_specific_gradient_hook, identifier="final_wq_inp")
-handle_wq = last_attn_layer.wq.register_full_backward_hook(hook_wq)
-hook_handles.append(handle_wq)
-print("  Registered hook on last_attn_layer.wq.weight")
-
-# Register hook for w2.weight
-hook_wk = functools.partial(save_specific_gradient_hook, identifier="final_wk_inp")
-handle_wk = last_attn_layer.wk.register_full_backward_hook(hook_wk)
-hook_handles.append(handle_wk)
-print("  Registered hook on last_attn_layer.wk.weight")
-
-# Register hook for w3.weight
-hook_wv = functools.partial(save_specific_gradient_hook, identifier="final_wv_inp")
-handle_wv = last_attn_layer.wv.register_full_backward_hook(hook_wv)
-hook_handles.append(handle_wv)
-print("  Registered hook on last_attn_layer.wv.weight")
-
+## FORWARD PASS
 
 
 print("Starting forward pass...")
@@ -262,6 +238,9 @@ predictions.retain_grad()
 predictions_path = f"{BWD_SAVE_DIR}/head_fwd/predictions.pt"
 torch.save(predictions, predictions_path)
 
+
+## LOSS CALCULATION
+
 # --- Loss Calculation ---
 print("Calculating loss...")
 # CrossEntropyLoss expects preds: (N, C) or (N, C, ...), labels: (N) or (N, ...)
@@ -269,6 +248,9 @@ print("Calculating loss...")
 criterion = torch.nn.CrossEntropyLoss()
 loss = criterion(predictions.view(-1, predictions.size(-1)), labels.view(-1))
 print(f"Loss calculated: {loss.item()}") # Use .item() to get scalar value
+
+
+## BACKWARD PASS
 
 
 # --- Backward Pass (Triggers Hooks) ---
@@ -280,32 +262,90 @@ stop_bwd = time.time_ns()
 time_bwd_ms = (stop_bwd - start_bwd) / 1e6
 print(f"Backward pass completed in {time_bwd_ms:.2f} ms")
 
+
+# --- 1. Save Model Parameter Gradients (Before Optimizer Step) ---
+print("Saving model parameter gradients before optimizer step...")
+model_gradients_before_opt = {}
+for name, param in model.named_parameters():
+    if param.grad is not None:
+        model_gradients_before_opt[name] = param.grad.detach().cpu().clone()
+    # else:
+    #     print(f"Parameter {name} has no gradient.")
+
+
+param_grads_dir = os.path.join(BWD_SAVE_DIR, "param_gradients")
+os.makedirs(param_grads_dir, exist_ok=True)
+param_grads_save_path = os.path.join(param_grads_dir, "model_parameter_gradients_before_step.pt")
+torch.save(model_gradients_before_opt, param_grads_save_path)
+print(f"Saved model parameter gradients to {param_grads_save_path}")
+
+# --- 2. Initialize and Run Optimizer ---
+print("Initializing Adam optimizer and performing optimization step...")
+optimizer = optim.Adam(
+    model.parameters(), # Pass all model parameters to the optimizer
+    lr=1e-4,
+    betas=(0.9, 0.999), # (beta1, beta2)
+    eps=1e-8,           # epsilon
+    weight_decay=1e-3
+)
+
+optimizer.step() # Apply gradients to model parameters, updating them
+print("Optimizer step performed.")
+
+# --- 3. Save Optimizer State Values and Updated Parameters (After Optimizer Step) ---
+print("Saving optimizer state values and updated model parameters after step...")
+optimizer_states_after_step = {}
+# The optimizer.state is a dict where keys are parameters and values are their state (e.g., exp_avg)
+for param_group in optimizer.param_groups: # Iterate over parameter groups
+    for p in param_group['params']:    # Iterate over parameters in each group
+        if p in optimizer.state:       # Check if the parameter has state in the optimizer
+            state = optimizer.state[p]
+            # Find the name of the parameter p for saving
+            param_name = None
+            for name, param_val in model.named_parameters():
+                if param_val is p:
+                    param_name = name
+                    break
+            
+            if param_name and state: # Ensure state is not empty and name was found
+                # 'step' can be a tensor or an int/float. Adam typically stores it as a tensor or Python int.
+                step_val = state['step']
+                if isinstance(step_val, torch.Tensor):
+                    step_val = step_val.cpu().item() # Convert to Python number if it's a scalar tensor
+                
+                optimizer_states_after_step[param_name] = {
+                    'step': step_val,
+                    'exp_avg': state['exp_avg'].detach().cpu().clone(),    # 1st moment estimate
+                    'exp_avg_sq': state['exp_avg_sq'].detach().cpu().clone() # 2nd moment estimate
+                }
+            elif not state:
+                 print(f"  Parameter {param_name or 'Unknown (check mapping)'} has no state in optimizer (e.g. no grad was computed).")
+            elif not param_name:
+                 print(f"  Warning: Optimizer state found for a parameter not in model.named_parameters() (should not happen).")
+
+
+opt_states_dir = os.path.join(BWD_SAVE_DIR, "optimizer_states")
+os.makedirs(opt_states_dir, exist_ok=True)
+optimizer_states_save_path = os.path.join(opt_states_dir, "optimizer_states_after_step.pt")
+torch.save(optimizer_states_after_step, optimizer_states_save_path)
+print(f"Saved optimizer states to {optimizer_states_save_path}")
+
+# Optionally, save the updated model parameters themselves
+updated_params_save_path = os.path.join(opt_states_dir, "model_parameters_after_step.pt")
+updated_params_dict = {name: param.detach().cpu().clone() for name, param in model.named_parameters()}
+torch.save(updated_params_dict, updated_params_save_path)
+print(f"Saved updated model parameters to {updated_params_save_path}")
+
+
+
+## SAVE ADDITIONAL GRADIENTS
+
+print("Saving additional gradients...")
+
 head_input_gradient = captured_gradients.get("head_input")
 
 head_input_gradient_path = f"{BWD_SAVE_DIR}/head_bwd/head_input_gradient.pt"
 torch.save(head_input_gradient, head_input_gradient_path)
-
-final_ffn_norm_gradient = captured_gradients.get("final_ffn_norm")
-torch.save(final_ffn_norm_gradient, f"{BWD_SAVE_DIR}/layers_bwd/10/ffn_norm_gradient.pt")
-
-final_w1_inp_gradient = captured_gradients.get("final_w1_inp")
-torch.save(final_w1_inp_gradient, f"{BWD_SAVE_DIR}/layers_bwd/10/w1_inp_gradient.pt")
-
-final_w2_inp_gradient = captured_gradients.get("final_w2_inp")
-torch.save(final_w2_inp_gradient, f"{BWD_SAVE_DIR}/layers_bwd/10/w2_inp_gradient.pt")
-
-final_w3_inp_gradient = captured_gradients.get("final_w3_inp")
-torch.save(final_w3_inp_gradient, f"{BWD_SAVE_DIR}/layers_bwd/10/w3_inp_gradient.pt")
-
-final_wq_inp_gradient = captured_gradients.get("final_wq_inp")
-torch.save(final_wq_inp_gradient, f"{BWD_SAVE_DIR}/layers_bwd/10/wq_inp_gradient.pt")
-
-final_wk_inp_gradient = captured_gradients.get("final_wk_inp")
-torch.save(final_wk_inp_gradient, f"{BWD_SAVE_DIR}/layers_bwd/10/wk_inp_gradient.pt")
-
-final_wv_inp_gradient = captured_gradients.get("final_wv_inp")
-torch.save(final_wv_inp_gradient, f"{BWD_SAVE_DIR}/layers_bwd/10/wv_inp_gradient.pt")
-
 
 
 logits_grad = predictions.grad
