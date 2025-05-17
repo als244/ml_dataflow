@@ -18,7 +18,7 @@ import os
 
 ##
 
-BWD_SAVE_DIR = "/mnt/storage/research/ml_dataflow/correct_transformer_data"
+BWD_SAVE_DIR = "../correct_transformer_data"
 
 
 
