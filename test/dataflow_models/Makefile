@@ -38,6 +38,7 @@ create_data_dirs:
         	mkdir -p test_transformer_data/layers_fwd/$$i; \
 		mkdir -p test_transformer_data/layers_bwd/$$i; \
 		mkdir -p test_transformer_data/model_grads/layers/$$i; \
+		mkdir -p test_transformer_data/optimizer_states/layers/$$i; \
 		mkdir -p correct_transformer_data/layers_fwd/$$i; \
 		mkdir -p correct_transformer_data/layers_bwd/$$i; \
 		mkdir -p correct_transformer_data/model_grads/layers/$$i; \
@@ -49,10 +50,13 @@ create_data_dirs:
 	mkdir -p test_transformer_data/embedding_bwd; \
 	mkdir -p test_transformer_data/model_grads/embedding; \
 	mkdir -p test_transformer_data/model_grads/head; \
+	mkdir -p test_transformer_data/optimizer_states/embedding; \
+	mkdir -p test_transformer_data/optimizer_states/head; \
 	mkdir -p correct_transformer_data/head_fwd; \
 	mkdir -p correct_transformer_data/head_bwd; \
-	mkdir -p correct_transformer_data/model_grads/embedding; \
-	mkdir -p correct_transformer_data/model_grads/head; \
+	mkdir -p correct_transformer_data/model_grads; \
+	mkdir -p correct_transformer_data/model_grad; \
+	mkdir -p correct_transformer_data/optimizer_states; \
 	mkdir -p profiling
 
 naive_transformer: naive_transformer.c

@@ -273,7 +273,7 @@ for name, param in model.named_parameters():
     #     print(f"Parameter {name} has no gradient.")
 
 
-param_grads_dir = os.path.join(BWD_SAVE_DIR, "param_gradients")
+param_grads_dir = os.path.join(BWD_SAVE_DIR, "model_grads")
 os.makedirs(param_grads_dir, exist_ok=True)
 param_grads_save_path = os.path.join(param_grads_dir, "model_parameter_gradients_before_step.pt")
 torch.save(model_gradients_before_opt, param_grads_save_path)

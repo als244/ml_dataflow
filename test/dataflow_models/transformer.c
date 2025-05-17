@@ -18,6 +18,16 @@
 #define HOST_MEM_GB 100
 #define DEV_MEM_GB 20
 
+#define MODEL_CONFIG_SIZE_B 1
+#define MODEL_PATH "../data/1B"
+
+
+#define NUM_TOKENS 2048
+#define MAX_TOKENS_PER_CHUNK 2048
+
+#define TOKEN_IDS_PATH "../data/2048_token_ids_uint32.dat"
+#define TOKEN_LABELS_PATH "../data/2048_labels_uint32.dat"
+
 int main(int argc, char * argv[]){
 
 	int ret;
@@ -160,37 +170,53 @@ int main(int argc, char * argv[]){
 	float eps = 1e-5;
 	int theta = 500000;
 
+	int n_layers;
+	int num_q_heads;
+	int num_kv_heads;
+	int head_dim;
+	int ffn_dim;
+	int model_dim;
+	int kv_dim;
+	int vocab_size;
+
+	if (MODEL_CONFIG_SIZE_B == 70){
 	// llama3 70B config
-	/*
-	int n_layers = 80;
-	int num_q_heads = 64;
-	int num_kv_heads = 8;
-	int head_dim = 128;
-	int ffn_dim = 28672;
-	*/
-
-	// llama3 8b config
-	int n_layers = 32;
-	int num_q_heads = 32;
-	int num_kv_heads = 8;
-	int head_dim = 128;
-	int ffn_dim = 14336;
-	int model_dim = num_q_heads * head_dim;
-	int kv_dim = num_kv_heads * head_dim;
-
-
-	// llama3 1B config
-	/*
-	int n_layers = 16;
-	int num_q_heads = 32;
-	int num_kv_heads = 8;
-	int head_dim = 64;
-	int ffn_dim = 8192;
-	int model_dim = num_q_heads * head_dim;
-	int kv_dim = num_kv_heads * head_dim;
-	*/
-
-	int vocab_size = 128256;
+		n_layers = 80;
+		num_q_heads = 64;
+		num_kv_heads = 8;
+		head_dim = 128;
+		ffn_dim = 28672;
+		model_dim = num_q_heads * head_dim;
+		kv_dim = num_kv_heads * head_dim;
+		vocab_size = 128256;
+	}
+	else if (MODEL_CONFIG_SIZE_B == 8){
+		// llama3 8b config
+		n_layers = 32;
+		num_q_heads = 32;
+		num_kv_heads = 8;
+		head_dim = 128;
+		ffn_dim = 14336;
+		model_dim = num_q_heads * head_dim;
+		kv_dim = num_kv_heads * head_dim;
+		vocab_size = 128256;
+	}
+	else if (MODEL_CONFIG_SIZE_B == 1){
+		// llama3 1b config
+		n_layers = 16;
+		num_q_heads = 32;
+		num_kv_heads = 8;
+		head_dim = 64;
+		ffn_dim = 8192;
+		model_dim = num_q_heads * head_dim;
+		kv_dim = num_kv_heads * head_dim;
+		vocab_size = 128256;
+	}
+	else{
+		fprintf(stderr, "Error: invalid model config size (B): %d\n", MODEL_CONFIG_SIZE_B);
+		return -1;
+	}
+	
 
 	MoE_Config * moe_config = NULL;
 
@@ -330,11 +356,15 @@ int main(int argc, char * argv[]){
 
 	// Loading in from checkpoint...
 
-	printf("\n\nLOADING MODEL FROM CHECKPOINT...\n");
+	printf("\n\nLOADING MODEL FROM CHECKPOINT: %s...\n", MODEL_PATH);
+
+	char layer_path[PATH_MAX];
 
 
 	printf("Loading embedding table...\n");
-	FILE * fp = fopen("../data/8B/embed/tok_embeddings.weight", "rb");
+
+	sprintf(layer_path, "%s/embed/tok_embeddings.weight", MODEL_PATH);
+	FILE * fp = fopen(layer_path, "rb");
 	if (!fp){
 		fprintf(stderr, "Error: failed to open data/embed/tok_embedding.weight...\n");
 		return -1;
@@ -354,13 +384,11 @@ int main(int argc, char * argv[]){
 
 	printf("Loading all sys transformer blocks...\n");
 
-	char * layer_base_path = "../data/8B/layers";
-
-	char layer_path[PATH_MAX];
+	
 	for (int i = 0; i < n_layers; i++){
 		
 
-		sprintf(layer_path, "%s/%d/combined_layer.weight", layer_base_path, i);
+		sprintf(layer_path, "%s/layers/%d/combined_layer.weight", MODEL_PATH, i);
 
 		printf("Loading transformer block from: %s...\n", layer_path);
 		ret = load_transformer_block(layer_path, sys_blocks[i]);
@@ -374,8 +402,9 @@ int main(int argc, char * argv[]){
 
 	printf("Loading head...\n");
 
+	sprintf(layer_path, "%s/head/combined_head.weight", MODEL_PATH);
 
-	fp = fopen("../data/8B/head/combined_head.weight", "rb");
+	fp = fopen(layer_path, "rb");
 	if (!fp){
 		fprintf(stderr, "Error: failed to open data/head/combined_head.weight...\n");
 		return -1;
@@ -918,31 +947,31 @@ int main(int argc, char * argv[]){
 
 	// CONTEXT AND GRAD CONTEXTS!
 
-	int total_tokens = 8833;
+	int total_tokens = NUM_TOKENS;
 
-	// see if round number makes a difference...
-	total_tokens = 8192;
+
+	// for now just testing the 1 sequence case for debugging...
 	int num_seqs = 1;
 
 
-	int max_tokens_per_chunk = 8833;
-	max_tokens_per_chunk = 8192;
+	int max_tokens_per_chunk = MAX_TOKENS_PER_CHUNK;
 	int num_chunks = MY_CEIL(total_tokens, max_tokens_per_chunk);
 	
 	
-
+	char inp_file_path[PATH_MAX];
+	sprintf(inp_file_path, "%s", TOKEN_IDS_PATH);
 
 	uint32_t * sys_token_ids = malloc(total_tokens * sizeof(uint32_t));
 
-	fp = fopen("../data/prompt_attn_paper_8833_tok_uint32.dat", "rb");
+	fp = fopen(inp_file_path, "rb");
 	if (!fp){
-		fprintf(stderr, "Error: failed to open data/prompt_attn_paper_8833_tok_uint32.dat...\n");
+		fprintf(stderr, "Error: failed to open %s...\n", inp_file_path);
 		return -1;
 	}
 
 	read_els = fread(sys_token_ids, sizeof(uint32_t), total_tokens, fp);
 	if (read_els != total_tokens){
-		fprintf(stderr, "Error: failed to read prompt_attn_paper_8833_tok_uint32.dat, read_els: %zu, expected: %d\n", read_els, total_tokens);
+		fprintf(stderr, "Error: failed to read %s, read_els: %zu, expected: %d\n", inp_file_path, read_els, total_tokens);
 		return -1;
 	}
 	fclose(fp);
@@ -966,15 +995,17 @@ int main(int argc, char * argv[]){
 
 	uint32_t * sys_labels = malloc(total_tokens * sizeof(uint32_t));
 
-	fp = fopen("../data/prompt_attn_paper_8833_labels_uint32.dat", "rb");
+	sprintf(inp_file_path, "%s", TOKEN_LABELS_PATH);
+
+	fp = fopen(inp_file_path, "rb");
 	if (!fp){
-		fprintf(stderr, "Error: failed to open data/prompt_attn_paper_8833_labels_uint32.dat...\n");
+		fprintf(stderr, "Error: failed to open %s...\n", inp_file_path);
 		return -1;
 	}
 
 	read_els = fread(sys_labels, sizeof(uint32_t), total_tokens, fp);
 	if (read_els != total_tokens){
-		fprintf(stderr, "Error: failed to read prompt_attn_paper_8833_labels_uint32.dat, read_els: %zu, expected: %d\n", read_els, total_tokens);
+		fprintf(stderr, "Error: failed to read %s, read_els: %zu, expected: %d\n", inp_file_path, read_els, total_tokens);
 		return -1;
 	}
 	fclose(fp);
