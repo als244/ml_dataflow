@@ -2,52 +2,11 @@
 #define HOST_OPS_H
 
 #include "dataflow.h"
+#include "dataflow_ops.h"
 
 #include <immintrin.h>  // For AVX512 intrinsics
 
 #define USE_FP16_ARTIHMETIC_FOR_ADD 1
-#define USE_FP16_ARITHMETIC_FOR_ADAM_STEP 1
-
-typedef struct Adam_Host_Op_Args{
-    DataflowDatatype param_dt;
-    DataflowDatatype grad_dt;
-    DataflowDatatype mean_dt;
-    DataflowDatatype var_dt;
-    int num_threads;
-    int layer_id;
-    uint64_t num_els;
-    float lr;
-    float beta1;
-    float beta2;
-    float weight_decay;
-    float epsilon;
-    void * param;
-    void * grad;
-    void * mean;
-    void * var;
-} Adam_Host_Op_Args;
-
-typedef struct set_mem_host_op_args{
-    void * ptr;
-    size_t size_bytes;
-    int value;
-} Set_Mem_Host_Op_Args;
-
-// C = alpha * A + beta * B
-typedef struct add_host_op_args{
-    DataflowDatatype A_dt;
-    DataflowDatatype B_dt;
-    DataflowDatatype C_dt;
-    void * A;
-    void * B;
-    void * C;
-    float alpha;
-    float beta;
-    int num_threads;
-    int layer_id;
-    size_t num_els;
-} Add_Host_Op_Args;
-
 
 
 int set_mem_host(void * _set_mem_host_op_args);
