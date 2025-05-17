@@ -893,12 +893,10 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 	float grad_avg_scale = 1.0f / ((float)head_activations -> num_tokens);
 
 	 // 2. Output projection weight gradients
-    // Forward: [num_tokens, embedding_size] @ [embedding_size, vocab_size] -> [num_tokens, vocab_size]
-    // Backward for weights: dW = X^T @ dY
-    // For matmul with transa=1, transb=0:
-    // M = embedding_size (rows of dW)
-    // K = num_tokens (reduction dim)
-    // N = vocab_size (cols of dW)
+    
+	// transa = 0, transb = 1
+
+	// if both are row-major and we want a col-major output, then "NT" transpose is correct
 
     ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
                        grad_transformer_head -> bwd_dt,
@@ -906,11 +904,11 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
                        grad_transformer_head -> bwd_dt,
                        grad_transformer_head -> bwd_dt,
                        grad_transformer_head -> compute_dt,
-                       1, 0,  // transa=1 for X^T, transb=0 for dY
-                       vocab_size, head_activations -> num_tokens, embedding_size,
+                       0, 1,
+                       embedding_size, head_activations -> num_tokens, vocab_size,
                        grad_avg_scale, 1.0,  // Accumulate gradients,
+					   head_activations -> head_norm_out,    // Input activations [num_tokens, embedding_size]     
 					   model_output -> logits, // Gradient of output [num_tokens, vocab_size]
-                       head_activations -> head_norm_out,    // Input activations [num_tokens, embedding_size]     
                        grad_transformer_head -> w_head,      // Previous gradient
                        grad_transformer_head -> w_head,      // Output gradient
                        head_activations -> kernelWorkspaceBytes, head_activations -> kernelWorkspace);
@@ -1698,8 +1696,10 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
     uint64_t kernelWorkspaceBytes = activation_workspace -> kernelWorkspaceBytes;
     void * kernelWorkspace = activation_workspace -> kernelWorkspace;
 
-    int to_transa = 1;
-    int to_transb = 0;
+	// Need 0,1 for transa, transb if both input matrices are row major
+	// and we want a col-major output...
+    int to_transa = 0;
+    int to_transb = 1;
 
 	
 
@@ -1731,7 +1731,7 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
                     to_transa, to_transb,
                     ffn_dim, total_q, model_dim, 
                     1.0, 1.0,  // Accumulate gradients
-                    grad_stream -> X, activation_workspace -> x_temp_mlp, (grad_weights -> w_2)[0], (grad_weights -> w_2)[0],
+                    activation_workspace -> x_temp_mlp, grad_stream -> X, (grad_weights -> w_2)[0], (grad_weights -> w_2)[0],
                     kernelWorkspaceBytes, kernelWorkspace);
     if (ret) {
         fprintf(stderr, "Error: failed to submit w2 weight gradient computation...\n");
@@ -1756,9 +1756,9 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
                     bwd_dt, bwd_dt, bwd_dt, bwd_dt,
                     compute_dt,
                     to_transa, to_transb,
-                    ffn_dim, total_q, model_dim, 
+                    model_dim, total_q, ffn_dim, 
                     1.0, 1.0,  // Accumulate gradients
-                    (bwd_activations -> x_1)[0], bwd_activations -> recomputed_activations -> recomputed_ffn_norm, (grad_weights -> w_1)[0], (grad_weights -> w_1)[0],
+                    bwd_activations -> recomputed_activations -> recomputed_ffn_norm, (bwd_activations -> x_1)[0], (grad_weights -> w_1)[0], (grad_weights -> w_1)[0],
                     kernelWorkspaceBytes, kernelWorkspace);
     if (ret) {
         fprintf(stderr, "Error: failed to submit w1 weight gradient computation...\n");
@@ -1781,9 +1781,9 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
                     bwd_dt, bwd_dt, bwd_dt, bwd_dt,
                     compute_dt,
                     to_transa, to_transb,
-                    ffn_dim, total_q, model_dim,
+                    model_dim, total_q, ffn_dim,
                     1.0, 1.0,  // Accumulate gradients
-                    (bwd_activations -> x_3)[0], bwd_activations -> recomputed_activations -> recomputed_ffn_norm, (grad_weights -> w_3)[0], (grad_weights -> w_3)[0],
+                    bwd_activations -> recomputed_activations -> recomputed_ffn_norm, (bwd_activations -> x_3)[0], (grad_weights -> w_3)[0], (grad_weights -> w_3)[0],
                     kernelWorkspaceBytes, kernelWorkspace);
     if (ret) {
         fprintf(stderr, "Error: failed to submit w3 weight gradient computation...\n");
@@ -1811,7 +1811,7 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
                     to_transa, to_transb,
                     model_dim, total_q, model_dim, 
                     1.0, 1.0,  // Accumulate gradients
-                    bwd_activations -> x_o, fwd_activations -> x_attn_out, grad_weights -> w_o, grad_weights -> w_o,
+                    fwd_activations -> x_attn_out, bwd_activations -> x_o, grad_weights -> w_o, grad_weights -> w_o,
                     kernelWorkspaceBytes, kernelWorkspace);
     if (ret) {
         fprintf(stderr, "Error: failed to submit attention output weight gradient computation...\n");
@@ -1836,9 +1836,9 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
                     bwd_dt, bwd_dt, bwd_dt, bwd_dt,
                     compute_dt,
                     to_transa, to_transb,
-                    kv_dim, total_q, model_dim,
+                    model_dim, kv_dim, total_q,
                     1.0, 1.0,  // Accumulate gradients
-                    bwd_activations -> x_v_local, bwd_activations -> recomputed_activations -> recomputed_attn_norm, grad_weights -> w_v, grad_weights -> w_v,
+                    bwd_activations -> recomputed_activations -> recomputed_attn_norm, bwd_activations -> x_v_local, grad_weights -> w_v, grad_weights -> w_v,
                     kernelWorkspaceBytes, kernelWorkspace);
     if (ret) {
         fprintf(stderr, "Error: failed to submit V projection weight gradient computation...\n");
@@ -1861,9 +1861,9 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
                     bwd_dt, bwd_dt, bwd_dt, bwd_dt,
                     compute_dt,
                     to_transa, to_transb,
-                    kv_dim, total_q, model_dim,
+                    model_dim, total_q, kv_dim,
                     1.0, 1.0,  // Accumulate gradients
-                    bwd_activations -> x_k_local, bwd_activations -> recomputed_activations -> recomputed_attn_norm, grad_weights -> w_k, grad_weights -> w_k,
+                    bwd_activations -> recomputed_activations -> recomputed_attn_norm, bwd_activations -> x_k_local, grad_weights -> w_k, grad_weights -> w_k,
                     kernelWorkspaceBytes, kernelWorkspace);
     if (ret) {
         fprintf(stderr, "Error: failed to submit K projection weight gradient computation...\n");
@@ -1889,7 +1889,7 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
                     to_transa, to_transb,
                     model_dim, total_q, model_dim,
                     1.0, 1.0,  // Accumulate gradients
-                    bwd_activations -> x_q, bwd_activations -> recomputed_activations -> recomputed_attn_norm, grad_weights -> w_q, grad_weights -> w_q,
+                    bwd_activations -> recomputed_activations -> recomputed_attn_norm, bwd_activations -> x_q, grad_weights -> w_q, grad_weights -> w_q,
                     kernelWorkspaceBytes, kernelWorkspace);
     if (ret) {
         fprintf(stderr, "Error: failed to submit Q projection weight gradient computation...\n");

@@ -804,12 +804,7 @@ int main(int argc, char * argv[]){
 	sys_grad_embedding_table -> embedding_table_size = (uint64_t) vocab_size * (uint64_t) model_dim * block_bwd_dt_size;
 	sys_grad_embedding_table -> embedding_table = cur_host_mem;
 	
-	
-	ret = dataflow_handle.set_mem(&dataflow_handle, inbound_stream_id, sys_grad_embedding_table -> embedding_table, 0, sys_grad_embedding_table -> embedding_table_size);
-	if (ret){
-		fprintf(stderr, "Error: failed to set mem for sys_grad_embedding_table...\n");
-		return -1;
-	}
+	memset(sys_grad_embedding_table -> embedding_table, 0, sys_grad_embedding_table -> embedding_table_size);
 
 	cur_host_mem += sys_grad_embedding_table -> embedding_table_size;
 	used_host_mem += sys_grad_embedding_table -> embedding_table_size;
@@ -861,11 +856,8 @@ int main(int argc, char * argv[]){
 	sys_grad_head -> w_head = sys_grad_head -> w_head_norm + (uint64_t) model_dim * (uint64_t) block_bwd_dt_size;
 
 
-	ret = dataflow_handle.set_mem(&dataflow_handle, inbound_stream_id, sys_grad_head -> buffer, 0, combined_head_bwd_size);
-	if (ret){
-		fprintf(stderr, "Error: failed to set mem for sys_grad_head...\n");
-		return -1;
-	}
+	memset(sys_grad_head -> buffer, 0, combined_head_bwd_size);
+	
 
 
 	cur_host_mem += combined_head_bwd_size;
@@ -1223,6 +1215,21 @@ int main(int argc, char * argv[]){
 	used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
+	ret = dataflow_handle.set_mem(&dataflow_handle, inbound_stream_id, fwd_context -> contextBuffer, 0, fwd_context -> contextBufferBytes);
+	if (ret){
+		fprintf(stderr, "Error: failed to set mem for fwd_context...\n");
+		return -1;
+	}
+
+	ret = dataflow_handle.set_mem(&dataflow_handle, inbound_stream_id, bwd_context -> contextBuffer, 0, bwd_context -> contextBufferBytes);
+	if (ret){
+		fprintf(stderr, "Error: failed to set mem for bwd_context...\n");
+		return -1;
+	}
+	
+	
+	
+
 	
 	/*
 
@@ -1236,7 +1243,6 @@ int main(int argc, char * argv[]){
 	}
 	*/
 
-	printf("\n\nReady for embedding...\n");
 
 	// SKELETONS FOR OUTER STRUCTURES...
 
@@ -1349,6 +1355,8 @@ int main(int argc, char * argv[]){
 			fprintf(stderr, "Error: failed to bind seq_batch saved_activations buffer...\n");
 			return -1;
 		}
+
+		memset(cur_host_mem, 0, saved_activations_buffer_size);
 
 		cur_host_mem += saved_activations_buffer_size;
 		used_host_mem += saved_activations_buffer_size;
