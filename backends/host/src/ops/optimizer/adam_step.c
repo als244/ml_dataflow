@@ -168,8 +168,14 @@ static inline uint16_t float32_to_float16_scalar(float f_val) {
     return (sign_fp16 << 15) | (uint16_t)(exp_fp16_biased << 10) | man_fp16;
 }
 
-static void * thread_func_adam_step_fp32(void * _adam_worker_args){
 
+
+
+
+
+
+
+static void * thread_func_adam_step_fp32(void * _adam_worker_args){
     Adam_Worker_Args * adam_worker_args = (Adam_Worker_Args *) _adam_worker_args;
 
     float * restrict base_param_ptr = (float *) adam_worker_args->param;
@@ -185,9 +191,21 @@ static void * thread_func_adam_step_fp32(void * _adam_worker_args){
     float beta2_val = adam_worker_args->beta2;
     float weight_decay_val = adam_worker_args->weight_decay;
     float epsilon_val = adam_worker_args->epsilon;
+    uint64_t current_step = adam_worker_args->step_num; // <-- Get current step
 
     float one_minus_beta1_val = 1.0f - beta1_val;
     float one_minus_beta2_val = 1.0f - beta2_val;
+
+    // Calculate bias correction factors once
+    float bias_correction1_factor = 1.0f;
+    float bias_correction2_factor = 1.0f;
+    if (current_step > 0) {
+        float beta1_pow_t = powf(beta1_val, (float)current_step);
+        float beta2_pow_t = powf(beta2_val, (float)current_step);
+        // Assuming beta < 1.0 and step_num >= 1, 1.0 - beta_pow_t > 0
+        bias_correction1_factor = 1.0f / (1.0f - beta1_pow_t);
+        bias_correction2_factor = 1.0f / (1.0f - beta2_pow_t);
+    }
 
     for (uint64_t i_local = 0; i_local < num_elements_for_thread; ++i_local) {
         uint64_t current_global_idx = start_index_for_thread + i_local;
@@ -197,36 +215,29 @@ static void * thread_func_adam_step_fp32(void * _adam_worker_args){
         float m_val = base_mean_ptr[current_global_idx];
         float v_val = base_var_ptr[current_global_idx];
 
-        // 1. Apply weight decay (if any)
         if (weight_decay_val != 0.0f) {
             g_val += weight_decay_val * p_val;
         }
 
-        // 2. Update biased first moment estimate
         m_val = beta1_val * m_val + one_minus_beta1_val * g_val;
-
-        // 3. Update biased second raw moment estimate
         v_val = beta2_val * v_val + one_minus_beta2_val * g_val * g_val;
 
-        // 4. Compute update
-        // Bias correction terms (1-beta1^t) and (1-beta2^t) are omitted here
-        // as 't' (timestep) is not passed. If needed, lr_val should be adjusted
-        // or m_val and v_val corrected before this step.
-        float update_val = lr_val * m_val / (sqrtf(v_val) + epsilon_val);
-
-        // 5. Apply update
+        // Apply bias correction
+        float m_hat_val = m_val * bias_correction1_factor;
+        float v_hat_val = v_val * bias_correction2_factor;
+        
+        float update_val = lr_val * m_hat_val / (sqrtf(v_hat_val) + epsilon_val);
         p_val -= update_val;
 
         base_param_ptr[current_global_idx] = p_val;
-        base_mean_ptr[current_global_idx]  = m_val;
-        base_var_ptr[current_global_idx]   = v_val;
+        base_mean_ptr[current_global_idx]  = m_val; // Store original biased mean
+        base_var_ptr[current_global_idx]   = v_val; // Store original biased var
     }
     
     return NULL;
 }
 
 static void * thread_func_adam_step_bf16(void * _adam_worker_args){
-
     Adam_Worker_Args * adam_worker_args = (Adam_Worker_Args *) _adam_worker_args;
 
     uint16_t * restrict base_param_ptr = (uint16_t *) adam_worker_args->param;
@@ -242,40 +253,49 @@ static void * thread_func_adam_step_bf16(void * _adam_worker_args){
     float beta2_val = adam_worker_args->beta2;
     float weight_decay_val = adam_worker_args->weight_decay;
     float epsilon_val = adam_worker_args->epsilon;
+    uint64_t current_step = adam_worker_args->step_num; // <-- Get current step
 
     float one_minus_beta1_val = 1.0f - beta1_val;
     float one_minus_beta2_val = 1.0f - beta2_val;
 
+    float bias_correction1_factor = 1.0f;
+    float bias_correction2_factor = 1.0f;
+    if (current_step > 0) {
+        float beta1_pow_t = powf(beta1_val, (float)current_step);
+        float beta2_pow_t = powf(beta2_val, (float)current_step);
+        bias_correction1_factor = 1.0f / (1.0f - beta1_pow_t);
+        bias_correction2_factor = 1.0f / (1.0f - beta2_pow_t);
+    }
+
     for (uint64_t i_local = 0; i_local < num_elements_for_thread; ++i_local) {
         uint64_t current_global_idx = start_index_for_thread + i_local;
 
-        // Load BF16 and convert to FP32
         float p_val_fp32 = bfloat16_to_float_scalar(base_param_ptr[current_global_idx]);
         float g_val_fp32 = bfloat16_to_float_scalar(base_grad_ptr[current_global_idx]);
         float m_val_fp32 = bfloat16_to_float_scalar(base_mean_ptr[current_global_idx]);
         float v_val_fp32 = bfloat16_to_float_scalar(base_var_ptr[current_global_idx]);
 
-        // AdamW steps in FP32
         if (weight_decay_val != 0.0f) {
             g_val_fp32 += weight_decay_val * p_val_fp32;
         }
         m_val_fp32 = beta1_val * m_val_fp32 + one_minus_beta1_val * g_val_fp32;
         v_val_fp32 = beta2_val * v_val_fp32 + one_minus_beta2_val * g_val_fp32 * g_val_fp32;
-        float update_val_fp32 = lr_val * m_val_fp32 / (sqrtf(v_val_fp32) + epsilon_val);
+
+        float m_hat_val_fp32 = m_val_fp32 * bias_correction1_factor;
+        float v_hat_val_fp32 = v_val_fp32 * bias_correction2_factor;
+
+        float update_val_fp32 = lr_val * m_hat_val_fp32 / (sqrtf(v_hat_val_fp32) + epsilon_val);
         p_val_fp32 -= update_val_fp32;
 
-        // Convert back to BF16 and store
         base_param_ptr[current_global_idx] = float_to_bfloat16_scalar(p_val_fp32);
-        base_mean_ptr[current_global_idx]  = float_to_bfloat16_scalar(m_val_fp32);
-        base_var_ptr[current_global_idx]   = float_to_bfloat16_scalar(v_val_fp32);
+        base_mean_ptr[current_global_idx]  = float_to_bfloat16_scalar(m_val_fp32); // Store original biased mean
+        base_var_ptr[current_global_idx]   = float_to_bfloat16_scalar(v_val_fp32); // Store original biased var
     }
-
     
     return NULL;
 }
 
 static void * thread_func_adam_step_fp16(void * _adam_worker_args){
-
     Adam_Worker_Args * adam_worker_args = (Adam_Worker_Args *) _adam_worker_args;
 
     uint16_t * restrict base_param_ptr = (uint16_t *) adam_worker_args->param;
@@ -291,34 +311,44 @@ static void * thread_func_adam_step_fp16(void * _adam_worker_args){
     float beta2_val = adam_worker_args->beta2;
     float weight_decay_val = adam_worker_args->weight_decay;
     float epsilon_val = adam_worker_args->epsilon;
+    uint64_t current_step = adam_worker_args->step_num; // <-- Get current step
 
     float one_minus_beta1_val = 1.0f - beta1_val;
     float one_minus_beta2_val = 1.0f - beta2_val;
 
+    float bias_correction1_factor = 1.0f;
+    float bias_correction2_factor = 1.0f;
+    if (current_step > 0) {
+        float beta1_pow_t = powf(beta1_val, (float)current_step);
+        float beta2_pow_t = powf(beta2_val, (float)current_step);
+        bias_correction1_factor = 1.0f / (1.0f - beta1_pow_t);
+        bias_correction2_factor = 1.0f / (1.0f - beta2_pow_t);
+    }
+
     for (uint64_t i_local = 0; i_local < num_elements_for_thread; ++i_local) {
         uint64_t current_global_idx = start_index_for_thread + i_local;
 
-        // Load FP16 and convert to FP32
         float p_val_fp32 = float16_to_float32_scalar(base_param_ptr[current_global_idx]);
         float g_val_fp32 = float16_to_float32_scalar(base_grad_ptr[current_global_idx]);
         float m_val_fp32 = float16_to_float32_scalar(base_mean_ptr[current_global_idx]);
         float v_val_fp32 = float16_to_float32_scalar(base_var_ptr[current_global_idx]);
 
-        // AdamW steps in FP32
         if (weight_decay_val != 0.0f) {
             g_val_fp32 += weight_decay_val * p_val_fp32;
         }
         m_val_fp32 = beta1_val * m_val_fp32 + one_minus_beta1_val * g_val_fp32;
         v_val_fp32 = beta2_val * v_val_fp32 + one_minus_beta2_val * g_val_fp32 * g_val_fp32;
-        float update_val_fp32 = lr_val * m_val_fp32 / (sqrtf(v_val_fp32) + epsilon_val);
+
+        float m_hat_val_fp32 = m_val_fp32 * bias_correction1_factor;
+        float v_hat_val_fp32 = v_val_fp32 * bias_correction2_factor;
+
+        float update_val_fp32 = lr_val * m_hat_val_fp32 / (sqrtf(v_hat_val_fp32) + epsilon_val);
         p_val_fp32 -= update_val_fp32;
 
-        // Convert back to FP16 and store
         base_param_ptr[current_global_idx] = float32_to_float16_scalar(p_val_fp32);
-        base_mean_ptr[current_global_idx]  = float32_to_float16_scalar(m_val_fp32);
-        base_var_ptr[current_global_idx]   = float32_to_float16_scalar(v_val_fp32);
+        base_mean_ptr[current_global_idx]  = float32_to_float16_scalar(m_val_fp32); // Store original biased mean
+        base_var_ptr[current_global_idx]   = float32_to_float16_scalar(v_val_fp32); // Store original biased var
     }
-
     
     return NULL;
 }
@@ -353,7 +383,7 @@ static void * thread_func_adam_step_fp8e5m2(void * _adam_worker_args){
 
 int do_adam_step_host(DataflowDatatype param_dt, DataflowDatatype grad_dt, DataflowDatatype mean_dt, DataflowDatatype var_dt,
                              int num_threads,
-                             uint64_t num_els, float lr, float beta1, float beta2, float weight_decay, float epsilon,
+                             uint64_t num_els, uint64_t step_num, float lr, float beta1, float beta2, float weight_decay, float epsilon,
                              void * param, void * grad, void * mean, void * var){
 
     // for now only support when all same dtype..
@@ -404,7 +434,8 @@ int do_adam_step_host(DataflowDatatype param_dt, DataflowDatatype grad_dt, Dataf
         adam_worker_args.beta2 = beta2;
         adam_worker_args.weight_decay = weight_decay;
         adam_worker_args.epsilon = epsilon;
-        
+        adam_worker_args.step_num = step_num;
+
         adam_step_func(&adam_worker_args);
     }
 
@@ -519,6 +550,7 @@ int do_adam_step_host(DataflowDatatype param_dt, DataflowDatatype grad_dt, Dataf
         adam_worker_args_array[i].beta2 = beta2;
         adam_worker_args_array[i].weight_decay = weight_decay;
         adam_worker_args_array[i].epsilon = epsilon;
+        adam_worker_args_array[i].step_num = step_num;
     }
     
     // Give slices to each worker...

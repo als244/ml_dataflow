@@ -19,17 +19,23 @@ typedef struct {
     float beta2;
     float weight_decay;
     float epsilon;
+    uint64_t step_num;
 } Adam_Worker_Args;
 
 // Spwans num_threads to do the adam step, threads are pinned to the same node as calling thread
 
-// form adam_step.c
+// from adam_step.c
+// this is the fallback implementation for when avx2 is not supported...
 int do_adam_step_host(DataflowDatatype param_dt, DataflowDatatype grad_dt, DataflowDatatype mean_dt, DataflowDatatype var_dt,
                              int num_threads,
-                             uint64_t num_els, float lr, float beta1, float beta2, float weight_decay, float epsilon,
+                             uint64_t num_els, uint64_t step_num, float lr, float beta1, float beta2, float weight_decay, float epsilon,
                              void * param, void * grad, void * mean, void * var);
 
 
+int do_adam_step_host_avx2(DataflowDatatype param_dt, DataflowDatatype grad_dt, DataflowDatatype mean_dt, DataflowDatatype var_dt,
+                             int num_threads,
+                             uint64_t num_els, uint64_t step_num, float lr, float beta1, float beta2, float weight_decay, float epsilon,
+                             void * param, void * grad, void * mean, void * var);
 
 
 
@@ -45,7 +51,7 @@ int do_adam_step_host(DataflowDatatype param_dt, DataflowDatatype grad_dt, Dataf
 
 int do_adam_step_host_avx512(DataflowDatatype param_dt, DataflowDatatype grad_dt, DataflowDatatype mean_dt, DataflowDatatype var_dt,
                              int num_threads,
-                             uint64_t num_els, float lr, float beta1, float beta2, float weight_decay, float epsilon,
+                             uint64_t num_els, uint64_t step_num, float lr, float beta1, float beta2, float weight_decay, float epsilon,
                              void * param, void * grad, void * mean, void * var);
 
 #endif

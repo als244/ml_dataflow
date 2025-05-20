@@ -1,7 +1,7 @@
 #include "host_ops.h"
 #include "adam_step.h"
 
-#define TO_PRINT 1
+#define TO_PRINT 0
 
 
 // Just for testing...
@@ -9,7 +9,7 @@
 #define TOTAL_LAYERS 16
 #define DATA_SAVE_DIR "test_transformer_data"
 
-static int save_file(int layer_id, char * filename, void * ptr, uint64_t num_els, DataflowDatatype dt) {
+static int save_file(int step_num, int layer_id, char * filename, void * ptr, uint64_t num_els, DataflowDatatype dt) {
 
 	int ret;
 
@@ -18,23 +18,23 @@ static int save_file(int layer_id, char * filename, void * ptr, uint64_t num_els
 	char full_filename[1024];
 
 	if (layer_id == TOTAL_LAYERS){
-		sprintf(full_filename, "%s/optimizer_states/head/%s.dat", DATA_SAVE_DIR, filename);
+		sprintf(full_filename, "%s/optimizer_states/head/step_%d_%s.dat", DATA_SAVE_DIR, step_num, filename);
 	}
 	else if (layer_id == -1){
-		sprintf(full_filename, "%s/optimizer_states/embedding/%s.dat", DATA_SAVE_DIR, filename);
+		sprintf(full_filename, "%s/optimizer_states/embedding/step_%d_%s.dat", DATA_SAVE_DIR, step_num, filename);
 	}
 	else if ((layer_id < -1) || (layer_id > TOTAL_LAYERS)){
-		fprintf(stderr, "Error: invalid layer id: %d\n", layer_id);
+		fprintf(stderr, "[Adam Dispatcher] Error: invalid layer id: %d\n", layer_id);
 		return -1;
 	}
 	else{
-		sprintf(full_filename, "%s/optimizer_states/layers/%d/%s.dat", DATA_SAVE_DIR, layer_id, filename);
+		sprintf(full_filename, "%s/optimizer_states/layers/%d/step_%d_%s.dat", DATA_SAVE_DIR, layer_id, step_num, filename);
 	}
 
 
 	FILE * fp = fopen(full_filename, "wb");
 	if (!fp){
-		fprintf(stderr, "Error: failed to save %s, because couldn't open file: %s...\n", filename, full_filename);
+		fprintf(stderr, "[Adam Dispatcher] Error: failed to save %s, because couldn't open file: %s...\n", filename, full_filename);
 		return -1;
 	}
 
@@ -44,7 +44,7 @@ static int save_file(int layer_id, char * filename, void * ptr, uint64_t num_els
 
 	size_t num_written = fwrite(ptr, el_size, num_els, fp);
 	if (num_written != num_els){
-		fprintf(stderr, "Error: failed to write to file %s, wrote %zu elements instead of %zu\n", filename, num_written, num_els);
+		fprintf(stderr, "[Adam Dispatcher] Error: failed to write to file %s, wrote %zu elements instead of %zu\n", filename, num_written, num_els);
 		return -1;
 	}
 
@@ -71,6 +71,7 @@ int adam_step_host(void * _adam_host_op_args){
 	// unlike other ops, these are not references but rather op values themselves...
 
 	int num_threads = adam_host_op_args -> num_threads;
+	int step_num = adam_host_op_args -> step_num;
 	uint64_t num_els = adam_host_op_args -> num_els;
 	int layer_id = adam_host_op_args -> layer_id;
 	float lr = adam_host_op_args -> lr;
@@ -85,42 +86,45 @@ int adam_step_host(void * _adam_host_op_args){
 	void * var = adam_host_op_args -> var;
 
 	if (TO_PRINT){
-		printf("[Adam Dispatcher] Optimizing Layer ID: %d...\n\n", layer_id);
+		printf("[Adam Dispatcher, Step #%d] Optimizing Layer ID: %d...\n\n", step_num, layer_id);
 	}
 
 	if (TO_SAVE_RESULTS){
 
 		if (TO_PRINT){
-			printf("[Adam Dispatcher] Saving Results for Layer ID: %d...\n\n", layer_id);
+			printf("[Adam Dispatcher, Step #%d] Saving Results for Layer ID: %d...\n\n", step_num, layer_id);
 		}
 
-		save_file(layer_id, "param_pre_step", param, num_els, param_dt);
-		save_file(layer_id, "grad_pre_step", mean, num_els, mean_dt);
-		save_file(layer_id, "mean_pre_step", mean, num_els, mean_dt);
-		save_file(layer_id, "var_pre_step", var, num_els, var_dt);
+		save_file(step_num, layer_id, "param_pre_step", param, num_els, param_dt);
+		save_file(step_num, layer_id, "grad_pre_step", grad, num_els, grad_dt);
+		save_file(step_num, layer_id, "mean_pre_step", mean, num_els, mean_dt);
+		save_file(step_num, layer_id, "var_pre_step", var, num_els, var_dt);
 	}
 
-	 if (__builtin_cpu_supports("avx512f")){
-        ret = do_adam_step_host_avx512(param_dt, grad_dt, mean_dt, var_dt, num_threads, num_els, lr, beta1, beta2, weight_decay, epsilon, param, grad, mean, var);
+	if (__builtin_cpu_supports("avx512f")){
+        ret = do_adam_step_host_avx512(param_dt, grad_dt, mean_dt, var_dt, num_threads, num_els, step_num, lr, beta1, beta2, weight_decay, epsilon, param, grad, mean, var);
     }
+	else if (__builtin_cpu_supports("avx2")){
+		ret = do_adam_step_host_avx2(param_dt, grad_dt, mean_dt, var_dt, num_threads, num_els, step_num, lr, beta1, beta2, weight_decay, epsilon, param, grad, mean, var);
+	}
     else{
-        ret = do_adam_step_host(param_dt, grad_dt, mean_dt, var_dt, num_threads, num_els, lr, beta1, beta2, weight_decay, epsilon, param, grad, mean, var);
+        ret = do_adam_step_host(param_dt, grad_dt, mean_dt, var_dt, num_threads, num_els, step_num, lr, beta1, beta2, weight_decay, epsilon, param, grad, mean, var);
     }
 
 	if (ret){
 		fprintf(stderr, "Error: failed to do adam step...\n");
-		return -1;
+		return ret;
 	}
 
 	if (TO_SAVE_RESULTS){
 
 		if (TO_PRINT){
-			printf("[Adam Dispatcher] Saving Results for Layer ID: %d...\n\n", layer_id);
+			printf("[Adam Dispatcher, Step #%d] Saving Results for Layer ID: %d...\n\n", step_num, layer_id);
 		}
 
-		save_file(layer_id, "param_post_step", param, num_els, param_dt);
-		save_file(layer_id, "mean_post_step", mean, num_els, mean_dt);
-		save_file(layer_id, "var_post_step", var, num_els, var_dt);
+		save_file(step_num, layer_id, "param_post_step", param, num_els, param_dt);
+		save_file(step_num, layer_id, "mean_post_step", mean, num_els, mean_dt);
+		save_file(step_num, layer_id, "var_post_step", var, num_els, var_dt);
 	}
 
 	return 0;

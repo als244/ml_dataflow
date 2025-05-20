@@ -15,6 +15,6 @@ int add_host(void * _add_host_op_args);
 
 int adam_step_host(void * _adam_host_op_args);
 
-
+int print_loss_host(void * _print_loss_host_op_args);
 
 #endif

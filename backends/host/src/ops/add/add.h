@@ -19,6 +19,11 @@ int do_add_host(DataflowDatatype A_dt, DataflowDatatype B_dt, DataflowDatatype C
                 float alpha, float beta);
 
 
+int do_add_host_avx2(DataflowDatatype A_dt, DataflowDatatype B_dt, DataflowDatatype C_dt,
+                int num_threads, size_t num_els, void * A, void * B, void * C,
+                float alpha, float beta);
+
+
 // in case of fp16 dtypes, this toggles if we want to do fp16 arithmetic for additoins
 // saves on memory bandwidth because doing twice as many operations for same number 
 // load insructions (for fp16: loading 512 elements instead of 256 elements)

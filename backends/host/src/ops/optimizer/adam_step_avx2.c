@@ -181,28 +181,7 @@ static inline uint16_t f16_to_u16_scalar(_Float16 f16_val) {
     return u16_bits;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-static void * thread_func_adam_step_avx512_fp32(void * _adam_worker_args){
+static void * thread_func_adam_step_avx2_fp32(void * _adam_worker_args){
     Adam_Worker_Args * adam_worker_args = (Adam_Worker_Args *) _adam_worker_args;
 
     float * restrict base_param_ptr = (float *) adam_worker_args->param;
@@ -229,59 +208,62 @@ static void * thread_func_adam_step_avx512_fp32(void * _adam_worker_args){
     if (current_step > 0) {
         float beta1_pow_t = powf(beta1_val, (float)current_step);
         float beta2_pow_t = powf(beta2_val, (float)current_step);
+        
         // Assuming beta1_val < 1.0f and beta2_val < 1.0f, and current_step >= 1
-        // then 1.0f - beta_pow_t will be > 0.0f.
+        // 1.0f - beta_pow_t will be > 0.0f
         // If beta_pow_t is tiny (large step), factor approaches 1.0.
         bias_correction1_factor = 1.0f / (1.0f - beta1_pow_t);
         bias_correction2_factor = 1.0f / (1.0f - beta2_pow_t);
     }
 
-    __m512 lr_vec = _mm512_set1_ps(lr_val);
-    __m512 beta1_vec = _mm512_set1_ps(beta1_val);
-    __m512 beta2_vec = _mm512_set1_ps(beta2_val);
-    __m512 one_minus_beta1_vec = _mm512_set1_ps(one_minus_beta1_val);
-    __m512 one_minus_beta2_vec = _mm512_set1_ps(one_minus_beta2_val);
-    __m512 wd_vec = _mm512_set1_ps(weight_decay_val);
-    __m512 eps_vec = _mm512_set1_ps(epsilon_val);
-    __m512 bias_correction1_vec = _mm512_set1_ps(bias_correction1_factor);
-    __m512 bias_correction2_vec = _mm512_set1_ps(bias_correction2_factor);
+    __m256 lr_vec = _mm256_set1_ps(lr_val);
+    __m256 beta1_vec = _mm256_set1_ps(beta1_val);
+    __m256 beta2_vec = _mm256_set1_ps(beta2_val);
+    __m256 one_minus_beta1_vec = _mm256_set1_ps(one_minus_beta1_val);
+    __m256 one_minus_beta2_vec = _mm256_set1_ps(one_minus_beta2_val);
+    __m256 wd_vec = _mm256_set1_ps(weight_decay_val);
+    __m256 eps_vec = _mm256_set1_ps(epsilon_val);
+    __m256 bias_correction1_vec = _mm256_set1_ps(bias_correction1_factor);
+    __m256 bias_correction2_vec = _mm256_set1_ps(bias_correction2_factor);
 
     uint64_t i_local = 0;
-    uint64_t limit = num_elements_for_thread - (num_elements_for_thread % 16);
+    uint64_t limit = num_elements_for_thread - (num_elements_for_thread % 8);
 
-    for (i_local = 0; i_local < limit; i_local += 16) {
+    for (i_local = 0; i_local < limit; i_local += 8) {
         uint64_t current_global_idx = start_index_for_thread + i_local;
 
-        __m512 param_vec = _mm512_loadu_ps(base_param_ptr + current_global_idx);
-        __m512 grad_vec  = _mm512_loadu_ps(base_grad_ptr + current_global_idx);
-        __m512 mean_vec  = _mm512_loadu_ps(base_mean_ptr + current_global_idx);
-        __m512 var_vec   = _mm512_loadu_ps(base_var_ptr + current_global_idx);
+        __m256 param_vec = _mm256_loadu_ps(base_param_ptr + current_global_idx);
+        __m256 grad_vec  = _mm256_loadu_ps(base_grad_ptr + current_global_idx);
+        __m256 mean_vec  = _mm256_loadu_ps(base_mean_ptr + current_global_idx);
+        __m256 var_vec   = _mm256_loadu_ps(base_var_ptr + current_global_idx);
 
         if (weight_decay_val != 0.0f) {
-            grad_vec = _mm512_fmadd_ps(param_vec, wd_vec, grad_vec);
+            grad_vec = _mm256_fmadd_ps(param_vec, wd_vec, grad_vec);
         }
-        mean_vec = _mm512_mul_ps(mean_vec, beta1_vec);
-        mean_vec = _mm512_fmadd_ps(grad_vec, one_minus_beta1_vec, mean_vec);
         
-        __m512 grad_sq_vec = _mm512_mul_ps(grad_vec, grad_vec);
-        var_vec = _mm512_mul_ps(var_vec, beta2_vec);
-        var_vec = _mm512_fmadd_ps(grad_sq_vec, one_minus_beta2_vec, var_vec);
+        mean_vec = _mm256_mul_ps(mean_vec, beta1_vec);
+        mean_vec = _mm256_fmadd_ps(grad_vec, one_minus_beta1_vec, mean_vec);
         
-        __m512 mean_hat_vec = _mm512_mul_ps(mean_vec, bias_correction1_vec);
-        __m512 var_hat_vec  = _mm512_mul_ps(var_vec, bias_correction2_vec);
+        __m256 grad_sq_vec = _mm256_mul_ps(grad_vec, grad_vec);
+        var_vec = _mm256_mul_ps(var_vec, beta2_vec);
+        var_vec = _mm256_fmadd_ps(grad_sq_vec, one_minus_beta2_vec, var_vec);
+        
+        __m256 mean_hat_vec = _mm256_mul_ps(mean_vec, bias_correction1_vec);
+        __m256 var_hat_vec  = _mm256_mul_ps(var_vec, bias_correction2_vec);
 
-        __m512 var_hat_sqrt_plus_eps = _mm512_add_ps(_mm512_sqrt_ps(var_hat_vec), eps_vec);
-        __m512 update_val = _mm512_div_ps(mean_hat_vec, var_hat_sqrt_plus_eps);
-        update_val = _mm512_mul_ps(update_val, lr_vec);
-        param_vec = _mm512_sub_ps(param_vec, update_val);
+        __m256 var_hat_sqrt_plus_eps = _mm256_add_ps(_mm256_sqrt_ps(var_hat_vec), eps_vec);
+        __m256 update_val = _mm256_div_ps(mean_hat_vec, var_hat_sqrt_plus_eps);
+        update_val = _mm256_mul_ps(update_val, lr_vec);
+        param_vec = _mm256_sub_ps(param_vec, update_val);
 
-        _mm512_storeu_ps(base_param_ptr + current_global_idx, param_vec);
-        _mm512_storeu_ps(base_mean_ptr + current_global_idx, mean_vec); // Store original biased mean
-        _mm512_storeu_ps(base_var_ptr + current_global_idx, var_vec);   // Store original biased var
+        _mm256_storeu_ps(base_param_ptr + current_global_idx, param_vec);
+        _mm256_storeu_ps(base_mean_ptr + current_global_idx, mean_vec); // Store original biased mean
+        _mm256_storeu_ps(base_var_ptr + current_global_idx, var_vec);   // Store original biased var
     }
 
     for (; i_local < num_elements_for_thread; ++i_local) {
         uint64_t current_global_idx = start_index_for_thread + i_local;
+
         float p_val = base_param_ptr[current_global_idx];
         float g_val = base_grad_ptr[current_global_idx];
         float m_val = base_mean_ptr[current_global_idx];
@@ -300,13 +282,13 @@ static void * thread_func_adam_step_avx512_fp32(void * _adam_worker_args){
         p_val -= update;
 
         base_param_ptr[current_global_idx] = p_val;
-        base_mean_ptr[current_global_idx]  = m_val;
-        base_var_ptr[current_global_idx]   = v_val;
+        base_mean_ptr[current_global_idx]  = m_val; // Store original biased mean
+        base_var_ptr[current_global_idx]   = v_val; // Store original biased var
     }
     return NULL;
 }
 
-static void * thread_func_adam_step_avx512_bf16(void * _adam_worker_args){
+static void * thread_func_adam_step_avx2_bf16(void * _adam_worker_args){
     Adam_Worker_Args * adam_worker_args = (Adam_Worker_Args *) _adam_worker_args;
 
     uint16_t * restrict base_param_ptr = (uint16_t *) adam_worker_args->param;
@@ -322,7 +304,7 @@ static void * thread_func_adam_step_avx512_bf16(void * _adam_worker_args){
     float beta2_val = adam_worker_args->beta2;
     float weight_decay_val = adam_worker_args->weight_decay;
     float epsilon_val = adam_worker_args->epsilon;
-    uint64_t current_step = adam_worker_args->step_num;
+    uint64_t current_step = adam_worker_args->step_num; // Get the current step
 
     float one_minus_beta1_val = 1.0f - beta1_val;
     float one_minus_beta2_val = 1.0f - beta2_val;
@@ -333,66 +315,104 @@ static void * thread_func_adam_step_avx512_bf16(void * _adam_worker_args){
     if (current_step > 0) {
         float beta1_pow_t = powf(beta1_val, (float)current_step);
         float beta2_pow_t = powf(beta2_val, (float)current_step);
-        bias_correction1_factor = 1.0f / (1.0f - beta1_pow_t);
-        bias_correction2_factor = 1.0f / (1.0f - beta2_pow_t);
+        
+        // Denominator (1 - beta^t) should be > 0 if beta < 1 and step >= 1
+        // Adding a small epsilon for safety in floating point comparison, though direct division is usually fine.
+        if (1.0f - beta1_pow_t > 1e-9f) { // Check to prevent division by zero or very small numbers if beta1_pow_t is ~1
+            bias_correction1_factor = 1.0f / (1.0f - beta1_pow_t);
+        } else {
+            // This case implies beta1 is very close to 1 and/or step is small, making beta1_pow_t ~1,
+            // or beta1 is 1. If 1.0f - beta1_pow_t is effectively zero, and m_val is not updated by grad,
+            // an infinite correction might occur. For beta1<1, this means large t, where correction is ~1.
+            // If beta1_pow_t truly is 1 (e.g. beta1=1), correction should ideally be 1 or handle m differently.
+            // Given Adam's design (beta1<1), this path is more for extreme FP scenarios or large t where beta1_pow_t -> 0.
+            // If beta1_pow_t -> 0 (large t), factor -> 1. If beta1_pow_t -> 1 (problematic), factor -> large.
+            // We'll assume beta1_val < 1.0f, making 1.0f - beta1_pow_t > 0.0f for any current_step >= 1.
+            // If current_step makes beta1_pow_t so small it's zero, factor becomes 1.0.
+            bias_correction1_factor = 1.0f / (1.0f - beta1_pow_t); // Re-evaluate if this needs more complex handling for edge cases not covered by typical Adam parameters
+        }
+
+        if (1.0f - beta2_pow_t > 1e-9f) {
+            bias_correction2_factor = 1.0f / (1.0f - beta2_pow_t);
+        } else {
+             bias_correction2_factor = 1.0f / (1.0f - beta2_pow_t); // Similar reasoning
+        }
     }
 
-    __m512 lr_vec = _mm512_set1_ps(lr_val);
-    __m512 beta1_vec = _mm512_set1_ps(beta1_val);
-    __m512 beta2_vec = _mm512_set1_ps(beta2_val);
-    __m512 one_minus_beta1_vec = _mm512_set1_ps(one_minus_beta1_val);
-    __m512 one_minus_beta2_vec = _mm512_set1_ps(one_minus_beta2_val);
-    __m512 wd_vec = _mm512_set1_ps(weight_decay_val);
-    __m512 eps_vec = _mm512_set1_ps(epsilon_val);
-    __m512 bias_correction1_vec = _mm512_set1_ps(bias_correction1_factor);
-    __m512 bias_correction2_vec = _mm512_set1_ps(bias_correction2_factor);
+    __m256 lr_vec = _mm256_set1_ps(lr_val);
+    __m256 beta1_vec = _mm256_set1_ps(beta1_val);
+    __m256 beta2_vec = _mm256_set1_ps(beta2_val);
+    __m256 one_minus_beta1_vec = _mm256_set1_ps(one_minus_beta1_val);
+    __m256 one_minus_beta2_vec = _mm256_set1_ps(one_minus_beta2_val);
+    __m256 wd_vec = _mm256_set1_ps(weight_decay_val);
+    __m256 eps_vec = _mm256_set1_ps(epsilon_val);
+    __m256 bias_correction1_vec = _mm256_set1_ps(bias_correction1_factor);
+    __m256 bias_correction2_vec = _mm256_set1_ps(bias_correction2_factor);
 
     uint64_t i_local = 0;
-    uint64_t limit = num_elements_for_thread - (num_elements_for_thread % 16); // AVX512_BF16 processes 16 bf16 -> 16 fp32
+    uint64_t limit = num_elements_for_thread - (num_elements_for_thread % 8);
 
-    for (i_local = 0; i_local < limit; i_local += 16) {
+    float temp_fp32_buffer[8];
+    uint16_t temp_bf16_buffer[8];
+
+    for (i_local = 0; i_local < limit; i_local += 8) {
         uint64_t current_global_idx = start_index_for_thread + i_local;
 
-        __m256i param_bf16 = _mm256_loadu_si256((__m256i const*)(base_param_ptr + current_global_idx));
-        __m256i grad_bf16  = _mm256_loadu_si256((__m256i const*)(base_grad_ptr + current_global_idx));
-        __m256i mean_bf16  = _mm256_loadu_si256((__m256i const*)(base_mean_ptr + current_global_idx));
-        __m256i var_bf16   = _mm256_loadu_si256((__m256i const*)(base_var_ptr + current_global_idx));
+        __m128i param_bf16_loaded = _mm_loadu_si128((__m128i const*)(base_param_ptr + current_global_idx));
+        __m128i grad_bf16_loaded  = _mm_loadu_si128((__m128i const*)(base_grad_ptr + current_global_idx));
+        __m128i mean_bf16_loaded  = _mm_loadu_si128((__m128i const*)(base_mean_ptr + current_global_idx));
+        __m128i var_bf16_loaded   = _mm_loadu_si128((__m128i const*)(base_var_ptr + current_global_idx));
 
-        __m512 param_fp32 = _mm512_cvtpbh_ps((__m256bh)param_bf16);
-        __m512 grad_fp32  = _mm512_cvtpbh_ps((__m256bh)grad_bf16);
-        __m512 mean_fp32  = _mm512_cvtpbh_ps((__m256bh)mean_bf16);
-        __m512 var_fp32   = _mm512_cvtpbh_ps((__m256bh)var_bf16);
+        __m256i param_bf16_int32 = _mm256_cvtepu16_epi32(param_bf16_loaded);
+        __m256 param_fp32 = _mm256_castsi256_ps(_mm256_slli_epi32(param_bf16_int32, 16));
+        __m256i grad_bf16_int32 = _mm256_cvtepu16_epi32(grad_bf16_loaded);
+        __m256 grad_fp32 = _mm256_castsi256_ps(_mm256_slli_epi32(grad_bf16_int32, 16));
+        __m256i mean_bf16_int32 = _mm256_cvtepu16_epi32(mean_bf16_loaded);
+        __m256 mean_fp32 = _mm256_castsi256_ps(_mm256_slli_epi32(mean_bf16_int32, 16));
+        __m256i var_bf16_int32 = _mm256_cvtepu16_epi32(var_bf16_loaded);
+        __m256 var_fp32 = _mm256_castsi256_ps(_mm256_slli_epi32(var_bf16_int32, 16));
 
         if (weight_decay_val != 0.0f) {
-            grad_fp32 = _mm512_fmadd_ps(param_fp32, wd_vec, grad_fp32);
+            grad_fp32 = _mm256_fmadd_ps(param_fp32, wd_vec, grad_fp32);
         }
-        mean_fp32 = _mm512_mul_ps(mean_fp32, beta1_vec);
-        mean_fp32 = _mm512_fmadd_ps(grad_fp32, one_minus_beta1_vec, mean_fp32);
         
-        __m512 grad_sq_fp32 = _mm512_mul_ps(grad_fp32, grad_fp32);
-        var_fp32 = _mm512_mul_ps(var_fp32, beta2_vec);
-        var_fp32 = _mm512_fmadd_ps(grad_sq_fp32, one_minus_beta2_vec, var_fp32);
+        mean_fp32 = _mm256_mul_ps(mean_fp32, beta1_vec);
+        mean_fp32 = _mm256_fmadd_ps(grad_fp32, one_minus_beta1_vec, mean_fp32);
+         
+        __m256 grad_sq_fp32 = _mm256_mul_ps(grad_fp32, grad_fp32);
+        var_fp32 = _mm256_mul_ps(var_fp32, beta2_vec);
+        var_fp32 = _mm256_fmadd_ps(grad_sq_fp32, one_minus_beta2_vec, var_fp32);
+         
+        __m256 mean_hat_fp32 = _mm256_mul_ps(mean_fp32, bias_correction1_vec);
+        __m256 var_hat_fp32  = _mm256_mul_ps(var_fp32, bias_correction2_vec);
 
-        __m512 mean_hat_fp32 = _mm512_mul_ps(mean_fp32, bias_correction1_vec);
-        __m512 var_hat_fp32  = _mm512_mul_ps(var_fp32, bias_correction2_vec);
+        __m256 var_hat_sqrt_plus_eps = _mm256_add_ps(_mm256_sqrt_ps(var_hat_fp32), eps_vec);
+        __m256 update_val_fp32 = _mm256_div_ps(mean_hat_fp32, var_hat_sqrt_plus_eps);
         
-        __m512 var_hat_sqrt_plus_eps = _mm512_add_ps(_mm512_sqrt_ps(var_hat_fp32), eps_vec);
-        __m512 update_val_fp32 = _mm512_div_ps(mean_hat_fp32, var_hat_sqrt_plus_eps);
-        update_val_fp32 = _mm512_mul_ps(update_val_fp32, lr_vec);
-        param_fp32 = _mm512_sub_ps(param_fp32, update_val_fp32);
+        update_val_fp32 = _mm256_mul_ps(update_val_fp32, lr_vec);
+        param_fp32 = _mm256_sub_ps(param_fp32, update_val_fp32);
 
-        __m256i param_store_bf16 = (__m256i)_mm512_cvtneps_pbh(param_fp32);
-        __m256i mean_store_bf16  = (__m256i)_mm512_cvtneps_pbh(mean_fp32); // Store original biased mean
-        __m256i var_store_bf16   = (__m256i)_mm512_cvtneps_pbh(var_fp32);   // Store original biased var
+        _mm256_storeu_ps(temp_fp32_buffer, param_fp32);
+        for(int k=0; k<8; ++k) temp_bf16_buffer[k] = float_to_bfloat16_scalar(temp_fp32_buffer[k]); // Assumed function
+        __m128i param_store_bf16 = _mm_loadu_si128((__m128i const*)temp_bf16_buffer);
 
-        _mm256_storeu_si256((__m256i *)(base_param_ptr + current_global_idx), param_store_bf16);
-        _mm256_storeu_si256((__m256i *)(base_mean_ptr + current_global_idx), mean_store_bf16);
-        _mm256_storeu_si256((__m256i *)(base_var_ptr + current_global_idx), var_store_bf16);
+        _mm256_storeu_ps(temp_fp32_buffer, mean_fp32); // Store original biased mean
+        for(int k=0; k<8; ++k) temp_bf16_buffer[k] = float_to_bfloat16_scalar(temp_fp32_buffer[k]);
+        __m128i mean_store_bf16 = _mm_loadu_si128((__m128i const*)temp_bf16_buffer);
+
+        _mm256_storeu_ps(temp_fp32_buffer, var_fp32); // Store original biased var
+        for(int k=0; k<8; ++k) temp_bf16_buffer[k] = float_to_bfloat16_scalar(temp_fp32_buffer[k]);
+        __m128i var_store_bf16 = _mm_loadu_si128((__m128i const*)temp_bf16_buffer);
+
+        _mm_storeu_si128((__m128i *)(base_param_ptr + current_global_idx), param_store_bf16);
+        _mm_storeu_si128((__m128i *)(base_mean_ptr + current_global_idx), mean_store_bf16);
+        _mm_storeu_si128((__m128i *)(base_var_ptr + current_global_idx), var_store_bf16);
     }
 
     for (; i_local < num_elements_for_thread; ++i_local) {
         uint64_t current_global_idx = start_index_for_thread + i_local;
-        float p_val = bfloat16_to_float_scalar(base_param_ptr[current_global_idx]);
+
+        float p_val = bfloat16_to_float_scalar(base_param_ptr[current_global_idx]); // Assumed function
         float g_val = bfloat16_to_float_scalar(base_grad_ptr[current_global_idx]);
         float m_val = bfloat16_to_float_scalar(base_mean_ptr[current_global_idx]);
         float v_val = bfloat16_to_float_scalar(base_var_ptr[current_global_idx]);
@@ -400,6 +420,7 @@ static void * thread_func_adam_step_avx512_bf16(void * _adam_worker_args){
         if (weight_decay_val != 0.0f) {
             g_val += weight_decay_val * p_val;
         }
+        
         m_val = beta1_val * m_val + one_minus_beta1_val * g_val;
         v_val = beta2_val * v_val + one_minus_beta2_val * g_val * g_val;
 
@@ -416,7 +437,8 @@ static void * thread_func_adam_step_avx512_bf16(void * _adam_worker_args){
     return NULL;
 }
 
-static void * thread_func_adam_step_avx512_fp16(void * _adam_worker_args){
+
+static void * thread_func_adam_step_avx2_fp16(void * _adam_worker_args){
     Adam_Worker_Args * adam_worker_args = (Adam_Worker_Args *) _adam_worker_args;
 
     uint16_t * restrict base_param_ptr = (uint16_t *) adam_worker_args->param;
@@ -443,70 +465,72 @@ static void * thread_func_adam_step_avx512_fp16(void * _adam_worker_args){
     if (current_step > 0) {
         float beta1_pow_t = powf(beta1_val, (float)current_step);
         float beta2_pow_t = powf(beta2_val, (float)current_step);
+        
         // Assuming beta < 1.0 and step_num >= 1, 1.0 - beta_pow_t > 0
         bias_correction1_factor = 1.0f / (1.0f - beta1_pow_t);
         bias_correction2_factor = 1.0f / (1.0f - beta2_pow_t);
     }
 
-    __m512 lr_vec = _mm512_set1_ps(lr_val);
-    __m512 beta1_vec = _mm512_set1_ps(beta1_val);
-    __m512 beta2_vec = _mm512_set1_ps(beta2_val);
-    __m512 one_minus_beta1_vec = _mm512_set1_ps(one_minus_beta1_val);
-    __m512 one_minus_beta2_vec = _mm512_set1_ps(one_minus_beta2_val);
-    __m512 wd_vec = _mm512_set1_ps(weight_decay_val);
-    __m512 eps_vec = _mm512_set1_ps(epsilon_val);
-    __m512 bias_correction1_vec = _mm512_set1_ps(bias_correction1_factor);
-    __m512 bias_correction2_vec = _mm512_set1_ps(bias_correction2_factor);
+    __m256 lr_vec = _mm256_set1_ps(lr_val);
+    __m256 beta1_vec = _mm256_set1_ps(beta1_val);
+    __m256 beta2_vec = _mm256_set1_ps(beta2_val);
+    __m256 one_minus_beta1_vec = _mm256_set1_ps(one_minus_beta1_val);
+    __m256 one_minus_beta2_vec = _mm256_set1_ps(one_minus_beta2_val);
+    __m256 wd_vec = _mm256_set1_ps(weight_decay_val);
+    __m256 eps_vec = _mm256_set1_ps(epsilon_val);
+    __m256 bias_correction1_vec = _mm256_set1_ps(bias_correction1_factor);
+    __m256 bias_correction2_vec = _mm256_set1_ps(bias_correction2_factor);
 
     uint64_t i_local = 0;
-    uint64_t limit = num_elements_for_thread - (num_elements_for_thread % 16); 
+    uint64_t limit = num_elements_for_thread - (num_elements_for_thread % 8);
 
-    for (i_local = 0; i_local < limit; i_local += 16) {
+    for (i_local = 0; i_local < limit; i_local += 8) {
         uint64_t current_global_idx = start_index_for_thread + i_local;
 
-        // Load 16 FP16 values (256 bits) into __m256i
-        __m256i param_ph = _mm256_loadu_si256((__m256i const*)(base_param_ptr + current_global_idx));
-        __m256i grad_ph  = _mm256_loadu_si256((__m256i const*)(base_grad_ptr + current_global_idx));
-        __m256i mean_ph  = _mm256_loadu_si256((__m256i const*)(base_mean_ptr + current_global_idx));
-        __m256i var_ph   = _mm256_loadu_si256((__m256i const*)(base_var_ptr + current_global_idx));
+        __m128i param_ph_loaded = _mm_loadu_si128((__m128i const*)(base_param_ptr + current_global_idx));
+        __m128i grad_ph_loaded  = _mm_loadu_si128((__m128i const*)(base_grad_ptr + current_global_idx));
+        __m128i mean_ph_loaded  = _mm_loadu_si128((__m128i const*)(base_mean_ptr + current_global_idx));
+        __m128i var_ph_loaded   = _mm_loadu_si128((__m128i const*)(base_var_ptr + current_global_idx));
 
-        // Convert 16xFP16 -> 16xFP32
-        __m512 param_fp32 = _mm512_cvtph_ps(param_ph);
-        __m512 grad_fp32  = _mm512_cvtph_ps(grad_ph);
-        __m512 mean_fp32  = _mm512_cvtph_ps(mean_ph);
-        __m512 var_fp32   = _mm512_cvtph_ps(var_ph);
+        __m256 param_fp32 = _mm256_cvtph_ps(param_ph_loaded);
+        __m256 grad_fp32  = _mm256_cvtph_ps(grad_ph_loaded);
+        __m256 mean_fp32  = _mm256_cvtph_ps(mean_ph_loaded);
+        __m256 var_fp32   = _mm256_cvtph_ps(var_ph_loaded);
 
         if (weight_decay_val != 0.0f) {
-            grad_fp32 = _mm512_fmadd_ps(param_fp32, wd_vec, grad_fp32);
+            grad_fp32 = _mm256_fmadd_ps(param_fp32, wd_vec, grad_fp32);
         }
-        mean_fp32 = _mm512_mul_ps(mean_fp32, beta1_vec);
-        mean_fp32 = _mm512_fmadd_ps(grad_fp32, one_minus_beta1_vec, mean_fp32);
         
-        __m512 grad_sq_fp32 = _mm512_mul_ps(grad_fp32, grad_fp32);
-        var_fp32 = _mm512_mul_ps(var_fp32, beta2_vec);
-        var_fp32 = _mm512_fmadd_ps(grad_sq_fp32, one_minus_beta2_vec, var_fp32);
-
-        __m512 mean_hat_fp32 = _mm512_mul_ps(mean_fp32, bias_correction1_vec);
-        __m512 var_hat_fp32  = _mm512_mul_ps(var_fp32, bias_correction2_vec);
+        mean_fp32 = _mm256_mul_ps(mean_fp32, beta1_vec);
+        mean_fp32 = _mm256_fmadd_ps(grad_fp32, one_minus_beta1_vec, mean_fp32);
         
-        __m512 var_hat_sqrt_plus_eps = _mm512_add_ps(_mm512_sqrt_ps(var_hat_fp32), eps_vec);
-        __m512 update_val_fp32 = _mm512_div_ps(mean_hat_fp32, var_hat_sqrt_plus_eps);
-        update_val_fp32 = _mm512_mul_ps(update_val_fp32, lr_vec);
-        param_fp32 = _mm512_sub_ps(param_fp32, update_val_fp32);
+        __m256 grad_sq_fp32 = _mm256_mul_ps(grad_fp32, grad_fp32);
+        var_fp32 = _mm256_mul_ps(var_fp32, beta2_vec);
+        var_fp32 = _mm256_fmadd_ps(grad_sq_fp32, one_minus_beta2_vec, var_fp32);
+        
+        __m256 mean_hat_fp32 = _mm256_mul_ps(mean_fp32, bias_correction1_vec);
+        __m256 var_hat_fp32  = _mm256_mul_ps(var_fp32, bias_correction2_vec);
 
+        __m256 var_hat_sqrt_plus_eps = _mm256_add_ps(_mm256_sqrt_ps(var_hat_fp32), eps_vec);
+        __m256 update_val_fp32 = _mm256_div_ps(mean_hat_fp32, var_hat_sqrt_plus_eps);
+        update_val_fp32 = _mm256_mul_ps(update_val_fp32, lr_vec);
+        param_fp32 = _mm256_sub_ps(param_fp32, update_val_fp32);
+
+        // **FIXED HERE: Use immediate value for rounding mode**
         // _MM_FROUND_TO_NEAREST_INT (0x00) | _MM_FROUND_NO_EXC (0x08) = 0x08
-        __m256i param_store_ph = _mm512_cvtps_ph(param_fp32, 0x08);
-        __m256i mean_store_ph  = _mm512_cvtps_ph(mean_fp32,  0x08); // Store original biased mean
-        __m256i var_store_ph   = _mm512_cvtps_ph(var_fp32,   0x08); // Store original biased var
+        __m128i param_store_ph = _mm256_cvtps_ph(param_fp32, 0x08);
+        __m128i mean_store_ph  = _mm256_cvtps_ph(mean_fp32,  0x08); // Store original biased mean
+        __m128i var_store_ph   = _mm256_cvtps_ph(var_fp32,   0x08); // Store original biased var
 
-        _mm256_storeu_si256((__m256i *)(base_param_ptr + current_global_idx), param_store_ph);
-        _mm256_storeu_si256((__m256i *)(base_mean_ptr + current_global_idx), mean_store_ph);
-        _mm256_storeu_si256((__m256i *)(base_var_ptr + current_global_idx), var_store_ph);
+        _mm_storeu_si128((__m128i *)(base_param_ptr + current_global_idx), param_store_ph);
+        _mm_storeu_si128((__m128i *)(base_mean_ptr + current_global_idx), mean_store_ph);
+        _mm_storeu_si128((__m128i *)(base_var_ptr + current_global_idx), var_store_ph);
     }
 
     // Scalar remainder loop
     for (; i_local < num_elements_for_thread; ++i_local) {
         uint64_t current_global_idx = start_index_for_thread + i_local;
+
         // Ensure float16_to_float32_scalar and float32_to_float16_scalar are defined
         float p_val = float16_to_float32_scalar(base_param_ptr[current_global_idx]);
         float g_val = float16_to_float32_scalar(base_grad_ptr[current_global_idx]);
@@ -532,135 +556,7 @@ static void * thread_func_adam_step_avx512_fp16(void * _adam_worker_args){
     return NULL;
 }
 
-static void * thread_func_adam_step_avx512_fp16_native(void * _adam_worker_args){
-    Adam_Worker_Args * adam_worker_args = (Adam_Worker_Args *) _adam_worker_args;
-
-    uint16_t * restrict base_param_ptr = (uint16_t *) adam_worker_args->param;
-    uint16_t * restrict base_grad_ptr  = (uint16_t *) adam_worker_args->grad;
-    uint16_t * restrict base_mean_ptr  = (uint16_t *) adam_worker_args->mean;
-    uint16_t * restrict base_var_ptr   = (uint16_t *) adam_worker_args->var;
-
-    uint64_t start_index_for_thread = adam_worker_args->start_ind;
-    uint64_t num_elements_for_thread = adam_worker_args->num_els;
-
-    float lr_f = adam_worker_args->lr;
-    float beta1_f = adam_worker_args->beta1;
-    float beta2_f = adam_worker_args->beta2;
-    float weight_decay_f = adam_worker_args->weight_decay;
-    float epsilon_f = adam_worker_args->epsilon;
-    uint64_t current_step = adam_worker_args->step_num;
-
-    _Float16 lr_f16             = (_Float16)lr_f;
-    _Float16 beta1_f16          = (_Float16)beta1_f;
-    _Float16 beta2_f16          = (_Float16)beta2_f;
-    _Float16 weight_decay_f16   = (_Float16)weight_decay_f;
-    _Float16 epsilon_f16        = (_Float16)epsilon_f;
-    _Float16 one_f16            = (_Float16)1.0f;
-    _Float16 one_minus_beta1_f16 = one_f16 - beta1_f16;
-    _Float16 one_minus_beta2_f16 = one_f16 - beta2_f16;
-
-    float bias_correction1_factor_f = 1.0f;
-    float bias_correction2_factor_f = 1.0f;
-
-    if (current_step > 0) {
-        float beta1_pow_t = powf(beta1_f, (float)current_step);
-        float beta2_pow_t = powf(beta2_f, (float)current_step);
-        // Assuming beta < 1.0 and step_num >= 1, 1.0 - beta_pow_t > 0
-        bias_correction1_factor_f = 1.0f / (1.0f - beta1_pow_t);
-        bias_correction2_factor_f = 1.0f / (1.0f - beta2_pow_t);
-    }
-    _Float16 bias_correction1_f16 = (_Float16)bias_correction1_factor_f;
-    _Float16 bias_correction2_f16 = (_Float16)bias_correction2_factor_f;
-
-    __m512h lr_vec_ph             = _mm512_set1_ph(lr_f16);
-    __m512h beta1_vec_ph          = _mm512_set1_ph(beta1_f16);
-    __m512h beta2_vec_ph          = _mm512_set1_ph(beta2_f16);
-    __m512h one_minus_beta1_vec_ph = _mm512_set1_ph(one_minus_beta1_f16);
-    __m512h one_minus_beta2_vec_ph = _mm512_set1_ph(one_minus_beta2_f16);
-    __m512h wd_vec_ph             = _mm512_set1_ph(weight_decay_f16);
-    __m512h eps_vec_ph            = _mm512_set1_ph(epsilon_f16);
-    __m512h bias_correction1_vec_ph = _mm512_set1_ph(bias_correction1_f16);
-    __m512h bias_correction2_vec_ph = _mm512_set1_ph(bias_correction2_f16);
-
-    const int vec_len = 32; // 32 FP16 elements in __m512h
-    uint64_t i_local = 0;
-    uint64_t limit = (num_elements_for_thread / vec_len) * vec_len;
-
-
-    for (i_local = 0; i_local < limit; i_local += vec_len) {
-        uint64_t current_global_idx = start_index_for_thread + i_local;
-
-        __m512h param_ph = _mm512_loadu_ph((const void*)(base_param_ptr + current_global_idx));
-        __m512h grad_ph  = _mm512_loadu_ph((const void*)(base_grad_ptr + current_global_idx));
-        __m512h mean_ph  = _mm512_loadu_ph((const void*)(base_mean_ptr + current_global_idx));
-        __m512h var_ph   = _mm512_loadu_ph((const void*)(base_var_ptr + current_global_idx));
-
-        if (weight_decay_f != 0.0f) {
-            grad_ph = _mm512_fmadd_ph(wd_vec_ph, param_ph, grad_ph);
-        }
-        
-        mean_ph = _mm512_mul_ph(mean_ph, beta1_vec_ph);
-        mean_ph = _mm512_fmadd_ph(grad_ph, one_minus_beta1_vec_ph, mean_ph);
-        
-        __m512h grad_sq_ph = _mm512_mul_ph(grad_ph, grad_ph);
-        var_ph = _mm512_mul_ph(var_ph, beta2_vec_ph);
-        var_ph = _mm512_fmadd_ph(grad_sq_ph, one_minus_beta2_vec_ph, var_ph);
-        
-        __m512h mean_hat_ph = _mm512_mul_ph(mean_ph, bias_correction1_vec_ph);
-        __m512h var_hat_ph  = _mm512_mul_ph(var_ph,  bias_correction2_vec_ph);
-
-        __m512h var_hat_sqrt_ph = _mm512_sqrt_ph(var_hat_ph);
-        __m512h denom_ph = _mm512_add_ph(var_hat_sqrt_ph, eps_vec_ph);
-        __m512h update_ratio_ph = _mm512_div_ph(mean_hat_ph, denom_ph);
-        __m512h param_update_ph = _mm512_mul_ph(lr_vec_ph, update_ratio_ph);
-        
-        param_ph = _mm512_sub_ph(param_ph, param_update_ph);
-
-        _mm512_storeu_ph((void*)(base_param_ptr + current_global_idx), param_ph);
-        _mm512_storeu_ph((void*)(base_mean_ptr + current_global_idx), mean_ph); // Store original biased mean
-        _mm512_storeu_ph((void*)(base_var_ptr + current_global_idx), var_ph);   // Store original biased var
-    }
-
-    // Scalar remainder loop
-    for (; i_local < num_elements_for_thread; ++i_local) {
-        uint64_t current_global_idx = start_index_for_thread + i_local;
-
-        _Float16 p_f16 = u16_to_f16_scalar(base_param_ptr[current_global_idx]);
-        _Float16 g_f16 = u16_to_f16_scalar(base_grad_ptr[current_global_idx]);
-        _Float16 m_f16 = u16_to_f16_scalar(base_mean_ptr[current_global_idx]);
-        _Float16 v_f16 = u16_to_f16_scalar(base_var_ptr[current_global_idx]);
-
-        if (weight_decay_f != 0.0f) { // Compare with original float
-             g_f16 = g_f16 + weight_decay_f16 * p_f16;
-        }
-        
-        m_f16 = beta1_f16 * m_f16 + one_minus_beta1_f16 * g_f16;
-        _Float16 g_sq_f16 = g_f16 * g_f16;
-        v_f16 = beta2_f16 * v_f16 + one_minus_beta2_f16 * g_sq_f16;
-        
-        _Float16 m_hat_f16 = m_f16 * bias_correction1_f16;
-        _Float16 v_hat_f16 = v_f16 * bias_correction2_f16;
-        
-        _Float16 v_hat_sqrt_f16 = (_Float16)sqrtf((float)v_hat_f16); 
-        _Float16 denom_f16 = v_hat_sqrt_f16 + epsilon_f16;
-        _Float16 param_update_f16;
-
-        if (denom_f16 == (_Float16)0.0f || denom_f16 != denom_f16 /* NaN check */ ) { // Avoid division by zero or NaN
-            param_update_f16 = (_Float16)0.0f;
-        } else {
-            param_update_f16 = lr_f16 * m_hat_f16 / denom_f16;
-        }
-        
-        p_f16 = p_f16 - param_update_f16;
-
-        base_param_ptr[current_global_idx] = f16_to_u16_scalar(p_f16);
-        base_mean_ptr[current_global_idx]  = f16_to_u16_scalar(m_f16); // Store original biased mean
-        base_var_ptr[current_global_idx]   = f16_to_u16_scalar(v_f16); // Store original biased var
-    }
-    return NULL;
-}
-
-static void * thread_func_adam_step_avx512_fp8e4m3(void * _adam_worker_args) {
+static void * thread_func_adam_step_avx2_fp8e4m3(void * _adam_worker_args) {
 
     Adam_Worker_Args * adam_worker_args = (Adam_Worker_Args *) _adam_worker_args;
 
@@ -672,7 +568,7 @@ static void * thread_func_adam_step_avx512_fp8e4m3(void * _adam_worker_args) {
     return NULL;
 }
 
-static void * thread_func_adam_step_avx512_fp8e5m2(void * _adam_worker_args){
+static void * thread_func_adam_step_avx2_fp8e5m2(void * _adam_worker_args){
 
     Adam_Worker_Args * adam_worker_args = (Adam_Worker_Args *) _adam_worker_args;
 
@@ -688,48 +584,43 @@ static void * thread_func_adam_step_avx512_fp8e5m2(void * _adam_worker_args){
 
 
 
-int do_adam_step_host_avx512(DataflowDatatype param_dt, DataflowDatatype grad_dt, DataflowDatatype mean_dt, DataflowDatatype var_dt,
+int do_adam_step_host_avx2(DataflowDatatype param_dt, DataflowDatatype grad_dt, DataflowDatatype mean_dt, DataflowDatatype var_dt,
                              int num_threads,
                              uint64_t num_els, uint64_t step_num, float lr, float beta1, float beta2, float weight_decay, float epsilon,
                              void * param, void * grad, void * mean, void * var){
 
     // for now only support when all same dtype..
     if (param_dt != grad_dt || param_dt != mean_dt || param_dt != var_dt){
-        fprintf(stderr, "Error: all dtypes must be the same for avx512 adam step...\n");
+        fprintf(stderr, "Error: all dtypes must be the same for avx2 adam step...\n");
         return -1;
     }
 
     void * (*adam_step_func)(void * _adam_worker_args);
 
     if (param_dt == DATAFLOW_FP32){
-        adam_step_func = thread_func_adam_step_avx512_fp32;
+        adam_step_func = thread_func_adam_step_avx2_fp32;
     }
     else if (param_dt == DATAFLOW_BF16){
-        adam_step_func = thread_func_adam_step_avx512_bf16;
+        adam_step_func = thread_func_adam_step_avx2_bf16;
     }
     else if (param_dt == DATAFLOW_FP16){
-        if (USE_AVX512_FP16_ARITHMETIC_FOR_ADAM_STEP){
-            adam_step_func = thread_func_adam_step_avx512_fp16_native;
-        }
-        else{
-            adam_step_func = thread_func_adam_step_avx512_fp16;
-        }
+        adam_step_func = thread_func_adam_step_avx2_fp16;
     }
     /* Not ready for fp8 yet
     else if (param_dt == DATAFLOW_FP8E4M3){
-        adam_step_func = thread_func_adam_step_avx512_fp8e4m3;
+        adam_step_func = thread_func_adam_step_avx2_fp8e4m3;
     }
     else if (param_dt == DATAFLOW_FP8E5M2){
-        adam_step_func = thread_func_adam_step_avx512_fp8e5m2;
+        adam_step_func = thread_func_adam_step_avx2_fp8e5m2;
     }
     */
     else{
-        fprintf(stderr, "Error: unsupported dtype for avx512 adam step...\n");
+        fprintf(stderr, "Error: unsupported dtype for avx2 adam step...\n");
         return -1;
     }
 
     if (!adam_step_func){
-        fprintf(stderr, "Error: failed to get thread function for avx512 adam step...\n");
+        fprintf(stderr, "Error: failed to get thread function for avx2 adam step...\n");
         return -1;
     }
 

@@ -1,6 +1,65 @@
 #define _GNU_SOURCE
 #include "add.h"
 
+// Scalar conversion functions from your AVX512 example
+// Ensure these are included or defined in your "add.h" or current file.
+static inline float scalar_u16_to_fp32_fp16(uint16_t val_fp16_bits) {
+    _Float16 f16_val; // Assumes compiler support for _Float16
+    memcpy(&f16_val, &val_fp16_bits, sizeof(f16_val));
+    return (float)f16_val;
+}
+
+static inline uint16_t scalar_fp32_to_u16_fp16(float val_fp32) {
+    _Float16 f16_val = (_Float16)val_fp32; // Assumes compiler support for _Float16
+    uint16_t u16_bits;
+    memcpy(&u16_bits, &f16_val, sizeof(u16_bits));
+    return u16_bits;
+}
+
+static inline float scalar_u16_to_fp32_bf16(uint16_t val_bf16_bits) {
+    uint32_t val_fp32_bits = ((uint32_t)val_bf16_bits) << 16;
+    float fp32_val;
+    memcpy(&fp32_val, &val_fp32_bits, sizeof(fp32_val));
+    return fp32_val;
+}
+
+static inline uint16_t scalar_fp32_to_u16_bf16(float val_fp32) {
+    uint32_t u32_in;
+    memcpy(&u32_in, &val_fp32, sizeof(u32_in));
+
+    if (isnan(val_fp32)) {
+        return ((u32_in & 0x80000000) >> 16) | 0x7FC0; // Preserve sign, return a QNaN pattern
+    }
+    if (isinf(val_fp32)) {
+        return ((u32_in & 0x80000000) >> 16) | 0x7F80; // Preserve sign, Inf
+    }
+
+    uint32_t sign = u32_in & 0x80000000;
+    uint32_t u32_abs = u32_in & 0x7FFFFFFF; 
+
+    if (u32_abs == 0) {
+        return (uint16_t)(sign >> 16);
+    }
+    
+    uint16_t truncated_val_abs = (uint16_t)(u32_abs >> 16);
+    uint32_t remainder = u32_abs & 0xFFFF;
+
+    if (remainder > 0x8000) { 
+        truncated_val_abs++;
+    } else if (remainder == 0x8000) { 
+        if ((truncated_val_abs & 1) != 0) { 
+            truncated_val_abs++;
+        }
+    }
+
+    if ((truncated_val_abs & 0x7F80) == 0x7F80) {
+        if (!isinf(val_fp32)) { 
+            return (uint16_t)(sign >> 16) | 0x7F80; 
+        }
+    }
+    return (uint16_t)(sign >> 16) | (truncated_val_abs & 0x7FFF);
+}
+
 static void * thread_func_add_fp32(void * _add_worker_args){
 
     Add_Worker_Args * add_worker_args = (Add_Worker_Args *) _add_worker_args;
@@ -22,6 +81,34 @@ static void * thread_func_add_fp32(void * _add_worker_args){
     return NULL;
 }
 
+static void * thread_func_add_bf16(void * _add_worker_args){
+
+    Add_Worker_Args * add_worker_args = (Add_Worker_Args *) _add_worker_args;
+
+    uint16_t * A = add_worker_args->A;
+    uint16_t * B = add_worker_args->B;
+    uint16_t * C = add_worker_args->C;
+
+    float alpha = add_worker_args->alpha;
+    float beta = add_worker_args->beta;
+
+    size_t start_ind = add_worker_args->start_ind;
+    size_t num_els = add_worker_args->num_els;
+
+    float val_a_fp32;
+    float val_b_fp32;
+    float result_fp32;
+
+    for (size_t i = start_ind; i < start_ind + num_els; i++){
+        val_a_fp32 = scalar_u16_to_fp32_bf16(A[i]);
+        val_b_fp32 = scalar_u16_to_fp32_bf16(B[i]);
+        result_fp32 = alpha * val_a_fp32 + beta * val_b_fp32;
+        C[i] = scalar_fp32_to_u16_bf16(result_fp32);
+    }
+
+    return NULL;
+}
+
 
 static void * thread_func_add_fp16(void * _add_worker_args){
 
@@ -37,24 +124,21 @@ static void * thread_func_add_fp16(void * _add_worker_args){
     size_t start_ind = add_worker_args->start_ind;
     size_t num_els = add_worker_args->num_els;
 
+    float val_a_fp32;
+    float val_b_fp32;
+    float result_fp32;
+
+    for (size_t i = start_ind; i < start_ind + num_els; i++){
+        val_a_fp32 = scalar_u16_to_fp32_fp16(A[i]);
+        val_b_fp32 = scalar_u16_to_fp32_fp16(B[i]);
+        result_fp32 = alpha * val_a_fp32 + beta * val_b_fp32;
+        C[i] = scalar_fp32_to_u16_fp16(result_fp32);
+    }
+
+    return NULL;
 }
 
 
-static void * thread_func_add_bf16(void * _add_worker_args){
-
-    Add_Worker_Args * add_worker_args = (Add_Worker_Args *) _add_worker_args;
-
-    uint16_t * A = add_worker_args->A;
-    uint16_t * B = add_worker_args->B;
-    uint16_t * C = add_worker_args->C;
-
-    float alpha = add_worker_args->alpha;
-    float beta = add_worker_args->beta;
-
-    size_t start_ind = add_worker_args->start_ind;
-    size_t num_els = add_worker_args->num_els;
-
-}
 
 static void * thread_func_add_fp8e4m3(void * _add_worker_args){
 
