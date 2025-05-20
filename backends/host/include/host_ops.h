@@ -9,12 +9,16 @@
 #define USE_FP16_ARTIHMETIC_FOR_ADD 1
 
 
+
+int print_chunk_loss_host(void * _print_chunk_loss_host_op_args);
+int print_step_loss_host(void * _print_step_loss_host_op_args);
+
 int set_mem_host(void * _set_mem_host_op_args);
 
 int add_host(void * _add_host_op_args);
 
 int adam_step_host(void * _adam_host_op_args);
 
-int print_loss_host(void * _print_loss_host_op_args);
+
 
 #endif

@@ -22,7 +22,7 @@
 #define MODEL_PATH "../data/1B"
 
 
-#define NUM_TOKENS 2048
+#define NUM_TOKENS 1024
 #define MAX_TOKENS_PER_CHUNK NUM_TOKENS
 
 #define TOKEN_IDS_PATH "../data/2048_token_ids_uint32.dat"
@@ -35,7 +35,7 @@
 
 // right now only testing with 1 sequence, but can have this sequence do fwd/bwd repeats
 // just for perf testing...
-#define NUM_TOTAL_SEQ_LAPS 1
+#define NUM_TOTAL_SEQ_LAPS 1000
 
 
 
@@ -43,7 +43,8 @@
 
 // config for what to print...
 
-#define TO_PRINT_LOSS 1
+#define TO_PRINT_STEP_LOSS 1
+#define TO_PRINT_CHUNK_LOSS 0
 
 
 #define TO_PRINT_IS_STEP 0
@@ -87,9 +88,9 @@ int main(int argc, char * argv[]){
 	int ctx_id = 0;
 	unsigned int ctx_flags = CU_CTX_SCHED_BLOCKING_SYNC | CU_CTX_MAP_HOST;
 
-	int num_streams = 6;
-	int opt_stream_prios[6] = {0, 0, 0, 0, 0, 0};
-	char * opt_stream_names[6] = {"Inbound", "Compute", "Outbound", "Peer", "Host Ops", "Inbound Fwd Context"};
+	int num_streams = 7;
+	int opt_stream_prios[7] = {0, 0, 0, 0, 0, 0, 0};
+	char * opt_stream_names[7] = {"Inbound", "Compute", "Outbound", "Peer", "Host Ops", "Inbound Fwd Context", "Loss Update"};
 
 
 	int inbound_stream_id = 0;
@@ -98,6 +99,8 @@ int main(int argc, char * argv[]){
 	int peer_stream_id = 3;
 	int host_ops_stream_id = 4;
 	int inbound_fwd_ctx_stream_id = 5;
+	int loss_stream_id = 6;
+
 	ret = dataflow_init_handle(&dataflow_handle, compute_type, device_id, 
 			ctx_id, ctx_flags, 
 			num_streams, opt_stream_prios, opt_stream_names); 
@@ -1672,14 +1675,19 @@ int main(int argc, char * argv[]){
 
 
 
-
-
-
-	Print_Loss_Host_Op_Args * print_loss_op_buffer = calloc(num_chunks, sizeof(Print_Loss_Host_Op_Args));
-	if (!print_loss_op_buffer){
-		fprintf(stderr, "Error: failed to allocate print_loss_op_buffer...\n");
+	Print_Step_Loss_Host_Op_Args * print_step_loss_op_buffer = calloc(1, sizeof(Print_Step_Loss_Host_Op_Args));
+	if (!print_step_loss_op_buffer){
+		fprintf(stderr, "Error: failed to allocate print_step_loss_op_buffer...\n");
 		return -1;
 	}
+
+
+	Print_Chunk_Loss_Host_Op_Args * print_chunk_loss_op_buffer = calloc(num_chunks, sizeof(Print_Chunk_Loss_Host_Op_Args));
+	if (!print_chunk_loss_op_buffer){
+		fprintf(stderr, "Error: failed to allocate print_chunk_loss_op_buffer...\n");
+		return -1;
+	}
+
 
 
 
@@ -2087,14 +2095,14 @@ int main(int argc, char * argv[]){
 
 			// save the loss tracker...
 			
-			if (TO_PRINT_LOSS){
+			if ((TO_PRINT_CHUNK_LOSS) || (TO_PRINT_STEP_LOSS)) {
 				cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, compute_stream_id);
 				if (!cur_stream_state){
 					fprintf(stderr, "Error: failed to get stream state for head...\n");
 					return -1;
 				}
 				
-				ret = dataflow_handle.submit_dependency(&dataflow_handle, outbound_stream_id, cur_stream_state);
+				ret = dataflow_handle.submit_dependency(&dataflow_handle, loss_stream_id, cur_stream_state);
 				if (ret){
 					fprintf(stderr, "Error: failed to submit dependency to send head to host...\n");
 					return -1;
@@ -2102,15 +2110,18 @@ int main(int argc, char * argv[]){
 
 				
 
-				ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, outbound_stream_id, &(sys_loss_tracker[i]), &(dev_loss_vec[head_activations -> num_tokens]), sizeof(float));
+				ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, loss_stream_id, &(sys_loss_tracker[i]), &(dev_loss_vec[head_activations -> num_tokens]), sizeof(float));
 
 				if (ret){
 					fprintf(stderr, "Error: failed to submit outbound transfer for loss tracker...\n");
 					return -1;
 				}
+			}
 
-				ret = dataflow_submit_print_loss_host(&dataflow_handle, outbound_stream_id,
-										&print_loss_host, &(print_loss_op_buffer[i]),
+			if (TO_PRINT_CHUNK_LOSS) {
+
+				ret = dataflow_submit_print_chunk_loss_host(&dataflow_handle, loss_stream_id,
+										&print_chunk_loss_host, &(print_chunk_loss_op_buffer[i]),
 										cur_step, s, i, head_activations -> num_tokens, &(sys_loss_tracker[i]));
 
 				if (ret){
@@ -2119,10 +2130,21 @@ int main(int argc, char * argv[]){
 				}
 			}
 
-
 			// Ensure that this seq batch's context will refere the bwd context,
 			// in order to correctly backprop through the block...
 			seq_batches[i] -> context = bwd_context;
+		}
+
+		if (TO_PRINT_STEP_LOSS) {
+
+			ret = dataflow_submit_print_step_loss_host(&dataflow_handle, loss_stream_id,
+										&print_step_loss_host, print_step_loss_op_buffer,
+										cur_step, num_chunks, total_pred_tokens_in_step, sys_loss_tracker);
+
+			if (ret){
+				fprintf(stderr, "Error: failed to submit print step loss host...\n");
+				return -1;
+			}
 		}
 
 		// Send back grad head to host...

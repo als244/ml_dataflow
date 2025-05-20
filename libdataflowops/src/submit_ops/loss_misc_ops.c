@@ -62,8 +62,8 @@ int dataflow_submit_default_cross_entropy_loss(Dataflow_Handle * handle, int str
 
 // Print Loss Host Op
 
-int dataflow_submit_print_loss_host(Dataflow_Handle * handle, int stream_id,
-									void * print_loss_host_func, Print_Loss_Host_Op_Args * op_buffer,
+int dataflow_submit_print_chunk_loss_host(Dataflow_Handle * handle, int stream_id,
+									void * print_chunk_loss_host_func, Print_Chunk_Loss_Host_Op_Args * op_buffer,
 									int step_num, int seq_id, int chunk_id, int num_tokens, float * avg_loss_ref){
 
 	int ret;
@@ -75,15 +75,34 @@ int dataflow_submit_print_loss_host(Dataflow_Handle * handle, int stream_id,
     op_buffer -> avg_loss_ref = avg_loss_ref;
 
 
-    ret = (handle -> submit_host_op)(handle, print_loss_host_func, op_buffer, stream_id);
+    ret = (handle -> submit_host_op)(handle, print_chunk_loss_host_func, op_buffer, stream_id);
     if (ret){
-        fprintf(stderr, "Error: failed to submit print loss host op...\n");
+        fprintf(stderr, "Error: failed to submit print chunk loss host op...\n");
         return -1;
     }
 
     return 0;
-
-	
-	
-	
 }
+
+
+int dataflow_submit_print_step_loss_host(Dataflow_Handle * handle, int stream_id,
+									void * print_step_loss_host_func, Print_Step_Loss_Host_Op_Args * op_buffer,
+									int step_num, int num_chunks, int total_tokens, float * per_chunk_avg_loss){
+
+	int ret;
+
+	op_buffer -> step_num = step_num;
+	op_buffer -> num_chunks = num_chunks;
+	op_buffer -> total_tokens = total_tokens;
+	op_buffer -> per_chunk_avg_loss = per_chunk_avg_loss;
+
+	ret = (handle -> submit_host_op)(handle, print_step_loss_host_func, op_buffer, stream_id);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit print step loss host op...\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+
