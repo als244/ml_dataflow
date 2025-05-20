@@ -99,9 +99,9 @@ optimizer = optim.Adam(
 )
 
 
-n_repeats = 2
+n_repeats = 10
 
-for i in range(n_repeats):
+for i in range(1, n_repeats + 1):
 
 
     ## FORWARD PASS

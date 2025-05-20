@@ -35,7 +35,7 @@
 
 // right now only testing with 1 sequence, but can have this sequence do fwd/bwd repeats
 // just for perf testing...
-#define NUM_TOTAL_SEQ_LAPS 1000
+#define NUM_TOTAL_SEQ_LAPS 10
 
 
 
