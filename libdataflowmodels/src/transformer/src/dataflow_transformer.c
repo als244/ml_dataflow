@@ -1361,6 +1361,32 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 
 	int is_causal = 1;
 
+	if (TO_SAVE_DATA && TO_SAVE_BWD_LAYER && ((BWD_LAYER_ID_TO_SAVE == -1) || (layer_id == BWD_LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "fwd_x_q_rope", fwd_activations -> x_q, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_q_rope file...\n");
+			return -1;
+		}
+	}
+
+
+	if (TO_SAVE_DATA && TO_SAVE_BWD_LAYER && ((BWD_LAYER_ID_TO_SAVE == -1) || (layer_id == BWD_LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "fwd_x_k_global_attn_inp", fwd_context -> x_k, total_k, kv_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_attn_k_global_inp file...\n");
+			return -1;
+		}
+	}
+
+	if (TO_SAVE_DATA && TO_SAVE_BWD_LAYER && ((BWD_LAYER_ID_TO_SAVE == -1) || (layer_id == BWD_LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "fwd_x_v_global_attn_inp", fwd_context -> x_v, total_k, kv_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_attn_v_global_inp file...\n");
+			return -1;
+		}
+	}
+
+
 	// 7. Backprop through attention
 	ret = dataflow_submit_attention_bwd(dataflow_handle, compute_stream_id,
 							bwd_dt,
