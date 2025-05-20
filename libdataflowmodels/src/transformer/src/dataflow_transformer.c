@@ -890,7 +890,7 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 		printf("Submitting Output Projection Weight Gradients...\n");
 	}
 
-	float grad_avg_scale = 1.0f / ((float)head_activations -> num_tokens);
+	float grad_avg_scale = 1.0f / ((float)head_activations -> total_pred_tokens_in_step);
 
 	 // 2. Output projection weight gradients
     

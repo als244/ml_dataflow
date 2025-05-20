@@ -118,6 +118,7 @@ typedef struct transformer_block_activations {
 
 typedef struct transformer_head_activations {
 	int num_tokens;
+	int total_pred_tokens_in_step;
 
 	void * buffer;
 	// tempporary buffer for norm output

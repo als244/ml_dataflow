@@ -164,7 +164,7 @@ typedef struct seq_batch_loss_config {
 	// of size num_tokens_to_predict
 	uint32_t * labels;
 
-	// of size num_tokens_to_predic + 1
+	// of size num_tokens_to_predict + 1
 	// last index is the avg loss across all tokens in batch
 	float * loss_vec;
 } Seq_Batch_Loss_Config;
