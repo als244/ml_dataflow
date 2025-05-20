@@ -22,8 +22,8 @@
 #define MODEL_PATH "../data/1B"
 
 
-#define NUM_TOKENS 1024
-#define MAX_TOKENS_PER_CHUNK NUM_TOKENS
+#define NUM_TOKENS 2048
+#define MAX_TOKENS_PER_CHUNK 512
 
 #define TOKEN_IDS_PATH "../data/2048_token_ids_uint32.dat"
 #define TOKEN_LABELS_PATH "../data/2048_labels_uint32.dat"
@@ -1468,6 +1468,7 @@ int main(int argc, char * argv[]){
 
 	for (int i = 0; i < num_chunks * n_layers; i++){
 		sem_init(&(is_saved_act_home[i]), 0, 0);
+		sem_post(&(is_saved_act_home[i]));
 	}
 	
 	
@@ -1845,6 +1846,9 @@ int main(int argc, char * argv[]){
 
 		// FWD PASS...
 
+		cur_act = 0;
+		working_act_buffer_ind = 0;
+
 		// 1.) DOING EMBEDDDING....
 
 		// for layer 0 we include the embedding table...
@@ -1964,6 +1968,9 @@ int main(int argc, char * argv[]){
 
 					sys_activation_home = sys_saved_activations[k * num_chunks + i].savedActivationsBuffer;
 
+					// intialized to is_home and then not removed during bwd pass...
+					sem_wait(&(is_saved_act_home[k * num_chunks + i]));
+
 					ret = (dataflow_handle.submit_outbound_transfer)(&dataflow_handle, outbound_stream_id, sys_activation_home, cur_activations -> working_activations -> savedActivationsBuffer, 
 																	cur_activations -> working_activations -> savedActivationsBufferBytes);
 
@@ -1979,7 +1986,10 @@ int main(int argc, char * argv[]){
 						return -1;
 					}
 
-					printf("Submitting host op to enqueue act index %d sys activations as home...\n\n", k * num_chunks + i);
+					if (TO_PRINT_ACT_TRANSFERRING){
+						printf("Submitting host op to enqueue act index %d sys activations as home...\n\n", k * num_chunks + i);
+					}
+
 					ret = (dataflow_handle.submit_host_op)(&dataflow_handle, post_sem_callback, (void *) &(is_saved_act_home[k * num_chunks + i]), outbound_stream_id);
 					if (ret){
 						fprintf(stderr, "Error: failed to submit host op to enqueue seq #%d, chunk #%d, layer id #%d's activations as home...\n", s, i, k);
@@ -1992,6 +2002,11 @@ int main(int argc, char * argv[]){
 				// otherwise we are close to turning around and will save it on device until we reverse...
 				else{
 					sem_post(&(is_fwd_activations_ready[k * num_chunks + i]));
+
+					if (TO_PRINT_ACT_TRANSFERRING){
+						printf("Saving seq #%d, chunk #%d, layer id #%d's at working buffer index %d (act #%d of %d)...\n\n", s, i, k, working_act_buffer_ind, cur_act, total_acts);
+					}
+
 					sem_post(&(is_saved_activation_ready[working_act_buffer_ind]));
 				}
 
@@ -2340,7 +2355,7 @@ int main(int argc, char * argv[]){
 
 				// ensure that we have the correct activations ready...
 				if (TO_PRINT_FWD_ACT_WAITING){
-					printf("\n\n[Bwd] Waiting for fwd activations of chunk #%d to be ready...\n\n", i);
+					printf("\n\n[Bwd] Waiting for fwd activations of layer #%d, chunk #%d to be ready at working buffer index %d...\n\n", k, i, working_act_buffer_ind);
 				}
 				
 				sem_wait(&(is_fwd_activations_ready[k * num_chunks + i]));
@@ -2402,14 +2417,14 @@ int main(int argc, char * argv[]){
 					if (((k - 1) * num_chunks + i) <= final_saved_act_buffer_ind){
 
 						if (TO_PRINT_FWD_ACT_WAITING){
-							printf("\n\n[Bwd] Waiting for prior layer's saved activations to be ready...\n\n");
+							printf("\n\n[Bwd] Waiting for prior layer's saved activations to be home...\n\n");
 						}
 
 						sem_wait(&(is_saved_act_home[(k - 1) * num_chunks + i]));
 						sem_post(&(is_saved_act_home[(k - 1) * num_chunks + i]));
 
 						if (TO_PRINT_CTX_TRANSFERRING){
-							printf("\n\n[Bwd] Transferring prior layer's saved context from host to device...\n\n");
+							printf("\n\n[Bwd] Transferring prior layer's saved context at home index %d from host to device...\n\n", (k - 1) * num_chunks + i);
 						}
 
 						prior_layer_sys_saved_activations = &(sys_saved_activations[(k - 1) * num_chunks + i]);
@@ -2440,7 +2455,7 @@ int main(int argc, char * argv[]){
 						prior_layer_dev_saved_activations = &(saved_activations[prior_layer_dev_saved_act_ind]);
 
 						if (TO_PRINT_CTX_TRANSFERRING){
-							printf("\n\n[Bwd] Transferring prior layer's saved context from self...\n\n");
+							printf("\n\n[Bwd] Transferring prior layer's saved context from self at dev index %d...\n\n", prior_layer_dev_saved_act_ind);
 						}
 
 						ret = dataflow_handle.submit_peer_transfer(&dataflow_handle, inbound_fwd_ctx_stream_id, global_fwd_ctx_k_dest, prior_layer_dev_saved_activations -> x_k_local, cur_tokens * kv_dim * block_dt_size);
@@ -2497,6 +2512,14 @@ int main(int argc, char * argv[]){
 					}
 
 					// ensuring the saved activation made it home before prefetching......
+
+					int fwd_layer = cur_fwd_prefetch_act_ind / num_chunks;
+					int fwd_chunk = cur_fwd_prefetch_act_ind % num_chunks;
+
+					if (TO_PRINT_ACT_TRANSFERRING){
+						printf("\n\n[Bwd] Waiting for saved activation at index %d (fwd layer %d, chunk %d) to be home and bringing into working buffer index %d...\n\n", cur_fwd_prefetch_act_ind, fwd_layer, fwd_chunk, working_act_buffer_ind);
+					}
+
 					sem_wait(&(is_saved_act_home[cur_fwd_prefetch_act_ind]));
 					sem_post(&(is_saved_act_home[cur_fwd_prefetch_act_ind]));
 
@@ -2886,12 +2909,6 @@ int main(int argc, char * argv[]){
 
 					sem_wait(&(is_block_ready[i]));
 
-					if (TO_PRINT_POST_STEP_RELOADING){
-						int sem_val;
-						sem_getvalue(&(is_block_ready[i]), &sem_val);
-						printf("Is block ready at index %d, sem value: %d\n\n", i, sem_val);
-					}
-
 					ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, blocks[i] -> buffer, sys_blocks[i] -> buffer, aligned_block_size);
 					if (ret){
 						fprintf(stderr, "Error: failed to submit inbound transfer to load updated blocks...\n");
@@ -2915,7 +2932,6 @@ int main(int argc, char * argv[]){
 
 			working_layer_ind = 0;
 			replacement_layer_ind = 0;
-
 			seq_in_step = 0;
 		}
 		else{
@@ -2924,8 +2940,7 @@ int main(int argc, char * argv[]){
 
 		if (is_opt_step){
 			cur_step++;
-		}
-		
+		}		
 	}
 	
 
