@@ -252,6 +252,19 @@ int dataflow_submit_default_cross_entropy_loss(Dataflow_Handle * handle, int str
 
 
 /// HOST OPS
+typedef struct Print_Loss_Host_Op_Args{
+    int step_num;
+    int seq_id;
+    int chunk_id;
+    int num_tokens;
+    float * avg_loss_ref;
+} Print_Loss_Host_Op_Args;
+// Require user to pass in host function pointer...
+
+// this is within loss_misc_ops.c
+int dataflow_submit_print_loss_host(Dataflow_Handle * handle, int stream_id,
+									void * print_loss_host_func, Print_Loss_Host_Op_Args * op_buffer,
+									int step_num, int seq_id, int chunk_id, int num_tokens, float * avg_loss_ref);
 
 
 typedef struct Adam_Host_Op_Args{
@@ -260,6 +273,7 @@ typedef struct Adam_Host_Op_Args{
     DataflowDatatype mean_dt;
     DataflowDatatype var_dt;
     int num_threads;
+    int step_num;
     int layer_id;
     uint64_t num_els;
     float lr;
@@ -294,8 +308,6 @@ typedef struct add_host_op_args{
     size_t num_els;
 } Add_Host_Op_Args;
 
-// Require user to pass in host function pointer...
-
 // these are within optimizer_ops.c
 int dataflow_submit_add_host(Dataflow_Handle * handle, int stream_id, 
                         void * add_host_func, Add_Host_Op_Args * op_buffer,
@@ -307,14 +319,14 @@ int dataflow_submit_adam_step_host(Dataflow_Handle * handle, int stream_id,
                         void * adam_host_func, Adam_Host_Op_Args * op_buffer,
 						DataflowDatatype param_dt, DataflowDatatype grad_dt, 
                         DataflowDatatype mean_dt, DataflowDatatype var_dt,
-                        int num_threads, int layer_id, uint64_t num_els, 
+                        int num_threads, int step_num, int layer_id, uint64_t num_els, 
                         float lr, float beta1, float beta2, float weight_decay, float epsilon,
                         void * param, void * grad, void * mean, void * var);
 
 
 int dataflow_submit_set_mem_host(Dataflow_Handle * handle, int stream_id, 
                         void * set_mem_host_func, Set_Mem_Host_Op_Args * op_buffer,
-                        void * ptr, size_t size_bytes, int value);
+                        void * ptr, int value, size_t size_bytes);
 
 
 

@@ -38,7 +38,7 @@ int dataflow_submit_adam_step_host(Dataflow_Handle * handle, int stream_id,
                         void * adam_host_func, Adam_Host_Op_Args * op_buffer,
 						DataflowDatatype param_dt, DataflowDatatype grad_dt, 
                         DataflowDatatype mean_dt, DataflowDatatype var_dt,
-                        int num_threads, int layer_id, uint64_t num_els, 
+                        int num_threads, int step_num, int layer_id, uint64_t num_els, 
                         float lr, float beta1, float beta2, float weight_decay, float epsilon,
                         void * param, void * grad, void * mean, void * var) {
 
@@ -50,6 +50,7 @@ int dataflow_submit_adam_step_host(Dataflow_Handle * handle, int stream_id,
     // different because other ops use the args immediately when submitted (either copied into driver for native, or used directly for external)
 
     op_buffer -> num_threads = num_threads;
+    op_buffer -> step_num = step_num;
     op_buffer -> num_els = num_els;
     op_buffer -> layer_id = layer_id;
 
@@ -84,13 +85,13 @@ int dataflow_submit_adam_step_host(Dataflow_Handle * handle, int stream_id,
 
 int dataflow_submit_set_mem_host(Dataflow_Handle * handle, int stream_id, 
                         void * set_mem_host_func, Set_Mem_Host_Op_Args * op_buffer,
-                        void * ptr, size_t size_bytes, int value){
+                        void * ptr, int value, size_t size_bytes){
 
     int ret;
 
     op_buffer -> ptr = ptr;
-    op_buffer -> size_bytes = size_bytes;
     op_buffer -> value = value;
+    op_buffer -> size_bytes = size_bytes;
 
     ret = (handle -> submit_host_op)(handle, set_mem_host_func, op_buffer, stream_id);
     if (ret){
