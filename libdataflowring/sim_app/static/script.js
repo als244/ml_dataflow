@@ -529,7 +529,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const modelStages = simulationConfig.N;
                 const dpDegreeValue = formData.get('dp_degree');
-                const dataParallelismFactor = dpDegreeValue ? parseInt(dpDegreeValue) : 16; // Default if not found or invalid
+                const dataParallelismFactor = dpDegreeValue ? parseInt(dpDegreeValue) : 8; // Default if not found or invalid
                 drawTorusPlot(modelStages, dataParallelismFactor);
                 torusPlotInitialized = true;
                 showTorusPlot();
@@ -682,8 +682,118 @@ document.addEventListener('DOMContentLoaded', () => {
             if (inArrow && inLabel && device.inbound && device.inbound.progress > 1e-6 && transferDist > 1e-6) { const progress = Math.min(1.0, device.inbound.progress); const lenProg = progress * transferDist; const perpVec = { x: -unitDir.y, y: unitDir.x }; const offset = { x: perpVec.x * arrowOffsetDist, y: perpVec.y * arrowOffsetDist }; const startX = innerPos.x + unitDir.x * innerNodeRadius + offset.x; const startY = innerPos.y + unitDir.y * innerNodeRadius + offset.y; const endX = startX + unitDir.x * lenProg; const endY = startY + unitDir.y * lenProg; const midX = (startX + endX) / 2; const midY = (startY + endY) / 2; const labelOffsetX = perpVec.x * labelOffsetDistance; const labelOffsetY = perpVec.y * labelOffsetDistance; inArrow.setAttribute('d', `M ${startX} ${startY} L ${endX} ${endY}`); inArrow.setAttribute('stroke', device.inbound.color || 'gray'); inArrow.setAttribute('visibility', 'visible'); updateMultiLineText(inLabel, device.inbound.label || '', midX + labelOffsetX, midY + labelOffsetY, transferLabelFontSize); inLabel.setAttribute('fill', device.inbound.color || 'gray'); inLabel.setAttribute('visibility', 'visible'); } else if (inArrow && inLabel) { inArrow.setAttribute('visibility', 'hidden'); inLabel.setAttribute('visibility', 'hidden'); }
             const outArrow = svgElements[`${deviceId}_out_arrow`]; const outLabel = svgElements[`${deviceId}_out_label`];
             if (outArrow && outLabel && device.outbound && device.outbound.progress > 1e-6 && transferDist > 1e-6) { const progress = Math.min(1.0, device.outbound.progress); const lenProg = progress * transferDist; const perpVec = { x: -unitDir.y, y: unitDir.x }; const offset = { x: perpVec.x * arrowOffsetDist, y: perpVec.y * arrowOffsetDist }; const startX = outerPos.x - unitDir.x * outerNodeRadius - offset.x; const startY = outerPos.y - unitDir.y * outerNodeRadius - offset.y; const endX = startX - unitDir.x * lenProg; const endY = startY - unitDir.y * lenProg; const midX = (startX + endX) / 2; const midY = (startY + endY) / 2; const labelOffsetX = -perpVec.x * labelOffsetDistance; const labelOffsetY = -perpVec.y * labelOffsetDistance; outArrow.setAttribute('d', `M ${startX} ${startY} L ${endX} ${endY}`); outArrow.setAttribute('stroke', device.outbound.color || 'gray'); outArrow.setAttribute('visibility', 'visible'); updateMultiLineText(outLabel, device.outbound.label || '', midX + labelOffsetX, midY + labelOffsetY, transferLabelFontSize); outLabel.setAttribute('fill', device.outbound.color || 'gray'); outLabel.setAttribute('visibility', 'visible'); } else if (outArrow && outLabel) { outArrow.setAttribute('visibility', 'hidden'); outLabel.setAttribute('visibility', 'hidden'); }
-            const ringArrow = svgElements[`${deviceId}_ring_arrow`]; const ringLabel = svgElements[`${deviceId}_ring_label`];
-            if (ringArrow && ringLabel && device.peer && device.peer.progress > 1e-6 && N > 1) { const progress = Math.min(1.0, device.peer.progress); const peerId = device.peer.target_peer; if (peerId >= 0 && peerId < N && peerId !== i && nodePositions.outer[peerId]) { const targetPos = nodePositions.outer[peerId]; const startPos = outerPos; const dx = targetPos.x - startPos.x; const dy = targetPos.y - startPos.y; const dist = Math.hypot(dx, dy); const startAngleRad = Math.atan2(dy, dx); const startEdge = pointOnCircle(startPos.x, startPos.y, outerNodeRadius, startAngleRad * 180 / Math.PI); const endAngleRad = Math.atan2(-dy, -dx); const endEdge = pointOnCircle(targetPos.x, targetPos.y, outerNodeRadius, endAngleRad * 180 / Math.PI); const currentEdgeX = startEdge.x + (endEdge.x - startEdge.x) * progress; const currentEdgeY = startEdge.y + (endEdge.y - startEdge.y) * progress; const sweepFlag = device.peer.direction > 0 ? 1 : 0; let arcRadius = dist * 0.6; if (Math.hypot(currentEdgeX - startEdge.x, currentEdgeY - startEdge.y) > 1e-3) { const pathData = `M ${startEdge.x} ${startEdge.y} A ${arcRadius} ${arcRadius} 0 0 ${sweepFlag} ${currentEdgeX} ${currentEdgeY}`; ringArrow.setAttribute('d', pathData); ringArrow.setAttribute('stroke', device.peer.color || 'indigo'); ringArrow.setAttribute('visibility', 'visible'); const midX = (startEdge.x + currentEdgeX) / 2; const midY = (startEdge.y + currentEdgeY) / 2; const vecCenterX = midX - centerX; const vecCenterY = midY - effectiveCenterY; const vecCenterMag = Math.hypot(vecCenterX, vecCenterY); const outX = vecCenterMag > 1e-6 ? vecCenterX / vecCenterMag : 0; const outY = vecCenterMag > 1e-6 ? vecCenterY / vecCenterMag : 0; const labelOffsetMag = labelOffsetDistance * 2.0; const labelX = midX + outX * labelOffsetMag; const labelY = midY + outY * labelOffsetMag; updateMultiLineText(ringLabel, device.peer.label || '', labelX, labelY, transferLabelFontSize); ringLabel.setAttribute('fill', device.peer.color || 'indigo'); ringLabel.setAttribute('visibility', 'visible'); } else { ringArrow.setAttribute('visibility', 'hidden'); ringLabel.setAttribute('visibility', 'hidden'); } } else { ringArrow.setAttribute('visibility', 'hidden'); ringLabel.setAttribute('visibility', 'hidden'); } } else if (ringArrow && ringLabel) { ringArrow.setAttribute('visibility', 'hidden'); ringLabel.setAttribute('visibility', 'hidden'); }
+            
+            const ringArrow = svgElements[`${deviceId}_ring_arrow`];
+            const ringLabel = svgElements[`${deviceId}_ring_label`];
+
+            // Ensure outerPos is defined (center of the current/source node 'i')
+            // const startPos = outerPos; // Or however you get the source node's center
+            // Ensure nodePositions.outer[peerId] is defined (center of the target node)
+            // const targetPos = nodePositions.outer[peerId];
+
+            if (ringArrow && ringLabel && device.peer && device.peer.progress > 1e-6 && N > 1) {
+                const progress = Math.min(1.0, device.peer.progress);
+                const peerId = device.peer.target_peer;
+
+                // Assuming startPos and targetPos are correctly defined {x, y} objects for node centers
+                if (peerId >= 0 && peerId < N && peerId !== i && nodePositions.outer[peerId] && outerPos) {
+                    const startPos = outerPos; // Center of the source node
+                    const targetPos = nodePositions.outer[peerId]; // Center of the target node
+
+                    const dx_centers = targetPos.x - startPos.x;
+                    const dy_centers = targetPos.y - startPos.y;
+                    const dist_centers = Math.hypot(dx_centers, dy_centers);
+
+                    let V_ST_x = 0, V_ST_y = 0; // Normalized vector from source center to target center
+
+                    if (dist_centers > 1e-9) {
+                        V_ST_x = dx_centers / dist_centers;
+                        V_ST_y = dy_centers / dist_centers;
+                    } else {
+                        // Nodes are practically coincident. Hide arrow or handle as an edge case.
+                        ringArrow.setAttribute('visibility', 'hidden');
+                        ringLabel.setAttribute('visibility', 'hidden');
+                        return; // Or continue if in a loop
+                    }
+
+                    // Calculate startEdge: point on the source node's circumference, in the direction of the target node's center
+                    const startEdge_x = startPos.x + outerNodeRadius * V_ST_x;
+                    const startEdge_y = startPos.y + outerNodeRadius * V_ST_y;
+
+                    // Define the "effective target" for the arrow tip as the center of the target node.
+                    // The arrow will animate from startEdge towards this point.
+                    const effective_target_tip_x = targetPos.x;
+                    const effective_target_tip_y = targetPos.y;
+
+                    // Vector from startEdge to this effective_target_tip
+                    const vec_SE_ET_x = effective_target_tip_x - startEdge_x;
+                    const vec_SE_ET_y = effective_target_tip_y - startEdge_y;
+                    // Note: The length of this vector is Math.abs(dist_centers - outerNodeRadius)
+
+                    // currentEdge is 'progress' along the vector from startEdge to effective_target_tip
+                    const currentEdgeX = startEdge_x + progress * vec_SE_ET_x;
+                    const currentEdgeY = startEdge_y + progress * vec_SE_ET_y;
+
+                    const sweepFlag = device.peer.direction > 0 ? 1 : 0;
+
+                    // Calculate the actual chord length of the arc segment to be drawn
+                    const chordDx_arc = currentEdgeX - startEdge_x; // This is progress * vec_SE_ET_x
+                    const chordDy_arc = currentEdgeY - startEdge_y; // This is progress * vec_SE_ET_y
+                    const chordLength_arc_sq = chordDx_arc * chordDx_arc + chordDy_arc * chordDy_arc;
+
+                    if (chordLength_arc_sq > 1e-6) { // Ensure the arc segment has a tangible length (e.g., > 0.001)
+                        const chordLength_arc = Math.sqrt(chordLength_arc_sq);
+                        
+                        // Determine the arc radius. Start with a value based on center-to-center distance.
+                        let arcRadiusFinal = dist_centers * 0.6; 
+
+                        // If the chosen radius is too small for the current chord (would form a semicircle or less),
+                        // increase it to make the arc flatter. This helps align the tangent with the chord.
+                        const minRadiusForChord = chordLength_arc / 2.0;
+                        if (arcRadiusFinal < minRadiusForChord) {
+                            arcRadiusFinal = chordLength_arc * 2.0; // Using a multiplier > 0.5 (e.g., 2.0) makes it quite flat.
+                        }
+                        
+                        // Ensure the radius isn't excessively small in absolute terms.
+                        // This value might need tuning based on your `outerNodeRadius` and overall scale.
+                        arcRadiusFinal = Math.max(arcRadiusFinal, outerNodeRadius * 0.1, 0.1); // Min radius related to node size or an absolute small value.
+
+                        const pathData = `M ${startEdge_x} ${startEdge_y} A ${arcRadiusFinal} ${arcRadiusFinal} 0 0 ${sweepFlag} ${currentEdgeX} ${currentEdgeY}`;
+                        ringArrow.setAttribute('d', pathData);
+                        ringArrow.setAttribute('stroke', device.peer.color || 'indigo');
+                        ringArrow.setAttribute('visibility', 'visible');
+
+                        // --- Label positioning (assuming this part is okay) ---
+                        const midX = (startEdge_x + currentEdgeX) / 2;
+                        const midY = (startEdge_y + currentEdgeY) / 2;
+                        // Assuming centerX, effectiveCenterY, labelOffsetDistance, updateMultiLineText, transferLabelFontSize are defined
+                        const vecCenterX = midX - centerX; 
+                        const vecCenterY = midY - effectiveCenterY;
+                        const vecCenterMag = Math.hypot(vecCenterX, vecCenterY);
+                        const outX = vecCenterMag > 1e-6 ? vecCenterX / vecCenterMag : 0;
+                        const outY = vecCenterMag > 1e-6 ? vecCenterY / vecCenterMag : 0;
+                        const labelOffsetMag = labelOffsetDistance * 2.0;
+                        const labelX = midX + outX * labelOffsetMag;
+                        const labelY = midY + outY * labelOffsetMag;
+                        updateMultiLineText(ringLabel, device.peer.label || '', labelX, labelY, transferLabelFontSize);
+                        ringLabel.setAttribute('fill', device.peer.color || 'indigo');
+                        ringLabel.setAttribute('visibility', 'visible');
+                        // --- End Label positioning ---
+
+                    } else {
+                        // Arrow is too short to draw (progress is very small or startEdge is at targetPos)
+                        ringArrow.setAttribute('visibility', 'hidden');
+                        ringLabel.setAttribute('visibility', 'hidden');
+                    }
+                } else {
+                    ringArrow.setAttribute('visibility', 'hidden');
+                    ringLabel.setAttribute('visibility', 'hidden');
+                }
+            } else if (ringArrow && ringLabel) {
+                ringArrow.setAttribute('visibility', 'hidden');
+                ringLabel.setAttribute('visibility', 'hidden');
+            }
+
             const computeArc = svgElements[`${deviceId}_compute_arc`];
             if (computeArc && device.compute && device.compute.progress > 1e-6) {
 
@@ -737,15 +847,15 @@ document.addEventListener('DOMContentLoaded', () => {
                         } else { // N > 2 (original logic for more than 2 nodes)
                             angleStartDeg = angleNext;
                             const angleEndTargetDeg = anglePrev; // Visually, arc starts from prev and goes to next (backwards)
-                            totalSweepDeg = (angleStartDeg - angleEndTargetDeg + 360) % 360;
+                            totalSweepDeg = (angleEndTargetDeg - angleStartDeg + 360) % 360;
                             // Fallback for N > 2 if sweep is 0 unexpectedly
                             if (totalSweepDeg === 0 && angleStartDeg === angleEndTargetDeg && progress > 0) {
                                 totalSweepDeg = 360;
                             }
                         }
                         const currentSweepAmount = progress * totalSweepDeg;
-                        theta1Deg = angleStartDeg - currentSweepAmount; // Arc data starts here
-                        theta2Deg = angleStartDeg;                   // Arc data ends here
+                        theta2Deg = angleStartDeg + currentSweepAmount; // Arc data starts here
+                        theta1Deg = angleStartDeg;                   // Arc data ends here
                     }
                 } else { // N === 1 (since N=0 is guarded at the function start)
                     // For a single node, sweep a full circle starting from the top.
@@ -777,6 +887,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     // sweepFlagArc: 1 for positive angle direction (typically counter-clockwise).
                     // All our totalSweepDeg are positive magnitudes, and theta calculations respect direction.
+                    
                     let sweepFlagArc = 1;
                     
                     const pathData = `M ${startPoint.x} ${startPoint.y} A ${arcOuterRadius} ${arcOuterRadius} 0 ${largeArcFlag} ${sweepFlagArc} ${endPoint.x} ${endPoint.y}`;

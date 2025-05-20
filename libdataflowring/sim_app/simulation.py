@@ -23,7 +23,9 @@ COLOR_RING_CW = 'maroon'
 COLOR_COMPUTE_DEFAULT = 'gray'
 COLOR_COMPUTE_FWD = 'darkgreen'
 COLOR_COMPUTE_BWD_X = 'orangered'
-COLOR_COMPUTE_BWD_W = 'teal'
+
+diamond_color = '#B9F2FF'
+COLOR_COMPUTE_BWD_W = 'yellow'
 COLOR_COMPUTE_HEAD = 'lawngreen'
 COLOR_STALL_NODE_FILL_HEX = '#FF0000' # Example Hex for frontend
 COLOR_FINISH_NODE_FILL_HEX = '#00CC00' # Example Hex for frontend
@@ -40,7 +42,7 @@ def round_up_to_multiple(n, m):
 class Device:
     # --- __init__ ---
     # Keep __init__ mostly the same, ensure no plotting refs
-    def __init__(self, device_id, layer_capacity, activations_capacity, transitions_capacity, head_transitions_capacity, total_devices, total_layers, total_chunks, total_train_chunks, is_train_chunks, prev_train_chunks, computation_times_frames, computation_times_frames_last_block, computation_times_frames_bwd, headFrames, bwdWFrames, layerTransferFrames, headTransferFrames, savedActivationsFrames, activationTransitionFrames, contextTransferFrames):
+    def __init__(self, device_id, layer_capacity, activations_capacity, transitions_capacity, head_transitions_capacity, total_devices, total_layers, num_seqs, seqlen, chunks_per_seq, total_chunks, final_chunk_in_seq_data_frac, computation_times_frames, computation_times_frames_last_block, computation_times_frames_bwd, headFrames, bwdWFrames, layerTransferFrames, headTransferFrames, savedActivationsFrames, activationTransitionFrames, contextTransferFrames):
         self.device_id = device_id
         self.device_has_started = False
         self.device_start_time = 0
@@ -51,10 +53,11 @@ class Device:
         self.transitions_capacity = transitions_capacity
         self.head_transitions_capacity = head_transitions_capacity
         self.total_devices = total_devices
+        self.num_seqs = num_seqs
+        self.seqlen = seqlen
+        self.chunks_per_seq = chunks_per_seq
         self.total_chunks = total_chunks
-        self.total_train_chunks = total_train_chunks
-        self.is_train_chunks = is_train_chunks
-        self.prev_train_chunks = prev_train_chunks
+        self.final_chunk_in_seq_data_frac = final_chunk_in_seq_data_frac
         self.computation_times_frames = computation_times_frames
         self.computation_times_frames_bwd = computation_times_frames_bwd
         self.computation_times_frames_last_block = computation_times_frames_last_block
@@ -74,7 +77,8 @@ class Device:
         self.activations_write_ptr = 0
         self.activations_empty_slot_ind = 0
         self.activations_stack = []
-        self.cur_train_fwd_activation_ind = 0
+        self.final_dev_activation_stack = set()
+
 
         # Adjust transitions capacity for special devices (Keep logic)
         is_head_device = (self.device_id == (self.total_layers % self.total_devices if self.total_devices > 0 else 0))
@@ -101,7 +105,10 @@ class Device:
 
         self.context_buffer = [-1 for _ in range(self.total_chunks)]
         self.home_storage = set()
-        self.computation_queue = deque()
+        self.fwd_computation_queue = deque()
+        self.bwd_computation_queue = deque()
+        self.current_task = None
+        self.current_task_dir = 0
         self.outbound_queue = deque()
         self.inbound_queue = deque()
         self.peer_transfer_queue = deque()
@@ -134,7 +141,6 @@ class Device:
         self.computing_status_text = "Idle" # Renamed for clarity vs is_computing flag
         self.stall_reason = ""
         self.cur_fwd_computation_num = 0
-        self.activations_stack_cutoff_ind = 0
         self.activations_stack_next_ind = 0
         self.next_weight_prefetch_layer_id = -1
         self.next_bwd_weight_prefetch_layer_id = -1
@@ -157,7 +163,7 @@ class Device:
         self.activations_write_ptr = 0
         self.activations_empty_slot_ind = 0
         self.activations_stack = []
-        self.cur_train_fwd_activation_ind = 0
+        self.final_dev_activation_stack = set()
 
         is_head_device = (self.device_id == (self.total_layers % self.total_devices if self.total_devices > 0 else 0))
         is_last_block_device = (self.device_id == ((self.total_layers - 1) % self.total_devices if self.total_devices > 0 else 0))
@@ -201,11 +207,7 @@ class Device:
         self.current_computation_type = None
         self.current_computation_layer_id = -1
         self.current_computation_chunk_id = -1
-        self.first_train_chunk = -1
-        for i in range(self.total_chunks):
-            if self.is_train_chunks[i]:
-                self.first_train_chunk = i
-                break
+        self.final_train_chunk = self.total_chunks - self.chunks_per_seq
 
 
         # --- Populate Home Storage and Initial Weights ---
@@ -247,21 +249,26 @@ class Device:
             transfer_direction = 1
             for i in range(self.total_chunks):
                  comp_time = self.computation_times_frames.get(i, 0)
-                 is_train_chunk = self.is_train_chunks[i]
                  
                  ## forward pass for all chunks on all layers except the last one passes output to the next device
-                 if is_train_chunk or (cur_layer_id < self.total_layers - 1):
-                     self.computation_queue.append((i, cur_layer_id, False, False, transfer_direction, comp_time))
-                 ## if non-training chunk on the last layer, no need to pass output to the next device
-                 else:
-                     if cur_layer_id == self.total_layers - 1:
-                         self.computation_queue.append((i, cur_layer_id, False, False, 0, self.computation_times_frames_last_block[i]))
-                     else:
-                         self.computation_queue.append((i, cur_layer_id, False, False, 0, comp_time))
+                 self.fwd_computation_queue.append((i, cur_layer_id, False, False, transfer_direction, comp_time))
                  
-                 if is_train_chunk:
-                    self.activations_stack.append((i, cur_layer_id))
             cur_layer_id += self.total_devices
+
+        ## the activations are needed in reverse order of sequences
+        ## and reverse order within each sequence...
+
+        ## the nearest activation (final chunk to be appended) is the last chunk of the first sequence on the last layer...
+        cur_layer_id = self.device_id
+        while cur_layer_id < self.total_layers:
+            for seq_ind in range(self.num_seqs - 1, -1, -1):
+                seq_chunk_start = int(seq_ind * self.chunks_per_seq)
+                for chunk_ind in range(seq_chunk_start, seq_chunk_start + self.chunks_per_seq):
+                    self.activations_stack.append((chunk_ind, cur_layer_id))
+
+            cur_layer_id += self.total_devices
+        
+       
 
         # Context Buffer Initialization
         last_layer_on_device = -1
@@ -285,42 +292,25 @@ class Device:
         ## the index (within activations_stack) of the first activation that we will be saving (not sending back)
         ## in activations_buffer (preparing for turn-around)
         ## leaving 1 extra space for working activation...
-        activation_ind_cutoff = max(0, (total_activations - self.activations_capacity) + 1)
+        activation_ind_cutoff = max(0, (total_activations - self.activations_capacity))
 
-        self.activations_stack_cutoff_ind = activation_ind_cutoff
+        final_stack = self.activations_stack[activation_ind_cutoff + 1:]
+        for act in final_stack:
+            self.final_dev_activation_stack.add(act)
+
+        ## the index (within activations_stack) of the next activation to be saved
         self.activations_stack_next_ind = activation_ind_cutoff
 
         # Head Task (if applicable)
         if self.device_id == head_device_id:
 
-            total_chunk_depend_frames = 0
-            last_block_chunk_id_when_id_ready = max(0, self.total_chunks - self.total_devices - 1)
-            for i in range(last_block_chunk_id_when_id_ready, self.total_chunks):
-                total_chunk_depend_frames += self.computation_times_frames_last_block[i]
-
-            cur_head_frame_cnt = 0
-            cutoff_chunk_id = self.total_chunks - 1
-            for i in range(self.total_chunks):
-                if self.is_train_chunks[i]:
-                    if cur_head_frame_cnt + self.headFrames > total_chunk_depend_frames:
-                        if i < self.total_chunks - 1 and (cur_head_frame_cnt + self.headFrames - total_chunk_depend_frames) < self.headFrames / 2:
-                            cutoff_chunk_id = i + 1
-                        else:
-                            cutoff_chunk_id = i
-                        break
-                    cur_head_frame_cnt += self.headFrames
-
             transfer_direction = -1
             # Simple Head processing order: all training chunks sequentially
             # More complex logic (like reversal) could be added if needed
-            for i in range(cutoff_chunk_id):
-                if self.is_train_chunks[i]:
-                    self.computation_queue.append((i, self.total_layers, False, False, transfer_direction, self.headFrames))
-            for i in range(self.total_chunks - 1, cutoff_chunk_id - 1, -1):
-                if self.is_train_chunks[i]:
-                    self.computation_queue.append((i, self.total_layers, False, False, transfer_direction, self.headFrames))
-                    ## ensure we actually compute the final head chunk...
-                    self.head_final_chunk_id = i
+            for i in range(self.chunks_per_seq - 1, self.total_chunks, self.chunks_per_seq):
+                for j in range(i, i - self.chunks_per_seq, -1):
+                    self.fwd_computation_queue.append((j, self.total_layers, True, False, transfer_direction, self.headFrames))
+                    self.head_final_chunk_id = j
 
         # Backward Pass
         cur_layer_id = last_layer_on_device # Start from last non-head layer
@@ -343,17 +333,18 @@ class Device:
             if cur_layer_id == 0:
                 transfer_direction = 0
 
-            for i in range(self.total_chunks - 1, -1, -1):
-                is_train_chunk = self.is_train_chunks[i]
-                if is_train_chunk:
-                    bwdX_time = self.computation_times_frames_bwd.get(i, 0)
+            for i in range(self.chunks_per_seq - 1, self.total_chunks, self.chunks_per_seq):
+                for j in range(i, i - self.chunks_per_seq, -1):
+                    
+                    bwdX_time = self.computation_times_frames_bwd.get(j, 0)
                     bwdW_time = self.bwdWFrames
 
                     current_transfer_dir_bX = transfer_direction if cur_layer_id > 0 else 0
-                    self.computation_queue.append((i, cur_layer_id, True, False, current_transfer_dir_bX, bwdX_time)) # BwdX
-                    self.computation_queue.append((i, cur_layer_id, False, True, 0, bwdW_time)) # BwdW
+                    self.bwd_computation_queue.append((j, cur_layer_id, True, False, current_transfer_dir_bX, bwdX_time)) # BwdX
+                    self.bwd_computation_queue.append((j, cur_layer_id, False, True, 0, bwdW_time)) # BwdW
 
             cur_layer_id -= self.total_devices
+            
 
     def _find_first_free_idx(self, buffer):
         try:
@@ -464,150 +455,253 @@ class Device:
     # --- handle_computation_depends ---
     # Keep logic the same, but update `computing_status_text`
     def handle_computation_depends(self, T):
-        if not self.computation_queue:
+        if not self.fwd_computation_queue and not self.bwd_computation_queue:
             self.computing_status_text = "Idle (No Tasks)" if not self.device_has_finished else "Finished Comp"
             self.is_stalled = False
             return False
 
-        next_task = self.computation_queue[0]
-        cid, lid, bX, bW, tdir, dur = next_task
-        has_deps = False
-        is_fwd = not bX and not bW and lid < self.total_layers # Check against head layer ID
-        is_head = lid == self.total_layers
+        has_fwd_task = len(self.fwd_computation_queue) > 0
+        has_bwd_task = len(self.bwd_computation_queue) > 0
+       
+        is_head_task = False
+        if has_fwd_task:
+            next_fwd_task = self.fwd_computation_queue[0]
+            f_cid, f_lid, f_bX, f_bW, f_tdir, f_dur = next_fwd_task
+            if f_lid == self.total_layers:
+                is_head_task = True
+       
+        if has_bwd_task:
+            next_bwd_task = self.bwd_computation_queue[0]
+            b_cid, b_lid, b_bX, b_bW, b_tdir, b_dur = next_bwd_task
+
 
         computation_type_str = "???"
         self.stall_reason = ""
 
-        # --- Check Dependencies (Keep logic) ---
-        has_weight = (0, lid) in self.cur_weights
-        has_input_transition = True
-        input_transition_key = None
-        input_buffer_to_check = None
-        if is_fwd and lid > 0:
-            input_transition_key = (0, cid, lid - 1, False)
-            input_buffer_to_check = self.transitions_inbound_buffer
-        elif is_head:
-             input_transition_key = (0, cid, self.total_layers - 1, False)
-             input_buffer_to_check = self.head_input_transitions_buffer
-        elif bX:
-            input_transition_key = (0, cid, lid + 1, True)
-            if lid == self.total_layers - 1:
-                input_buffer_to_check = self.head_output_transitions_buffer
+        ## first check if we have a bwd task that is ready...
+
+        has_bwd_deps = False
+        has_fwd_deps = False
+        bwd_missing_items = []
+        fwd_missing_items = []
+        
+        if not is_head_task and has_bwd_task:
+           
+            has_weight = (0, b_lid) in self.cur_weights
+            has_input_transition = False
+            input_transition_key = None
+            input_buffer_to_check = None
+
+            if b_bX:
+                input_transition_key = (0, b_cid, b_lid + 1, True)
+                if b_lid == self.total_layers - 1:
+                    input_buffer_to_check = self.head_output_transitions_buffer
+                else:
+                    input_buffer_to_check = self.transitions_inbound_buffer
+        
+                # bW doesn't need a *new* input transition
+                if input_transition_key and input_buffer_to_check:
+                    has_input_transition = input_transition_key in input_buffer_to_check
+
+            has_fwd_activation = True
+            fwd_act_key = None
+
+            if b_bX or b_bW:
+                fwd_act_key = (0, b_cid, b_lid)
+                has_fwd_activation = fwd_act_key in self.activations_buffer
+
+            
+            has_context = True
+            missing_ctx_chunk = -1
+
+            cur_seq_start = b_cid - (b_cid % self.chunks_per_seq)
+            if b_bX: # Simplified context check: assumes context for *this* layer `lid` is needed
+                for i in range(b_cid, cur_seq_start - 1, -1):
+                    if self.context_buffer[i] != (0, i, b_lid):
+                        has_context = False
+                        missing_ctx_chunk = i
+                        break
+
+            needs_outbound_trans_space = (b_tdir != 0)
+       
+            has_outbound_trans_space = True # Assume true if no transfer needed
+            if needs_outbound_trans_space and (self.transitions_outbound_empty_slot_ind is None):
+                has_outbound_trans_space = False
+
+            if b_bX:
+                computation_type_str = "Bwd X"
+                has_bwd_deps = has_weight and has_input_transition and has_fwd_activation and has_context and has_outbound_trans_space
+                if not has_weight: bwd_missing_items.append("No Weight")
+                if not has_input_transition: bwd_missing_items.append("No Grad. Stream")
+                if not has_fwd_activation: bwd_missing_items.append("No Fwd Act.")
+                if not has_context: bwd_missing_items.append(f"No Ctx (Chunk: {missing_ctx_chunk})")
+                if not has_outbound_trans_space: bwd_missing_items.append("Congested (Trans.)")
+            elif b_bW:
+                computation_type_str = "Bwd W"
+                has_bwd_deps = has_fwd_activation
+                if not has_fwd_activation: bwd_missing_items.append("No Fwd Act.")
+
+            ## if we have a bwd task then schedule it!
+            if has_bwd_deps:
+                if not self.device_has_started:
+                    self.device_has_started = True
+                    self.device_start_time = T
+
+                # if self.is_stalled: print(f"T={T}, Dev {self.device_id}: UNSTALL") # Optional log
+                self.is_computing = True
+                self.is_stalled = False
+                self.stall_reason = ""
+                self.cur_computation_start_time = T
+                self.cur_computation_duration = b_dur
+                self.current_computation_type = computation_type_str
+                self.current_computation_layer_id = b_lid
+                self.current_computation_chunk_id = b_cid
+                # UPDATE STATUS TEXT FOR FRONTEND
+                self.computing_status_text = f"COMP:\n{computation_type_str}\nC{b_cid},L{b_lid}"
+
+                # Mark required input buffers as 'in use' / consumed (-2) (Keep logic)
+                if input_transition_key and input_buffer_to_check and not b_bW:
+                    try:
+                        idx = input_buffer_to_check.index(input_transition_key)
+                        input_buffer_to_check[idx] = (-2,) + input_transition_key[1:]
+                        # Update empty slot index for that buffer
+                        if input_buffer_to_check is self.transitions_inbound_buffer: self.transitions_inbound_empty_slot_ind = self._find_first_free_idx(self.transitions_inbound_buffer)
+                        elif input_buffer_to_check is self.head_input_transitions_buffer: self.head_input_transitions_empty_slot_ind = self._find_first_free_idx(self.head_input_transitions_buffer)
+                        elif input_buffer_to_check is self.head_output_transitions_buffer: self.head_output_transitions_empty_slot_ind = self._find_first_free_idx(self.head_output_transitions_buffer)
+                    except ValueError: pass # print(f"T={T}, Dev {self.device_id}: ERROR - Could not find input transition {input_transition_key} to mark.")
+
+                # Reserve space in outbound transition buffer is required
+                # Already checked depedency that there is space in outbound buffer
+                if needs_outbound_trans_space and has_outbound_trans_space:
+                    is_grad_out = b_bX
+                    self.transitions_outbound_buffer[self.transitions_outbound_empty_slot_ind] = (-2, b_cid, b_lid, is_grad_out)
+                    self.transitions_outbound_empty_slot_ind = self._find_first_free_idx(self.transitions_outbound_buffer)
+
+                return True, -1 # Computation successfully started
+                
+        
+        ## if we didn't have a bwd task ready then check if we have a fwd task that is ready...
+        has_fwd_deps = False
+        if has_fwd_task:
+            ## check if we have a fwd task that is ready...
+            # --- Check Dependencies (Keep logic) ---
+            has_weight = (0, f_lid) in self.cur_weights
+            has_input_transition = False
+            input_transition_key = None
+            input_buffer_to_check = None
+          
+            input_transition_key = (0, f_cid, f_lid - 1, False)
+            ## if head 
+            if f_lid == self.total_layers:
+                input_buffer_to_check = self.head_input_transitions_buffer
             else:
                 input_buffer_to_check = self.transitions_inbound_buffer
-        # bW doesn't need a *new* input transition
 
-        if input_transition_key and input_buffer_to_check:
-            has_input_transition = input_transition_key in input_buffer_to_check
 
-        has_fwd_activation = True
-        fwd_act_key = None
-        if bX or bW:
-            fwd_act_key = (0, cid, lid)
-            has_fwd_activation = fwd_act_key in self.activations_buffer
-                
-        has_context = True
-        missing_ctx_chunk = -1
-        if bX: # Simplified context check: assumes context for *this* layer `lid` is needed
-            for i in range(cid, -1, -1):
-                if self.context_buffer[i] != (0, i, lid):
-                    has_context = False
-                    missing_ctx_chunk = i
-                    break
+            if f_lid == 0:
+                input_buffer_to_check = None
+                has_input_transition = True
 
-        needs_act_buffer_space = is_fwd
-        has_act_buffer_space = True
-        if needs_act_buffer_space and self.activations_empty_slot_ind is None:
-             has_act_buffer_space = False
+            if input_transition_key and input_buffer_to_check:
+                has_input_transition = input_transition_key in input_buffer_to_check
 
-        needs_outbound_trans_space = (tdir != 0)
+
+            needs_act_buffer_space = f_lid < self.total_layers
+            has_act_buffer_space = True
+            if needs_act_buffer_space and self.activations_empty_slot_ind is None:
+                has_act_buffer_space = False
+
+            needs_outbound_trans_space = (f_tdir != 0)
        
-        has_outbound_trans_space = True # Assume true if no transfer needed
-        if needs_outbound_trans_space and (self.transitions_outbound_empty_slot_ind is None):
-            has_outbound_trans_space = False
-             
+            has_outbound_trans_space = True # Assume true if no transfer needed
+            if needs_outbound_trans_space and (self.transitions_outbound_empty_slot_ind is None):
+                has_outbound_trans_space = False
+
+            if f_lid == self.total_layers:
+                computation_type_str = "Head"
+                has_fwd_deps = has_weight and has_input_transition and has_outbound_trans_space
+                if not has_weight: fwd_missing_items.append("No Weight")
+                if not has_input_transition: fwd_missing_items.append("No Act. Stream")
+                if not has_outbound_trans_space: fwd_missing_items.append("Congested (Trans.)")
+            else:
+                computation_type_str = "Fwd"
+                has_fwd_deps = has_weight and has_input_transition and has_act_buffer_space and has_outbound_trans_space
+                if not has_weight: fwd_missing_items.append("No Weight")
+                if not has_input_transition: fwd_missing_items.append("No Act. Stream")
+                if not has_act_buffer_space: fwd_missing_items.append("Congested (Act.)")
+                if not has_outbound_trans_space: fwd_missing_items.append("Congested (Trans.)")
+
+            if has_fwd_deps:
+                if not self.device_has_started:
+                    self.device_has_started = True
+                    self.device_start_time = T
+
+                # if self.is_stalled: print(f"T={T}, Dev {self.device_id}: UNSTALL") # Optional log
+                self.is_computing = True
+                self.is_stalled = False
+                self.stall_reason = ""
+                self.cur_computation_start_time = T
+                self.cur_computation_duration = f_dur
+
+                if (self.cur_computation_duration == 0):
+                    print(f"T={T}, Dev {self.device_id}: ERROR - Computation duration is 0 for {computation_type_str} C{f_cid},L{f_lid}")
+               
+                self.current_computation_type = computation_type_str
+                self.current_computation_layer_id = f_lid
+                self.current_computation_chunk_id = f_cid
+                # UPDATE STATUS TEXT FOR FRONTEND
+                self.computing_status_text = f"COMP:\n{computation_type_str}\nC{f_cid},L{f_lid}"
+
+                # Mark required input buffers as 'in use' / consumed (-2) (Keep logic)
+                if input_transition_key and input_buffer_to_check:
+                    try:
+                        idx = input_buffer_to_check.index(input_transition_key)
+                        input_buffer_to_check[idx] = (-2,) + input_transition_key[1:]
+                        # Update empty slot index for that buffer
+                        if input_buffer_to_check is self.transitions_inbound_buffer: self.transitions_inbound_empty_slot_ind = self._find_first_free_idx(self.transitions_inbound_buffer)
+                        elif input_buffer_to_check is self.head_input_transitions_buffer: self.head_input_transitions_empty_slot_ind = self._find_first_free_idx(self.head_input_transitions_buffer)
+                    except ValueError: 
+                        print(f"T={T}, Dev {self.device_id}: ERROR - Could not find input transition {input_transition_key} to mark.")
+                        pass
+
+                # Reserve space in outbound transition buffer is required
+                # Already checked depedency that there is space in outbound buffer
+                if needs_outbound_trans_space and has_outbound_trans_space:
+                    is_grad_out = f_lid == self.total_layers
+                    self.transitions_outbound_buffer[self.transitions_outbound_empty_slot_ind] = (-2, f_cid, f_lid, is_grad_out)
+                    self.transitions_outbound_empty_slot_ind = self._find_first_free_idx(self.transitions_outbound_buffer)
+
+                return True, 1
+        
 
 
-        # --- Determine Computation Type and Final Dependency Check (Keep logic) ---
-        missing_items = []
-        if is_fwd:
-            computation_type_str = "Fwd"
-            has_deps = has_weight and has_input_transition and has_act_buffer_space and has_outbound_trans_space
-            if not has_weight: missing_items.append("No Weight")
-            if not has_input_transition: missing_items.append("No Act. Stream")
-            if not has_act_buffer_space: missing_items.append("Congested (Act.)")
-            if not has_outbound_trans_space: missing_items.append("Congested (Trans.)")
-        elif is_head:
-            computation_type_str = "Head"
-            has_deps = has_weight and has_input_transition and has_outbound_trans_space
-            if not has_weight: missing_items.append("No Weight")
-            if not has_input_transition: missing_items.append("No Act. Stream")
-            if not has_outbound_trans_space: missing_items.append("Congested (Trans.)")
-        elif bX:
-            computation_type_str = "Bwd X"
-            has_deps = has_weight and has_input_transition and has_fwd_activation and has_context and has_outbound_trans_space
-            if not has_weight: missing_items.append("No Weight")
-            if not has_input_transition: missing_items.append("No Grad. Stream")
-            if not has_fwd_activation: missing_items.append("No Fwd Act.")
-            if not has_context: missing_items.append(f"No Ctx (Chunk: {missing_ctx_chunk})")
-            if not has_outbound_trans_space: missing_items.append("Congested (Trans.)")
-        elif bW:
-            computation_type_str = "Bwd W"
-            has_deps = has_fwd_activation # Simplest dependency
-            if not has_fwd_activation: missing_items.append("No Fwd Act.")
+        ## otherwise we are stalled
+        if not self.is_stalled:
+            self.is_stalled = True
+            self.stall_start_time = T
+            # print(f"T={T}, Dev {self.device_id}: STALL -> Waiting for C{cid},L{lid},{computation_type_str}. Missing: {missing_items}") # Optional Log
 
-        # --- Update State based on Dependencies ---
-        if has_deps:
-            if not self.device_has_started:
-                self.device_has_started = True
-                self.device_start_time = T
+        self.is_computing = False
+        if has_fwd_task:
+            if is_head_task:
+                self.stall_reason = "Head Blocked by:\n" + "\n".join(fwd_missing_items)
+            else:
+                self.stall_reason = "FWD Blocked by:\n" + "\n".join(fwd_missing_items)
+            #if has_bwd_task:
+            #    self.stall_reason += "\n\nBWD Blocked by:\n" + "\n".join(bwd_missing_items)
+        else:
+            self.stall_reason = "BWD Blocked by:\n" + "\n".join(bwd_missing_items)
 
-            # if self.is_stalled: print(f"T={T}, Dev {self.device_id}: UNSTALL") # Optional log
-            self.is_computing = True
-            self.is_stalled = False
-            self.stall_reason = ""
-            self.cur_computation_start_time = T
-            self.cur_computation_duration = dur
-            self.current_computation_type = computation_type_str
-            self.current_computation_layer_id = lid
-            self.current_computation_chunk_id = cid
-            # UPDATE STATUS TEXT FOR FRONTEND
-            self.computing_status_text = f"COMP:\n{computation_type_str}\nC{cid},L{lid}"
-
-            # Mark required input buffers as 'in use' / consumed (-2) (Keep logic)
-            if input_transition_key and input_buffer_to_check and not bW:
-                try:
-                    idx = input_buffer_to_check.index(input_transition_key)
-                    input_buffer_to_check[idx] = (-2,) + input_transition_key[1:]
-                    # Update empty slot index for that buffer
-                    if input_buffer_to_check is self.transitions_inbound_buffer: self.transitions_inbound_empty_slot_ind = self._find_first_free_idx(self.transitions_inbound_buffer)
-                    elif input_buffer_to_check is self.head_input_transitions_buffer: self.head_input_transitions_empty_slot_ind = self._find_first_free_idx(self.head_input_transitions_buffer)
-                    elif input_buffer_to_check is self.head_output_transitions_buffer: self.head_output_transitions_empty_slot_ind = self._find_first_free_idx(self.head_output_transitions_buffer)
-                except ValueError: pass # print(f"T={T}, Dev {self.device_id}: ERROR - Could not find input transition {input_transition_key} to mark.")
-
-            # Reserve space in outbound transition buffer is required
-            # Already checked depedency that there is space in outbound buffer
-            if needs_outbound_trans_space and has_outbound_trans_space:
-                is_grad_out = bX or is_head
-                self.transitions_outbound_buffer[self.transitions_outbound_empty_slot_ind] = (-2, cid, lid, is_grad_out)
-                self.transitions_outbound_empty_slot_ind = self._find_first_free_idx(self.transitions_outbound_buffer)
-
-            return True # Computation successfully started
-
-        else: # Dependencies not met
-            if not self.is_stalled:
-                self.is_stalled = True
-                self.stall_start_time = T
-                # print(f"T={T}, Dev {self.device_id}: STALL -> Waiting for C{cid},L{lid},{computation_type_str}. Missing: {missing_items}") # Optional Log
-
-            self.is_computing = False
-            self.stall_reason = "Blocked by:\n" + "\n".join(missing_items)
-            # UPDATE STATUS TEXT FOR FRONTEND
-            self.computing_status_text = f"STALL:\n{computation_type_str}\nC{cid},L{lid}"
-            self.current_computation_type = None
-            self.current_computation_layer_id = -1
-            self.current_computation_chunk_id = -1
-            return False # Computation could not start
+        # UPDATE STATUS TEXT FOR FRONTEND
+        if has_fwd_task:
+            self.computing_status_text = f"STALL:\n{computation_type_str}\nC{f_cid},L{f_lid}"
+        else:
+            self.computing_status_text = f"STALL:\n{computation_type_str}\nC{b_cid},L{b_lid}"
+            
+        self.current_computation_type = None
+        self.current_computation_layer_id = -1
+        self.current_computation_chunk_id = -1
+        return False, 0
 
     # --- Prefetching logic (handle_bwd_prefetch_*) ---
     # Keep logic the same.
@@ -692,17 +786,20 @@ class Device:
             next_act_idx = self.activations_empty_slot_ind
 
             act_key = (cid, lid, False)
+            ## can't prefetch if it's not in home storage
             if act_key not in self.home_storage:
-                 # print(f"Dev {self.device_id}: ERROR - Cannot prefetch BWD FwdAct C{cid} L{lid}, not in home.")
-                 self.activations_stack_next_ind -= 1
                  # Potentially try next one (careful with recursion)
                  # self.handle_bwd_prefetch_fwd_act()
                  return
-
-            act_item = (cid, lid, False, False, next_act_idx, self.savedActivationsFrames)
+            
+            if (cid + 1) % self.chunks_per_seq == 0:
+                act_item = (cid, lid, False, False, next_act_idx, round(self.final_chunk_in_seq_data_frac * self.savedActivationsFrames))
+            else:
+                act_item = (cid, lid, False, False, next_act_idx, self.savedActivationsFrames)
 
             insert_idx = 0
-            if self.is_inbound_transferring: insert_idx = 1
+            if self.is_inbound_transferring: 
+                insert_idx = 1
             while insert_idx < len(self.inbound_queue):
                  q_cid, q_lid, _, _, _, _ = self.inbound_queue[insert_idx]
                  if lid > q_lid:
@@ -719,13 +816,28 @@ class Device:
     # Keep logic the same, update `computing_status_text`
     def handle_computation(self, T):
         completed_tasks = 0
-        if not self.is_computing and not self.is_stalled and self.computation_queue:
-            self.handle_computation_depends(T)
+        has_depends = False 
+        comp_dir = 0
+        if not self.is_computing and not self.is_stalled and (len(self.fwd_computation_queue) > 0 or len(self.bwd_computation_queue) > 0):
+            has_depends, comp_dir = self.handle_computation_depends(T)
+            if has_depends:
+                if comp_dir == 1:
+                    self.current_task = self.fwd_computation_queue[0]
+                    self.current_task_dir = 1
+                else:
+                    self.current_task = self.bwd_computation_queue[0]
+                    self.current_task_dir = -1
 
+     
         if self.is_computing and (self.cur_computation_start_time + self.cur_computation_duration <= T):
-            task = self.computation_queue.popleft()
+            
+            if self.current_task_dir == 1:
+                self.fwd_computation_queue.popleft()
+            else:
+                self.bwd_computation_queue.popleft()
+
             completed_tasks += 1
-            cid, lid, bX, bW, tdir, dur = task
+            cid, lid, bX, bW, tdir, dur = self.current_task
 
             is_head = lid == self.total_layers
             is_fwd = not bX and not bW and not is_head
@@ -759,32 +871,28 @@ class Device:
                     elif input_trans_buffer_to_free is self.head_input_transitions_buffer: self.head_input_transitions_empty_slot_ind = self._find_first_free_idx(self.head_input_transitions_buffer)
                     elif input_trans_buffer_to_free is self.head_output_transitions_buffer: self.head_output_transitions_empty_slot_ind = self._find_first_free_idx(self.head_output_transitions_buffer)
                 except ValueError: 
-                    # print(f"T={T} Dev {self.device_id} WARN: Couldn't find consumed input {input_trans_consumed_key} to free.")
+                    print(f"T={T} Dev {self.device_id} WARN: Couldn't find consumed input {input_trans_consumed_key} to free.")
                     pass
 
             # 2. Handle Output Activation/Context Saving (FWD)
-            is_train_chunk = self.is_train_chunks[cid]
             if is_fwd:
-                if is_train_chunk:
-                    should_keep_in_buffer = self.cur_train_fwd_activation_ind >= self.activations_stack_cutoff_ind
-                    act_dest_idx = self.activations_empty_slot_ind
-                    if should_keep_in_buffer:
-                         self.activations_buffer[act_dest_idx] = (0, cid, lid)
+                should_keep_in_buffer = (cid, lid) in self.final_dev_activation_stack
+                act_dest_idx = self.activations_empty_slot_ind
+                
+                if should_keep_in_buffer:
+                    self.activations_buffer[act_dest_idx] = (0, cid, lid)
+                else:
+                    self.activations_buffer[act_dest_idx] = (-2, cid, lid)
+
+                    if (cid + 1) % self.chunks_per_seq == 0:
+                        self.outbound_queue.append((cid, lid, False, False, round(self.final_chunk_in_seq_data_frac * self.savedActivationsFrames)))
                     else:
-                         self.activations_buffer[act_dest_idx] = (-2, cid, lid)
-                         self.outbound_queue.append((cid, lid, False, False, self.savedActivationsFrames))
+                        self.outbound_queue.append((cid, lid, False, False, self.savedActivationsFrames))
                     
-                    self.activations_empty_slot_ind = self._find_first_free_idx(self.activations_buffer)
-                    self.cur_train_fwd_activation_ind += 1
-                else: # Not training chunk, save context only
-                    ## don't add context for last block on device...
-                    if lid < self.last_block_layer_id:
-                        self.outbound_queue.append((cid, lid, False, True, self.contextTransferFrames))
+                self.activations_empty_slot_ind = self._find_first_free_idx(self.activations_buffer)
 
             # 3. Handle Output Peer Transition
             needs_outbound_trans = (tdir != 0)
-            if is_fwd and lid == self.total_layers - 1 and not is_train_chunk:
-                 needs_outbound_trans = False # Don't send non-train final layer output to head
 
             is_grad_out = bX or is_head
             if needs_outbound_trans:
@@ -795,6 +903,8 @@ class Device:
                 self.transitions_outbound_buffer[out_idx] = (0, cid, lid, is_grad_out) # Mark ready
                 # Use correct transition time (potentially different for head?) - assumed activationTransitionFrames for now
                 trans_time = self.activationTransitionFrames # Simplification
+                if (cid + 1) % self.chunks_per_seq == 0:
+                    trans_time = round(self.final_chunk_in_seq_data_frac * trans_time)
                 self.peer_transfer_queue.append((peer_id, cid, lid, is_grad_out, trans_time))
 
 
@@ -827,21 +937,10 @@ class Device:
                 if (lid - self.total_devices >= 0):
                     #print(f"Prefetching context for next layer of training chunk: {cid}, Cur Layer Id: {lid}, Next Layer Id: {lid - self.total_devices}")
                     self.handle_bwd_prefetch_context(cid, lid, lid - self.total_devices)
-
-                    ## ensure to get context for non-training chunks...
-                    ## replace currently layer context with the previous layer's context
-                    ## the context between current chunk and the next training chunk is not required
-                    ## for the next training chunk (earlier in sequence, so not impacted by later context)
-                    ## meaning we can start prefetching it now...
-                    next_training_chunk_id = self.prev_train_chunks[cid]
-                    ## if the first training chunk, then the prev chunk should be set to -1, meaning we can properly prefetch the context for cid = 0....
-                    for i in range(cid - 1, next_training_chunk_id, -1):
-                        self.handle_bwd_prefetch_context(i, lid, lid - self.total_devices)
-
                 
                 ## if this is the last chunk, now prefetch the next required weight
                 ## which replaces the current weight
-                if cid == self.first_train_chunk:
+                if cid == self.final_train_chunk:
                     self.handle_bwd_prefetch_weight()
 
             elif bW: # BwdW finished, can prefetch the next required activaton
@@ -854,7 +953,7 @@ class Device:
 
                 self.handle_bwd_prefetch_fwd_act()
 
-                if (cid == self.first_train_chunk):
+                if (cid == self.final_train_chunk):
                     self.outbound_queue.append((-1, lid, True, False, self.layerTransferFrames))
 
             # --- Reset Compute State & Check Next Task ---
@@ -863,9 +962,18 @@ class Device:
             self.current_computation_type = None
             self.current_computation_layer_id = -1
             self.current_computation_chunk_id = -1
+            self.current_task = None
+            self.current_task_dir = 0
 
-            if self.computation_queue:
-                self.handle_computation_depends(T) # Try next task immediately
+            if len(self.fwd_computation_queue) > 0 or len(self.bwd_computation_queue) > 0:
+                has_depends, comp_dir = self.handle_computation_depends(T)
+                if has_depends:
+                    if comp_dir == 1:
+                        self.current_task = self.fwd_computation_queue[0]
+                        self.current_task_dir = 1
+                    else:
+                        self.current_task = self.bwd_computation_queue[0]
+                        self.current_task_dir = -1
             elif not self.device_has_finished:
                 self.device_finish_time = T
                 self.device_has_finished = True
@@ -873,7 +981,14 @@ class Device:
                 # print(f"T={T}, Dev {self.device_id}: >>> FINISHED ALL COMPUTE TASKS <<<") # Optional log
 
         elif self.is_stalled:
-            self.handle_computation_depends(T) # Re-check dependencies
+            has_depends, comp_dir = self.handle_computation_depends(T) # Re-check dependencies
+            if has_depends:
+                if comp_dir == 1:
+                    self.current_task = self.fwd_computation_queue[0]
+                    self.current_task_dir = 1
+                else:
+                    self.current_task = self.bwd_computation_queue[0]
+                    self.current_task_dir = -1
 
         return completed_tasks
 
@@ -951,6 +1066,7 @@ class Device:
             # Buffers (save their content directly)
             "cur_weights": list(self.cur_weights), # Save list copy
             "activations_buffer": list(self.activations_buffer),
+            "final_dev_activation_stack": list(self.final_dev_activation_stack),
             "transitions_inbound_buffer": list(self.transitions_inbound_buffer),
             "transitions_outbound_buffer": list(self.transitions_outbound_buffer),
             "head_input_transitions_buffer": list(self.head_input_transitions_buffer) if self.head_input_transitions_buffer is not None else None,
@@ -965,7 +1081,10 @@ class Device:
             "head_input_transitions_empty_slot_ind": self.head_input_transitions_empty_slot_ind,
             "head_output_transitions_empty_slot_ind": self.head_output_transitions_empty_slot_ind,
             # Queues (convert deques to lists)
-            "computation_queue": list(self.computation_queue),
+            "fwd_computation_queue": list(self.fwd_computation_queue),
+            "bwd_computation_queue": list(self.bwd_computation_queue),
+            "current_task": self.current_task,
+            "current_task_dir": self.current_task_dir,
             "outbound_queue": list(self.outbound_queue),
             "inbound_queue": list(self.inbound_queue),
             "peer_transfer_queue": list(self.peer_transfer_queue),
@@ -980,7 +1099,7 @@ class Device:
             "current_computation_chunk_id": self.current_computation_chunk_id,
             "is_outbound_transferring": self.is_outbound_transferring,
             "cur_outbound_start_time": self.cur_outbound_start_time,
-            "cur_outbound_duration": self.cur_outbound_duration,
+            "cur_outbound_duration" : self.cur_outbound_duration,
             "cur_outbound_details": self.cur_outbound_details,
             "is_inbound_transferring": self.is_inbound_transferring,
             "cur_inbound_start_time": self.cur_inbound_start_time,
@@ -995,18 +1114,13 @@ class Device:
             "stall_reason": self.stall_reason,
             "cur_fwd_computation_num": self.cur_fwd_computation_num,
             "activations_stack": list(self.activations_stack), # Save stack
-            "activations_stack_cutoff_ind": self.activations_stack_cutoff_ind,
             "activations_stack_next_ind": self.activations_stack_next_ind,
-            "cur_train_fwd_activation_ind": self.cur_train_fwd_activation_ind,
             "next_weight_prefetch_layer_id": self.next_weight_prefetch_layer_id,
             "next_bwd_weight_prefetch_layer_id": self.next_bwd_weight_prefetch_layer_id,
             "last_block_layer_id": self.last_block_layer_id,
             "head_final_chunk_id": self.head_final_chunk_id,
             "home_storage": self.home_storage,
-            "total_train_chunks": self.total_train_chunks,
-            "is_train_chunks": self.is_train_chunks,
-            "prev_train_chunks": self.prev_train_chunks,
-            "first_train_chunk": self.first_train_chunk
+            "first_train_chunk": self.final_train_chunk
         }
 
     def load_from_serializable_state(self, dev_state):
@@ -1021,6 +1135,7 @@ class Device:
         # Buffers (restore lists)
         self.cur_weights = list(dev_state.get("cur_weights", [-1] * self.layer_capacity))
         self.activations_buffer = list(dev_state.get("activations_buffer", [-1] * self.activations_capacity))
+        self.final_dev_activation_stack = set(dev_state.get("final_dev_activation_stack", []))
         self.transitions_inbound_buffer = list(dev_state.get("transitions_inbound_buffer", [-1] * self.transitions_capacity))
         self.transitions_outbound_buffer = list(dev_state.get("transitions_outbound_buffer", [-1] * self.transitions_capacity))
         self.head_input_transitions_buffer = list(dev_state.get("head_input_transitions_buffer")) if dev_state.get("head_input_transitions_buffer") is not None else None
@@ -1035,7 +1150,11 @@ class Device:
         self.head_input_transitions_empty_slot_ind = dev_state.get("head_input_transitions_empty_slot_ind", 0 if self.head_input_transitions_buffer is not None else None)
         self.head_output_transitions_empty_slot_ind = dev_state.get("head_output_transitions_empty_slot_ind", 0 if self.head_output_transitions_buffer is not None else None)
         # Queues (restore deques from lists)
-        self.computation_queue = deque(dev_state.get("computation_queue", []))
+        self.fwd_computation_queue = deque(dev_state.get("fwd_computation_queue", []))
+        self.bwd_computation_queue = deque(dev_state.get("bwd_computation_queue", []))
+        self.current_task = dev_state.get("current_task", None)
+        self.current_task_dir = dev_state.get("current_task_dir", 0)
+        
         self.outbound_queue = deque(dev_state.get("outbound_queue", []))
         self.inbound_queue = deque(dev_state.get("inbound_queue", []))
         self.peer_transfer_queue = deque(dev_state.get("peer_transfer_queue", []))
@@ -1065,18 +1184,13 @@ class Device:
         self.stall_reason = dev_state.get("stall_reason", "")
         self.cur_fwd_computation_num = dev_state.get("cur_fwd_computation_num", 0)
         self.activations_stack = list(dev_state.get("activations_stack", [])) # Restore list
-        self.activations_stack_cutoff_ind = dev_state.get("activations_stack_cutoff_ind", 0)
         self.activations_stack_next_ind = dev_state.get("activations_stack_next_ind", 0)
-        self.cur_train_fwd_activation_ind = dev_state.get("cur_train_fwd_activation_ind", 0)
         self.next_weight_prefetch_layer_id = dev_state.get("next_weight_prefetch_layer_id", -1)
         self.next_bwd_weight_prefetch_layer_id = dev_state.get("next_bwd_weight_prefetch_layer_id", -1)
         self.head_final_chunk_id = dev_state.get("head_final_chunk_id", -1)
         self.last_block_layer_id = dev_state.get("last_block_layer_id", -1)
         self.home_storage = set(dev_state.get("home_storage", []))
-        self.total_train_chunks = dev_state.get("total_train_chunks", 0)
-        self.is_train_chunks = dev_state.get("is_train_chunks", [])
-        self.prev_train_chunks = dev_state.get("prev_train_chunks", [])
-        self.first_train_chunk = dev_state.get("first_train_chunk", -1)
+        self.final_train_chunk = dev_state.get("first_train_chunk", 0)
         # Ensure buffer empty slot indices are recalculated based on loaded buffers
         self._recalculate_empty_slot_indices()
 
@@ -1095,26 +1209,25 @@ class SimulationRunner:
         self.TO_PRINT = False # Hardcode for now
 
         # --- Extract and Calculate Parameters (Keep logic) ---
-        self.cycle_rate_micros = params.get('cycle_rate_micros', 2000)
+        self.cycle_rate_micros = params.get('cycle_rate_micros', 1000)
         self.N = params.get('N', 8)
-        self.seqlen = params.get('seqlen', 128) * (1 << 10)
-        self.max_attended_tokens = params.get('max_attended_tokens', 128) * (1 << 10)
-        self.train_token_ratio = params.get('train_token_ratio', 1)
-        self.min_chunk_size = params.get('min_chunk_size', 8192)
-        self.train_chunk_distribution = params.get('train_chunk_distribution', "Uniform")
+        self.num_seqs = params.get('num_seqs', 24)
+        self.seqlen = params.get('seqlen', 12) * (1 << 10)
+        self.max_attended_tokens = params.get('max_attended_tokens', 12) * (1 << 10)
+        self.min_chunk_size = params.get('min_chunk_size', 12288)
         self.bitwidth = params.get('bitwidth', 8)
-        self.total_layers = params.get('total_layers', 64) # Store non-head count
+        self.total_layers = params.get('total_layers', 63) # Store non-head count
         self.vocab_size = params.get('vocab_size', 128290)
         self.model_dim = params.get('model_dim', 7168)
         self.kv_dim = params.get('kv_dim', 512) # Recalculate kv_dim based on this
-        self.num_experts = params.get('num_experts', 1)
-        self.active_experts = params.get('active_experts', 1)
+        self.num_experts = params.get('num_experts', 256)
+        self.active_experts = params.get('active_experts', 9)
         self.expert_dim = params.get('expert_dim', 2048)
         self.attn_type = params.get('attn_type', "Exact")
         self.max_device_memory_bytes = params.get('max_device_memory_bytes', 8 * (1 << 30))
         self.hardware_max_flops = params.get('hardware_max_flops', 1989 * 1e12)
         self.hardware_mem_bw_bytes_sec = params.get('hardware_mem_bw_bytes_sec', 3350 * 1e9) # Typo fixed TB/s -> GB/s -> B/s
-        self.matmul_efficiency = params.get('matmul_efficiency', 0.7)
+        self.matmul_efficiency = params.get('matmul_efficiency', 0.65)
         self.attn_fwd_efficiency = params.get('attn_fwd_efficiency', 0.55)
         self.attn_bwd_efficiency = params.get('attn_bwd_efficiency', 0.25)
         self.home_bw_gbit_sec = params.get('home_bw_gbit_sec', 400)
@@ -1123,71 +1236,42 @@ class SimulationRunner:
         # --- Derived Parameters (Keep logic) ---
         self.dtype_bytes = self.bitwidth / 8.0 if self.bitwidth > 0 else 2.0
 
-        self.hw_compute_bound = 2 * self.hardware_max_flops / self.hardware_mem_bw_bytes_sec if self.hardware_mem_bw_bytes_sec > 0 else float('inf')
+        self.hw_compute_bound = self.hardware_max_flops / self.hardware_mem_bw_bytes_sec if self.hardware_mem_bw_bytes_sec > 0 else float('inf')
         
         #print(f"Hardware Compute Bound: {self.hw_compute_bound}")
         
         ## determine chunk size based on arithmetic intensity of expert
 
-        ## avg. expert has M value of: (num_chunks * active_experts * chunk_size) / (num_experts)
+        ## avg. expert has M value of: (active_experts * chunk_size) / (num_experts)
         ## and K value of: model_dim
         ## and N value of: expert_dim
 
         ## matmul arithmetic intensity is then given by:
-        ## matmul_arith = (2 * M * K * N) / (dtype_bytes * ((M * K) + (M * N) + (K * N)))
+        ## matmul_arith = (2 * M * K * N) / (((M * K) + (M * N) + (K * N)))
 
         ## we want matmul_arith >= hw_compute_bound
         ## solve for M:
-        ## M >= (hw_compute_bound * dtype_bytes * K * N)) / (2 * K * N - hw_compute_bound * dtype_bytes * (K + N))
+        ## M >= (hw_compute_bound * K * N)) / (2 * K * N - hw_compute_bound * (K + N))
 
         ## Now let's solve for chunk_size:
-        ## chunk_size >= active_experts * (hw_compute_bound * dtype_bytes * model_dim * expert_dim)) / (2 * model_dim * expert_dim - hw_compute_bound * dtype_bytes * (model_dim + expert_dim))
+        ## chunk_size >= (num_experts * hw_compute_bound * model_dim * expert_dim)) / (active_experts * (2 * model_dim * expert_dim - hw_compute_bound * (model_dim + expert_dim))
 
         ## Let's round up to the nearest multiple of 256
-
-        chunk_size_base = math.ceil(self.active_experts * (self.hw_compute_bound * self.dtype_bytes * self.model_dim * self.expert_dim)) / (2 * self.model_dim * self.expert_dim - self.hw_compute_bound * self.dtype_bytes * (self.model_dim + self.expert_dim))
+        chunk_size_base = math.ceil((self.num_experts * (self.hw_compute_bound * self.model_dim * self.expert_dim)) / (self.active_experts * (2 * self.model_dim * self.expert_dim - self.hw_compute_bound * (self.model_dim + self.expert_dim))))
 
         #print(f"Based on hw compute bound of {self.hw_compute_bound} FLOS/byte, along with FFN dims of {self.model_dim} x {self.expert_dim}, the base chunk size is {chunk_size_base}")
         if chunk_size_base < self.min_chunk_size:
             #print(f"Min chunk size is {self.min_chunk_size}, so using that instead...")
             chunk_size_base = self.min_chunk_size
 
-        chunk_multiple = 256
+        chunk_multiple = 1024
 
         self.chunk_size = round_up_to_multiple(chunk_size_base, chunk_multiple)
 
-        self.total_chunks = math.ceil(self.seqlen / self.chunk_size) if self.chunk_size > 0 else 0
-        train_chunk_freq = math.ceil(1 / self.train_token_ratio) if self.train_token_ratio > 0 else self.total_chunks
-        self.total_train_chunks = 0
-        self.is_train_chunks = [False] * self.total_chunks
-        self.prev_train_chunks = [-1] * self.total_chunks
-        self.first_train_chunk = -1
-        if self.train_chunk_distribution == "Uniform":
-            self.is_train_chunks[0] = True
-            self.first_train_chunk = 0
-            self.prev_train_chunks[0] = -1
-            self.total_train_chunks += 1
-            prev_train_chunk = 0
-            for i in range(train_chunk_freq, self.total_chunks - 1, train_chunk_freq):
-                self.is_train_chunks[i] = True
-                self.prev_train_chunks[i] = prev_train_chunk
-                self.total_train_chunks += 1
-                prev_train_chunk = i
-            if (prev_train_chunk != self.total_chunks - 1):
-                self.is_train_chunks[self.total_chunks - 1] = True
-                self.prev_train_chunks[self.total_chunks - 1] = prev_train_chunk
-                self.total_train_chunks += 1
-        elif self.train_chunk_distribution == "Suffix":
-            total_train_chunks_estimate = math.ceil(self.total_chunks * self.train_token_ratio) if self.train_token_ratio > 0 else self.total_chunks
-            start_train_chunk = self.total_chunks - total_train_chunks_estimate
-            self.first_train_chunk = start_train_chunk
-            self.is_train_chunks[start_train_chunk] = True
-            self.prev_train_chunks[start_train_chunk] = -1
-            self.total_train_chunks += 1
-            for i in range(start_train_chunk + 1, self.total_chunks):
-                self.is_train_chunks[i] = True
-                self.prev_train_chunks[i] = i - 1
-                self.total_train_chunks += 1
+        self.chunks_per_seq = math.ceil(self.seqlen / self.chunk_size) if self.chunk_size > 0 else 0
+
+        self.total_chunks = int(self.chunks_per_seq * self.num_seqs)
+        
                 
         self.attn_block_size_bytes = self.dtype_bytes * (self.model_dim + (2 * self.model_dim * self.model_dim + 2 * self.model_dim * self.kv_dim))
         self.ffn_block_size_bytes = self.dtype_bytes * (self.model_dim + (3 * self.model_dim * self.expert_dim * self.num_experts))
@@ -1202,15 +1286,14 @@ class SimulationRunner:
         self.output_size_bytes = self.dtype_bytes * (self.model_dim * self.chunk_size)
         self.head_layer_size_bytes = self.dtype_bytes * (self.model_dim + (self.vocab_size * self.model_dim))
 
-        self.per_layer_full_context_size = self.total_chunks * self.chunk_context_size_bytes
+        self.per_layer_full_context_size = self.chunks_per_seq * self.chunk_context_size_bytes
 
            # Estimate transition/head buffer sizes based on chunks/N
-        self.transitions_capacity = max(1, self.N if self.N > 0 else 1) # Simplified base capacity
+        self.transitions_capacity = self.total_chunks
         # Head needs potentially more space for inputs/outputs across chunks
-        # Use max of N and total_train_chunks as a heuristic? Needs careful thought.
         self.head_transitions_capacity = max(self.transitions_capacity, self.total_chunks)
 
-        transition_dev_mem = 2 * self.transitions_capacity * self.output_size_bytes # Use larger head capacity estimate
+        transition_dev_mem = self.transitions_capacity * self.output_size_bytes # Use larger head capacity estimate
 
         ## head transitions capacity applies to device holding last layer and head
         special_transition_dev_mem = (self.head_transitions_capacity + self.transitions_capacity) * self.output_size_bytes
@@ -1218,9 +1301,10 @@ class SimulationRunner:
         # --- Determine Capacities (Keep simplified logic) ---
         self.layer_capacity = 2 if self.N <= self.total_layers else 1 # Base on non-head layers
         self.grad_layer_capacity = 2 if self.N <= self.total_layers else 1
-        self.context_buffer_capacity = 1 # Keep simple
+
+        self.context_buffer_capacity = 2 # one for working forwards, one for recalling
         self.grad_context_buffer_capacity = 1
-        self.per_layer_grad_context_size = self.total_train_chunks * self.chunk_context_size_bytes
+        self.per_layer_grad_context_size = self.chunks_per_seq * self.chunk_context_size_bytes
 
         base_dev_mem = self.layer_capacity * self.layer_size_bytes
         base_dev_mem += self.grad_layer_capacity * self.layer_size_bytes
@@ -1272,7 +1356,7 @@ class SimulationRunner:
         ## max home layers is
         # 
         max_per_home_layers_base = math.ceil(self.total_layers / self.N)
-        self.max_activations_capacity = (max_per_home_layers_base * self.total_train_chunks) + 1
+        self.max_activations_capacity = (max_per_home_layers_base * self.total_chunks) + 1
         
 
         self.activations_capacity = int(min(base_activations_capacity, self.max_activations_capacity))
@@ -1341,51 +1425,56 @@ class SimulationRunner:
         self.bwd_w_time = 0
 
         prev_seq_len = 0
-        for i in range(self.total_chunks):
-            cur_seq_len = prev_seq_len + self.chunk_size
-            if cur_seq_len > self.max_attended_tokens:
-                cur_seq_len = self.max_attended_tokens
 
-            attn_flops = self.flops_per_attn_chunk_mult * cur_seq_len
+        is_train_chunk = True
 
-            self.total_attn_flops += self.total_layers * attn_flops
+        cur_chunk_id = 0
+
+        self.final_train_chunk = 0
+
+        self.final_chunk_in_seq_tokens = self.seqlen - (self.chunks_per_seq - 1) * self.chunk_size
+        self.final_chunk_in_seq_data_frac = self.final_chunk_in_seq_tokens / self.chunk_size
+        
+
+        for seq_id in range(self.num_seqs):
+            cur_seq_len = 0
+            prev_seq_len = 0
+            for chunk_id in range(self.chunks_per_seq):
+                cur_seq_len = prev_seq_len + self.chunk_size
+                if (cur_seq_len > self.seqlen):
+                    cur_seq_len = self.seqlen
+                if cur_seq_len > self.max_attended_tokens:
+                    cur_seq_len = self.max_attended_tokens
+
+                attn_flops = self.flops_per_attn_chunk_mult * cur_seq_len
+
+                self.total_attn_flops += self.total_layers * attn_flops
           
 
-            layer_flops_fwd = self.base_flops_per_layer_matmul + attn_flops
+                layer_flops_fwd = self.base_flops_per_layer_matmul + attn_flops
 
-            is_train_chunk = self.is_train_chunks[i]
 
-            ## non-train chuns don't need last FFN
-            if is_train_chunk:
                 self.total_matmul_flops += self.total_layers * self.base_flops_per_layer_matmul
                 self.total_fwd_flops += self.total_layers * layer_flops_fwd
                 self.total_fwd_attn_flops += self.total_layers * attn_flops
                 self.total_fwd_matmul_flops += self.total_layers * self.base_flops_per_layer_matmul
-            else:
-                self.total_matmul_flops += (self.total_layers - 1) * self.base_flops_per_layer_matmul
-                self.total_fwd_flops += self.total_layers * layer_flops_fwd - self.base_flops_per_layer_matmul
-                self.total_fwd_attn_flops += self.total_layers * attn_flops
-                self.total_fwd_matmul_flops += (self.total_layers - 1) * self.base_flops_per_layer_matmul
 
-            matmul_time = self.base_flops_per_layer_matmul / (safe_flops * safe_matmul_eff)
-            attn_time = attn_flops / (safe_flops * safe_attn_fwd_eff)
-            self.fwd_attn_time += self.total_layers * attn_time
-            self.fwd_matmul_time += self.total_layers * matmul_time
+                matmul_time = self.base_flops_per_layer_matmul / (safe_flops * safe_matmul_eff)
+                attn_time = attn_flops / (safe_flops * safe_attn_fwd_eff)
+                self.fwd_attn_time += self.total_layers * attn_time
+                self.fwd_matmul_time += self.total_layers * matmul_time
 
-            self.computation_times_sec[i] = matmul_time + attn_time
-            if i == 0:
-                self.true_first_chunk_cycles = self.computation_times_sec[i] * self.cycles_per_second
-            self.computation_times_frames[i] = max(1,round(self.computation_times_sec[i] * self.cycles_per_second))
+                self.computation_times_sec[cur_chunk_id] = matmul_time + attn_time
+                if cur_chunk_id == 0:
+                    self.true_first_chunk_cycles = self.computation_times_sec[cur_chunk_id] * self.cycles_per_second
+                self.computation_times_frames[cur_chunk_id] = max(1,round(self.computation_times_sec[cur_chunk_id] * self.cycles_per_second))
             
-            if is_train_chunk:
-                self.computation_times_frames_last_block[i] = self.computation_times_frames[i]
-                self.total_compute_cycles += self.total_layers * self.computation_times_frames[i]
-            else:
-                self.computation_times_frames_last_block[i] = max(1,round(attn_time * self.cycles_per_second))
-                self.total_compute_cycles += (self.total_layers - 1) * self.computation_times_frames[i] + self.computation_times_frames_last_block[i]
+           
+                self.computation_times_frames_last_block[cur_chunk_id] = self.computation_times_frames[cur_chunk_id]
+                self.total_compute_cycles += self.total_layers * self.computation_times_frames[cur_chunk_id]
 
-            
-            if is_train_chunk:
+                ## BWD ...
+
                 # BwdX FLOPS = Fwd Matmul + 2 * Fwd Attn
                 bwd_x_flops = self.base_flops_per_layer_matmul + 2.5 * attn_flops
                 bwd_w_flops = self.base_flops_per_layer_matmul # Re-calc for clarity
@@ -1401,9 +1490,9 @@ class SimulationRunner:
 
                 self.bwd_w_time += self.total_layers * self.bwdWTimeSec
 
-                self.computation_times_sec_bwd[i] = bwd_x_time
-                self.computation_times_frames_bwd[i] = max(1,round(bwd_x_time * self.cycles_per_second))
-                self.total_compute_cycles += self.total_layers * self.computation_times_frames_bwd[i]
+                self.computation_times_sec_bwd[cur_chunk_id] = bwd_x_time
+                self.computation_times_frames_bwd[cur_chunk_id] = max(1,round(bwd_x_time * self.cycles_per_second))
+                self.total_compute_cycles += self.total_layers * self.computation_times_frames_bwd[cur_chunk_id]
                 self.total_compute_cycles += self.total_layers * self.bwdWFrames # Add BwdW cycles
 
                 # Accumulate FLOP types for BWD
@@ -1427,11 +1516,8 @@ class SimulationRunner:
                 head_time = head_flops / (safe_flops * safe_matmul_eff)
                 self.head_time += head_time
 
-            else:
-                self.computation_times_sec_bwd[i] = 0
-                self.computation_times_frames_bwd[i] = 0
-
-            prev_seq_len = cur_seq_len
+                prev_seq_len = cur_seq_len
+                cur_chunk_id += 1
 
         # --- Total FLOPS (Final Calculation) ---
         self.total_flops = self.total_fwd_flops + self.total_bwd_flops + self.total_head_flops
@@ -1472,6 +1558,7 @@ class SimulationRunner:
         self.headTransferFrames = max(1,round(head_layer_transfer_time_sec * self.cycles_per_second))
         self.trueHeadTransferCycles = head_layer_transfer_time_sec * self.cycles_per_second
         activation_transfer_time_sec = (self.activation_size_bytes * 8) / safe_home_bw_bps
+        
         self.savedActivationsFrames = max(1,round(activation_transfer_time_sec * self.cycles_per_second))
         self.trueSavedActivationsCycles = activation_transfer_time_sec * self.cycles_per_second
         chunk_context_transfer_time_sec = (self.chunk_context_size_bytes * 8) / safe_home_bw_bps
@@ -1505,15 +1592,14 @@ class SimulationRunner:
     def _create_memory_legend_text(self):
         # Keep calculation logic, return the text string
         train_model_size = (self.vocab_size * self.model_dim * self.dtype_bytes) + (self.layer_size_bytes * self.total_layers) + self.head_layer_size_bytes
-        train_activation_size = (self.total_train_chunks * self.activation_size_bytes * self.total_layers) # Based on non-head layers
-        train_context_size = self.total_train_chunks * self.chunk_context_size_bytes * self.total_layers
-        train_block_inputs = self.total_train_chunks * self.chunk_size * self.model_dim * self.total_layers * self.dtype_bytes
-        train_attn_output_size = self.total_train_chunks * self.chunk_size * self.model_dim * self.total_layers * self.dtype_bytes
+        train_activation_size = (self.total_chunks * self.activation_size_bytes * self.total_layers) # Based on non-head layers
+        train_context_size = self.chunks_per_seq * self.chunk_context_size_bytes * self.total_layers
+        train_block_inputs = self.total_chunks * self.chunk_size * self.model_dim * self.total_layers * self.dtype_bytes
+        train_attn_output_size = self.total_chunks * self.chunk_size * self.model_dim * self.total_layers * self.dtype_bytes
         train_remain_activation_size = train_activation_size - train_context_size - train_attn_output_size - train_block_inputs
-        non_train_context_size = ((self.total_chunks - self.total_train_chunks) * self.chunk_context_size_bytes * self.total_layers)
         train_gradient_size = train_model_size # Approximation
         train_optimizer_state_size = (2 * train_model_size) # Approximation
-        aggregate_memory_size = train_model_size  + train_gradient_size + train_optimizer_state_size + train_activation_size + non_train_context_size
+        aggregate_memory_size = train_model_size  + train_gradient_size + train_optimizer_state_size + train_activation_size
         chunk_workspace_size = (self.chunk_size * self.expert_dim * self.active_experts * self.dtype_bytes) # Review if needed
 
         layer_allocation = (self.layer_capacity * self.layer_size_bytes)
@@ -1521,7 +1607,7 @@ class SimulationRunner:
         context_buffer_allocation = (self.context_buffer_capacity * self.per_layer_full_context_size)
         grad_context_buffer_allocation = (self.grad_context_buffer_capacity * self.per_layer_grad_context_size)
         activation_allocation = (self.activations_capacity * self.activation_size_bytes)
-        transition_allocation = (2 * self.transitions_capacity * self.output_size_bytes) # Use head cap estimate
+        transition_allocation = (self.transitions_capacity * self.output_size_bytes) # Use head cap estimate
         typical_device_memory_size = (layer_allocation + grad_layer_allocation +
                                       context_buffer_allocation + grad_context_buffer_allocation +
                                       activation_allocation + transition_allocation)
@@ -1546,10 +1632,12 @@ class SimulationRunner:
         else:
              home_0_num_blocks_for_act_est = home_0_num_blocks # If Dev 0 doesn't have head
 
-        total_activation_cnt_dev0 = int(self.total_train_chunks * home_0_num_blocks_for_act_est)
+        total_activation_cnt_dev0 = int(self.total_chunks * home_0_num_blocks_for_act_est)
         home_activation_stack_0 = max(0, total_activation_cnt_dev0 - self.activations_capacity)
         typical_home_activation_size = home_activation_stack_0 * self.activation_size_bytes
         per_home_total_size_0 = typical_home_activation_size + 4 * home_0_layer_size # Approx: Act + Model + Grad + Opt
+
+        typical_home_model_shard = (4 * typical_home_layer_sizes) / 8
 
         typical_home_total_size = typical_home_activation_size + 4 * typical_home_layer_sizes
 
@@ -1589,11 +1677,14 @@ class SimulationRunner:
           f"--- DATAFLOW CONFIG ---\n\n"
           f"Chunk Size: {self.chunk_size}\n"
           f"{chunk_size_str}"
+          f"- Chunks per Seq: {self.chunks_per_seq}\n"
           f"- Total Chunks: {self.total_chunks}\n\n"
           f"* TOTAL PER-DEVICE MEMORY *\n"
           f" - {typical_device_memory_size / (1 << 30):.2f} GB\n\n\n"
           f"* TOTAL PER-HOME SPACE *\n"
-          f" - {typical_home_total_size / (1 << 30):.2f} GB\n\n\n\n"
+          f" - {typical_home_total_size / (1 << 30):.2f} GB\n"
+          f" - If sharing model with 8 rings...\n"
+          f"  => Per Home:{(typical_home_model_shard + typical_home_activation_size) / (1 << 30):.2f} GB\n\n\n\n"
           f"--- MEMORY PARTITIONS ---\n\n"
           f"Device Partitions (Typical):\n"
           f" - Activation Cap.: {self.activations_capacity}\n"
@@ -1606,8 +1697,8 @@ class SimulationRunner:
           f"   {(self.context_buffer_capacity * self.per_layer_full_context_size)/ (1 << 30):.3f} GB\n"
           f" - Grad Ctx Buffer Cap.: {self.grad_context_buffer_capacity}\n"
           f"   {(self.grad_context_buffer_capacity * self.per_layer_grad_context_size)/ (1 << 30):.3f} GB\n"
-          f" - Trans. Cap. (Inp/Out): {self.transitions_capacity}\n"
-          f"   {(2 * self.transitions_capacity * self.output_size_bytes)/ (1 << 30):.3f} GB\n\n"     
+          f" - Trans. Cap.: {self.transitions_capacity}\n"
+          f"   {(self.transitions_capacity * self.output_size_bytes)/ (1 << 30):.3f} GB\n\n"     
           f"Home Partitions (Typical):\n"
           f" - Home # Act. Saved: {home_activation_stack_0}\n"
           f"    {typical_home_activation_size / (1 << 30):.2f} GB\n"
@@ -1679,17 +1770,39 @@ class SimulationRunner:
         if self.N == 1:
             blockTransitionCyclesText = f"N/A"
 
-        first_train_chunk_str = f""
-
-        if self.first_train_chunk != 0:
-            first_train_chunk_str = f"C{self.first_train_chunk} => [{self.first_train_chunk * self.chunk_size}, {(self.first_train_chunk + 1) * self.chunk_size})\n"
-
         lower_bound_cycles = math.ceil(self.total_compute_cycles / self.N)
         lower_bound_seconds = lower_bound_cycles / self.cycles_per_second
 
         lower_bounds_time_str = self.format_time_from_sec(lower_bound_seconds)
 
         self.total_time_str = self.format_time_from_sec(self.total_time)
+
+        if self.chunks_per_seq > 1:
+            first_chunk_text = f"- C0 => [0, {self.chunk_size})\n"
+        else:
+            first_chunk_text = f"- C0 => [0, {self.seqlen})\n"
+
+        first_seq_last_chunk_text = f"- C{self.chunks_per_seq-1} => [{(self.chunks_per_seq-1) * self.chunk_size}, {self.seqlen})\n"
+        if self.chunks_per_seq > 1:
+            first_seq_text = f"First Seq:\n{first_chunk_text}{first_seq_last_chunk_text}\n"
+        else:
+            first_seq_text = f"First Seq:\n{first_chunk_text}\n"
+
+        if self.chunks_per_seq > 1:
+            last_seq_first_chunk_text = f"- C{self.total_chunks-self.chunks_per_seq} => [{(self.num_seqs-1) * self.seqlen}, {(self.num_seqs - 1) * self.seqlen + self.chunk_size})\n"
+        else:
+            last_seq_first_chunk_text = f"- C{self.total_chunks-self.chunks_per_seq} => [{(self.num_seqs-1) * self.seqlen}, {self.num_seqs * self.seqlen})\n"
+    
+        final_chunk_text = f" - C{self.total_chunks-1} => [{(self.num_seqs-1) * self.seqlen + self.chunk_size * (self.chunks_per_seq-1)}, {(self.num_seqs) * self.seqlen})\n"
+
+        if self.num_seqs > 1:
+            if self.chunks_per_seq > 1:
+                last_seq_text = f"Last Seq:\n{last_seq_first_chunk_text}{final_chunk_text}\n"
+            else:
+                last_seq_first_chunk_text = f"- C{self.total_chunks-self.chunks_per_seq} => [{(self.num_seqs-1) * self.seqlen}, {self.num_seqs * self.seqlen})\n"
+                last_seq_text = f"Last Seq:\n{last_seq_first_chunk_text}\n"
+        else:
+            last_seq_text = f""
 
         text = (
             f"--- DISCOVERED CONSTANTS ---\n\n"
@@ -1729,15 +1842,14 @@ class SimulationRunner:
             f"* THROUGHPUT UPPER-BOUND * \n" 
             f" - {math.ceil(self.total_flops / (self.total_compute_cycles / self.cycles_per_second) / 1e12)} TFLOPS\n\n\n\n"
             f"--- COMPUTE CYCLES ---\n\n"
-            f"C0 => Tokens: [0, {self.chunk_size})\n"
-            f"{first_train_chunk_str}"
-            f"C{self.total_chunks-1} => [{(self.total_chunks-1) * self.chunk_size}, {self.seqlen})\n\n"
+            f"{first_seq_text}"
+            f"{last_seq_text}"
             f"Fwd:\n"
             f" - C0: {self.computation_times_frames.get(0,0)}\n"
-            f" - C{self.total_chunks-1}: {self.computation_times_frames.get(self.total_chunks-1,0)}\n"
+            f" - C{self.chunks_per_seq-1}: {self.computation_times_frames.get(self.chunks_per_seq-1,0)}\n"
             f"Bwd X:\n"
-            f" - C{self.first_train_chunk}: {self.computation_times_frames_bwd.get(self.first_train_chunk,0)}\n"
-            f" - C{self.total_chunks-1}: {self.computation_times_frames_bwd.get(self.total_chunks-1,0)}\n"
+            f" - C{self.final_train_chunk}: {self.computation_times_frames_bwd.get(self.final_train_chunk,0)}\n"
+            f" - C{self.chunks_per_seq-1}: {self.computation_times_frames_bwd.get(self.chunks_per_seq-1,0)}\n"
             f"Bwd W:\n"
             f" - All: {self.bwdWFrames}\n"
             f"Head:\n"
@@ -1748,7 +1860,8 @@ class SimulationRunner:
             f" - Head: {self.headTransferFrames}\n"
             f"Chunk Info\n"
             f" - Activation Save/Fetch: {self.savedActivationsFrames}\n"
-            f" - Block Transitions: {blockTransitionCyclesText}"
+            f" - Block Transitions: {blockTransitionCyclesText}\n"
+            f" - Context Transfers: {contextTransferCycleText}"
         )
 
         return textwrap.dedent(text)
@@ -1776,10 +1889,11 @@ class SimulationRunner:
                      head_transitions_capacity=self.head_transitions_capacity,
                      total_devices=self.N,
                      total_layers=self.total_layers, # Pass total including head
+                     num_seqs=self.num_seqs,
+                     seqlen=self.seqlen,
+                     chunks_per_seq=self.chunks_per_seq,
                      total_chunks=self.total_chunks,
-                     total_train_chunks=self.total_train_chunks,
-                     is_train_chunks=self.is_train_chunks,
-                     prev_train_chunks=self.prev_train_chunks,
+                     final_chunk_in_seq_data_frac=self.final_chunk_in_seq_data_frac,
                      computation_times_frames=self.computation_times_frames,
                      computation_times_frames_last_block=self.computation_times_frames_last_block,
                      computation_times_frames_bwd=self.computation_times_frames_bwd,
@@ -1792,8 +1906,17 @@ class SimulationRunner:
                      contextTransferFrames=self.contextTransferFrames
                  )
                  # Note: _initialize_tasks_and_state is called within Device.__init__
-         self.total_tasks = sum(len(d.computation_queue) for d in self.all_devices.values()) if self.N > 0 else 0
-         self.total_computation_time = sum(task[-1] for i in range(self.N) for task in self.all_devices[i].computation_queue) if self.N > 0 else 0
+         
+         self.total_tasks = 0
+         self.total_computation_time = 0
+         for i in range(self.N):
+            self.total_tasks += len(self.all_devices[i].fwd_computation_queue)
+            for fwd_task in self.all_devices[i].fwd_computation_queue:
+                self.total_computation_time += fwd_task[-1]
+            self.total_tasks += len(self.all_devices[i].bwd_computation_queue)
+            for bwd_task in self.all_devices[i].bwd_computation_queue:
+                self.total_computation_time += bwd_task[-1]
+              
                
     def get_serializable_state(self):
         """ Returns ALL internal state needed to resume the simulation. """
