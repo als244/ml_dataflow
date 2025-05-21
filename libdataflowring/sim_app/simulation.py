@@ -42,7 +42,7 @@ def round_up_to_multiple(n, m):
 class Device:
     # --- __init__ ---
     # Keep __init__ mostly the same, ensure no plotting refs
-    def __init__(self, device_id, layer_capacity, activations_capacity, transitions_capacity, head_transitions_capacity, total_devices, total_layers, num_seqs, seqlen, chunks_per_seq, total_chunks, final_chunk_in_seq_data_frac, computation_times_frames, computation_times_frames_last_block, computation_times_frames_bwd, headFrames, bwdWFrames, layerTransferFrames, headTransferFrames, savedActivationsFrames, activationTransitionFrames, contextTransferFrames):
+    def __init__(self, device_id, layer_capacity, activations_capacity, transitions_capacity, head_transitions_capacity, total_devices, total_layers, num_seqs, seqlen, chunks_per_seq, seqs_per_chunk, total_chunks, final_chunk_in_seq_data_frac, computation_times_frames, computation_times_frames_last_block, computation_times_frames_bwd, headFrames, bwdWFrames, layerTransferFrames, headTransferFrames, savedActivationsFrames, activationTransitionFrames, contextTransferFrames):
         self.device_id = device_id
         self.device_has_started = False
         self.device_start_time = 0
@@ -56,6 +56,7 @@ class Device:
         self.num_seqs = num_seqs
         self.seqlen = seqlen
         self.chunks_per_seq = chunks_per_seq
+        self.seqs_per_chunk = seqs_per_chunk
         self.total_chunks = total_chunks
         self.final_chunk_in_seq_data_frac = final_chunk_in_seq_data_frac
         self.computation_times_frames = computation_times_frames
@@ -259,12 +260,21 @@ class Device:
         ## and reverse order within each sequence...
 
         ## the nearest activation (final chunk to be appended) is the last chunk of the first sequence on the last layer...
+        
         cur_layer_id = self.device_id
+
         while cur_layer_id < self.total_layers:
-            for seq_ind in range(self.num_seqs - 1, -1, -1):
-                seq_chunk_start = int(seq_ind * self.chunks_per_seq)
-                for chunk_ind in range(seq_chunk_start, seq_chunk_start + self.chunks_per_seq):
-                    self.activations_stack.append((chunk_ind, cur_layer_id))
+             ## for case of multiple seqs per chunk...
+            cur_chunk_ind = self.total_chunks - 1 
+
+            for seq_batch_id in range(self.num_seqs - 1, -1, -self.seqs_per_chunk):
+                if (self.chunks_per_seq > 1):
+                    seq_chunk_start = int(seq_batch_id * self.chunks_per_seq)
+                    for chunk_ind in range(seq_chunk_start, seq_chunk_start + self.chunks_per_seq):
+                        self.activations_stack.append((chunk_ind, cur_layer_id))
+                else:
+                    self.activations_stack.append((cur_chunk_ind, cur_layer_id))
+                    cur_chunk_ind -= 1
 
             cur_layer_id += self.total_devices
         
@@ -344,7 +354,6 @@ class Device:
                     self.bwd_computation_queue.append((j, cur_layer_id, False, True, 0, bwdW_time)) # BwdW
 
             cur_layer_id -= self.total_devices
-            
 
     def _find_first_free_idx(self, buffer):
         try:
@@ -1211,9 +1220,9 @@ class SimulationRunner:
         # --- Extract and Calculate Parameters (Keep logic) ---
         self.cycle_rate_micros = params.get('cycle_rate_micros', 1000)
         self.N = params.get('N', 8)
-        self.num_seqs = params.get('num_seqs', 24)
-        self.seqlen = params.get('seqlen', 12) * (1 << 10)
-        self.max_attended_tokens = params.get('max_attended_tokens', 12) * (1 << 10)
+        self.num_seqs = params.get('num_seqs', 60)
+        self.seqlen = params.get('seqlen', 4) * (1 << 10)
+        self.max_attended_tokens = params.get('max_attended_tokens', 4) * (1 << 10)
         self.min_chunk_size = params.get('min_chunk_size', 12288)
         self.bitwidth = params.get('bitwidth', 8)
         self.total_layers = params.get('total_layers', 63) # Store non-head count
@@ -1269,8 +1278,14 @@ class SimulationRunner:
         self.chunk_size = round_up_to_multiple(chunk_size_base, chunk_multiple)
 
         self.chunks_per_seq = math.ceil(self.seqlen / self.chunk_size) if self.chunk_size > 0 else 0
+        self.seqs_per_chunk = max(1, int(self.chunk_size / self.seqlen))
 
-        self.total_chunks = int(self.chunks_per_seq * self.num_seqs)
+
+        if (self.seqs_per_chunk == 1):
+            self.total_chunks = int(self.chunks_per_seq * self.num_seqs)
+        else:
+            self.total_chunks = math.ceil(self.num_seqs / self.seqs_per_chunk)
+            
         
                 
         self.attn_block_size_bytes = self.dtype_bytes * (self.model_dim + (2 * self.model_dim * self.model_dim + 2 * self.model_dim * self.kv_dim))
@@ -1428,28 +1443,34 @@ class SimulationRunner:
 
         is_train_chunk = True
 
-        cur_chunk_id = 0
+     
 
         self.final_train_chunk = 0
 
         self.final_chunk_in_seq_tokens = self.seqlen - (self.chunks_per_seq - 1) * self.chunk_size
         self.final_chunk_in_seq_data_frac = self.final_chunk_in_seq_tokens / self.chunk_size
-        
+    
+        cur_chunk_id = 0
 
-        for seq_id in range(self.num_seqs):
+        for seq_batch_id in range(0, self.num_seqs, self.seqs_per_chunk):
             cur_seq_len = 0
             prev_seq_len = 0
-            for chunk_id in range(self.chunks_per_seq):
+            for chunk in range(self.chunks_per_seq):
                 cur_seq_len = prev_seq_len + self.chunk_size
                 if (cur_seq_len > self.seqlen):
                     cur_seq_len = self.seqlen
                 if cur_seq_len > self.max_attended_tokens:
                     cur_seq_len = self.max_attended_tokens
 
-                attn_flops = self.flops_per_attn_chunk_mult * cur_seq_len
+                ## full chunk at attending the current seequence
+                if self.chunks_per_seq > 1:
+                    attn_flops = self.flops_per_attn_chunk_mult * cur_seq_len
+                ## we have 1/more complete sequences each of cur_seq_len
+                else:
+                    attn_flops = self.seqs_per_chunk * 2 * self.model_dim * cur_seq_len * cur_seq_len
 
                 self.total_attn_flops += self.total_layers * attn_flops
-          
+            
 
                 layer_flops_fwd = self.base_flops_per_layer_matmul + attn_flops
 
@@ -1468,8 +1489,8 @@ class SimulationRunner:
                 if cur_chunk_id == 0:
                     self.true_first_chunk_cycles = self.computation_times_sec[cur_chunk_id] * self.cycles_per_second
                 self.computation_times_frames[cur_chunk_id] = max(1,round(self.computation_times_sec[cur_chunk_id] * self.cycles_per_second))
+                
             
-           
                 self.computation_times_frames_last_block[cur_chunk_id] = self.computation_times_frames[cur_chunk_id]
                 self.total_compute_cycles += self.total_layers * self.computation_times_frames[cur_chunk_id]
 
@@ -1497,7 +1518,7 @@ class SimulationRunner:
 
                 # Accumulate FLOP types for BWD
                 self.total_attn_flops += self.total_layers * 2.5 * attn_flops # For BwdX
-                
+                    
                 self.total_bwd_attn_flops += self.total_layers * 2.5 * attn_flops # For BwdX
 
 
@@ -1658,6 +1679,14 @@ class SimulationRunner:
         else:
             chunk_size_str = f""
 
+        if self.chunks_per_seq > 1:
+            chunk_seq_str = f"- Chunks Per Seq: {self.chunks_per_seq}\n"
+        else:
+            if self.seqs_per_chunk > 1:
+                chunk_seq_str = f"- Seqs Per Chunk: {self.seqs_per_chunk}\n"
+            else:
+                chunk_seq_str = f"- Seqs == Chunks\n"
+
         text = (
           f"# Model Parameters: {total_model_params / (1e9):0.2f} B\n"
           f"     # Active: {total_active_params / (1e9):0.2f} B\n\n"
@@ -1677,14 +1706,14 @@ class SimulationRunner:
           f"--- DATAFLOW CONFIG ---\n\n"
           f"Chunk Size: {self.chunk_size}\n"
           f"{chunk_size_str}"
-          f"- Chunks per Seq: {self.chunks_per_seq}\n"
+          f"{chunk_seq_str}"
           f"- Total Chunks: {self.total_chunks}\n\n"
           f"* TOTAL PER-DEVICE MEMORY *\n"
           f" - {typical_device_memory_size / (1 << 30):.2f} GB\n\n\n"
           f"* TOTAL PER-HOME SPACE *\n"
           f" - {typical_home_total_size / (1 << 30):.2f} GB\n"
-          f" - If sharing model with 8 rings...\n"
-          f"  => Per Home:{(typical_home_model_shard + typical_home_activation_size) / (1 << 30):.2f} GB\n\n\n\n"
+          f"*If sharing model with 8 rings...\n"
+          f" => Per Home: {(typical_home_model_shard + typical_home_activation_size) / (1 << 30):.2f} GB\n\n\n\n"
           f"--- MEMORY PARTITIONS ---\n\n"
           f"Device Partitions (Typical):\n"
           f" - Activation Cap.: {self.activations_capacity}\n"
@@ -1780,7 +1809,11 @@ class SimulationRunner:
         if self.chunks_per_seq > 1:
             first_chunk_text = f"- C0 => [0, {self.chunk_size})\n"
         else:
-            first_chunk_text = f"- C0 => [0, {self.seqlen})\n"
+            if self.seqs_per_chunk > 1:
+                first_chunk_text = f"- C0 => Seqs: [0, {self.seqs_per_chunk})\n"
+            else:
+                first_chunk_text = f"- C0 => [0, {self.seqlen})\n"
+
 
         first_seq_last_chunk_text = f"- C{self.chunks_per_seq-1} => [{(self.chunks_per_seq-1) * self.chunk_size}, {self.seqlen})\n"
         if self.chunks_per_seq > 1:
@@ -1791,18 +1824,28 @@ class SimulationRunner:
         if self.chunks_per_seq > 1:
             last_seq_first_chunk_text = f"- C{self.total_chunks-self.chunks_per_seq} => [{(self.num_seqs-1) * self.seqlen}, {(self.num_seqs - 1) * self.seqlen + self.chunk_size})\n"
         else:
-            last_seq_first_chunk_text = f"- C{self.total_chunks-self.chunks_per_seq} => [{(self.num_seqs-1) * self.seqlen}, {self.num_seqs * self.seqlen})\n"
+            if self.seqs_per_chunk > 1:
+                last_seq_first_chunk_text = f"- C{self.total_chunks-self.chunks_per_seq} => Seqs: [{(self.total_chunks - 1) * self.seqs_per_chunk}, {self.num_seqs})\n"
+            else:
+                last_seq_first_chunk_text = f"- C{self.total_chunks-self.chunks_per_seq} => [{(self.num_seqs-1) * self.seqlen}, {self.num_seqs * self.seqlen})\n"
     
+        
         final_chunk_text = f" - C{self.total_chunks-1} => [{(self.num_seqs-1) * self.seqlen + self.chunk_size * (self.chunks_per_seq-1)}, {(self.num_seqs) * self.seqlen})\n"
 
         if self.num_seqs > 1:
             if self.chunks_per_seq > 1:
                 last_seq_text = f"Last Seq:\n{last_seq_first_chunk_text}{final_chunk_text}\n"
             else:
-                last_seq_first_chunk_text = f"- C{self.total_chunks-self.chunks_per_seq} => [{(self.num_seqs-1) * self.seqlen}, {self.num_seqs * self.seqlen})\n"
                 last_seq_text = f"Last Seq:\n{last_seq_first_chunk_text}\n"
         else:
             last_seq_text = f""
+
+        if self.chunks_per_seq > 1:
+            fwd_last_chunk_in_seq_text = f" - C{self.chunks_per_seq-1} => [{(self.num_seqs-1) * self.seqlen + self.chunk_size * (self.chunks_per_seq-1)}, {(self.num_seqs) * self.seqlen})\n"
+            bwd_last_chunk_in_seq_text = f" - C{self.chunks_per_seq-1}: {self.computation_times_frames_bwd.get(self.chunks_per_seq-1,0)}\n"
+        else:
+            fwd_last_chunk_in_seq_text = f""
+            bwd_last_chunk_in_seq_text = f""
 
         text = (
             f"--- DISCOVERED CONSTANTS ---\n\n"
@@ -1846,10 +1889,10 @@ class SimulationRunner:
             f"{last_seq_text}"
             f"Fwd:\n"
             f" - C0: {self.computation_times_frames.get(0,0)}\n"
-            f" - C{self.chunks_per_seq-1}: {self.computation_times_frames.get(self.chunks_per_seq-1,0)}\n"
+            f"{fwd_last_chunk_in_seq_text}"
             f"Bwd X:\n"
             f" - C{self.final_train_chunk}: {self.computation_times_frames_bwd.get(self.final_train_chunk,0)}\n"
-            f" - C{self.chunks_per_seq-1}: {self.computation_times_frames_bwd.get(self.chunks_per_seq-1,0)}\n"
+            f"{bwd_last_chunk_in_seq_text}"
             f"Bwd W:\n"
             f" - All: {self.bwdWFrames}\n"
             f"Head:\n"
@@ -1892,6 +1935,7 @@ class SimulationRunner:
                      num_seqs=self.num_seqs,
                      seqlen=self.seqlen,
                      chunks_per_seq=self.chunks_per_seq,
+                     seqs_per_chunk=self.seqs_per_chunk,
                      total_chunks=self.total_chunks,
                      final_chunk_in_seq_data_frac=self.final_chunk_in_seq_data_frac,
                      computation_times_frames=self.computation_times_frames,
