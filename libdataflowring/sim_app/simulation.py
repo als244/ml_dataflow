@@ -7,6 +7,10 @@ import textwrap
 from collections import deque
 import math
 
+## reduces home memory pressure because other rings need to store same
+## model shards...
+ATTENTION_BITWIDTH = 16
+
 # --- Constants ---
 # Keep calculation constants, remove drawing constants
 # COLOR_* constants remain as they identify *types* of operations/transfers
@@ -38,11 +42,33 @@ COLOR_FINISH_NODE_FILL_HEX = '#00CC00' # Example Hex for frontend
 def round_up_to_multiple(n, m):
     return int(((n + m - 1) // m) * m)
 
+def determine_chunk_size(seqlen, min_chunk_size):
+    if seqlen > min_chunk_size:
+        # Case 1: Find smallest DIVISOR of seqlen that is >= min_chunk_size.
+        # Ensure the start_check_value is at least 1, as divisors are positive.
+        start_check_value = max(1, min_chunk_size)
+        for chunk_candidate in range(start_check_value, seqlen + 1):
+            if seqlen % chunk_candidate == 0:
+                return chunk_candidate
+        return seqlen # Defensive return, but loop should always find a value.
+    else: # Case 2: seqlen <= min_chunk_size
+        # Find smallest MULTIPLE of seqlen that is >= min_chunk_size.
+        if min_chunk_size % seqlen == 0:
+            # If min_chunk_size is already a multiple of seqlen,
+            # and we need chunk_size >= min_chunk_size, then min_chunk_size is the smallest.
+            return min_chunk_size
+        else:
+            # min_chunk_size is not a multiple. Find the next multiple of seqlen
+            # that is strictly greater than min_chunk_size. This will also be the
+            # smallest multiple of seqlen that is >= min_chunk_size.
+            num_complete_blocks = min_chunk_size // seqlen
+            return (num_complete_blocks + 1) * seqlen
+
 # --- Device Class (Keep logic, remove plotting references) ---
 class Device:
     # --- __init__ ---
     # Keep __init__ mostly the same, ensure no plotting refs
-    def __init__(self, device_id, layer_capacity, activations_capacity, transitions_capacity, head_transitions_capacity, total_devices, total_layers, num_seqs, seqlen, chunks_per_seq, seqs_per_chunk, total_chunks, final_chunk_in_seq_data_frac, computation_times_frames, computation_times_frames_last_block, computation_times_frames_bwd, headFrames, bwdWFrames, layerTransferFrames, headTransferFrames, savedActivationsFrames, activationTransitionFrames, contextTransferFrames):
+    def __init__(self, device_id, layer_capacity, activations_capacity, transitions_capacity, head_transitions_capacity, total_devices, total_layers, num_seqs, seqlen, chunks_per_seq, seqs_per_chunk, total_chunks, final_chunk_in_seq_data_frac, computation_times_frames, computation_times_frames_last_block, computation_times_frames_bwd, headFrames, bwdWFrames, layerTransferFrames, gradLayerTransferFrames, headTransferFrames, savedActivationsFrames, activationTransitionFrames, contextTransferFrames):
         self.device_id = device_id
         self.device_has_started = False
         self.device_start_time = 0
@@ -65,6 +91,7 @@ class Device:
         self.headFrames = headFrames
         self.bwdWFrames = bwdWFrames
         self.layerTransferFrames = layerTransferFrames
+        self.gradLayerTransferFrames = gradLayerTransferFrames
         self.headTransferFrames = headTransferFrames
         self.savedActivationsFrames = savedActivationsFrames
         self.activationTransitionFrames = activationTransitionFrames
@@ -963,7 +990,7 @@ class Device:
                 self.handle_bwd_prefetch_fwd_act()
 
                 if (cid == self.final_train_chunk):
-                    self.outbound_queue.append((-1, lid, True, False, self.layerTransferFrames))
+                    self.outbound_queue.append((-1, lid, True, False, self.gradLayerTransferFrames))
 
             # --- Reset Compute State & Check Next Task ---
             self.is_computing = False
@@ -1220,6 +1247,7 @@ class SimulationRunner:
         # --- Extract and Calculate Parameters (Keep logic) ---
         self.cycle_rate_micros = params.get('cycle_rate_micros', 1000)
         self.N = params.get('N', 16)
+        self.num_rings = params.get('num_rings', 8)
         self.num_seqs = params.get('num_seqs', 120)
         self.seqlen = params.get('seqlen', 4) * (1 << 10)
         self.max_attended_tokens = params.get('max_attended_tokens', 4) * (1 << 10)
@@ -1237,7 +1265,7 @@ class SimulationRunner:
         self.hardware_max_flops = params.get('hardware_max_flops', 1989 * 1e12)
         self.hardware_mem_bw_bytes_sec = params.get('hardware_mem_bw_bytes_sec', 3350 * 1e9) # Typo fixed TB/s -> GB/s -> B/s
         self.matmul_efficiency = params.get('matmul_efficiency', 0.65)
-        self.attn_fwd_efficiency = params.get('attn_fwd_efficiency', 0.55)
+        self.attn_fwd_efficiency = params.get('attn_fwd_efficiency', 0.3)
         self.attn_bwd_efficiency = params.get('attn_bwd_efficiency', 0.25)
         self.home_bw_gbit_sec = params.get('home_bw_gbit_sec', 400)
         self.peer_bw_gbit_sec = params.get('peer_bw_gbit_sec', 100)
@@ -1266,16 +1294,14 @@ class SimulationRunner:
         ## chunk_size >= (num_experts * hw_compute_bound * model_dim * expert_dim)) / (active_experts * (2 * model_dim * expert_dim - hw_compute_bound * (model_dim + expert_dim))
 
         ## Let's round up to the nearest multiple of 256
-        chunk_size_base = math.ceil((self.num_experts * (self.hw_compute_bound * self.model_dim * self.expert_dim)) / (self.active_experts * (2 * self.model_dim * self.expert_dim - self.hw_compute_bound * (self.model_dim + self.expert_dim))))
+        comp_bound_min_chunk_size = math.ceil((self.num_experts * (self.hw_compute_bound * self.model_dim * self.expert_dim)) / (self.active_experts * (2 * self.model_dim * self.expert_dim - self.hw_compute_bound * (self.model_dim + self.expert_dim))))
 
         #print(f"Based on hw compute bound of {self.hw_compute_bound} FLOS/byte, along with FFN dims of {self.model_dim} x {self.expert_dim}, the base chunk size is {chunk_size_base}")
-        if chunk_size_base < self.min_chunk_size:
+        if comp_bound_min_chunk_size < self.min_chunk_size:
             #print(f"Min chunk size is {self.min_chunk_size}, so using that instead...")
-            chunk_size_base = self.min_chunk_size
+            comp_bound_min_chunk_size = self.min_chunk_size
 
-        chunk_multiple = 1024
-
-        self.chunk_size = round_up_to_multiple(chunk_size_base, chunk_multiple)
+        self.chunk_size = determine_chunk_size(self.seqlen, comp_bound_min_chunk_size)
 
         self.chunks_per_seq = math.ceil(self.seqlen / self.chunk_size) if self.chunk_size > 0 else 0
         self.seqs_per_chunk = max(1, int(self.chunk_size / self.seqlen))
@@ -1285,6 +1311,7 @@ class SimulationRunner:
             self.total_chunks = int(self.chunks_per_seq * self.num_seqs)
         else:
             self.total_chunks = math.ceil(self.num_seqs / self.seqs_per_chunk)
+
             
         
                 
@@ -1293,12 +1320,32 @@ class SimulationRunner:
         self.layer_size_bytes = self.attn_block_size_bytes + self.ffn_block_size_bytes
 
         # 4 * for input/query/attn output/proj_output, 2 * for keys/values
-        self.attn_activation_bytes = self.dtype_bytes * (4 * (self.model_dim * self.chunk_size) + 2 * (self.kv_dim * self.chunk_size))
+
+        if (self.bitwidth <= 16):
+            self.attention_bitwidth = ATTENTION_BITWIDTH
+            self.attention_dtype_bytes = ATTENTION_BITWIDTH / 8
+        else:
+            self.attention_bitwidth = self.bitwidth
+            self.attention_dtype_bytes = self.dtype_bytes
+
+        ## store Q, K, V, and attn_out in bf16/fp16
+        self.attn_act_inps = self.attention_dtype_bytes * ((self.model_dim * self.chunk_size) + 2 * (self.kv_dim * self.chunk_size))
+
+        self.attn_out = self.attention_dtype_bytes * ((self.model_dim * self.chunk_size))
+
+        ## store result of matmul of attn out in set precision
+        self.attn_out_proj = self.dtype_bytes * (self.model_dim * self.chunk_size)
+
+        self.attn_activation_bytes = self.attn_act_inps + self.attn_out + self.attn_out_proj
         self.ffn_activation_bytes = self.dtype_bytes * (self.active_experts * (2 * self.chunk_size * self.expert_dim))
+
+
         self.activation_size_bytes = self.attn_activation_bytes + self.ffn_activation_bytes
 
-        self.chunk_context_size_bytes = 2 * (self.chunk_size * self.kv_dim * self.dtype_bytes)
+        self.chunk_context_size_bytes = self.attention_dtype_bytes * 2 *(self.chunk_size * self.kv_dim)
+        
         self.output_size_bytes = self.dtype_bytes * (self.model_dim * self.chunk_size)
+
         self.head_layer_size_bytes = self.dtype_bytes * (self.model_dim + (self.vocab_size * self.model_dim))
 
         self.per_layer_full_context_size = self.chunks_per_seq * self.chunk_context_size_bytes
@@ -1576,9 +1623,42 @@ class SimulationRunner:
 
         self.round_frames_to_zero_cutoff = 0.1
 
-        layer_transfer_time_sec = (self.layer_size_bytes * 8) / safe_home_bw_bps
+        self.block_transfer_bits = self.bitwidth
+        self.grad_block_transfer_bits = self.bitwidth
+        self.head_transfer_bits = self.bitwidth
+
+        self.block_transfer_byte_multiplier = 1
+        self.grad_block_transfer_byte_multiplier = 2
+        self.head_transfer_byte_multiplier = 1
+        
+        ## mixed precision training => sotre higher precision in home and downcast on device
+        ## keep head in higher precision always...
+        if self.bitwidth == 8:
+            # first cast from fp32 to fp8 in home and then send...
+            # self.block_transfer_bits = 16
+            # self.block_transfer_byte_multiplier = 2
+
+            ## gradients should always be sent back in bf16...
+            self.grad_block_transfer_bits = 16
+            self.grad_block_transfer_byte_multiplier = 2
+            
+            ## head should always be in bf16...
+            self.head_transfer_bits = 16
+            self.head_transfer_byte_multiplier = 2
+            
+
+
+
+
+        layer_transfer_time_sec = (self.layer_size_bytes * self.block_transfer_byte_multiplier * 8) / safe_home_bw_bps
         self.layerTransferFrames = max(1,round(layer_transfer_time_sec * self.cycles_per_second))
         self.trueLayerTransferCycles = layer_transfer_time_sec * self.cycles_per_second
+
+        grad_layer_transfer_time_sec = (self.layer_size_bytes * self.grad_block_transfer_byte_multiplier * 8) / safe_home_bw_bps
+        self.gradLayerTransferFrames = max(1,round(grad_layer_transfer_time_sec * self.cycles_per_second))
+        self.trueGradLayerTransferCycles = grad_layer_transfer_time_sec * self.cycles_per_second
+
+
         head_layer_transfer_time_sec = (self.head_layer_size_bytes * 8) / safe_home_bw_bps
         self.headTransferFrames = max(1,round(head_layer_transfer_time_sec * self.cycles_per_second))
         self.trueHeadTransferCycles = head_layer_transfer_time_sec * self.cycles_per_second
@@ -1660,11 +1740,38 @@ class SimulationRunner:
         total_activation_cnt_dev0 = int(self.total_chunks * home_0_num_blocks_for_act_est)
         home_activation_stack_0 = max(0, total_activation_cnt_dev0 - self.activations_capacity)
         typical_home_activation_size = home_activation_stack_0 * self.activation_size_bytes
-        per_home_total_size_0 = typical_home_activation_size + 4 * home_0_layer_size # Approx: Act + Model + Grad + Opt
 
-        typical_home_model_shard = (4 * typical_home_layer_sizes) / 8
+        model_bits = "32"
+        grad_bits = "16"
+        opt_bits = "16"
 
-        typical_home_total_size = typical_home_activation_size + 4 * typical_home_layer_sizes
+       
+
+        if self.dtype_bytes == 1:
+            ## store optimizer state and gradients in bf16, and model in fp16 in home.
+            home_model_size = 4 * home_0_layer_size
+            home_grad_size = 2 * home_0_layer_size
+            home_opt_size = 4 * home_0_layer_size
+            ind_ring_model_shard_size = home_model_size + home_grad_size + home_opt_size
+        else:
+            ## store model in fp32 in home...
+            if self.dtype_bytes == 2:
+                home_model_size = 2 * home_0_layer_size
+                home_grad_size = home_0_layer_size
+                home_opt_size = 2 * home_0_layer_size
+                ind_ring_model_shard_size = home_model_size + home_grad_size + home_opt_size
+            else:
+                home_model_size = home_0_layer_size
+                home_grad_size = home_0_layer_size
+                home_opt_size = home_0_layer_size
+                grad_bits = "32"
+                opt_bits = "32"
+                ind_ring_model_shard_size = home_model_size + home_grad_size + home_opt_size
+                
+
+        typical_home_total_size = typical_home_activation_size + ind_ring_model_shard_size
+
+        typical_home_total_size_with_shared_rings = typical_home_activation_size + (ind_ring_model_shard_size / self.num_rings)
 
         gb = (1 << 30)
         mb = (1 << 20)
@@ -1679,7 +1786,7 @@ class SimulationRunner:
         total_active_params = embed_params + self.total_layers * (attn_block_params + ffn_active_params) + head_params
 
         if self.chunk_size > self.min_chunk_size:
-            chunk_size_str = f" (To Reach Compute-Bound)\n"
+            chunk_size_str = f" (Min to Reach Compute-Bound)\n"
         else:
             chunk_size_str = f""
 
@@ -1700,10 +1807,10 @@ class SimulationRunner:
           f"- Gradients: {train_gradient_size / (1 << 30):.2f} GB\n"
           f"- Opt. State: {(2 * train_model_size) / (1 << 30):.2f} GB\n\n"
           f"Data (Generated from Fwd):\n"
-          f"- Block Inputs: {(train_block_inputs) / (1 << 30):.2f} GB\n"
-          f"- Seq. Context: {(train_context_size) / (1 << 30):.2f} GB\n"
-          f"- Attn Outputs: {(train_attn_output_size) / (1 << 30):.2f} GB\n"
-          f"- Other Activs: {(train_remain_activation_size) / (1 << 30):.2f} GB\n\n"
+          f"- Block Inputs ({self.bitwidth} bits): {(train_block_inputs) / (1 << 30):.2f} GB\n"
+          f"- Seq. Context ({self.attention_bitwidth} bits): {(train_context_size) / (1 << 30):.2f} GB\n"
+          f"- Attn Outputs ({self.attention_bitwidth} bits): {(train_attn_output_size) / (1 << 30):.2f} GB\n"
+          f"- Other Activs ({self.bitwidth} bits): {(train_remain_activation_size) / (1 << 30):.2f} GB\n\n"
           f"TOTAL:\n"
           f"- Attn Critical: {(train_block_inputs + train_context_size + train_attn_output_size) / (1 << 30):.2f} GB\n"
           f"- All: {aggregate_memory_size / (1 << 30):.2f} GB\n\n\n"
@@ -1716,8 +1823,8 @@ class SimulationRunner:
           f" - {typical_device_memory_size / (1 << 30):.2f} GB\n\n\n"
           f"* TOTAL PER-HOME SPACE *\n"
           f" - {typical_home_total_size / (1 << 30):.2f} GB\n"
-          f"*If sharing model with 8 rings...\n"
-          f" => Per Home: {(typical_home_model_shard + typical_home_activation_size) / (1 << 30):.2f} GB\n\n\n\n"
+          f"**Amortizing Model Shard over {self.num_rings} Rings...\n"
+          f"=> Per Home: {(typical_home_total_size_with_shared_rings) / (1 << 30):.2f} GB\n\n\n\n"
           f"--- MEMORY PARTITIONS ---\n\n"
           f"Device Partitions (Typical):\n"
           f" - Activation Cap.: {self.activations_capacity}\n"
@@ -1733,11 +1840,14 @@ class SimulationRunner:
           f" - Trans. Cap.: {self.transitions_capacity}\n"
           f"   {(self.transitions_capacity * self.output_size_bytes)/ (1 << 30):.3f} GB\n\n"     
           f"Home Partitions (Typical):\n"
-          f" - Home # Act. Saved: {home_activation_stack_0}\n"
+          f" - Home # Act. Saved ({self.bitwidth} bits): {home_activation_stack_0}\n"
           f"    {typical_home_activation_size / (1 << 30):.2f} GB\n"
-          f" - Model: {typical_home_layer_sizes / (1 << 30):.2f} GB\n"
-          f" - Model Grads: {typical_home_layer_sizes / (1 << 30):.2f} GB\n"
-          f" - Opt. State: {2 * typical_home_layer_sizes / (1 << 30):.2f} GB\n\n"
+          f" - Model ({model_bits} bits): {home_model_size / (1 << 30):.2f} GB\n"
+          f"   - Amortizing over Rings: {(home_model_size / self.num_rings) / (1 << 30):.2f} GB\n"
+          f" - Model Grads ({grad_bits} bits): {home_grad_size / (1 << 30):.2f} GB\n"
+          f"   - Amortizing over Rings: {(home_grad_size / self.num_rings) / (1 << 30):.2f} GB\n"
+          f" - Opt. State ({opt_bits} bits): {home_opt_size / (1 << 30):.2f} GB\n"
+          f"   - Amortizing over Rings: {(home_opt_size / self.num_rings) / (1 << 30):.2f} GB\n"
           f"Chunk Memory Usage:\n"
           f" - Saved Act.: {(self.activation_size_bytes)/ 1e6:.2f} MB\n" 
           f" - Context: {(self.chunk_context_size_bytes)/ 1e6:.2f} MB\n"
@@ -1903,8 +2013,9 @@ class SimulationRunner:
             f" - All: {self.headFrames}\n\n"
             f"--- COMMUNICATION CYCLES ---\n\n"
             f"Layers\n"
-            f" - Block: {self.layerTransferFrames}\n"
-            f" - Head: {self.headTransferFrames}\n"
+            f" - Block ({self.block_transfer_bits} bits): {self.layerTransferFrames}\n"
+            f" - Block Grads ({self.grad_block_transfer_bits} bits): {self.gradLayerTransferFrames}\n"
+            f" - Head ({self.head_transfer_bits} bits): {self.headTransferFrames}\n"
             f"Chunk Info\n"
             f" - Activation Save/Fetch: {self.savedActivationsFrames}\n"
             f" - Block Transitions: {blockTransitionCyclesText}\n"
@@ -1948,6 +2059,7 @@ class SimulationRunner:
                      headFrames=self.headFrames,
                      bwdWFrames=self.bwdWFrames,
                      layerTransferFrames=self.layerTransferFrames,
+                     gradLayerTransferFrames=self.gradLayerTransferFrames,
                      headTransferFrames=self.headTransferFrames,
                      savedActivationsFrames=self.savedActivationsFrames,
                      activationTransitionFrames=self.activationTransitionFrames,

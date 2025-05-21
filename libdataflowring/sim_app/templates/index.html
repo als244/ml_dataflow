@@ -25,7 +25,7 @@
                         <label for="min_chunk_size">Min Chunk Size (Tokens):</label>
                         <input type="number" id="min_chunk_size" name="min_chunk_size" value="12288" min="1" required>
                         <div class="section-header"><h3>Training Spec</h3></div>
-                        <label for="num_seqs">Num Seqs (Per Ring/Per Round):</label>
+                        <label for="num_seqs">Num Seqs Per Ring (Per Round):</label>
                         <input type="number" id="num_seqs" name="num_seqs" value="120" min="1" required>
                         <label for="seqlen">Sequence Length (K):</label>
                         <input type="number" id="seqlen" name="seqlen" value="4" min="1" required>
@@ -40,15 +40,17 @@
 
                     <div id="param-grid">
                         <div class="section-header"><h3>Training Environment</h3></div>
-                        <label for="N">Num Devices (Per Ring):</label>
+                        <label for="N">Num Devices Per Ring:</label>
                         <input type="number" id="N" name="N" value="16" min="1" required>
+                        <label for="num_rings">Num Rings:</label>
+                        <input type="number" id="num_rings" name="num_rings" value="8" min="1" max="65536" required>
                         <label for="max_device_memory_gb">Max Device Memory (GB):</label>
                         <input type="number" id="max_device_memory_gb" name="max_device_memory_gb" value="80" step="0.1" min="1" required>
                     </div>
 
                     <div id="param-grid">
                         <div class="section-header"><h3>Model Spec</h3></div>
-                        <label for="bitwidth">Bitwidth:</label>
+                        <label for="bitwidth">Matmul Bitwidth:</label>
                         <input type="number" id="bitwidth" name="bitwidth" value="8" min="1" step="1" required>
                         <label for="total_layers">Total Blocks:</label>
                         <input type="number" id="total_layers" name="total_layers" value="63" min="1" required>
@@ -83,7 +85,7 @@
                         <label for="matmul_efficiency">Matmul Efficiency:</label>
                         <input type="number" id="matmul_efficiency" name="matmul_efficiency" value="0.65" step="0.01" min="0" max="1" required>
                         <label for="attn_fwd_efficiency">Attention Fwd Efficiency:</label>
-                        <input type="number" id="attn_fwd_efficiency" name="attn_fwd_efficiency" value="0.55" step="0.01" min="0" max="1" required>
+                        <input type="number" id="attn_fwd_efficiency" name="attn_fwd_efficiency" value="0.3" step="0.01" min="0" max="1" required>
                         <label for="attn_bwd_efficiency">Attention Bwd Efficiency:</label>
                         <input type="number" id="attn_bwd_efficiency" name="attn_bwd_efficiency" value="0.25" step="0.01" min="0" max="1" required>
                         <label for="home_bw_gbit_sec">Home BW (Gb/s):</label>
@@ -126,7 +128,7 @@
                 <div id="status-area">Status: Idle | Cycle: 0</div>
                 <div id="simulation-svg-container">
 
-                    <div id="animation-header" class="animation-header-text">Example Sequence</div>
+                    <div id="animation-header" class="animation-header-text">Example Ring</div>
 
                      <svg id="simulation-svg"
                           preserveAspectRatio="xMidYMid meet"

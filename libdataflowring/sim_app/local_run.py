@@ -52,6 +52,7 @@ def parse_parameters(form_data):
     # ... (keep existing parsing logic - ensure it matches SimulationRunner needs) ...
     params['cycle_rate_micros'] = form_data.get('cycle_rate_micros', default=1000, type=int)
     params['min_chunk_size'] = form_data.get('min_chunk_size', default=12288, type=int)
+    params['num_rings'] = form_data.get('num_rings', default=8, type=int)
     params['N'] = form_data.get('N', default=16, type=int)
     params['num_seqs'] = form_data.get('num_seqs', default=120, type=int)
     params['seqlen'] = form_data.get('seqlen', default=4, type=int) # K tokens
@@ -70,7 +71,7 @@ def parse_parameters(form_data):
     params['hardware_max_flops'] = form_data.get('hardware_max_tflops', default=1989, type=float) * 1e12
     params['hardware_mem_bw_bytes_sec'] = form_data.get('hardware_mem_bw_gbs', default=3350, type=float) * 1e9 # Input GB/s
     params['matmul_efficiency'] = form_data.get('matmul_efficiency', default=0.65, type=float)
-    params['attn_fwd_efficiency'] = form_data.get('attn_fwd_efficiency', default=0.55, type=float)
+    params['attn_fwd_efficiency'] = form_data.get('attn_fwd_efficiency', default=0.3, type=float)
     params['attn_bwd_efficiency'] = form_data.get('attn_bwd_efficiency', default=0.25, type=float)
     params['home_bw_gbit_sec'] = form_data.get('home_bw_gbit_sec', default=400, type=float)
     params['peer_bw_gbit_sec'] = form_data.get('peer_bw_gbit_sec', default=100, type=float)
