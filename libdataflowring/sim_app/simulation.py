@@ -1447,8 +1447,12 @@ class SimulationRunner:
 
         self.final_train_chunk = 0
 
-        self.final_chunk_in_seq_tokens = self.seqlen - (self.chunks_per_seq - 1) * self.chunk_size
-        self.final_chunk_in_seq_data_frac = self.final_chunk_in_seq_tokens / self.chunk_size
+        if self.chunks_per_seq > 1:
+            self.final_chunk_in_seq_tokens = self.seqlen - (self.chunks_per_seq - 1) * self.chunk_size
+            self.final_chunk_in_seq_data_frac = self.final_chunk_in_seq_tokens / self.chunk_size
+        else:
+            self.final_chunk_in_seq_tokens = self.seqlen
+            self.final_chunk_in_seq_data_frac = 1.0
     
         cur_chunk_id = 0
 
