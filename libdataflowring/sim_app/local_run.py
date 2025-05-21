@@ -53,7 +53,7 @@ def parse_parameters(form_data):
     params['cycle_rate_micros'] = form_data.get('cycle_rate_micros', default=1000, type=int)
     params['min_chunk_size'] = form_data.get('min_chunk_size', default=12288, type=int)
     params['N'] = form_data.get('N', default=16, type=int)
-    params['num_seqs'] = form_data.get('num_seqs', default=60, type=int)
+    params['num_seqs'] = form_data.get('num_seqs', default=120, type=int)
     params['seqlen'] = form_data.get('seqlen', default=4, type=int) # K tokens
     params['max_attended_tokens'] = form_data.get('max_attended_tokens', default=4, type=int) # K tokens
     params['chunk_type'] = form_data.get('chunk_type', default="Equal Data", type=str)
