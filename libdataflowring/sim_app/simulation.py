@@ -1219,7 +1219,7 @@ class SimulationRunner:
 
         # --- Extract and Calculate Parameters (Keep logic) ---
         self.cycle_rate_micros = params.get('cycle_rate_micros', 1000)
-        self.N = params.get('N', 8)
+        self.N = params.get('N', 16)
         self.num_seqs = params.get('num_seqs', 60)
         self.seqlen = params.get('seqlen', 4) * (1 << 10)
         self.max_attended_tokens = params.get('max_attended_tokens', 4) * (1 << 10)
