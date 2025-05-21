@@ -528,7 +528,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 runToCycleInput.value = data.state.current_frame;
 
                 const modelStages = simulationConfig.N;
-                const dpDegreeValue = formData.get('dp_degree');
+                const dpDegreeValue = formData.get('num_rings');
                 const dataParallelismFactor = dpDegreeValue ? parseInt(dpDegreeValue) : 8; // Default if not found or invalid
                 drawTorusPlot(modelStages, dataParallelismFactor);
                 torusPlotInitialized = true;
@@ -1162,7 +1162,7 @@ document.addEventListener('DOMContentLoaded', () => {
          
         const layout = {
             title: {
-                text: `<b>Model Stages: ${N_slices}<br>(Hypothetical) Concurrent Rings: ${M_nodes_per_slice}</b>`,
+                text: `<b>Model Stages: ${N_slices}<br>Concurrent Rings: ${M_nodes_per_slice}</b>`,
                 x: 0.5, xanchor: 'center', font: { size: 16, family: 'sans-serif' }
             },
             showlegend: true,
@@ -1337,7 +1337,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
         const layout = {
             title: {
-                text: `<b>Model Stages: 2<br>(Hypothetical) Concurrent Rings: ${M_nodes_per_slice}</b>`,
+                text: `<b>Model Stages: 2<br>Concurrent Rings: ${M_nodes_per_slice}</b>`,
                 x: 0.5, xanchor: 'center', font: { size: 16, family: 'sans-serif' }
             },
             showlegend: true,

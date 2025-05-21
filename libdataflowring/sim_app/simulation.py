@@ -10,6 +10,8 @@ import math
 ## reduces home memory pressure because other rings need to store same
 ## model shards...
 ATTENTION_BITWIDTH = 16
+GRAD_BLOCK_BITWIDTH = 8
+HEAD_BITWIDTH = 8
 
 # --- Constants ---
 # Keep calculation constants, remove drawing constants
@@ -521,8 +523,9 @@ class Device:
         bwd_missing_items = []
         fwd_missing_items = []
         
-        if not is_head_task and has_bwd_task:
-           
+        ## finishing head before doing bwd...
+        #if not is_head_task and has_bwd_task and (b_bX or not has_fwd_task):
+        if not is_head_task and has_bwd_task:  
             has_weight = (0, b_lid) in self.cur_weights
             has_input_transition = False
             input_transition_key = None
@@ -1248,12 +1251,12 @@ class SimulationRunner:
         self.cycle_rate_micros = params.get('cycle_rate_micros', 1000)
         self.N = params.get('N', 16)
         self.num_rings = params.get('num_rings', 8)
-        self.num_seqs = params.get('num_seqs', 120)
+        self.num_seqs = params.get('num_seqs', 90)
         self.seqlen = params.get('seqlen', 4) * (1 << 10)
         self.max_attended_tokens = params.get('max_attended_tokens', 4) * (1 << 10)
         self.min_chunk_size = params.get('min_chunk_size', 12288)
         self.bitwidth = params.get('bitwidth', 8)
-        self.total_layers = params.get('total_layers', 63) # Store non-head count
+        self.total_layers = params.get('total_layers', 59) # Store non-head count
         self.vocab_size = params.get('vocab_size', 128290)
         self.model_dim = params.get('model_dim', 7168)
         self.kv_dim = params.get('kv_dim', 512) # Recalculate kv_dim based on this
@@ -1267,6 +1270,7 @@ class SimulationRunner:
         self.matmul_efficiency = params.get('matmul_efficiency', 0.65)
         self.attn_fwd_efficiency = params.get('attn_fwd_efficiency', 0.3)
         self.attn_bwd_efficiency = params.get('attn_bwd_efficiency', 0.25)
+        self.head_efficiency = params.get('head_efficiency', 0.35)
         self.home_bw_gbit_sec = params.get('home_bw_gbit_sec', 400)
         self.peer_bw_gbit_sec = params.get('peer_bw_gbit_sec', 100)
         self.chunk_type = params.get('chunk_type', "Equal Data")
@@ -1319,6 +1323,15 @@ class SimulationRunner:
         self.ffn_block_size_bytes = self.dtype_bytes * (self.model_dim + (3 * self.model_dim * self.expert_dim * self.num_experts))
         self.layer_size_bytes = self.attn_block_size_bytes + self.ffn_block_size_bytes
 
+        if (self.bitwidth <= 16):
+            self.grad_layer_bitwidth = GRAD_BLOCK_BITWIDTH
+            self.grad_layer_dtype_bytes = GRAD_BLOCK_BITWIDTH / 8
+        else:
+            self.grad_layer_bitwidth = self.bitwidth
+            self.grad_layer_dtype_bytes = self.dtype_bytes
+
+        self.grad_layer_size_bytes = self.layer_size_bytes * (self.grad_layer_dtype_bytes / self.dtype_bytes)
+
         # 4 * for input/query/attn output/proj_output, 2 * for keys/values
 
         if (self.bitwidth <= 16):
@@ -1345,8 +1358,16 @@ class SimulationRunner:
         self.chunk_context_size_bytes = self.attention_dtype_bytes * 2 *(self.chunk_size * self.kv_dim)
         
         self.output_size_bytes = self.dtype_bytes * (self.model_dim * self.chunk_size)
+        
 
-        self.head_layer_size_bytes = self.dtype_bytes * (self.model_dim + (self.vocab_size * self.model_dim))
+        if (self.bitwidth <= 16):
+            self.head_bitwidth = HEAD_BITWIDTH
+            self.head_dtype_bytes = HEAD_BITWIDTH / 8
+        else:
+            self.head_bitwidth = self.bitwidth
+            self.head_dtype_bytes = self.dtype_bytes
+
+        self.head_layer_size_bytes = self.head_dtype_bytes * (self.model_dim + (self.vocab_size * self.model_dim))
 
         self.per_layer_full_context_size = self.chunks_per_seq * self.chunk_context_size_bytes
 
@@ -1464,7 +1485,7 @@ class SimulationRunner:
         safe_matmul_eff = self.matmul_efficiency if self.matmul_efficiency > 0 else 1.0
         safe_attn_fwd_eff = self.attn_fwd_efficiency if self.attn_fwd_efficiency > 0 else 1.0
         safe_attn_bwd_eff = self.attn_bwd_efficiency if self.attn_bwd_efficiency > 0 else 1.0
-        
+        safe_head_eff = self.head_efficiency if self.head_efficiency > 0 else 1.0
           # Head FLOPS: fwd + bwd (assuming bwd similar to fwd)
         head_flops = 2 * (2 * self.chunk_size * self.model_dim * self.vocab_size)
 
@@ -1585,8 +1606,7 @@ class SimulationRunner:
 
                 self.total_head_flops += head_flops
 
-                head_time = head_flops / (safe_flops * safe_matmul_eff)
-                self.head_time += head_time
+                self.head_time += self.headTimeSec
 
                 prev_seq_len = cur_seq_len
                 cur_chunk_id += 1
@@ -1623,38 +1643,13 @@ class SimulationRunner:
 
         self.round_frames_to_zero_cutoff = 0.1
 
-        self.block_transfer_bits = self.bitwidth
-        self.grad_block_transfer_bits = self.bitwidth
-        self.head_transfer_bits = self.bitwidth
-
-        self.block_transfer_byte_multiplier = 1
-        self.grad_block_transfer_byte_multiplier = 2
-        self.head_transfer_byte_multiplier = 1
-        
-        ## mixed precision training => sotre higher precision in home and downcast on device
-        ## keep head in higher precision always...
-        if self.bitwidth == 8:
-            # first cast from fp32 to fp8 in home and then send...
-            # self.block_transfer_bits = 16
-            # self.block_transfer_byte_multiplier = 2
-
-            ## gradients should always be sent back in bf16...
-            self.grad_block_transfer_bits = 16
-            self.grad_block_transfer_byte_multiplier = 2
-            
-            ## head should always be in bf16...
-            self.head_transfer_bits = 16
-            self.head_transfer_byte_multiplier = 2
-            
 
 
-
-
-        layer_transfer_time_sec = (self.layer_size_bytes * self.block_transfer_byte_multiplier * 8) / safe_home_bw_bps
+        layer_transfer_time_sec = (self.layer_size_bytes * 8) / safe_home_bw_bps
         self.layerTransferFrames = max(1,round(layer_transfer_time_sec * self.cycles_per_second))
         self.trueLayerTransferCycles = layer_transfer_time_sec * self.cycles_per_second
 
-        grad_layer_transfer_time_sec = (self.layer_size_bytes * self.grad_block_transfer_byte_multiplier * 8) / safe_home_bw_bps
+        grad_layer_transfer_time_sec = (self.grad_layer_size_bytes * 8) / safe_home_bw_bps
         self.gradLayerTransferFrames = max(1,round(grad_layer_transfer_time_sec * self.cycles_per_second))
         self.trueGradLayerTransferCycles = grad_layer_transfer_time_sec * self.cycles_per_second
 
@@ -1750,8 +1745,9 @@ class SimulationRunner:
         if self.dtype_bytes == 1:
             ## store optimizer state and gradients in bf16, and model in fp16 in home.
             home_model_size = 4 * home_0_layer_size
-            home_grad_size = 2 * home_0_layer_size
-            home_opt_size = 4 * home_0_layer_size
+            home_grad_size = home_0_layer_size
+            grad_bits = "8"
+            home_opt_size = 2 * 2 * home_0_layer_size
             ind_ring_model_shard_size = home_model_size + home_grad_size + home_opt_size
         else:
             ## store model in fp32 in home...
@@ -1764,8 +1760,8 @@ class SimulationRunner:
                 home_model_size = home_0_layer_size
                 home_grad_size = home_0_layer_size
                 home_opt_size = home_0_layer_size
-                grad_bits = "32"
-                opt_bits = "32"
+                grad_bits = self.bitwidth
+                opt_bits = self.bitwidth
                 ind_ring_model_shard_size = home_model_size + home_grad_size + home_opt_size
                 
 
@@ -1832,7 +1828,7 @@ class SimulationRunner:
           f" - Layer Cap.: {self.layer_capacity}\n"
           f"   {(self.layer_capacity * self.layer_size_bytes)/ (1 << 30):.3f} GB\n"
           f" - Grad Layer Cap.: {self.grad_layer_capacity}\n"
-          f"   {(self.grad_layer_capacity * self.layer_size_bytes)/ (1 << 30):.3f} GB\n"
+          f"   {(self.grad_layer_capacity * self.grad_layer_size_bytes)/ (1 << 30):.3f} GB\n"
           f" - Ctx Buffer Cap.: {self.context_buffer_capacity}\n"
           f"   {(self.context_buffer_capacity * self.per_layer_full_context_size)/ (1 << 30):.3f} GB\n"
           f" - Grad Ctx Buffer Cap.: {self.grad_context_buffer_capacity}\n"
@@ -2013,9 +2009,9 @@ class SimulationRunner:
             f" - All: {self.headFrames}\n\n"
             f"--- COMMUNICATION CYCLES ---\n\n"
             f"Layers\n"
-            f" - Block ({self.block_transfer_bits} bits): {self.layerTransferFrames}\n"
-            f" - Block Grads ({self.grad_block_transfer_bits} bits): {self.gradLayerTransferFrames}\n"
-            f" - Head ({self.head_transfer_bits} bits): {self.headTransferFrames}\n"
+            f" - Block ({self.bitwidth} bits): {self.layerTransferFrames}\n"
+            f" - Block Grads ({self.grad_layer_bitwidth} bits): {self.gradLayerTransferFrames}\n"
+            f" - Head ({self.head_bitwidth} bits): {self.headTransferFrames}\n"
             f"Chunk Info\n"
             f" - Activation Save/Fetch: {self.savedActivationsFrames}\n"
             f" - Block Transitions: {blockTransitionCyclesText}\n"
