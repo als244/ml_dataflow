@@ -1975,7 +1975,7 @@ class SimulationRunner:
             f" - BWD: {self.total_bwd_flops:.2e} ({bwd_pct:.1f}%)\n"
             f"   - Attn: {self.total_bwd_attn_pct:.1f}%\n"
             f"   - Matmul: {self.total_bwd_matmul_pct:.1f}%\n\n\n"
-            f"Total Time: {self.total_time_str}\n"
+            f"Total Serial Time: {self.total_time_str}\n"
             f" - FWD: {self.total_fwd_time_pct:.1f}%\n"
             f"  - Attn: {self.total_fwd_attn_time_pct:.1f}%\n"
             f"  - Matmul: {self.total_fwd_matmul_time_pct:.1f}%\n"
