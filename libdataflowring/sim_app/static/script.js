@@ -1156,7 +1156,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 wire_z.push(nodes[0][j][2]); 
             } 
             traces.push({ x: wire_x, y: wire_y, z: wire_z, 
-                            mode: 'lines', type: 'scatter3d', name: `Seq. ${j}`, 
+                            mode: 'lines', type: 'scatter3d', name: `Ring ${j}`, 
                              line: { color: node_wire_colors_rgb[j], width: 3 }, hoverinfo: 'none', showlegend: true }); 
         } 
          
@@ -1304,7 +1304,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 y: [nodes_slice_coords[0][j][1], nodes_slice_coords[1][j][1]],
                 z: [nodes_slice_coords[0][j][2], nodes_slice_coords[1][j][2]],
                 mode: 'lines', type: 'scatter3d',
-                name: `Seq. ${j}`,
+                name: `Ring ${j}`,
                 line: { color: node_colors_per_sequence[j], width: 3 },
                 hoverinfo: 'none', showlegend: true
             });
