@@ -23,10 +23,10 @@
                         <label for="cycle_rate_micros"> Cycle Rate (micros/cycle):</label>
                         <input type="number" id="cycle_rate_micros" name="cycle_rate_micros" value="1000" min="1" required>
                         <label for="min_chunk_size">Min Chunk Size (Tokens):</label>
-                        <input type="number" id="min_chunk_size" name="min_chunk_size" value="12288" min="1" required>
+                        <input type="number" id="min_chunk_size" name="min_chunk_size" value="16384" min="1" required>
                         <div class="section-header"><h3>Training Spec</h3></div>
                         <label for="num_seqs">Num Seqs Per Ring (Per Round):</label>
-                        <input type="number" id="num_seqs" name="num_seqs" value="90" min="1" required>
+                        <input type="number" id="num_seqs" name="num_seqs" value="100" min="1" required>
                         <label for="seqlen">Sequence Length (K):</label>
                         <input type="number" id="seqlen" name="seqlen" value="4" min="1" required>
                         <label for="max_attended_tokens">Max Attended Tokens (K):</label>
@@ -56,6 +56,18 @@
                             <option value="16">16</option>
                             <option value="32">32</option>
                         </select>
+                        <label for="attn_bitwidth">Attention Bitwidth:</label>
+                        <select id="attn_bitwidth" name="attn_bitwidth" required disabled>
+                            <option value="8">8</option>
+                            <option value="16" selected>16</option>
+                            <option value="32">32</option>
+                        </select>
+                        <label for="head_bitwidth">Head Bitwidth:</label>
+                        <select id="head_bitwidth" name="head_bitwidth" required>
+                            <option value="8" selected>8</option>
+                            <option value="16">16</option>
+                            <option value="32">32</option>
+                        </select>
                         <label for="total_layers">Total Blocks:</label>
                         <input type="number" id="total_layers" name="total_layers" value="59" min="1" required>
                         <label for="vocab_size">Vocab Size:</label>
@@ -81,19 +93,19 @@
 
                     <div id="param-grid">
                         <hr class="section-separator">
-                        <div class="section-header"><h3>Hardware Specs</h3><h5>In practice, these will be discovered by the system</h5></div>
-                        <label for="hardware_max_tflops">TFLOPS (at bitwidth):</label>
+                        <div class="section-header"><h3>Hardware Specs</h3><h5>In practice, these will be discovered by the system. All efficiencies are relative to specified TFLOPs (e.g. if attention is in 16-bit and running at 500 TFLOPs vs 2000 specified, it has .25 efficiency). If you change the bitwidths, make sure to update these efficiency constants to be realistic...</h5></div>
+                        <label for="hardware_max_tflops">TFLOPS (at matmul bitwidth):</label>
                         <input type="number" id="hardware_max_tflops" name="hardware_max_tflops" value="1989" step="0.1" min="0.1" required>
                         <label for="hardware_mem_bw_gbs">Dev Mem BW (GB/s):</label>
                         <input type="number" id="hardware_mem_bw_gbs" name="hardware_mem_bw_gbs" value="3350" step="1" min="1" required>
                         <label for="matmul_efficiency">Matmul Efficiency:</label>
-                        <input type="number" id="matmul_efficiency" name="matmul_efficiency" value="0.65" step="0.01" min="0" max="1" required>
+                        <input type="number" id="matmul_efficiency" name="matmul_efficiency" value="0.5" step="0.01" min="0" max="1" required>
                         <label for="attn_fwd_efficiency">Attention Fwd Efficiency:</label>
                         <input type="number" id="attn_fwd_efficiency" name="attn_fwd_efficiency" value="0.3" step="0.01" min="0" max="1" required>
                         <label for="attn_bwd_efficiency">Attention Bwd Efficiency:</label>
                         <input type="number" id="attn_bwd_efficiency" name="attn_bwd_efficiency" value="0.25" step="0.01" min="0" max="1" required>
-                        <!-- <label for="head_efficiency">Head Efficiency:</label>
-                        <input type="number" id="head_efficiency" name="head_efficiency" value="0.35" step="0.01" min="0.01" max="1" required> -->
+                        <label for="head_efficiency">Head Efficiency:</label>
+                        <input type="number" id="head_efficiency" name="head_efficiency" value="0.8" step="0.01" min="0.01" max="1" required>
                         <label for="home_bw_gbit_sec">Home BW (Gb/s):</label>
                         <input type="number" id="home_bw_gbit_sec" name="home_bw_gbit_sec" value="400" step="0.1" min="0.1" required>
                         <label for="peer_bw_gbit_sec">Peer BW (Gb/s):</label>

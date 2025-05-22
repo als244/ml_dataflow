@@ -25,14 +25,16 @@ def parse_parameters(form_data):
     params = {}
     # ... (keep existing parsing logic - ensure it matches SimulationRunner needs) ...
     params['cycle_rate_micros'] = form_data.get('cycle_rate_micros', default=1000, type=int)
-    params['min_chunk_size'] = form_data.get('min_chunk_size', default=12288, type=int)
+    params['min_chunk_size'] = form_data.get('min_chunk_size', default=16384, type=int)
     params['num_rings'] = form_data.get('num_rings', default=8, type=int)
     params['N'] = form_data.get('N', default=16, type=int)
-    params['num_seqs'] = form_data.get('num_seqs', default=90, type=int)
+    params['num_seqs'] = form_data.get('num_seqs', default=100, type=int)
     params['seqlen'] = form_data.get('seqlen', default=4, type=int) # K tokens
     params['max_attended_tokens'] = form_data.get('max_attended_tokens', default=4, type=int) # K tokens
     params['chunk_type'] = form_data.get('chunk_type', default="Equal Data", type=str)
     params['bitwidth'] = form_data.get('bitwidth', default=8, type=int)
+    params['attn_bitwidth'] = form_data.get('attn_bitwidth', default=16, type=int)
+    params['head_bitwidth'] = form_data.get('head_bitwidth', default=8, type=int)
     params['total_layers'] = form_data.get('total_layers', default=59, type=int) # Non-head
     params['vocab_size'] = form_data.get('vocab_size', default=129280, type=int)
     params['model_dim'] = form_data.get('model_dim', default=7168, type=int)
@@ -44,10 +46,10 @@ def parse_parameters(form_data):
     params['max_device_memory_bytes'] = form_data.get('max_device_memory_gb', default=80, type=float) * (1 << 30)
     params['hardware_max_flops'] = form_data.get('hardware_max_tflops', default=1989, type=float) * 1e12
     params['hardware_mem_bw_bytes_sec'] = form_data.get('hardware_mem_bw_gbs', default=3350, type=float) * 1e9 # Input GB/s
-    params['matmul_efficiency'] = form_data.get('matmul_efficiency', default=0.65, type=float)
+    params['matmul_efficiency'] = form_data.get('matmul_efficiency', default=0.52, type=float)
     params['attn_fwd_efficiency'] = form_data.get('attn_fwd_efficiency', default=0.3, type=float)
     params['attn_bwd_efficiency'] = form_data.get('attn_bwd_efficiency', default=0.25, type=float)
-    params['head_efficiency'] = form_data.get('head_efficiency', default=0.35, type=float)
+    params['head_efficiency'] = form_data.get('head_efficiency', default=0.8, type=float)
     params['home_bw_gbit_sec'] = form_data.get('home_bw_gbit_sec', default=400, type=float)
     params['peer_bw_gbit_sec'] = form_data.get('peer_bw_gbit_sec', default=100, type=float)
     if params['N'] <= 0: raise ValueError("N must be positive.")

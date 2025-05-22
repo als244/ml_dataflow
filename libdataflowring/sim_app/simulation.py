@@ -7,11 +7,8 @@ import textwrap
 from collections import deque
 import math
 
-## reduces home memory pressure because other rings need to store same
-## model shards...
-ATTENTION_BITWIDTH = 16
+
 GRAD_BLOCK_BITWIDTH = 8
-HEAD_BITWIDTH = 8
 
 # --- Constants ---
 # Keep calculation constants, remove drawing constants
@@ -1251,11 +1248,13 @@ class SimulationRunner:
         self.cycle_rate_micros = params.get('cycle_rate_micros', 1000)
         self.N = params.get('N', 16)
         self.num_rings = params.get('num_rings', 8)
-        self.num_seqs = params.get('num_seqs', 90)
+        self.num_seqs = params.get('num_seqs', 100)
         self.seqlen = params.get('seqlen', 4) * (1 << 10)
         self.max_attended_tokens = params.get('max_attended_tokens', 4) * (1 << 10)
-        self.min_chunk_size = params.get('min_chunk_size', 12288)
+        self.min_chunk_size = params.get('min_chunk_size', 16384)
         self.bitwidth = params.get('bitwidth', 8)
+        self.attn_bitwidth = params.get('attn_bitwidth', 16)
+        self.head_bitwidth = params.get('head_bitwidth', 8)
         self.total_layers = params.get('total_layers', 59) # Store non-head count
         self.vocab_size = params.get('vocab_size', 128290)
         self.model_dim = params.get('model_dim', 7168)
@@ -1267,10 +1266,10 @@ class SimulationRunner:
         self.max_device_memory_bytes = params.get('max_device_memory_bytes', 8 * (1 << 30))
         self.hardware_max_flops = params.get('hardware_max_flops', 1989 * 1e12)
         self.hardware_mem_bw_bytes_sec = params.get('hardware_mem_bw_bytes_sec', 3350 * 1e9) # Typo fixed TB/s -> GB/s -> B/s
-        self.matmul_efficiency = params.get('matmul_efficiency', 0.65)
+        self.matmul_efficiency = params.get('matmul_efficiency', 0.5)
         self.attn_fwd_efficiency = params.get('attn_fwd_efficiency', 0.3)
         self.attn_bwd_efficiency = params.get('attn_bwd_efficiency', 0.25)
-        self.head_efficiency = params.get('head_efficiency', 0.35)
+        self.head_efficiency = params.get('head_efficiency', 0.8)
         self.home_bw_gbit_sec = params.get('home_bw_gbit_sec', 400)
         self.peer_bw_gbit_sec = params.get('peer_bw_gbit_sec', 100)
         self.chunk_type = params.get('chunk_type', "Equal Data")
@@ -1334,12 +1333,7 @@ class SimulationRunner:
 
         # 4 * for input/query/attn output/proj_output, 2 * for keys/values
 
-        if (self.bitwidth <= 16):
-            self.attention_bitwidth = ATTENTION_BITWIDTH
-            self.attention_dtype_bytes = ATTENTION_BITWIDTH / 8
-        else:
-            self.attention_bitwidth = self.bitwidth
-            self.attention_dtype_bytes = self.dtype_bytes
+        self.attention_dtype_bytes = self.attn_bitwidth / 8
 
         ## store Q, K, V, and attn_out in bf16/fp16
         self.attn_act_inps = self.attention_dtype_bytes * ((self.model_dim * self.chunk_size) + 2 * (self.kv_dim * self.chunk_size))
@@ -1360,12 +1354,8 @@ class SimulationRunner:
         self.output_size_bytes = self.dtype_bytes * (self.model_dim * self.chunk_size)
         
 
-        if (self.bitwidth <= 16):
-            self.head_bitwidth = HEAD_BITWIDTH
-            self.head_dtype_bytes = HEAD_BITWIDTH / 8
-        else:
-            self.head_bitwidth = self.bitwidth
-            self.head_dtype_bytes = self.dtype_bytes
+        
+        self.head_dtype_bytes = self.head_bitwidth / 8
 
         self.head_layer_size_bytes = self.head_dtype_bytes * (self.model_dim + (self.vocab_size * self.model_dim))
 
@@ -1489,7 +1479,7 @@ class SimulationRunner:
           # Head FLOPS: fwd + bwd (assuming bwd similar to fwd)
         head_flops = 2 * (2 * self.chunk_size * self.model_dim * self.vocab_size)
 
-        self.headTimeSec = head_flops / (safe_flops * safe_matmul_eff)
+        self.headTimeSec = head_flops / (safe_flops * safe_head_eff)
         
         self.headFrames = round(self.headTimeSec * self.cycles_per_second)
 
@@ -1794,6 +1784,16 @@ class SimulationRunner:
             else:
                 chunk_seq_str = f"- Seqs == Chunks\n"
 
+        if self.num_experts > 1 and (self.active_experts % 2 == 1):
+            avg_tokens_per_expert = math.ceil(self.chunk_size * (self.active_experts - 1) / self.num_experts)
+        else:
+            avg_tokens_per_expert = math.ceil(self.chunk_size * self.active_experts / self.num_experts)
+
+        if self.num_experts > 1:
+            avg_tokens_per_expert_str = f" - Avg Tokens Per Expert: {avg_tokens_per_expert}\n"
+        else:
+            avg_tokens_per_expert_str = f""
+
         text = (
           f"# Model Parameters: {total_model_params / (1e9):0.2f} B\n"
           f"     # Active: {total_active_params / (1e9):0.2f} B\n\n"
@@ -1804,14 +1804,15 @@ class SimulationRunner:
           f"- Opt. State: {(2 * train_model_size) / (1 << 30):.2f} GB\n\n"
           f"Data (Generated from Fwd):\n"
           f"- Block Inputs ({self.bitwidth} bits): {(train_block_inputs) / (1 << 30):.2f} GB\n"
-          f"- Seq. Context ({self.attention_bitwidth} bits): {(train_context_size) / (1 << 30):.2f} GB\n"
-          f"- Attn Outputs ({self.attention_bitwidth} bits): {(train_attn_output_size) / (1 << 30):.2f} GB\n"
+          f"- Seq. Context ({self.attn_bitwidth} bits): {(train_context_size) / (1 << 30):.2f} GB\n"
+          f"- Attn Outputs ({self.attn_bitwidth} bits): {(train_attn_output_size) / (1 << 30):.2f} GB\n"
           f"- Other Activs ({self.bitwidth} bits): {(train_remain_activation_size) / (1 << 30):.2f} GB\n\n"
           f"TOTAL:\n"
           f"- Attn Critical: {(train_block_inputs + train_context_size + train_attn_output_size) / (1 << 30):.2f} GB\n"
           f"- All: {aggregate_memory_size / (1 << 30):.2f} GB\n\n\n"
           f"--- DATAFLOW CONFIG ---\n\n"
           f"Chunk Size: {self.chunk_size}\n"
+          f"{avg_tokens_per_expert_str}"
           f"{chunk_size_str}"
           f"{chunk_seq_str}"
           f"- Total Chunks: {self.total_chunks}\n\n"
@@ -2220,8 +2221,9 @@ class SimulationRunner:
             f"Total Occupied Cycles: {self.N * T}\n\n"
             f"Fill Bubble: {start_bubble} Total Cycles\n"
             f"Flush Bubble: {stop_bubble} Total Cycles\n\n\n"
-            f"EFFICIENCY:\nOverall % Active: {overall_eff:.2f}%\n"
-            f"Steady-State % Active: {steady_eff:.2f}%\n\n"
+            f"EFFICIENCY:\n"
+            f"Steady-State % Active: {steady_eff:.2f}%\n"
+            f"Overall % Active: {overall_eff:.2f}%\n\n"
         )
         return {
             "text": completion_text, "final_cycle": T, "runtime_sec": runtime_in_seconds,

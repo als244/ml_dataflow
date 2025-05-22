@@ -1008,7 +1008,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 el.textContent = isEnabled ? 'Prepare Simulation' : 'Reset Simulation';
             } else {
                 // Keep specific form inputs like 'attn_type' and 'chunk_type' disabled if in prepare mode (isEnabled)
-                if (isEnabled && (el.id === 'attn_type' || el.id === 'chunk_type')) {
+                if (isEnabled && (el.id === 'attn_type' || el.id === 'chunk_type' || el.id === 'attn_bitwidth')) {
                     el.disabled = true;
                 } else {
                     el.disabled = !isEnabled;
