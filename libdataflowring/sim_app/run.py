@@ -46,7 +46,7 @@ def parse_parameters(form_data):
     params['max_device_memory_bytes'] = form_data.get('max_device_memory_gb', default=80, type=float) * (1 << 30)
     params['hardware_max_flops'] = form_data.get('hardware_max_tflops', default=1989, type=float) * 1e12
     params['hardware_mem_bw_bytes_sec'] = form_data.get('hardware_mem_bw_gbs', default=3350, type=float) * 1e9 # Input GB/s
-    params['matmul_efficiency'] = form_data.get('matmul_efficiency', default=0.52, type=float)
+    params['matmul_efficiency'] = form_data.get('matmul_efficiency', default=0.5, type=float)
     params['attn_fwd_efficiency'] = form_data.get('attn_fwd_efficiency', default=0.3, type=float)
     params['attn_bwd_efficiency'] = form_data.get('attn_bwd_efficiency', default=0.25, type=float)
     params['head_efficiency'] = form_data.get('head_efficiency', default=0.8, type=float)
