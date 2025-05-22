@@ -967,11 +967,8 @@ class Device:
                 if (lid - self.total_devices >= 0):
                     #print(f"Prefetching context for next layer of training chunk: {cid}, Cur Layer Id: {lid}, Next Layer Id: {lid - self.total_devices}")
                     self.handle_bwd_prefetch_context(cid, lid, lid - self.total_devices)
-                
-                ## if this is the last chunk, now prefetch the next required weight
-                ## which replaces the current weight
-                if cid == self.final_train_chunk:
-                    self.handle_bwd_prefetch_weight()
+
+                ## could prefetch weight here but doing at end of bW for cleanliness
 
             elif bW: # BwdW finished, can prefetch the next required activaton
                 ## now prefetch the next required activation, which replaces the current activation
@@ -985,6 +982,11 @@ class Device:
 
                 if (cid == self.final_train_chunk):
                     self.outbound_queue.append((-1, lid, True, False, self.gradLayerTransferFrames))
+
+                ## if this is the last chunk, now prefetch the next required weight
+                ## which replaces the current weight
+                if cid == self.final_train_chunk:
+                    self.handle_bwd_prefetch_weight()
 
             # --- Reset Compute State & Check Next Task ---
             self.is_computing = False
