@@ -1,6 +1,7 @@
 CC = gcc
-CFLAGS = -g -fPIC
-
+DEV_CFLAGS = -g -fPIC
+BUILD_CFLAGS = -O3 -fPIC
+CFLAGS = ${DEV_CFLAGS}
 
 CUDA_INCLUDE_DIR = /usr/local/cuda/include
 CUDA_LIB_DIR = /usr/local/cuda/lib64/stubs
@@ -20,17 +21,13 @@ PROF_NVCC_FLAGS = -O4 --use_fast_math --generate-line-info -Xptxas=-v
 NVCC_FLAGS = ${PROF_NVCC_FLAGS}
 
 
-## for now just makign for one arch, but in reality can compile down to all archs and 
-## select at runtime...
+## Define the list of CUDA architecture numbers to compile for (e.g., 80 86 89 90 100 120)
+## These will generate cuda_kernels_{archnum}.ptx and cuda_kernels_{archnum}.cubin files.
+NATIVE_OP_CUDA_ARCH_NUMS = 80 86 89 90 100 120 # Customize this list as needed (e.g., 80 86 89 90 100 120)
 
-## or do jit compilation durin init...
-
-## just for now only build for speciic, arch but in reality we can generate
-## many cubins (or ptx) and then dynamically select...
-NATIVE_OP_CUDA_ARCH_NUM = 90a
-
-NATIVE_OP_KERNELS_PTX = ${NATIVE_OP_PATH}/build/cuda_kernels.ptx
-NATIVE_OP_KERNELS_CUBIN = cuda_kernels.cubin
+## Generate lists of target PTX and CUBIN filenames for each specified architecture
+ALL_NATIVE_OP_KERNELS_PTX = $(foreach arch,$(NATIVE_OP_CUDA_ARCH_NUMS),${NATIVE_OP_PATH}/build/cuda_kernels_$(arch).ptx)
+ALL_NATIVE_OP_KERNELS_CUBIN = $(foreach arch,$(NATIVE_OP_CUDA_ARCH_NUMS),lib/native/cuda_kernels_$(arch).cubin)
 
 NATIVE_OP_KERNELS_ALL_INCLUDES = -I${CUDA_INCLUDE_DIR} -I${NATIVE_OP_PATH}/include
 
@@ -97,7 +94,7 @@ SET_OP_SKELETONS_INCLUDE_DIR = ../../../../libdataflowops/include
 
 REGISTER_OPS_INCLUDE_DIR = ../../include
 
-REGISTER_OPS_ALL_INCLUDES = -I${DATAFLOW_LIB_INCLUDE_DIR} -I${SET_OP_SKELETONS_INCLUDE_DIR} -I${REGISTER_OPS_INCLUDE_DIR}
+REGISTER_OPS_ALL_INCLUDES = -I${DATAFLOW_LIB_INCLUDE_DIR} -I${SET_OP_SKELETONS_INCLUDE_DIR} -I${REGISTER_OPS_INCLUDE_DIR} -I${CUDA_INCLUDE_DIR}
 
 REGISTER_OPS_LIB = ../../lib/libcuda_register_default_ops.so
 
@@ -108,11 +105,23 @@ create_dirs:
 	mkdir -p lib && mkdir -p lib/native && mkdir -p lib/external && mkdir -p ${NATIVE_OP_PATH}/build && mkdir -p ${EXTERNAL_OP_PATH}/matmul_helper/objs && mkdir -p ${EXTERNAL_OP_PATH}/attention_helper/objs
 
 ## native op kernels
-gen_native_ptx: ${NATIVE_OP_KERNELS_SRC} 
-	nvcc ${NVCC_FLAGS} ${NATIVE_OP_KERNELS_ALL_INCLUDES} $^ -o ${NATIVE_OP_KERNELS_PTX} -ptx -arch=compute_${NATIVE_OP_CUDA_ARCH_NUM} -code=sm_${NATIVE_OP_CUDA_ARCH_NUM}
 
-gen_native_cubin: ${NATIVE_OP_KERNELS_SRC}
-	nvcc ${NVCC_FLAGS} ${NATIVE_OP_KERNELS_ALL_INCLUDES} $^ -o lib/native/${NATIVE_OP_KERNELS_CUBIN} -cubin -arch=compute_${NATIVE_OP_CUDA_ARCH_NUM} -code=sm_${NATIVE_OP_CUDA_ARCH_NUM}
+# Phony target that depends on all architecture-specific PTX files
+gen_native_ptx: $(ALL_NATIVE_OP_KERNELS_PTX)
+
+# Phony target that depends on all architecture-specific CUBIN files
+gen_native_cubin: $(ALL_NATIVE_OP_KERNELS_CUBIN)
+
+# Pattern rule to build individual PTX files for each architecture
+${NATIVE_OP_PATH}/build/cuda_kernels_%.ptx: ${NATIVE_OP_KERNELS_SRC}
+	@echo "Generating PTX for sm_$*..."
+	$(NVCC) ${NVCC_FLAGS} ${NATIVE_OP_KERNELS_ALL_INCLUDES} $< -o $@ -ptx -arch=compute_$* -code=sm_$*
+
+# Pattern rule to build individual CUBIN files for each architecture
+lib/native/cuda_kernels_%.cubin: ${NATIVE_OP_KERNELS_SRC}
+	@echo "Generating CUBIN for sm_$*..."
+	$(NVCC) ${NVCC_FLAGS} ${NATIVE_OP_KERNELS_ALL_INCLUDES} $< -o $@ -cubin -arch=compute_$* -code=sm_$*
+
 
 ## native op config lib
 
@@ -126,7 +135,7 @@ lib/external/${EXTERNAL_OP_ATTENTION_LIB}: build_flash3_lib ${EXTERNAL_OP_ATTENT
 	${CC} ${CFLAGS} ${EXTERNAL_OP_ATTENTION_LIB_ALL_INCLUDES} -shared ${EXTERNAL_OP_ATTENTION_LIB_OBJS} -o $@ ${EXTERNAL_OP_ATTENTION_LIB_OTHER_LIB_DEPENDS}
 
 build_flash3_lib:
-	make -C ${FLASH3_DIR}
+	${MAKE} -C ${FLASH3_DIR}
 
 ${EXTERNAL_OP_PATH}/attention_helper/objs/attention_helper.o: ${EXTERNAL_OP_PATH}/attention_helper/src/attention_helper.c
 	${CC} ${CFLAGS} ${EXTERNAL_OP_ATTENTION_LIB_ALL_INCLUDES} -c $< -o $@
@@ -148,5 +157,4 @@ ${REGISTER_OPS_LIB}: src/register_ops/register_ops.c
 ## don't wipe flash3 lib as this takes a while to build...
 ## can go into that directory and run clean if wanted...
 clean:
-	rm -f ${NATIVE_OP_KERNELS_PTX} lib/native/${NATIVE_OP_KERNELS_CUBIN} lib/native/${NATIVE_OP_CONFIG_LIB} lib/external/${EXTERNAL_OP_ATTENTION_LIB} lib/external/${EXTERNAL_OP_MATMUL_LIB} ${EXTERNAL_OP_PATH}/matmul_helper/objs/*.o ${EXTERNAL_OP_PATH}/attention_helper/objs/*.o ${REGISTER_OPS_LIB}
-
+	rm -f $(ALL_NATIVE_OP_KERNELS_PTX) $(ALL_NATIVE_OP_KERNELS_CUBIN) lib/native/${NATIVE_OP_CONFIG_LIB} lib/external/${EXTERNAL_OP_ATTENTION_LIB} lib/external/${EXTERNAL_OP_MATMUL_LIB} ${EXTERNAL_OP_PATH}/matmul_helper/objs/*.o ${EXTERNAL_OP_PATH}/attention_helper/objs/*.o ${REGISTER_OPS_LIB}

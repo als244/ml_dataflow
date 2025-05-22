@@ -64,7 +64,11 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
     char native_function_code_filename[PATH_MAX];
     char native_function_config_filename[PATH_MAX];
 
-    sprintf(native_function_code_filename, "%s/lib/native/cuda_kernels.cubin", (const char *) OPS_ROOT_DIR);
+    Cuda_Device_Info * dev_info = (Cuda_Device_Info *) dataflow_handle -> device_info;
+
+    int arch_num = dev_info -> arch_num;
+
+    sprintf(native_function_code_filename, "%s/lib/native/cuda_kernels_%d.cubin", (const char *) OPS_ROOT_DIR, arch_num);
     sprintf(native_function_config_filename, "%s/lib/native/cuda_kernels_config.so", (const char *) OPS_ROOT_DIR);
 
 	int num_fwd_datatypes = 5;
