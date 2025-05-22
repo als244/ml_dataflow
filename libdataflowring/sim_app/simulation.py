@@ -542,7 +542,7 @@ class Device:
             has_fwd_activation = True
             fwd_act_key = None
 
-            if b_bX or b_bW:
+            if b_bW:
                 fwd_act_key = (0, b_cid, b_lid)
                 has_fwd_activation = fwd_act_key in self.activations_buffer
 
@@ -566,10 +566,9 @@ class Device:
 
             if b_bX:
                 computation_type_str = "Bwd X"
-                has_bwd_deps = has_weight and has_input_transition and has_fwd_activation and has_context and has_outbound_trans_space
+                has_bwd_deps = has_weight and has_input_transition and has_context and has_outbound_trans_space
                 if not has_weight: bwd_missing_items.append("No Weight")
                 if not has_input_transition: bwd_missing_items.append("No Grad. Stream")
-                if not has_fwd_activation: bwd_missing_items.append("No Fwd Act.")
                 if not has_context: bwd_missing_items.append(f"No Ctx (Chunk: {missing_ctx_chunk})")
                 if not has_outbound_trans_space: bwd_missing_items.append("Congested (Trans.)")
             elif b_bW:
@@ -678,9 +677,6 @@ class Device:
                 self.stall_reason = ""
                 self.cur_computation_start_time = T
                 self.cur_computation_duration = f_dur
-
-                if (self.cur_computation_duration == 0):
-                    print(f"T={T}, Dev {self.device_id}: ERROR - Computation duration is 0 for {computation_type_str} C{f_cid},L{f_lid}")
                
                 self.current_computation_type = computation_type_str
                 self.current_computation_layer_id = f_lid
@@ -697,7 +693,7 @@ class Device:
                         if input_buffer_to_check is self.transitions_inbound_buffer: self.transitions_inbound_empty_slot_ind = self._find_first_free_idx(self.transitions_inbound_buffer)
                         elif input_buffer_to_check is self.head_input_transitions_buffer: self.head_input_transitions_empty_slot_ind = self._find_first_free_idx(self.head_input_transitions_buffer)
                     except ValueError: 
-                        print(f"T={T}, Dev {self.device_id}: ERROR - Could not find input transition {input_transition_key} to mark.")
+                        #print(f"T={T}, Dev {self.device_id}: ERROR - Could not find input transition {input_transition_key} to mark.")
                         pass
 
                 # Reserve space in outbound transition buffer is required
@@ -752,8 +748,6 @@ class Device:
 
             prefetch_key = (-1, self.next_bwd_weight_prefetch_layer_id, False)
             if prefetch_key not in self.home_storage:
-                print(f"Dev {self.device_id}: ERROR - Cannot prefetch BWD weight L{self.next_bwd_weight_prefetch_layer_id}, not found.")
-                self.next_bwd_weight_prefetch_layer_id = -1
                 return
 
             transfer_time = self.headTransferFrames if self.next_bwd_weight_prefetch_layer_id == self.total_layers else self.layerTransferFrames
@@ -907,7 +901,7 @@ class Device:
                     elif input_trans_buffer_to_free is self.head_input_transitions_buffer: self.head_input_transitions_empty_slot_ind = self._find_first_free_idx(self.head_input_transitions_buffer)
                     elif input_trans_buffer_to_free is self.head_output_transitions_buffer: self.head_output_transitions_empty_slot_ind = self._find_first_free_idx(self.head_output_transitions_buffer)
                 except ValueError: 
-                    print(f"T={T} Dev {self.device_id} WARN: Couldn't find consumed input {input_trans_consumed_key} to free.")
+                    #print(f"T={T} Dev {self.device_id} WARN: Couldn't find consumed input {input_trans_consumed_key} to free.")
                     pass
 
             # 2. Handle Output Activation/Context Saving (FWD)
