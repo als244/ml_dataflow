@@ -8,8 +8,6 @@ from collections import deque
 import math
 
 
-GRAD_BLOCK_BITWIDTH = 8
-
 # --- Constants ---
 # Keep calculation constants, remove drawing constants
 # COLOR_* constants remain as they identify *types* of operations/transfers
@@ -1251,6 +1249,7 @@ class SimulationRunner:
         self.bitwidth = params.get('bitwidth', 8)
         self.attn_bitwidth = params.get('attn_bitwidth', 16)
         self.head_bitwidth = params.get('head_bitwidth', 8)
+        self.grad_bitwidth = params.get('grad_bitwidth', 8)
         self.total_layers = params.get('total_layers', 59) # Store non-head count
         self.vocab_size = params.get('vocab_size', 128290)
         self.model_dim = params.get('model_dim', 7168)
@@ -1318,12 +1317,7 @@ class SimulationRunner:
         self.ffn_block_size_bytes = self.dtype_bytes * (self.model_dim + (3 * self.model_dim * self.expert_dim * self.num_experts))
         self.layer_size_bytes = self.attn_block_size_bytes + self.ffn_block_size_bytes
 
-        if (self.bitwidth <= 16):
-            self.grad_layer_bitwidth = GRAD_BLOCK_BITWIDTH
-            self.grad_layer_dtype_bytes = GRAD_BLOCK_BITWIDTH / 8
-        else:
-            self.grad_layer_bitwidth = self.bitwidth
-            self.grad_layer_dtype_bytes = self.dtype_bytes
+        self.grad_layer_dtype_bytes = self.grad_bitwidth / 8
 
         self.grad_layer_size_bytes = self.layer_size_bytes * (self.grad_layer_dtype_bytes / self.dtype_bytes)
 
@@ -2008,7 +2002,7 @@ class SimulationRunner:
             f"--- COMMUNICATION CYCLES ---\n\n"
             f"Layers\n"
             f" - Block ({self.bitwidth} bits): {self.layerTransferFrames}\n"
-            f" - Block Grads ({self.grad_layer_bitwidth} bits): {self.gradLayerTransferFrames}\n"
+            f" - Block Grads ({self.grad_bitwidth} bits): {self.gradLayerTransferFrames}\n"
             f" - Head ({self.head_bitwidth} bits): {self.headTransferFrames}\n"
             f"Chunk Info\n"
             f" - Activation Save/Fetch: {self.savedActivationsFrames}\n"
