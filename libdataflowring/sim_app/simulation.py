@@ -1717,7 +1717,8 @@ class SimulationRunner:
         typical_home_activation_size = home_activation_stack_0 * self.activation_size_bytes
 
         model_bits = "32"
-        grad_bits = "16"
+        grad_bits = str(self.grad_bitwidth)
+        home_grad_size = home_0_layer_size * (self.grad_bitwidth / home_0_layer_size)
         opt_bits = "16"
 
        
@@ -1725,7 +1726,6 @@ class SimulationRunner:
         if self.dtype_bytes == 1:
             ## store optimizer state and gradients in bf16, and model in fp16 in home.
             home_model_size = 4 * home_0_layer_size
-            home_grad_size = home_0_layer_size
             grad_bits = "8"
             home_opt_size = 2 * 2 * home_0_layer_size
             ind_ring_model_shard_size = home_model_size + home_grad_size + home_opt_size
@@ -1733,14 +1733,11 @@ class SimulationRunner:
             ## store model in fp32 in home...
             if self.dtype_bytes == 2:
                 home_model_size = 2 * home_0_layer_size
-                home_grad_size = home_0_layer_size
                 home_opt_size = 2 * home_0_layer_size
                 ind_ring_model_shard_size = home_model_size + home_grad_size + home_opt_size
             else:
                 home_model_size = home_0_layer_size
-                home_grad_size = home_0_layer_size
                 home_opt_size = home_0_layer_size
-                grad_bits = self.bitwidth
                 opt_bits = self.bitwidth
                 ind_ring_model_shard_size = home_model_size + home_grad_size + home_opt_size
                 
