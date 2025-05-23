@@ -6,8 +6,8 @@
 
 // these shoudl be auto-cofigured, testing manually for now...
 // could also take in as command line argument...
-#define NUM_DEV_BLOCKS 12
-#define NUM_DEV_ACTIVATION_SLOTS 48
+#define NUM_DEV_BLOCKS 16
+#define NUM_DEV_ACTIVATION_SLOTS 16
 
 #define NUM_DEV_BLOCK_GRADS 2
 #define NUM_SYS_GRAD_RESULTS 1
@@ -18,22 +18,22 @@
 #define HOST_MEM_GB 100
 #define DEV_MEM_GB 20
 
-#define MODEL_CONFIG_SIZE_B 8
-#define MODEL_PATH "../data/8B"
+#define MODEL_CONFIG_SIZE_B 1
+#define MODEL_PATH "../data/1B"
 
 
 // this is just for testing...
-#define NUM_TOKENS_EXAMPLE_SEQ 8192
+#define NUM_TOKENS_EXAMPLE_SEQ 2048
 
 // this is just for testing,.. in 
 // reality determined dynamically...
 #define CHUNK_SIZE 2048
 
-#define TOKEN_IDS_PATH "../data/8192_token_ids_uint32.dat"
-#define TOKEN_LABELS_PATH "../data/8192_labels_uint32.dat"
+#define TOKEN_IDS_PATH "../data/2048_token_ids_uint32.dat"
+#define TOKEN_LABELS_PATH "../data/2048_labels_uint32.dat"
 
 
-#define MAX_SEQLEN 8192
+#define MAX_SEQLEN 2048
 
 
 // this determines total number of chunks / activations we need to store in 
@@ -1916,14 +1916,19 @@ int main(int argc, char * argv[]){
 
 	// this should be set at the beginning of each step...
 
-	float * dev_loss_vec;
-	int total_pred_tokens_in_step;
-
-	printf("------ STARTING TRAINING ------\n\n");
-
 	int num_steps = NUM_STEPS;
 	int num_rounds_per_step = NUM_ROUNDS_PER_STEP;
 
+
+	float * dev_loss_vec;
+	int total_pred_tokens_in_step = num_rounds_per_step * num_seq_groups_per_round * num_chunks_per_seq * chunk_size;
+	printf("\nTotal tokens per step: %d\n", total_pred_tokens_in_step);
+	int total_train_tokens = num_steps * total_pred_tokens_in_step;
+	printf("Total train tokens: %d\n\n", total_train_tokens);
+
+	printf("------ STARTING TRAINING ------\n\n");
+
+	
 
 	for (int t = 1; t < num_steps + 1; t++){
 
@@ -1954,9 +1959,6 @@ int main(int argc, char * argv[]){
 				for (int c = 0; c < num_chunks_per_seq; c++){
 
 					chunk_id = seq_group * num_chunks_per_seq + c;
-
-
-					
 
 					if (TO_PRINT_SUBMITTING){
 						printf("\n\nSubmitting embedding for seq group #%d, chunk #%d...\n\n", seq_group, chunk_id);
@@ -3013,7 +3015,7 @@ int main(int argc, char * argv[]){
 				}
 
 				// if we have more seqs to process, then we need to load updated layers after step...
-				if (t < num_steps - 1){
+				if (t < num_steps){
 
 					if (TO_PRINT_POST_STEP_RELOADING){
 						printf("Submitting dependency to load updated layers after step: %d...\n\n", t);
@@ -3088,10 +3090,10 @@ int main(int argc, char * argv[]){
 				}
 			}
 
-			printf("Finished enqueuing operations for round: %d\n\n", r);
+			//printf("Finished enqueuing operations for round: %d\n\n", r);
 		}
 
-		printf("Finished enqueuing operations for step: %d!\n\n", t);
+		//printf("Finished enqueuing operations for step: %d!\n\n", t);
 	}
 	
 
