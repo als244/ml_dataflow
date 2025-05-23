@@ -48,7 +48,7 @@
 // the optimizer...
 #define NUM_ROUNDS_PER_STEP 1
 
-#define NUM_STEPS 5
+#define NUM_STEPS 10
 
 
 
