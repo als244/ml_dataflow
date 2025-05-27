@@ -1921,6 +1921,8 @@ int main(int argc, char * argv[]){
 	float * dev_loss_vec;
 	int total_pred_tokens_in_step = num_rounds_per_step * num_seq_groups_per_round * num_chunks_per_seq * chunk_size;
 	printf("\nTotal tokens per step: %d\n", total_pred_tokens_in_step);
+	int round_tokens = num_seq_groups_per_round * num_chunks_per_seq * chunk_size;
+	printf("Round tokens: %d\n", round_tokens);
 	int total_train_tokens = num_steps * total_pred_tokens_in_step;
 	printf("Total train tokens: %d\n\n", total_train_tokens);
 
@@ -2357,7 +2359,7 @@ int main(int argc, char * argv[]){
 
 				ret = dataflow_submit_print_step_loss_host(&dataflow_handle, loss_stream_id,
 											&print_step_loss_host, print_step_loss_op_buffer,
-											t, r, num_chunks, total_pred_tokens_in_step, sys_loss_tracker);
+											t, r, num_chunks, round_tokens, sys_loss_tracker);
 
 				if (ret){
 					fprintf(stderr, "Error: failed to submit print step loss host...\n");
