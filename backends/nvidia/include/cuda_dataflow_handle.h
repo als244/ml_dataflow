@@ -3,6 +3,7 @@
 
 #include "cuda_drv.h"
 #include "dataflow.h"
+#include "cuda_profiler.h"
 
 #define CUDA_DEFAULT_STREAM_PRIO 0
 

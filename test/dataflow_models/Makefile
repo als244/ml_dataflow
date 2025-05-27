@@ -29,7 +29,7 @@ HOST_OPS_LIB = -ldataflow_hostops
 ALL_INCLUDES = -I${DATAFLOW_LIB_INCLUDE_DIR} -I${CUDA_DATAFLOW_BACKEND_INCLUDE_DIR} -I${CUDA_INCLUDE_DIR} -I${DATAFLOW_OPS_INCLUDE_DIR} -I${DATAFLOW_MODELS_INCLUDE_DIR} -I${HOST_OPS_INCLUDE_DIR}
 ALL_LIBS = -L${DATAFLOW_LIB_DIR} -L${CUDA_DATAFLOW_BACKEND_LIB_DIR} -L${DATAFLOW_OPS_LIB_DIR} -L${DATAFLOW_MODELS_LIB_DIR} -L${HOST_OPS_LIB_DIR} ${DATAFLOW_LIB} ${CUDA_DATAFLOW_BACKEND_LIBS} ${DATAFLOW_OPS_LIB} ${DATAFLOW_MODELS_LIB} ${HOST_OPS_LIB} -Wl,-rpath,${DATAFLOW_LIB_DIR} -Wl,-rpath,${CUDA_DATAFLOW_BACKEND_LIB_DIR} -Wl,-rpath,${DATAFLOW_OPS_LIB_DIR} -Wl,-rpath,${DATAFLOW_MODELS_LIB_DIR} -Wl,-rpath,${HOST_OPS_LIB_DIR}
 
-EXECS = naive_transformer transformer
+EXECS = naiveTransformer transformerHostAdd transformer
 
 all: create_data_dirs ${EXECS}
 
@@ -57,12 +57,17 @@ create_data_dirs:
 	mkdir -p correct_transformer_data/optimizer_states; \
 	mkdir -p profiling
 
-naive_transformer: naive_transformer.c
+naiveTransformer: naive_transformer.c
 	${CC} ${CFLAGS} ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
 
 
 transformer: transformer.c
 	${CC} ${CFLAGS} ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
+
+
+transformerHostAdd: transformer_host_add.c
+	${CC} ${CFLAGS} ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
+
 
 clean:
 	rm -f ${EXECS}

@@ -44,6 +44,59 @@ uint64_t cuda_op_table_hash_func(void * op_fingerprint, uint64_t table_size) {
 }
 
 
+// the functions for the profiler
+
+int cuda_profiler_start(){
+	return profile_start();
+}
+
+int cuda_profiler_stop(){
+	return profile_stop();
+}
+
+void cuda_profiler_name_device(Dataflow_Handle * dataflow_handle, const char * device_name){
+	void * dev_ref = dataflow_handle -> device_handle;
+	profile_name_device(dev_ref, device_name);
+	return;
+}
+
+void cuda_profiler_name_handle(Dataflow_Handle * dataflow_handle, const char * handle_name){
+	void * ctx_ref = dataflow_handle -> ctx;
+	profile_name_context(ctx_ref, handle_name);
+	return;
+}
+
+void cuda_profiler_name_stream(Dataflow_Handle * dataflow_handle, int stream_id, const char * stream_name){
+	CUstream * streams = (CUstream *) dataflow_handle -> streams;
+	CUstream * stream_ref;
+	if ((stream_id >= 0) && (stream_id < dataflow_handle -> num_streams)){
+		stream_ref = &(streams[stream_id]);
+	}
+	else{
+		fprintf(stderr, "Error: cannot name stream with id %d, when device only has %d streams...\n", stream_id, dataflow_handle -> num_streams);
+		return;
+	}
+	profile_name_stream(stream_ref, stream_name);
+	return;
+}
+
+void cuda_profiler_name_thread(Dataflow_Handle * dataflow_handle, const char * thread_name){
+	profile_name_thread(thread_name);
+	return;
+}
+
+int cuda_profiler_range_push(const char * message){
+	return profile_range_push(message);
+}
+
+int cuda_profiler_range_pop(){
+	return profile_range_pop();
+}
+
+
+
+
+
 
 
 // FUFILLING ALL FUNCTION POINTERS WIHTIN COMPUTE_HANDLE INTERFACE...
@@ -910,8 +963,26 @@ int dataflow_init_handle(Dataflow_Handle * dataflow_handle, ComputeType compute_
 	dataflow_handle -> submit_inbound_transfer = cuda_submit_inbound_transfer;
 	dataflow_handle -> submit_outbound_transfer = cuda_submit_outbound_transfer;
 	dataflow_handle -> submit_peer_transfer = cuda_submit_outbound_transfer;
-	
-	
+
+
+	// Initilaize profiler functionality...
+	(dataflow_handle -> profiler).start = cuda_profiler_start;
+	(dataflow_handle -> profiler).stop = cuda_profiler_stop;
+	(dataflow_handle -> profiler).name_device = cuda_profiler_name_device;
+	(dataflow_handle -> profiler).name_handle = cuda_profiler_name_handle;
+	(dataflow_handle -> profiler).name_stream = cuda_profiler_name_stream;
+	(dataflow_handle -> profiler).name_thread = cuda_profiler_name_thread;
+	(dataflow_handle -> profiler).range_push = cuda_profiler_range_push;
+	(dataflow_handle -> profiler).range_pop = cuda_profiler_range_pop;
+
+	// Now name all of the streams...!
+	if (opt_stream_names){
+		for (int i = 0; i < num_streams; i++){
+			if (opt_stream_names[i]){
+				cuda_profiler_name_stream(dataflow_handle, i, opt_stream_names[i]);
+			}
+		}
+	}
 
 	return 0;
 

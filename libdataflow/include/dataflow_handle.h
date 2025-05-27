@@ -5,6 +5,7 @@
 #include "dataflow_table.h"
 #include "dataflow_op_structs.h"
 
+
 #define OP_TABLE_MIN_SIZE 1UL << 10
 #define OP_TABLE_MAX_SIZE 1UL << 20
 
@@ -25,12 +26,23 @@ typedef enum compute_type {
 
 typedef struct dataflow_handle Dataflow_Handle;
 
+typedef struct dataflow_profiler {
+    int (*start)(void);
+    int (*stop)(void);
+	void (*name_device)(Dataflow_Handle * dataflow_handle, const char * device_name);
+    void (*name_handle)(Dataflow_Handle * dataflow_handle, const char * handle_name);
+    void (*name_stream)(Dataflow_Handle * dataflow_handle, int stream_id, const char * stream_name);
+    void (*name_thread)(Dataflow_Handle * dataflow_handle,const char * thread_name);
+    int (*range_push)(const char * message);
+    int (*range_pop)(void);
+} Dataflow_Profiler;
+
 struct dataflow_handle {
 
 	// Breakdown of core components...
 	// Could group these into more compact data structures, 
 	// but clearer if each distinct component has its own field
-	
+	Dataflow_Profiler profiler;
 	ComputeType compute_type;
 	// should be -1 for CPU
 	int device_id;

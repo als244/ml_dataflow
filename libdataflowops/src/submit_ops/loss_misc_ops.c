@@ -64,11 +64,12 @@ int dataflow_submit_default_cross_entropy_loss(Dataflow_Handle * handle, int str
 
 int dataflow_submit_print_chunk_loss_host(Dataflow_Handle * handle, int stream_id,
 									void * print_chunk_loss_host_func, Print_Chunk_Loss_Host_Op_Args * op_buffer,
-									int step_num, int seq_id, int chunk_id, int num_tokens, float * avg_loss_ref){
+									int step_num, int round_num, int seq_id, int chunk_id, int num_tokens, float * avg_loss_ref){
 
 	int ret;
     
 	op_buffer -> step_num = step_num;
+	op_buffer -> round_num = round_num;
     op_buffer -> seq_id = seq_id;
     op_buffer -> chunk_id = chunk_id;
     op_buffer -> num_tokens = num_tokens;
@@ -87,11 +88,12 @@ int dataflow_submit_print_chunk_loss_host(Dataflow_Handle * handle, int stream_i
 
 int dataflow_submit_print_step_loss_host(Dataflow_Handle * handle, int stream_id,
 									void * print_step_loss_host_func, Print_Step_Loss_Host_Op_Args * op_buffer,
-									int step_num, int num_chunks, int total_tokens, float * per_chunk_avg_loss){
+									int step_num, int round_num, int num_chunks, int total_tokens, float * per_chunk_avg_loss){
 
 	int ret;
 
 	op_buffer -> step_num = step_num;
+	op_buffer -> round_num = round_num;
 	op_buffer -> num_chunks = num_chunks;
 	op_buffer -> total_tokens = total_tokens;
 	op_buffer -> per_chunk_avg_loss = per_chunk_avg_loss;
