@@ -49,7 +49,7 @@ int dataflow_submit_attention(Dataflow_Handle * handle, int stream_id,
 
 	Op attention_op;
 
-	dataflow_set_flash3_attention_fwd_skeleton(&attention_op.op_skeleton);
+	dataflow_set_flash_attention_fwd_skeleton(&attention_op.op_skeleton);
 
 	void ** op_args = attention_op.op_args;
 
@@ -103,7 +103,7 @@ int dataflow_submit_attention_bwd(Dataflow_Handle * handle, int stream_id,
 
 	Op attention_bwd_op;
 
-	dataflow_set_flash3_attention_bwd_skeleton(&attention_bwd_op.op_skeleton);
+	dataflow_set_flash_attention_bwd_skeleton(&attention_bwd_op.op_skeleton);
 
 	void ** op_args = attention_bwd_op.op_args;
 

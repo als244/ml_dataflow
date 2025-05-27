@@ -10,6 +10,9 @@
 // calling flash3_fwd_wrapper from libflash3.so
 #include "flash3_wrapper.h"
 
+// calling flash2_bwd_wrapper from libflash2.so
+#include "flash2_wrapper.h"
+
 // functions to export
 
 // No need
@@ -51,7 +54,7 @@
 //			- (assumes that if sequence has Q queries and K keys, the starting position of Q_0
 //				occurs at position K - Q)
 
-int flash3_attention_fwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * op, void * op_extra);
+int flash_attention_fwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * op, void * op_extra);
 
 // ^ Calls function from libflash3.so:
 
@@ -65,7 +68,7 @@ int flash3_attention_fwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * 
                         void * x_attn_out, void * softmax_lse,
                         void * attn_workspace) */
 
-int flash3_attention_bwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * op, void * op_extra);
+int flash_attention_bwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * op, void * op_extra);
 
 
 /*
@@ -81,6 +84,5 @@ int flash3_bwd_wrapper(CUstream stream, int arch, int num_sm,
                             void * dx_q, void * dx_k, void * dx_v,
                             void * attn_bwd_workspace);
 */
-
 
 #endif

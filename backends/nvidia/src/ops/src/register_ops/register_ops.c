@@ -34,14 +34,14 @@ int dataflow_register_external_ops(Dataflow_Handle * dataflow_handle) {
 	// Register flash attention op
 
 	Op_Skeleton flash_attention_skeletons[2];
-	dataflow_set_flash3_attention_fwd_skeleton(&flash_attention_skeletons[0]);
-	dataflow_set_flash3_attention_bwd_skeleton(&flash_attention_skeletons[1]);
+	dataflow_set_flash_attention_fwd_skeleton(&flash_attention_skeletons[0]);
+	dataflow_set_flash_attention_bwd_skeleton(&flash_attention_skeletons[1]);
 
 	char flash_attention_lib[PATH_MAX];
 
 	sprintf(flash_attention_lib, "%s/lib/external/libattentionwrapper.so", (const char *) OPS_ROOT_DIR);
 	
-	char * flash_attention_symbols[2] = {"flash3_attention_fwd", "flash3_attention_bwd"};
+	char * flash_attention_symbols[2] = {"flash_attention_fwd", "flash_attention_bwd"};
 
 	char * flash_attention_init_symbols[2] = {NULL, NULL};
 

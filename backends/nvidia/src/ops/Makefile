@@ -56,6 +56,7 @@ EXTERNAL_OP_PATH = ${CURDIR}/src/external
 ## 0.) create flash3 lib as helper lib
 
 FLASH3_DIR = ${EXTERNAL_OP_PATH}/attention_helper/flash3
+
 ### flash3 lib dir
 FLASH3_LIB_DIR = ${FLASH3_DIR}/lib
 ### flash3 include dir
@@ -63,14 +64,20 @@ FLASH3_INCLUDE_DIR = ${FLASH3_DIR}/include
 ### flash3 lib
 FLASH3_LIB = -lflash3
 
+
+FLASH2_DIR = ${EXTERNAL_OP_PATH}/attention_helper/flash2
+FLASH2_LIB_DIR = ${FLASH2_DIR}/lib
+FLASH2_INCLUDE_DIR = ${FLASH2_DIR}/include
+FLASH2_LIB = -lflash2
+
 ## ensure we make flash3 lib
 
 
 ## 1.) set up variables for attention helper lib
 
 EXTERNAL_OP_ATTENTION_LIB_OBJS = ${EXTERNAL_OP_PATH}/attention_helper/objs/attention_helper.o
-EXTERNAL_OP_ATTENTION_LIB_ALL_INCLUDES = -I${DATAFLOW_LIB_INCLUDE_DIR} -I${CUDA_DATAFLOW_HANDLE_INCLUDE_DIR} -I${CUDA_INCLUDE_DIR} -I${EXTERNAL_OP_PATH}/attention_helper/include -I${FLASH3_INCLUDE_DIR}
-EXTERNAL_OP_ATTENTION_LIB_OTHER_LIB_DEPENDS = -L${FLASH3_LIB_DIR} ${FLASH3_LIB} -Wl,-rpath,${FLASH3_LIB_DIR}
+EXTERNAL_OP_ATTENTION_LIB_ALL_INCLUDES = -I${DATAFLOW_LIB_INCLUDE_DIR} -I${CUDA_DATAFLOW_HANDLE_INCLUDE_DIR} -I${CUDA_INCLUDE_DIR} -I${EXTERNAL_OP_PATH}/attention_helper/include -I${FLASH3_INCLUDE_DIR} -I${FLASH2_INCLUDE_DIR}
+EXTERNAL_OP_ATTENTION_LIB_OTHER_LIB_DEPENDS = -L${FLASH3_LIB_DIR} ${FLASH3_LIB} -Wl,-rpath,${FLASH3_LIB_DIR} -L${FLASH2_LIB_DIR} ${FLASH2_LIB} -Wl,-rpath,${FLASH2_LIB_DIR}
 
 
 EXTERNAL_OP_ATTENTION_LIB = libattentionwrapper.so
@@ -136,6 +143,9 @@ lib/external/${EXTERNAL_OP_ATTENTION_LIB}: build_flash3_lib ${EXTERNAL_OP_ATTENT
 
 build_flash3_lib:
 	${MAKE} -C ${FLASH3_DIR}
+
+build_flash2_lib:
+	${MAKE} -C ${FLASH2_DIR}
 
 ${EXTERNAL_OP_PATH}/attention_helper/objs/attention_helper.o: ${EXTERNAL_OP_PATH}/attention_helper/src/attention_helper.c
 	${CC} ${CFLAGS} ${EXTERNAL_OP_ATTENTION_LIB_ALL_INCLUDES} -c $< -o $@

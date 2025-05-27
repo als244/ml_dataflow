@@ -18,8 +18,8 @@ int dataflow_set_op_skeleton(Op_Skeleton * skeleton, char * op_name, DataflowDat
 void dataflow_set_matmul_skeleton(Op_Skeleton * skeleton);
 
 // Flash3 Attention Helpder
-void dataflow_set_flash3_attention_fwd_skeleton(Op_Skeleton * skeleton);
-void dataflow_set_flash3_attention_bwd_skeleton(Op_Skeleton * skeleton);
+void dataflow_set_flash_attention_fwd_skeleton(Op_Skeleton * skeleton);
+void dataflow_set_flash_attention_bwd_skeleton(Op_Skeleton * skeleton);
 
 
 

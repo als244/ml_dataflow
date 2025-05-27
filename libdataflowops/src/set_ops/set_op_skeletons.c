@@ -60,11 +60,11 @@ int dataflow_set_op_skeleton(Op_Skeleton * skeleton, char * op_name, DataflowDat
 		if (strcmp(op_name, "matmul") == 0) {
 			dataflow_set_matmul_skeleton(skeleton);
 		}
-		else if (strcmp(op_name, "flash3_attention_fwd") == 0) {
-			dataflow_set_flash3_attention_fwd_skeleton(skeleton);
+		else if (strcmp(op_name, "flash_attention_fwd") == 0) {
+			dataflow_set_flash_attention_fwd_skeleton(skeleton);
 		}
-		else if (strcmp(op_name, "flash3_attention_bwd") == 0) {
-			dataflow_set_flash3_attention_bwd_skeleton(skeleton);
+		else if (strcmp(op_name, "flash_attention_bwd") == 0) {
+			dataflow_set_flash_attention_bwd_skeleton(skeleton);
 		}
 		else{
 			printf("Cannot set skeleton, unknown op: %s, with fwd_dt: %s, bwd_dt: %s\n", op_name, dataflow_datatype_as_string(fwd_dt), dataflow_datatype_as_string(bwd_dt));
@@ -146,13 +146,13 @@ void dataflow_set_matmul_skeleton(Op_Skeleton * skeleton) {
 
 }
 
-void dataflow_set_flash3_attention_fwd_skeleton(Op_Skeleton * skeleton) {
+void dataflow_set_flash_attention_fwd_skeleton(Op_Skeleton * skeleton) {
 
 	Op_Skeleton_Header * skeleton_header = &(skeleton -> header);
 
 	char op_nickname[MAX_OP_NICKNAME_SIZE];
 
-	sprintf(op_nickname, "%s", "flash3_attention_fwd");
+	sprintf(op_nickname, "%s", "flash_attention_fwd");
 
 	// MAX nicknmae size is set to 255 with 256 allocated space...
 	strncpy(skeleton_header -> op_nickname, op_nickname, MAX_OP_NICKNAME_SIZE);
@@ -224,13 +224,13 @@ void dataflow_set_flash3_attention_fwd_skeleton(Op_Skeleton * skeleton) {
 	dataflow_do_fingerprinting(skeleton_header, sizeof(Op_Skeleton_Header), (skeleton -> identifier).fingerprint);
 }
 
-void dataflow_set_flash3_attention_bwd_skeleton(Op_Skeleton * skeleton) {
+void dataflow_set_flash_attention_bwd_skeleton(Op_Skeleton * skeleton) {
 
 	Op_Skeleton_Header * skeleton_header = &(skeleton -> header);
 
 	char op_nickname[MAX_OP_NICKNAME_SIZE];
 
-	sprintf(op_nickname, "%s", "flash3_attention_bwd");
+	sprintf(op_nickname, "%s", "flash_attention_bwd");
 
 	// MAX nicknmae size is set to 255 with 256 allocated space...
 	strncpy(skeleton_header -> op_nickname, op_nickname, MAX_OP_NICKNAME_SIZE);

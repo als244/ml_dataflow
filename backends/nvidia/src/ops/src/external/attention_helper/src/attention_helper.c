@@ -1,6 +1,6 @@
 #include "attention_helper.h"
 
-int flash3_attention_fwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * op, void * op_extra) {
+int flash_attention_fwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * op, void * op_extra) {
 
 	Cuda_Device_Info * device_info = (Cuda_Device_Info *) dataflow_handle -> device_info;
 
@@ -47,7 +47,15 @@ int flash3_attention_fwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * 
 	uint64_t workspaceBytes = *((uint64_t *) op_args[19]);
 	void * workspace = *((void **) op_args[20]);
 
-	int ret = flash3_fwd_wrapper(stream, arch, sm_count,
+	// The SMEM usage is baked into the arch versioning, 
+	// and GeForce cards with arch 120 have less than H100 of SM90
+	// so it fails to launch the kernel, need to disguise as 4090...
+
+	// however should probably just chnage the logic of smem sizes
+	// to be dynamic within the flash library...
+	
+	if (arch == 80 || arch == 86 || arch == 89 || arch == 90) {
+		return flash3_fwd_wrapper(stream, arch, sm_count,
 									flash_dtype_as_int,
 									num_seqs, total_q, total_k,
 									q_seq_offsets, q_seq_lens, max_seqlen_q,
@@ -57,16 +65,25 @@ int flash3_attention_fwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * 
 									x_attn_out, softmax_lse,
 									is_causal,
 									workspaceBytes, workspace);
+	}
 
-
-	return ret;
+	return flash2_fwd_wrapper(stream, arch, sm_count,
+									flash_dtype_as_int,
+									num_seqs, total_q, total_k,
+									q_seq_offsets, q_seq_lens, max_seqlen_q,
+									k_seq_offsets, k_seq_lens, max_seqlen_k,
+									num_q_heads, num_kv_heads, head_dim,
+									x_q, x_k, x_v,
+									x_attn_out, softmax_lse,
+									is_causal,
+									workspaceBytes, workspace);
 }
 
 
 // inputs: same as fwd + dx_out (upstream gradient) and possibly different sized workspace
 
 // purpose is to compute dx_q, dx_k, dx_v
-int flash3_attention_bwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * op, void * op_extra) {
+int flash_attention_bwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * op, void * op_extra) {
 
 	/*
 	int flash3_bwd_wrapper(CUstream stream, int arch, int num_sm,
@@ -139,7 +156,9 @@ int flash3_attention_bwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * 
 
 	void * workspace = *((void **) op_args[24]);
 
-	int ret = flash3_bwd_wrapper(stream, arch, sm_count,
+	// FLASH3 only supports SM80, SM86, SM89, SM90
+	if (arch == 80 || arch == 86 || arch == 89 || arch == 90) {
+		return flash3_bwd_wrapper(stream, arch, sm_count,
 									flash_dtype_as_int,
 									num_seqs, total_q, total_k,
 									q_seq_offsets, q_seq_lens, max_seqlen_q,
@@ -151,7 +170,18 @@ int flash3_attention_bwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * 
 									dx_q, dx_k, dx_v,
 									is_causal,
 									workspaceBytes, workspace);
+	} 
 
-
-	return ret;
+	return flash2_bwd_wrapper(stream, arch, sm_count,
+									flash_dtype_as_int,
+									num_seqs, total_q, total_k,
+									q_seq_offsets, q_seq_lens, max_seqlen_q,
+									k_seq_offsets, k_seq_lens, max_seqlen_k,
+									num_q_heads, num_kv_heads, head_dim,
+									x_q, x_k, x_v,
+									x_attn_out, softmax_lse,
+									dx_out,
+									dx_q, dx_k, dx_v,
+									is_causal,
+									workspaceBytes, workspace);
 }

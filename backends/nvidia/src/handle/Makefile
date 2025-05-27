@@ -2,8 +2,8 @@ CC = gcc
 CFLAGS = -g -fPIC
 
 CUDA_INCLUDE_DIR = /usr/local/cuda/include
-CUDA_LIB_DIR = /usr/local/cuda/lib64/stubs -L/usr/local/cuda/lib64
-CUDA_LIB_DEPENDS = -lcuda -lcublasLt
+CUDA_LIB_DIR = /usr/local/cuda/lib64/stubs
+CUDA_LIB_DEPENDS = -L${CUDA_LIB_DIR} -lcuda -lcublasLt
 
 DATAFLOW_INCLUDE_DIR = ../../../../libdataflow/include
 DATAFLOW_LIB_DIR = ${CURDIR}/../../../../libdataflow/lib
