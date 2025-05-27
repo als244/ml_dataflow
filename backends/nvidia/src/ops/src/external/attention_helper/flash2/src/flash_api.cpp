@@ -239,6 +239,11 @@ extern "C" {
 
         params.seqlen_knew = 0;
 
+        // these are used for split_kv, particularly for during decooding...
+        params.oaccum_ptr = NULL;
+        params.softmax_lseaccum_ptr = NULL; 
+       
+
         params.q_ptr = x_q;
         params.k_ptr = x_k;
         params.v_ptr = x_v;
