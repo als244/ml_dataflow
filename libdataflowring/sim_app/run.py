@@ -35,6 +35,7 @@ def parse_parameters(form_data):
     params['bitwidth'] = form_data.get('bitwidth', default=8, type=int)
     params['attn_bitwidth'] = form_data.get('attn_bitwidth', default=16, type=int)
     params['head_bitwidth'] = form_data.get('head_bitwidth', default=8, type=int)
+    params['grad_bitwidth'] = form_data.get('grad_bitwidth', default=8, type=int)
     params['total_layers'] = form_data.get('total_layers', default=59, type=int) # Non-head
     params['vocab_size'] = form_data.get('vocab_size', default=129280, type=int)
     params['model_dim'] = form_data.get('model_dim', default=7168, type=int)
