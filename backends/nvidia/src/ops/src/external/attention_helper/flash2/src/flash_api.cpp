@@ -65,28 +65,111 @@ inline int num_splits_heuristic(int batch_nheads_mblocks, int num_SMs, int num_n
 }
 
 
-void run_mha_fwd(Flash_fwd_params &params, cudaStream_t stream, bool force_split_kernel=false) {
-    FP16_SWITCH(!params.is_bf16, [&] {
-        HEADDIM_SWITCH(params.d, [&] {
-            BOOL_SWITCH(params.is_causal, Is_causal, [&] {
-                if (params.num_splits <= 1 && !force_split_kernel) {  // If we don't set it num_splits == 0
-                    run_mha_fwd_<elem_type, kHeadDim, Is_causal>(params, stream);
-                } else {
-                    run_mha_fwd_splitkv_dispatch<elem_type, kHeadDim, Is_causal>(params, stream);
-                }
+int run_mha_fwd(int major_arch,Flash_fwd_params &params, cudaStream_t stream, bool force_split_kernel=false) {
+    switch (major_arch) {
+        case 80:
+            FP16_SWITCH(!params.is_bf16, [&] {
+                HEADDIM_SWITCH(params.d, [&] {
+                    BOOL_SWITCH(params.is_causal, Is_causal, [&] {
+                        if (params.num_splits <= 1 && !force_split_kernel) {  // If we don't set it num_splits == 0
+                            run_mha_fwd_<80, elem_type, kHeadDim, Is_causal>(params, stream);
+                        } else {
+                            run_mha_fwd_splitkv_dispatch<80, elem_type, kHeadDim, Is_causal>(params, stream);
+                        }
+                    });
+                });
             });
-        });
-    });
+            break;
+        case 90:
+            FP16_SWITCH(!params.is_bf16, [&] {
+                HEADDIM_SWITCH(params.d, [&] {
+                    BOOL_SWITCH(params.is_causal, Is_causal, [&] {
+                        if (params.num_splits <= 1 && !force_split_kernel) {  // If we don't set it num_splits == 0
+                            run_mha_fwd_<90, elem_type, kHeadDim, Is_causal>(params, stream);
+                        } else {
+                            run_mha_fwd_splitkv_dispatch<90, elem_type, kHeadDim, Is_causal>(params, stream);
+                        }
+                    });
+                });
+            });
+            break;
+        case 100:
+            FP16_SWITCH(!params.is_bf16, [&] {
+                HEADDIM_SWITCH(params.d, [&] {
+                    BOOL_SWITCH(params.is_causal, Is_causal, [&] {
+                        if (params.num_splits <= 1 && !force_split_kernel) {  // If we don't set it num_splits == 0
+                            run_mha_fwd_<100, elem_type, kHeadDim, Is_causal>(params, stream);
+                        } else {
+                            run_mha_fwd_splitkv_dispatch<100, elem_type, kHeadDim, Is_causal>(params, stream);
+                        }
+                    });
+                });
+            });
+            break;
+        case 120:
+            FP16_SWITCH(!params.is_bf16, [&] {
+                HEADDIM_SWITCH(params.d, [&] {
+                    BOOL_SWITCH(params.is_causal, Is_causal, [&] {
+                        if (params.num_splits <= 1 && !force_split_kernel) {  // If we don't set it num_splits == 0
+                            run_mha_fwd_<120, elem_type, kHeadDim, Is_causal>(params, stream);
+                        } else {
+                            run_mha_fwd_splitkv_dispatch<120, elem_type, kHeadDim, Is_causal>(params, stream);
+                        }
+                    });
+                });
+            });
+            break;
+        default:
+            fprintf(stderr, "Error: major_arch %d not supported in flash2...\n", major_arch);
+            return -1;
+    }
+    return 0;
 }
 
-void run_mha_bwd(Flash_bwd_params &params, cudaStream_t stream) {
-    FP16_SWITCH(!params.is_bf16, [&] {
-        HEADDIM_SWITCH(params.d, [&] {
-            BOOL_SWITCH(params.is_causal, Is_causal, [&] {
-                run_mha_bwd_<elem_type, kHeadDim, Is_causal>(params, stream);
+int run_mha_bwd(int major_arch, Flash_bwd_params &params, cudaStream_t stream) {
+    switch (major_arch) {
+        case 80:
+            FP16_SWITCH(!params.is_bf16, [&] {
+                HEADDIM_SWITCH(params.d, [&] {
+                    BOOL_SWITCH(params.is_causal, Is_causal, [&] {
+                        run_mha_bwd_<80, elem_type, kHeadDim, Is_causal>(params, stream);
+                    });
+                });
             });
-        });
-    });
+            break;
+        case 90:
+            FP16_SWITCH(!params.is_bf16, [&] {
+                HEADDIM_SWITCH(params.d, [&] {
+                    BOOL_SWITCH(params.is_causal, Is_causal, [&] {
+                        run_mha_bwd_<90, elem_type, kHeadDim, Is_causal>(params, stream);
+                    });
+                });
+            });
+            break;
+        case 100:
+            FP16_SWITCH(!params.is_bf16, [&] {
+                HEADDIM_SWITCH(params.d, [&] {
+                    BOOL_SWITCH(params.is_causal, Is_causal, [&] {
+                        run_mha_bwd_<100, elem_type, kHeadDim, Is_causal>(params, stream);
+                    });
+                });
+            });
+            break;
+        case 120:
+            FP16_SWITCH(!params.is_bf16, [&] {
+                HEADDIM_SWITCH(params.d, [&] {
+                    BOOL_SWITCH(params.is_causal, Is_causal, [&] {
+                        run_mha_bwd_<120, elem_type, kHeadDim, Is_causal>(params, stream);
+                    });
+                });
+            });
+            break;
+        default:
+            fprintf(stderr, "Error: major_arch %d not supported in flash2...\n", major_arch);
+            return -1;
+    }
+    return 0;
+    
 }
 
 
@@ -403,11 +486,11 @@ extern "C" {
             fprintf(stderr, "Error: attention fwd failed because not enough workspace. Supplied %lu bytes, but requires %lu...\n", workspaceBytes, used_workspace_size);
             return -1;
         }
+
+        int major_arch = arch - (arch % 10);
         
        
-        run_mha_fwd(params, stream);
-
-        return 0;
+        return run_mha_fwd(major_arch, params, stream);
     }
 
     int flash2_bwd_wrapper(CUstream stream, int arch, int num_sm,
@@ -517,7 +600,13 @@ extern "C" {
             params.dv_accum_ptr = NULL;
         }  
 
-        run_mha_bwd(params, stream);
+        int major_arch = arch - (arch % 10);
+        
+        ret = run_mha_bwd(major_arch, params, stream);
+        if (ret){
+            fprintf(stderr, "Error: running flash2 bwd failed...\n");
+            return -1;
+        }
 
         if (num_q_heads != num_kv_heads){
             // TODO:

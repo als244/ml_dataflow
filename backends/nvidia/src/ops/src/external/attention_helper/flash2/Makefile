@@ -37,12 +37,20 @@ ALL_LIBS = ${WRAPPER_LIB_DEPENDS} -L${CUDA_RUNTIME_LIB_DIR} ${CUDA_RUNTIME_LIB} 
 
 
 ## for each ARCH VERSION DO THIS
-CU_KERNEL_SOURCES = ${wildcard src/instantiations/*.cu}
+CU_KERNEL_SOURCES_SM80 = ${wildcard src/instantiations/sm80/*.cu}
+CU_KERNEL_SOURCES_SM90 = ${wildcard src/instantiations/sm90/*.cu}
+CU_KERNEL_SOURCES_SM100 = ${wildcard src/instantiations/sm100/*.cu}
+CU_KERNEL_SOURCES_SM120 = ${wildcard src/instantiations/sm120/*.cu}
+
+
 
 ## create same base filename in different directory
-CU_KERNEL_OBJS_SM120 = ${patsubst src/instantiations/%.cu, build/instantiations/sm120/%.o, ${CU_KERNEL_SOURCES}}
+CU_KERNEL_OBJS_SM80 = ${patsubst src/instantiations/sm80/%.cu, build/instantiations/sm80/%.o, ${CU_KERNEL_SOURCES_SM80}}
+CU_KERNEL_OBJS_SM90 = ${patsubst src/instantiations/sm90/%.cu, build/instantiations/sm90/%.o, ${CU_KERNEL_SOURCES_SM90}}
+CU_KERNEL_OBJS_SM100 = ${patsubst src/instantiations/sm100/%.cu, build/instantiations/sm100/%.o, ${CU_KERNEL_SOURCES_SM100}}
+CU_KERNEL_OBJS_SM120 = ${patsubst src/instantiations/sm120/%.cu, build/instantiations/sm120/%.o, ${CU_KERNEL_SOURCES_SM120}}
 
-BUILD_CU_KERNEL_OBJS = ${CU_KERNEL_OBJS_SM120}
+BUILD_CU_KERNEL_OBJS = ${CU_KERNEL_OBJS_SM80} ${CU_KERNEL_OBJS_SM90} ${CU_KERNEL_OBJS_SM100} ${CU_KERNEL_OBJS_SM120}
 
 
 FLASH_API_SRC = src/flash_api.cpp
@@ -54,7 +62,7 @@ WRAPPER_SHARED_LIB = lib/libflash2.so
 all: create_dirs ${WRAPPER_SHARED_LIB}
 
 create_dirs:
-	mkdir -p lib && mkdir -p build && mkdir -p build/instantiations && mkdir -p build/instantiations/sm120
+	mkdir -p lib && mkdir -p build && mkdir -p build/instantiations && mkdir -p build/instantiations/sm80 && mkdir -p build/instantiations/sm90 && mkdir -p build/instantiations/sm100 && mkdir -p build/instantiations/sm120
 
 ${WRAPPER_SHARED_LIB}: ${BUILD_CU_KERNEL_OBJS} ${FLASH_API_OBJ} 
 	${CXX} ${CXX_FLAGS} -shared ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
@@ -62,7 +70,17 @@ ${WRAPPER_SHARED_LIB}: ${BUILD_CU_KERNEL_OBJS} ${FLASH_API_OBJ}
 ${FLASH_API_OBJ}: ${FLASH_API_SRC}
 	${CXX} ${CXX_FLAGS} ${ALL_INCLUDES} -c -o $@ $<
 
-build/instantiations/sm120/%.o: src/instantiations/%.cu
+
+build/instantiations/sm80/%.o: src/instantiations/sm80/%.cu
+	${NVCC} ${NVCC_FLAGS} ${ALL_INCLUDES} -arch=compute_80 -code=sm_80 $< -c -o $@
+
+build/instantiations/sm90/%.o: src/instantiations/sm90/%.cu
+	${NVCC} ${NVCC_FLAGS} ${ALL_INCLUDES} -arch=compute_90a -code=sm_90a $< -c -o $@
+
+build/instantiations/sm100/%.o: src/instantiations/sm100/%.cu
+	${NVCC} ${NVCC_FLAGS} ${ALL_INCLUDES} -arch=compute_100a -code=sm_100a $< -c -o $@
+
+build/instantiations/sm120/%.o: src/instantiations/sm120/%.cu
 	${NVCC} ${NVCC_FLAGS} ${ALL_INCLUDES} -arch=compute_120a -code=sm_120a $< -c -o $@
 
 clean:
