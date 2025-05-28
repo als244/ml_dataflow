@@ -2,6 +2,8 @@
 
 #include "namespace_config.h"
 
+#include "flash.h"
+
 namespace FLASH_NAMESPACE {
 
 template<typename T>
@@ -32,11 +34,11 @@ __global__ void bwd_agg_expanded_kv(int num_seqs, int * k_seq_offsets, int * k_s
     int kv_dim = n_kv_heads * head_dim;
 
     // Should be enough space to store row of orig_dk and orig_dv....
-    extern __shared__ T shared_mem[];
+    extern __shared__ uint8_t shared_mem[];
 
-    float * dk_row = shared_mem;
+    float * dk_row = reinterpret_cast<float*>(shared_mem);
     float * dv_row = dk_row + kv_dim;
-    T * new_dk_row = dv_row + kv_dim;
+    T * new_dk_row = reinterpret_cast<T*>(dv_row + kv_dim);
     T * new_dv_row = new_dk_row + model_dim;
 
 

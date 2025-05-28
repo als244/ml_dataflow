@@ -30,7 +30,8 @@ void run_bwd_agg_expanded_kv_<90, __half>(cudaStream_t stream,
 
     bwd_agg_expanded_kv<__half><<<grid, block, smem_size, stream>>>(num_seqs, k_seq_offsets, k_seq_lens, 
                                                                     head_dim, n_q_heads, n_kv_heads,
-                                                                    new_dk_expanded, new_dv_expanded, orig_dk, orig_dv);
+                                                                    static_cast<const __half*>(new_dk_expanded), static_cast<const __half*>(new_dv_expanded),
+                                                                    static_cast<__half*>(orig_dk), static_cast<__half*>(orig_dv));
 }
 
 } // namespace FLASH_NAMESPACE
