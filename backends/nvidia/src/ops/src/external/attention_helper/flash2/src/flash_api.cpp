@@ -172,6 +172,55 @@ int run_mha_bwd(int major_arch, Flash_bwd_params &params, cudaStream_t stream) {
     
 }
 
+int run_bwd_agg_expanded_kv(int major_arch, int is_bf16, cudaStream_t stream,
+                            int num_seqs, int * k_seq_offsets, int * k_seq_lens, int max_k_seq_len,
+                            int head_dim, int n_q_heads, int n_kv_heads,
+                            void * new_dk_expanded, void * new_dv_expanded,
+                            void * orig_dk, void * orig_dv) {
+    switch (major_arch) {
+        case 80:
+            if (is_bf16) {
+                run_bwd_agg_expanded_kv_<80, __nv_bfloat16>(stream, num_seqs, k_seq_offsets, k_seq_lens, max_k_seq_len, head_dim, n_q_heads, n_kv_heads,
+                new_dk_expanded, new_dv_expanded, orig_dk, orig_dv);
+            } else {
+                run_bwd_agg_expanded_kv_<80, __half>(stream, num_seqs, k_seq_offsets, k_seq_lens, max_k_seq_len, head_dim, n_q_heads, n_kv_heads,
+                new_dk_expanded, new_dv_expanded, orig_dk, orig_dv);
+            }
+            break;
+        case 90:
+            if (is_bf16) {
+                run_bwd_agg_expanded_kv_<90, __nv_bfloat16>(stream, num_seqs, k_seq_offsets, k_seq_lens, max_k_seq_len, head_dim, n_q_heads, n_kv_heads,
+                new_dk_expanded, new_dv_expanded, orig_dk, orig_dv);
+            } else {
+                run_bwd_agg_expanded_kv_<90, __half>(stream, num_seqs, k_seq_offsets, k_seq_lens, max_k_seq_len, head_dim, n_q_heads, n_kv_heads,
+                new_dk_expanded, new_dv_expanded, orig_dk, orig_dv);
+            }
+            break;
+        case 100:
+            if (is_bf16) {
+                run_bwd_agg_expanded_kv_<100, __nv_bfloat16>(stream, num_seqs, k_seq_offsets, k_seq_lens, max_k_seq_len, head_dim, n_q_heads, n_kv_heads,
+                new_dk_expanded, new_dv_expanded, orig_dk, orig_dv);
+            } else {
+                run_bwd_agg_expanded_kv_<100, __half>(stream, num_seqs, k_seq_offsets, k_seq_lens, max_k_seq_len, head_dim, n_q_heads, n_kv_heads,
+                new_dk_expanded, new_dv_expanded, orig_dk, orig_dv);
+            }
+            break;
+        case 120:
+            if (is_bf16) {
+                run_bwd_agg_expanded_kv_<120, __nv_bfloat16>(stream, num_seqs, k_seq_offsets, k_seq_lens, max_k_seq_len, head_dim, n_q_heads, n_kv_heads,
+                new_dk_expanded, new_dv_expanded, orig_dk, orig_dv);
+            } else {
+                run_bwd_agg_expanded_kv_<120, __half>(stream, num_seqs, k_seq_offsets, k_seq_lens, max_k_seq_len, head_dim, n_q_heads, n_kv_heads,
+                new_dk_expanded, new_dv_expanded, orig_dk, orig_dv);
+            }
+            break;
+        default:
+            fprintf(stderr, "Error: major_arch %d not supported in flash2...\n", major_arch);
+            return -1;
+    }
+    
+    return 0;
+}
 
 extern "C" {
     
@@ -615,6 +664,18 @@ extern "C" {
 
             // at::sum_out(dk, at::reshape(dk_expanded, {total_k, num_heads_k, num_heads / num_heads_k, head_size}), {2});
             // at::sum_out(dv, at::reshape(dv_expanded, {total_k, num_heads_k, num_heads / num_heads_k, head_size}), {2});
+
+            ret = run_bwd_agg_expanded_kv(major_arch, params.is_bf16, stream,
+                            num_seqs, k_seq_offsets, k_seq_lens, max_k_seq_len,
+                            head_dim, num_q_heads, num_kv_heads,
+                            params.dk, params.dv,
+                            dx_k, dx_v);
+            if (ret){
+                fprintf(stderr, "Error: running bwd_agg_expanded_kv failed...\n");
+                return -1;
+            }
+
+            CUDA_KERNEL_CHECK_LAUNCH();
         }
 
         return 0;

@@ -190,6 +190,19 @@ template<int Arch, typename T, int Headdim, bool Is_causal> void run_mha_bwd_(Fl
 }  // namespace FLASH_NAMESPACE
 
 
+template<int Arch, typename T> void run_bwd_agg_expanded_kv_(cudaStream_t stream, int num_seqs,
+    int * k_seq_offsets,
+    int * k_seq_lens,
+    int max_k_seq_len,
+    int head_dim,
+    int n_q_heads,
+    int n_kv_heads,
+    const T* __restrict__ new_dk_expanded,
+    const T* __restrict__ new_dv_expanded,
+    T* __restrict__ orig_dk,
+    T* __restrict__ orig_dv);
+
+
 // PREPRARING FOR EXPORT
 
 // MUST BE EXACT SAME ORDERING AS IN
