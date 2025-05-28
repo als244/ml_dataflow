@@ -12,6 +12,8 @@
 
 #define ROUND_UP_TO_128(x) (((x) + 127) & ~127)
 
+#define NEG_INF_FP32 0xFF800000
+
 
 inline int round_up_headdim(int head_size) {
     if (head_size <= 64) { return 64; }
@@ -269,6 +271,8 @@ extern "C" {
         params.v_batch_stride = 0;
         params.o_batch_stride = 0;
 
+        params.blockmask = NULL;
+
         
 
         // Need to determine what to do here
@@ -289,7 +293,7 @@ extern "C" {
 
         params.scale_softmax = 1.0 / sqrtf((float) head_dim);
         params.softcap = 0.0f;
-        params.scale_softmax_log2 = params.scale_softmax * M_LOG2E;
+        params.scale_softmax_log2 = params.scale_softmax * (float) M_LOG2E;
 
         params.cache_batch_idx = NULL;
         params.block_table = NULL;
@@ -305,8 +309,15 @@ extern "C" {
         params.scale_softmax_rp_dropout = params.scale_softmax * params.rp_dropout;
     
         params.is_causal = is_causal != 0;
-        params.window_size_left = -1;
-        params.window_size_right = -1;
+
+        if (is_causal){
+            params.window_size_left = -1;
+            params.window_size_right = 0;
+        }
+        else{
+            params.window_size_left = max_seqlen_k;
+            params.window_size_right = max_seqlen_k;
+        }
         
         params.rotary_dim = 0;
         params.rotary_cos_ptr = NULL;
@@ -379,8 +390,6 @@ extern "C" {
             return -1;
         }
 
-
-
         uint64_t used_workspace_size = 0;
         ret = set_flash2_fwd_workspace(params, workspace, &used_workspace_size);
         if (ret){
@@ -393,8 +402,7 @@ extern "C" {
             return -1;
         }
         
-        // Also calls combine at end of function if 
-        // num_splits > 1
+       
         run_mha_fwd(params, stream);
 
         return 0;
@@ -498,7 +506,14 @@ extern "C" {
                 fprintf(stderr, "Error: cuMemset within flash2_bwd_wrapper failed...\n");
                 return -1;
             }
-        }   
+        }
+
+        if (num_q_heads != num_kv_heads){
+            params.dk_ptr = params.dk_accum_ptr;
+            params.dv_ptr = params.dv_accum_ptr;
+            params.dk_accum_ptr = NULL;
+            params.dv_accum_ptr = NULL;
+        }  
 
         run_mha_bwd(params, stream);
 
