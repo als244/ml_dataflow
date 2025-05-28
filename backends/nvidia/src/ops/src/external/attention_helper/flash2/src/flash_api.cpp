@@ -668,14 +668,14 @@ extern "C" {
             ret = run_bwd_agg_expanded_kv(major_arch, params.is_bf16, stream,
                             num_seqs, k_seq_offsets, k_seq_lens, max_k_seq_len,
                             head_dim, num_q_heads, num_kv_heads,
-                            params.dk, params.dv,
+                            params.dk_ptr, params.dv_ptr,
                             dx_k, dx_v);
             if (ret){
                 fprintf(stderr, "Error: running bwd_agg_expanded_kv failed...\n");
                 return -1;
             }
 
-            CUDA_KERNEL_CHECK_LAUNCH();
+            CUDA_KERNEL_LAUNCH_CHECK();
         }
 
         return 0;
