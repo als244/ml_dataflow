@@ -1,3 +1,4 @@
+#include <stdint.h>
 
 template<typename T>
 __global__ void bwd_agg_expanded_kv(int num_seqs, int * k_seq_offsets, int * k_seq_lens,
@@ -31,7 +32,7 @@ __global__ void bwd_agg_expanded_kv(int num_seqs, int * k_seq_offsets, int * k_s
 
     float * dk_row = shared_mem;
     float * dv_row = dk_row + kv_dim;
-    T * new_dk_row = orig_dv_row + kv_dim;
+    T * new_dk_row = dv_row + kv_dim;
     T * new_dv_row = new_dk_row + model_dim;
 
 

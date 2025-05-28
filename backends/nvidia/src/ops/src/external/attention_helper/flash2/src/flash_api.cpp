@@ -666,7 +666,7 @@ extern "C" {
             // at::sum_out(dv, at::reshape(dv_expanded, {total_k, num_heads_k, num_heads / num_heads_k, head_size}), {2});
 
             ret = run_bwd_agg_expanded_kv(major_arch, params.is_bf16, stream,
-                            num_seqs, k_seq_offsets, k_seq_lens, max_k_seq_len,
+                            num_seqs, k_seq_offsets, k_seq_lens, max_seqlen_k,
                             head_dim, num_q_heads, num_kv_heads,
                             params.dk_ptr, params.dv_ptr,
                             dx_k, dx_v);
