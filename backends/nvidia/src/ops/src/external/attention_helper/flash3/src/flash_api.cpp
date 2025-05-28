@@ -605,17 +605,23 @@ extern "C" {
 
         params.rp_dropout = 1.0f;
     
+        // Having API either be causal or full...
+
+        // Newer updates to repo include attention chunk, which
+        // should be pulled in to this forked repo...
         params.is_causal = is_causal;
-        params.is_local = !is_causal;
+
+        // could add window size left/right to API but kinda confusing...
+        params.is_local = false;
         
         if (is_causal){
-            params.window_size_left = max_seqlen_k;
+            params.window_size_left = max_seqlen_k - 1;
             params.window_size_right = 0;
         }
+        // different from flash2 where those stay at -1 for full attention...
         else{
-            // these might have -1...
-            params.window_size_left = max_seqlen_k;
-            params.window_size_right = max_seqlen_q;
+            params.window_size_left = max_seqlen_k - 1;
+            params.window_size_right = max_seqlen_q - 1;
         }
         
         params.rotary_dim = 0;

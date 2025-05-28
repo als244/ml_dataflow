@@ -308,16 +308,17 @@ extern "C" {
 
         params.scale_softmax_rp_dropout = params.scale_softmax * params.rp_dropout;
     
-        params.is_causal = is_causal != 0;
+        // Having API either be causal or full...
+        params.is_causal = is_causal;
 
+        // These are from flash3 lib but make sense here too...
         if (is_causal){
-            params.window_size_left = max_seqlen_k;
+            params.window_size_left = max_seqlen_k - 1;
             params.window_size_right = 0;
         }
         else{
-             // these might have -1...
-            params.window_size_left = max_seqlen_k;
-            params.window_size_right = max_seqlen_q;
+            params.window_size_left = -1;
+            params.window_size_right = -1;
         }
         
         params.rotary_dim = 0;
