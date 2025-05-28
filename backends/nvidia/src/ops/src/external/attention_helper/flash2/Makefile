@@ -7,7 +7,7 @@ CXX_FLAGS = -std=c++17 -g -fPIC -O3 -Wall
 ## (may be in weird location if python installation of CUDA
 ## within some environment...)
 NVCC = nvcc
-NVCC_FLAGS = -Xcompiler=-fPIC -O3 -std=c++17 --ftemplate-backtrace-limit=0 --use_fast_math --generate-line-info -Xptxas=-v --expt-relaxed-constexpr -DCUTLASS_DEBUG_TRACE_LEVEL=0 -DNDEBUG
+NVCC_FLAGS = -Xcompiler=-fPIC -O3 -std=c++17 -U__CUDA_NO_HALF_OPERATORS__  -U__CUDA_NO_HALF_CONVERSIONS__ -U__CUDA_NO_HALF2_OPERATORS__ -U__CUDA_NO_BFLOAT16_CONVERSIONS__ --expt-relaxed-constexpr --expt-extended-lambda --use_fast_math --generate-line-info -Xptxas=-v 
 
 ## Flags for shared library
 WRAPPER_LIB_DEPENDS = -pthread -lm -ldl

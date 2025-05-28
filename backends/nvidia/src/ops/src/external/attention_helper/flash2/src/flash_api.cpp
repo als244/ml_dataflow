@@ -90,38 +90,21 @@ void run_mha_bwd(Flash_bwd_params &params, cudaStream_t stream) {
 
 extern "C" {
     
-    // Note: must have already called set_flash3_fwd_params()
+    // Note: must have already called set_flash2_fwd_params()
     //   (or set fully yourself)
     int set_flash2_fwd_workspace(Flash_fwd_params &params,
                                     void * attn_workspace,
                                     uint64_t * ret_used_workspace_size){
 
-
-        int total_q = params.total_q;
-        int head_dim = params.d;
-        int num_q_heads = params.h;
-
-        int model_dim = head_dim * num_q_heads;
-
-        uint64_t used_workspace_size = 0;
-
-        void * cur_attn_workspace = attn_workspace;
-
-        // FOLLOWING WHAT WAS DONE IN ORGINAL SOURCE...
-
-        params.softmax_lse_ptr = cur_attn_workspace;
-        cur_attn_workspace += num_q_heads * total_q * sizeof(float);
-        used_workspace_size += num_q_heads * total_q * sizeof(float);
-
-        if (ret_used_workspace_size){
-            *ret_used_workspace_size = used_workspace_size;
-        }
+        // If running split_kv version, then we need temp space for lse_accum and oaccum...
+        
+        *ret_used_workspace_size = 0;
 
         return 0;
     }
 
 
-    // Note: must have already called set_flash3_fwd_params()
+    // Note: must have already called set_flash2_fwd_params()
     //   (or set fully yourself)
     int set_flash2_bwd_workspace(Flash_bwd_params &params,
                                     int num_sms,
@@ -188,6 +171,10 @@ extern "C" {
         used_workspace_size += dq_accum_size;
 
         set_to_zero_size += dq_accum_size;
+
+        if (ret_used_workspace_size){
+            *ret_used_workspace_size = used_workspace_size;
+        }
         
         if (ret_set_to_zero_start){
             *ret_set_to_zero_start = set_to_zero_start;
@@ -317,7 +304,7 @@ extern "C" {
 
         params.scale_softmax_rp_dropout = params.scale_softmax * params.rp_dropout;
     
-        params.is_causal = is_causal;
+        params.is_causal = is_causal != 0;
         params.window_size_left = -1;
         params.window_size_right = -1;
         
@@ -388,7 +375,7 @@ extern "C" {
                                     is_causal);
 
         if (ret){
-            fprintf(stderr, "Error: setting flash3 fwd params failed...\n");
+            fprintf(stderr, "Error: setting flash2 fwd params failed...\n");
             return -1;
         }
 
@@ -397,7 +384,7 @@ extern "C" {
         uint64_t used_workspace_size = 0;
         ret = set_flash2_fwd_workspace(params, workspace, &used_workspace_size);
         if (ret){
-            fprintf(stderr, "Error: setting flash3_fwd params failed...\n");
+            fprintf(stderr, "Error: setting flash2_fwd params failed...\n");
             return -1;
         }
 
@@ -453,7 +440,7 @@ extern "C" {
                                     is_causal);
 
         if (ret){
-            fprintf(stderr, "Error: setting flash3 fwd params during bwd failed...\n");
+            fprintf(stderr, "Error: setting flash2 fwd params during bwd failed...\n");
             return -1;
         }
 
@@ -495,7 +482,7 @@ extern "C" {
         size_t set_to_zero_size = 0;
         ret = set_flash2_bwd_workspace(params, num_sm, total_k, workspace, &used_workspace_size, &set_to_zero_start, &set_to_zero_size);
         if (ret){
-            fprintf(stderr, "Error: setting flash3 bwd workspace failed...\n");
+            fprintf(stderr, "Error: setting flash2 bwd workspace failed...\n");
             return -1;
         }
 
@@ -508,7 +495,7 @@ extern "C" {
         if (set_to_zero_start){
             res = cuMemsetD8Async((CUdeviceptr) set_to_zero_start, 0, set_to_zero_size, stream);
             if (res != CUDA_SUCCESS){
-                fprintf(stderr, "Error: cuMemset within flash3_bwd_wrapper failed...\n");
+                fprintf(stderr, "Error: cuMemset within flash2_bwd_wrapper failed...\n");
                 return -1;
             }
         }   
