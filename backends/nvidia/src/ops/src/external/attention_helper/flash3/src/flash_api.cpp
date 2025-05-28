@@ -606,9 +606,17 @@ extern "C" {
         params.rp_dropout = 1.0f;
     
         params.is_causal = is_causal;
-        params.is_local = false;
-        params.window_size_left = -1;
-        params.window_size_right = -1;
+        params.is_local = !is_causal;
+        
+        if (is_causal){
+            params.window_size_left = max_seqlen_k;
+            params.window_size_right = 0;
+        }
+        else{
+            // these might have -1...
+            params.window_size_left = max_seqlen_k;
+            params.window_size_right = max_seqlen_q;
+        }
         
         params.rotary_dim = 0;
         params.rotary_cos_ptr = NULL;

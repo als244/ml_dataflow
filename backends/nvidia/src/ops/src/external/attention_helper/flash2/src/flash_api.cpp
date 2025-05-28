@@ -311,12 +311,13 @@ extern "C" {
         params.is_causal = is_causal != 0;
 
         if (is_causal){
-            params.window_size_left = -1;
+            params.window_size_left = max_seqlen_k;
             params.window_size_right = 0;
         }
         else{
+             // these might have -1...
             params.window_size_left = max_seqlen_k;
-            params.window_size_right = max_seqlen_k;
+            params.window_size_right = max_seqlen_q;
         }
         
         params.rotary_dim = 0;
