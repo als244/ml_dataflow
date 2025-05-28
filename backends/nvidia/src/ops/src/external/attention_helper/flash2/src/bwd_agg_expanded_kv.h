@@ -1,5 +1,9 @@
 #include <stdint.h>
 
+#include "namespace_config.h"
+
+namespace FLASH_NAMESPACE {
+
 template<typename T>
 __global__ void bwd_agg_expanded_kv(int num_seqs, int * k_seq_offsets, int * k_seq_lens,
                                     int head_dim, int n_q_heads, int n_kv_heads,
@@ -74,3 +78,4 @@ __global__ void bwd_agg_expanded_kv(int num_seqs, int * k_seq_offsets, int * k_s
     return;
     
 }
+} // namespace FLASH_NAMESPACE

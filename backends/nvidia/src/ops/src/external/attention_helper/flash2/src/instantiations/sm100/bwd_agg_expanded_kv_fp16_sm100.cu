@@ -1,11 +1,13 @@
-#include "bwd_agg_expanded_kv.h"
-
 #include <cuda_runtime.h>
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
 
 #include "cuda_check.h"
 
+#include "namespace_config.h"
+#include "bwd_agg_expanded_kv.h"
+
+namespace FLASH_NAMESPACE {
 
 template<>
 void run_bwd_agg_expanded_kv_<100, __half>(cudaStream_t stream, 
@@ -30,3 +32,5 @@ void run_bwd_agg_expanded_kv_<100, __half>(cudaStream_t stream,
                                                                     head_dim, n_q_heads, n_kv_heads,
                                                                     new_dk_expanded, new_dv_expanded, orig_dk, orig_dv);
 }
+
+} // namespace FLASH_NAMESPACE
