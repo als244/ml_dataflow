@@ -44,6 +44,17 @@
 // gradients on device without incorruring I/O overhead or gradient accumulation overhead
 #define NUM_SEQ_GROUPS_PER_ROUND 1
 
+
+// num_chunks = num_chunks_per_seq * num_seq_groups_per_round
+// num_chunks_per_seq = seqlen / chunk_size
+// for now should ensure that:
+// if seqlen > chunk_size:
+// 		seqlen % chunk_size == 0
+// if seqlen < chunk_size:
+// 		chunk_size % seqlen == 0
+
+
+
 // this (along with num seqs per round)modulates how frequently we will step 
 // the optimizer...
 #define NUM_ROUNDS_PER_STEP 1
@@ -51,7 +62,8 @@
 #define NUM_STEPS 10
 
 
-
+// up to num_chunks (per round for now, because just repeating) to save...
+#define NUM_RAW_CHUNK_IDS_LABELS_TO_SAVE 1
 
 
 // config for what to print...
@@ -1041,21 +1053,6 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 	fclose(fp);
-
-	// writing back in same dir as other data for clarity...
-
-	FILE * f_token_ids = fopen("test_transformer_data/token_ids_uint32.dat", "wb");
-	if (!f_token_ids){
-		fprintf(stderr, "Error: failed to open token_ids_uint32.dat...\n");
-		return -1;
-	}
-	
-	size_t wrote_els = fwrite(sys_token_ids, sizeof(uint32_t), num_tokens_example_seq, f_token_ids);
-	if (wrote_els != num_tokens_example_seq){
-		fprintf(stderr, "Error: failed to write token_ids_uint32.dat, sys_wrote_els: %zu, expected: %d\n", wrote_els, num_tokens_example_seq);
-		return -1;
-	}
-	fclose(f_token_ids);
 	
 	
 
@@ -1076,18 +1073,7 @@ int main(int argc, char * argv[]){
 	}
 	fclose(fp);
 
-	FILE * f_labels = fopen("test_transformer_data/labels_uint32.dat", "wb");
-	if (!f_labels){
-		fprintf(stderr, "Error: failed to open labels_uint32.dat...\n");
-		return -1;
-	}
-	
-	wrote_els = fwrite(sys_labels, sizeof(uint32_t), num_tokens_example_seq, f_labels);
-	if (wrote_els != num_tokens_example_seq){
-		fprintf(stderr, "Error: failed to write labels_uint32.dat, sys_wrote_els: %zu, expected: %d\n", wrote_els, num_tokens_example_seq);
-		return -1;
-	}
-	fclose(f_labels);
+
 
 	// Now we can prepare seq batch...
 
@@ -1108,9 +1094,9 @@ int main(int argc, char * argv[]){
 			return -1;
 		}
 
-		for (int i = 0; i < num_tokens_example_seq; i++){
-			memcpy(sys_token_ids + i * num_seqs_per_chunk, sys_token_ids, num_tokens_example_seq * sizeof(uint32_t));
-			memcpy(sys_labels + i * num_seqs_per_chunk, sys_labels, num_tokens_example_seq * sizeof(uint32_t));
+		for (int i = 1; i < num_seqs_per_chunk; i++){
+			memcpy(sys_token_ids + i * num_tokens_example_seq, sys_token_ids, num_tokens_example_seq * sizeof(uint32_t));
+			memcpy(sys_labels + i * num_tokens_example_seq, sys_labels, num_tokens_example_seq * sizeof(uint32_t));
 		}
 	}
 	
@@ -1130,7 +1116,28 @@ int main(int argc, char * argv[]){
 	int max_total_local_expert_tokens = max_tokens_per_chunk;
 
 
-	int * sys_seq_positions = malloc(chunk_size * sizeof(int));
+
+
+
+
+	uint32_t ** chunk_sys_token_ids = malloc(num_chunks * sizeof(uint32_t *));
+	uint32_t ** chunk_sys_labels = malloc(num_chunks * sizeof(uint32_t *));
+	int ** chunk_sys_seq_positions = malloc(num_chunks * sizeof(int * ));
+	
+	for (int i = 0; i < num_chunks; i++){
+		chunk_sys_token_ids[i] = cur_host_mem;
+		cur_host_mem += max_tokens_per_chunk * sizeof(uint32_t);
+		used_host_mem += max_tokens_per_chunk * sizeof(uint32_t);
+		chunk_sys_labels[i] = cur_host_mem;
+		cur_host_mem += max_tokens_per_chunk * sizeof(uint32_t);
+		used_host_mem += max_tokens_per_chunk * sizeof(uint32_t);
+		chunk_sys_seq_positions[i] = cur_host_mem;
+		cur_host_mem += max_tokens_per_chunk * sizeof(int);
+		used_host_mem += max_tokens_per_chunk * sizeof(int);
+	}
+
+
+
 
 
 	// these are offsets relative to local q
@@ -1155,8 +1162,15 @@ int main(int argc, char * argv[]){
 	// until last chunk should be [num_tokens_example_seq]
 	int * cur_sys_k_seq_lens = malloc(num_seqs_per_chunk * sizeof(int));
 
-	uint32_t * cur_sys_token_ids = sys_token_ids;
-	uint32_t * cur_sys_labels = sys_labels;
+	// the location where to copy token ids from
+	uint32_t * cur_ref_sys_token_ids = sys_token_ids;
+	uint32_t * cur_ref_sys_labels = sys_labels;
+	
+	// will contain pointers into the pinned slab
+	uint32_t * cur_sys_token_ids;
+	uint32_t * cur_sys_labels;
+	
+	int * cur_sys_seq_positions;
 
 
 	
@@ -1165,19 +1179,31 @@ int main(int argc, char * argv[]){
 	int chunk_tokens;
 	int cur_token;
 
-	int * cur_sys_seq_positions = malloc(max_tokens_per_chunk * sizeof(int));
 
 	for (int seq_group = 0; seq_group < num_seq_groups_per_round; seq_group++){
 
 		// for now make every sequence the same tokens...
-		cur_sys_token_ids = sys_token_ids;
-		cur_sys_labels = sys_labels;
+		cur_ref_sys_token_ids = sys_token_ids;
+		cur_ref_sys_labels = sys_labels;
 
 		cur_token = 0;
 
 		for (int c = 0; c < num_chunks_per_seq; c++){
 
 			chunk_id = seq_group * num_chunks_per_seq + c;
+
+			
+			cur_sys_token_ids = chunk_sys_token_ids[chunk_id];
+			cur_sys_labels = chunk_sys_labels[chunk_id];
+
+			// just assume for now new the number of chunks per seq evenly divides the seq len
+			// we already ensure that if multiple seqs fit in chunk the original example input sequence was extended....
+
+			memcpy(cur_sys_token_ids, cur_ref_sys_token_ids, chunk_size * sizeof(uint32_t));
+			memcpy(cur_sys_labels, cur_ref_sys_labels, chunk_size * sizeof(uint32_t));
+
+
+			// for now make every chuk full and the same size
 			chunk_tokens = chunk_size;
 
 			seq_batches[chunk_id] = malloc(sizeof(Seq_Batch));
@@ -1206,9 +1232,9 @@ int main(int argc, char * argv[]){
 			used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 			cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
-			
 
-		
+			// populating the seq positions slab that will be saved in seq batch struct
+			cur_sys_seq_positions = chunk_sys_seq_positions[chunk_id];
 
 			cur_sys_q_seq_offsets[0] = 0;
 			cur_sys_k_seq_offsets[0] = 0;
@@ -1261,16 +1287,62 @@ int main(int argc, char * argv[]){
 
 			// ADVANCE TO NEXT CHUNK
 
-			cur_sys_token_ids += chunk_tokens;
-			cur_sys_labels += chunk_tokens;
+			cur_ref_sys_token_ids += chunk_tokens;
+			cur_ref_sys_labels += chunk_tokens;
 		}
 	}
 
-	free(cur_sys_seq_positions);
 	free(cur_sys_q_seq_offsets);
 	free(cur_sys_q_seq_lens);
 	free(cur_sys_k_seq_offsets);
 	free(cur_sys_k_seq_lens);
+
+	// now already copied the inputs into the seq batch structs...
+	// so are done with the raw token ids and labels...
+	free(sys_token_ids);
+	free(sys_labels);
+
+	FILE * f_token_ids;
+	size_t wrote_els;
+	FILE * f_labels;
+
+	char file_path[PATH_MAX];
+	for (int i = 0; i < NUM_RAW_CHUNK_IDS_LABELS_TO_SAVE; i++){
+
+		sprintf(file_path, "test_transformer_data/chunk_%d_token_ids_uint32.dat", i);
+
+
+		// writing back in same dir as other data for clarity...
+		f_token_ids = fopen(file_path, "wb");
+		if (!f_token_ids){
+			fprintf(stderr, "Error: failed to open %s...\n", file_path);
+			return -1;
+		}
+	
+		size_t wrote_els = fwrite(seq_batches[i] -> sys_token_ids, sizeof(uint32_t), seq_batches[i] -> total_tokens, f_token_ids);
+		if (wrote_els != seq_batches[i] -> total_tokens){
+			fprintf(stderr, "Error: failed to write %s, sys_wrote_els: %zu, expected: %d\n", file_path, wrote_els, seq_batches[i] -> total_tokens);
+			return -1;
+		}
+		fclose(f_token_ids);
+
+
+		sprintf(file_path, "test_transformer_data/chunk_%d_labels_uint32.dat", i);
+
+		f_labels = fopen(file_path, "wb");
+		if (!f_labels){
+			fprintf(stderr, "Error: failed to open %s...\n", file_path);
+			return -1;
+		}
+	
+		wrote_els = fwrite(seq_batches[i] -> sys_labels, sizeof(uint32_t), seq_batches[i] -> total_tokens, f_labels);
+		if (wrote_els != seq_batches[i] -> total_tokens){
+			fprintf(stderr, "Error: failed to write %s, sys_wrote_els: %zu, expected: %d\n", file_path, wrote_els, seq_batches[i] -> total_tokens);
+			return -1;
+		}
+		fclose(f_labels);
+
+	}
 
 
 
