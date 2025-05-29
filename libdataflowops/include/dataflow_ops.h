@@ -261,13 +261,13 @@ typedef struct Print_Chunk_Loss_Host_Op_Args{
     float * avg_loss_ref;
 } Print_Chunk_Loss_Host_Op_Args;
 
-typedef struct Print_Step_Loss_Host_Op_Args{
+typedef struct Print_Round_Loss_Host_Op_Args{
 	int step_num;
 	int round_num;
 	int num_chunks;
 	int total_tokens;
 	float * per_chunk_avg_loss;
-} Print_Step_Loss_Host_Op_Args;
+} Print_Round_Loss_Host_Op_Args;
 
 // Require user to pass in host function pointer...
 
@@ -276,8 +276,8 @@ int dataflow_submit_print_chunk_loss_host(Dataflow_Handle * handle, int stream_i
 									void * print_chunk_loss_host_func, Print_Chunk_Loss_Host_Op_Args * op_buffer,
 									int step_num, int round_num, int seq_id, int chunk_id, int num_tokens, float * avg_loss_ref);
 
-int dataflow_submit_print_step_loss_host(Dataflow_Handle * handle, int stream_id,
-									void * print_step_loss_host_func, Print_Step_Loss_Host_Op_Args * op_buffer,
+int dataflow_submit_print_round_loss_host(Dataflow_Handle * handle, int stream_id,
+									void * print_round_loss_host_func, Print_Round_Loss_Host_Op_Args * op_buffer,
 									int step_num, int round_num, int num_chunks, int total_tokens, float * per_chunk_avg_loss);
 
 

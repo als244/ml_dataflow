@@ -12,8 +12,8 @@
 #define NUM_DEV_BLOCK_GRADS 2
 #define NUM_SYS_GRAD_RESULTS 3
 
-#define NUM_ADD_THREADS 16	
-#define NUM_ADAM_THREADS 16	
+#define NUM_ADD_THREADS 12	
+#define NUM_ADAM_THREADS 12	
 
 #define HOST_MEM_GB 110
 #define DEV_MEM_GB 22
@@ -42,13 +42,13 @@
 // the role of this is to be largest possible while still fitting in memory...
 // because it means more shared data can utilize the parameters and update
 // gradients on device without incorruring I/O overhead or gradient accumulation overhead
-#define NUM_SEQ_GROUPS_PER_ROUND 8
+#define NUM_SEQ_GROUPS_PER_ROUND 1
 
 // this (along with num seqs per round)modulates how frequently we will step 
 // the optimizer...
-#define NUM_ROUNDS_PER_STEP 8
+#define NUM_ROUNDS_PER_STEP 1
 
-#define NUM_STEPS 2
+#define NUM_STEPS 10
 
 
 
@@ -56,7 +56,7 @@
 
 // config for what to print...
 
-#define TO_PRINT_STEP_LOSS 1
+#define TO_PRINT_ROUND_LOSS 1
 #define TO_PRINT_CHUNK_LOSS 0
 
 
@@ -1731,10 +1731,7 @@ int main(int argc, char * argv[]){
 	cur_host_mem += logits_size;
 	used_host_mem += logits_size;
 
-	uint64_t loss_tracker_size = num_chunks * sizeof(float);
-	float * sys_loss_tracker = (float *) cur_host_mem;
-	cur_host_mem += loss_tracker_size;
-	used_host_mem += loss_tracker_size;
+	
 
 
 
@@ -1782,26 +1779,6 @@ int main(int argc, char * argv[]){
 
 
 	// TRAINING LOOP BELOW....
-
-
-
-
-
-	Print_Step_Loss_Host_Op_Args * print_step_loss_op_buffer = calloc(1, sizeof(Print_Step_Loss_Host_Op_Args));
-	if (!print_step_loss_op_buffer){
-		fprintf(stderr, "Error: failed to allocate print_step_loss_op_buffer...\n");
-		return -1;
-	}
-
-
-	Print_Chunk_Loss_Host_Op_Args * print_chunk_loss_op_buffer = calloc(num_chunks, sizeof(Print_Chunk_Loss_Host_Op_Args));
-	if (!print_chunk_loss_op_buffer){
-		fprintf(stderr, "Error: failed to allocate print_chunk_loss_op_buffer...\n");
-		return -1;
-	}
-
-
-
 
 
 	Transformer_Block_Activations * cur_activations;
@@ -1916,6 +1893,25 @@ int main(int argc, char * argv[]){
 
 	int num_steps = NUM_STEPS;
 	int num_rounds_per_step = NUM_ROUNDS_PER_STEP;
+
+	uint64_t loss_tracker_size = num_steps * num_rounds_per_step * num_chunks * sizeof(float);
+	float * sys_loss_tracker = (float *) cur_host_mem;
+	cur_host_mem += loss_tracker_size;
+	used_host_mem += loss_tracker_size;
+
+	Print_Round_Loss_Host_Op_Args * print_round_loss_op_buffer = calloc(num_steps * num_rounds_per_step, sizeof(Print_Round_Loss_Host_Op_Args));
+	if (!print_round_loss_op_buffer){
+		fprintf(stderr, "Error: failed to allocate print_round_loss_op_buffer...\n");
+		return -1;
+	}
+
+
+	Print_Chunk_Loss_Host_Op_Args * print_chunk_loss_op_buffer = calloc(num_steps * num_rounds_per_step * num_chunks, sizeof(Print_Chunk_Loss_Host_Op_Args));
+	if (!print_chunk_loss_op_buffer){
+		fprintf(stderr, "Error: failed to allocate print_chunk_loss_op_buffer...\n");
+		return -1;
+	}
+
 
 
 	float * dev_loss_vec;
@@ -2310,7 +2306,7 @@ int main(int argc, char * argv[]){
 
 					// save the loss tracker...
 					
-					if ((TO_PRINT_CHUNK_LOSS) || (TO_PRINT_STEP_LOSS)) {
+					if ((TO_PRINT_CHUNK_LOSS) || (TO_PRINT_ROUND_LOSS)) {
 						cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, compute_stream_id);
 						if (!cur_stream_state){
 							fprintf(stderr, "Error: failed to get stream state for head...\n");
@@ -2325,7 +2321,7 @@ int main(int argc, char * argv[]){
 
 						
 
-						ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, loss_stream_id, &(sys_loss_tracker[chunk_id]), &(dev_loss_vec[head_activations -> num_tokens]), sizeof(float));
+						ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, loss_stream_id, &(sys_loss_tracker[(t - 1) * num_rounds_per_step * num_chunks + r * num_chunks + chunk_id]), &(dev_loss_vec[head_activations -> num_tokens]), sizeof(float));
 
 						if (ret){
 							fprintf(stderr, "Error: failed to submit outbound transfer for loss tracker...\n");
@@ -2336,8 +2332,8 @@ int main(int argc, char * argv[]){
 					if (TO_PRINT_CHUNK_LOSS) {
 
 						ret = dataflow_submit_print_chunk_loss_host(&dataflow_handle, loss_stream_id,
-												&print_chunk_loss_host, &(print_chunk_loss_op_buffer[chunk_id]),
-												t, r, seq_group, chunk_id, head_activations -> num_tokens, &(sys_loss_tracker[chunk_id]));
+												&print_chunk_loss_host, &(print_chunk_loss_op_buffer[(t - 1) * num_rounds_per_step * num_chunks + r * num_chunks + chunk_id]),
+												t, r, seq_group, chunk_id, head_activations -> num_tokens, &(sys_loss_tracker[(t - 1) * num_rounds_per_step * num_chunks + r * num_chunks + chunk_id]));
 
 						if (ret){
 							fprintf(stderr, "Error: failed to submit print loss host...\n");
@@ -2355,11 +2351,11 @@ int main(int argc, char * argv[]){
 				dataflow_handle.profiler.range_pop();
 			}
 
-			if (TO_PRINT_STEP_LOSS) {
+			if (TO_PRINT_ROUND_LOSS) {
 
-				ret = dataflow_submit_print_step_loss_host(&dataflow_handle, loss_stream_id,
-											&print_step_loss_host, print_step_loss_op_buffer,
-											t, r, num_chunks, round_tokens, sys_loss_tracker);
+				ret = dataflow_submit_print_round_loss_host(&dataflow_handle, loss_stream_id,
+											&print_round_loss_host, &(print_round_loss_op_buffer[(t - 1) * num_rounds_per_step + r]),
+											t, r, num_chunks, round_tokens, &(sys_loss_tracker[(t - 1) * num_rounds_per_step * num_chunks + r * num_chunks]));
 
 				if (ret){
 					fprintf(stderr, "Error: failed to submit print step loss host...\n");

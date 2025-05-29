@@ -11,7 +11,7 @@
 
 
 int print_chunk_loss_host(void * _print_chunk_loss_host_op_args);
-int print_step_loss_host(void * _print_step_loss_host_op_args);
+int print_round_loss_host(void * _print_round_loss_host_op_args);
 
 int set_mem_host(void * _set_mem_host_op_args);
 

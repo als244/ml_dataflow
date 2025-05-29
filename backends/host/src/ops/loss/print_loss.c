@@ -19,9 +19,9 @@ int print_chunk_loss_host(void * _print_chunk_loss_host_op_args){
     return 0;
 }
 
-int print_step_loss_host(void * _print_step_loss_host_op_args){
+int print_round_loss_host(void * _print_round_loss_host_op_args){
 
-    Print_Step_Loss_Host_Op_Args * args = (Print_Step_Loss_Host_Op_Args *) _print_step_loss_host_op_args;
+    Print_Round_Loss_Host_Op_Args * args = (Print_Round_Loss_Host_Op_Args *) _print_round_loss_host_op_args;
 
     int step_num = args -> step_num;
     int round_num = args -> round_num;
