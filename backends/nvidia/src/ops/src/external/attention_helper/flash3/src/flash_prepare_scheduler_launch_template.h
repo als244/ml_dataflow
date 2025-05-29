@@ -111,6 +111,7 @@ __global__ void prepare_varlen_num_blocks_kernel(
 
 } // flash
 
+template<int compiler_arch>
 void prepare_varlen_num_blocks(Flash_fwd_params &params, cudaStream_t stream, bool packgqa,
                                int blockM, int blockN, bool enable_pdl) {
     // Only support batch <= 992 (32 warps, each with 31 batches)
