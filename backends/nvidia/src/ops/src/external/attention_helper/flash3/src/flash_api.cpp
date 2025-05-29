@@ -744,10 +744,10 @@ extern "C" {
             int const kBlockN = params.arch >= 90 ? std::get<1>(kBlockMN_kernel_args_sm90) : std::get<1>(kBlockMN_kernel_args_sm8x);
             
             if (params.arch == 90){
-                prepare_varlen_num_blocks<90>(params, stream, params.pack_gqa, kBlockM, kBlockN, true /*enable_pdl*/);
+                run_prepare_varlen_num_blocks_<90>(params, stream, params.pack_gqa, kBlockM, kBlockN, true /*enable_pdl*/);
                 CHECK_CUDA_KERNEL_LAUNCH();
             } else if (params.arch >= 80 && params.arch < 90) {
-                prepare_varlen_num_blocks<80>(params, stream, params.pack_gqa, kBlockM, kBlockN, false /*enable_pdl*/);
+                run_prepare_varlen_num_blocks_<80>(params, stream, params.pack_gqa, kBlockM, kBlockN, false /*enable_pdl*/);
                 CHECK_CUDA_KERNEL_LAUNCH();
             } else {
                 fprintf(stderr, "Unsupported architecture for prepare_varlen_num_blocks in flash3: %d\n", params.arch);
