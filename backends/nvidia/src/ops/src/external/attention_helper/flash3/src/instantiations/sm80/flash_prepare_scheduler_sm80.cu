@@ -19,7 +19,7 @@ void run_prepare_varlen_num_blocks_<80>(Flash_fwd_params &params, cudaStream_t s
                          // Consider the maximum number of batches to process.
     if (params.b == 0) return; // Nothing to do.
 
-    flash::prepare_varlen_num_blocks_kernel<<<gridDim, blockDim, 0, stream>>>(
+    flash::prepare_varlen_num_blocks_kernel<80><<<gridDim, blockDim, 0, stream>>>(
         params.seqlen_q, params.seqlen_k, params.seqlen_knew,
         params.cu_seqlens_q, params.cu_seqlens_k, params.cu_seqlens_knew,
         params.seqused_q, params.seqused_k, params.leftpad_k,
