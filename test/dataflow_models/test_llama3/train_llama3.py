@@ -31,7 +31,7 @@ torch.manual_seed(SEED)
 np.random.seed(SEED)
 random.seed(SEED)
 
-MAX_SEQ_LEN = 2048
+MAX_SEQ_LEN = 4096
 MAX_BATCH_SIZE = 1
 
 MODEL_PATH = "./models/1B_inst/"
@@ -70,8 +70,8 @@ print(f"Finished Initialized Model!\n\tRuntime: {time_ms} ms\n")
 
 device = torch.device("cuda:0")
 
-token_id_file = "2048_token_ids_uint32.dat"
-token_labels_file = "2048_labels_uint32.dat"
+token_id_file = "8192_token_ids_uint32.dat"
+token_labels_file = "8192_labels_uint32.dat"
 np_inp_tokens = np.fromfile(token_id_file, dtype=np.uint32)[:MAX_SEQ_LEN]
 np_labels = np.fromfile(token_labels_file, dtype=np.uint32)[:MAX_SEQ_LEN]
 
@@ -122,7 +122,7 @@ for i in range(1, n_repeats + 1):
 
     ## LOSS CALCULATION
     loss = criterion(predictions.view(-1, predictions.size(-1)), labels.view(-1))
-    print(f"[Step {i}] Loss calculated: {loss.item()}") # Use .item() to get scalar value
+    print(f"[Step {i}] Loss calculated: {loss.item()}\n") # Use .item() to get scalar value
 
 
     ## BACKWARD PASS
