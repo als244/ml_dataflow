@@ -1162,7 +1162,6 @@ int main(int argc, char * argv[]){
 	
 	int chunk_id;
 
-	int remain_tokens;
 	int chunk_tokens;
 	int cur_token;
 
@@ -1272,8 +1271,6 @@ int main(int argc, char * argv[]){
 	free(cur_sys_q_seq_lens);
 	free(cur_sys_k_seq_offsets);
 	free(cur_sys_k_seq_lens);
-
-	assert(remain_tokens == 0);
 
 
 
