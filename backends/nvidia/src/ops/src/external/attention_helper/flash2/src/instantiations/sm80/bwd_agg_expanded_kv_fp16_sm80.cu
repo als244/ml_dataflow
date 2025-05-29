@@ -17,7 +17,7 @@ void run_bwd_agg_expanded_kv_<80, __half>(cudaStream_t stream,
                                                     void * orig_dk, void * orig_dv) {
 
 
-    dim3 grid(num_seqs, max_k_seq_len);
+    dim3 grid(max_k_seq_len, num_seqs);
     dim3 block(128);
 
     int kv_dim = n_kv_heads * head_dim;
