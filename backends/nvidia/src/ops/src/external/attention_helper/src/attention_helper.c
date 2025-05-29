@@ -46,15 +46,11 @@ int flash_attention_fwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * o
 
 	uint64_t workspaceBytes = *((uint64_t *) op_args[19]);
 	void * workspace = *((void **) op_args[20]);
-
-	// The SMEM usage is baked into the arch versioning, 
-	// and GeForce cards with arch 120 have less than H100 of SM90
-	// so it fails to launch the kernel, need to disguise as 4090...
-
-	// however should probably just chnage the logic of smem sizes
-	// to be dynamic within the flash library...
 	
-	if (arch == 80 || arch == 86 || arch == 89 || arch == 90) {
+	// FLASH3 only supports SM80, SM86, SM89, SM90
+	// however has bad numerical accuracy on ampere...
+	//if (arch == 80 || arch == 86 || arch == 89 || arch == 90) {
+	if (arch == 90) {
 		return flash3_fwd_wrapper(stream, arch, sm_count,
 									flash_dtype_as_int,
 									num_seqs, total_q, total_k,
@@ -157,7 +153,9 @@ int flash_attention_bwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * o
 	void * workspace = *((void **) op_args[24]);
 
 	// FLASH3 only supports SM80, SM86, SM89, SM90
-	if (arch == 80 || arch == 86 || arch == 89 || arch == 90) {
+	// however has bad numerical accuracy on ampere...
+	//if (arch == 80 || arch == 86 || arch == 89 || arch == 90) {
+	if (arch == 90) {
 		return flash3_bwd_wrapper(stream, arch, sm_count,
 									flash_dtype_as_int,
 									num_seqs, total_q, total_k,
