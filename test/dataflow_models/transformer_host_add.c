@@ -18,22 +18,22 @@
 #define HOST_MEM_GB 110
 #define DEV_MEM_GB 21
 
-#define MODEL_CONFIG_SIZE_B 8
-#define MODEL_PATH "../data/8B"
+#define MODEL_CONFIG_SIZE_B 1
+#define MODEL_PATH "../data/1B"
 
 
 // this is just for testing...
-#define NUM_TOKENS_EXAMPLE_SEQ 2048
+#define NUM_TOKENS_EXAMPLE_SEQ 4096
 
 // this is just for testing,.. in 
 // reality determined dynamically...
-#define CHUNK_SIZE 2048
+#define CHUNK_SIZE 4096
 
-#define TOKEN_IDS_PATH "../data/2048_token_ids_uint32.dat"
-#define TOKEN_LABELS_PATH "../data/2048_labels_uint32.dat"
+#define TOKEN_IDS_PATH "../data/8192_token_ids_uint32.dat"
+#define TOKEN_LABELS_PATH "../data/8192_labels_uint32.dat"
 
 
-#define MAX_SEQLEN 2048
+#define MAX_SEQLEN NUM_TOKENS_EXAMPLE_SEQ
 
 
 // this determines total number of chunks / activations we need to store in 
