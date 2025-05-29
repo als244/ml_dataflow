@@ -6,17 +6,17 @@
 
 // these shoudl be auto-cofigured, testing manually for now...
 // could also take in as command line argument...
-#define NUM_DEV_BLOCKS 8
-#define NUM_DEV_ACTIVATION_SLOTS 64
+#define NUM_DEV_BLOCKS 12
+#define NUM_DEV_ACTIVATION_SLOTS 32
 
-#define NUM_DEV_BLOCK_GRADS 2
-#define NUM_SYS_GRAD_RESULTS 3
+#define NUM_DEV_BLOCK_GRADS 12
+#define NUM_SYS_GRAD_RESULTS 12
 
 #define NUM_ADD_THREADS 12	
 #define NUM_ADAM_THREADS 12	
 
 #define HOST_MEM_GB 110
-#define DEV_MEM_GB 22
+#define DEV_MEM_GB 21
 
 #define MODEL_CONFIG_SIZE_B 8
 #define MODEL_PATH "../data/8B"
