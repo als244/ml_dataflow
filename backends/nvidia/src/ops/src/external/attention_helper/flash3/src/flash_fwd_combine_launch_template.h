@@ -56,7 +56,7 @@ void run_flash_fwd_combine(Flash_fwd_params &params, cudaStream_t stream, bool e
     CHECK_CUDA_KERNEL_LAUNCH();
 }
 
-template<typename T, typename Tpartial, int kBlockK>
+template<int compile_arch, typename T, typename Tpartial, int kBlockK>
 void run_mha_fwd_combine_(Flash_fwd_params &params, cudaStream_t stream, bool enable_pdl) {
     // We want kBlockM to be as small as possible to maximize parallelism.
     // E.g., if hdim is 64, we want kBlockM to be 16 so that we can use 256 threads, each reading 4 elements (floats).

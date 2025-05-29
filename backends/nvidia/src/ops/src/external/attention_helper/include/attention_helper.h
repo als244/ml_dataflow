@@ -7,58 +7,32 @@
 #include "cuda_dataflow_handle.h"
 
 
-// calling flash3_fwd_wrapper from libflash3.so
-#include "flash3_wrapper.h"
-
-// calling flash2_bwd_wrapper from libflash2.so
+// calling flash2_[fwd|bwd]_wrapper from libflash2.so
 #include "flash2_wrapper.h"
 
+// calling flash3_[fwd|bwd]_wrapper from libflash3.so
+#include "flash3_wrapper.h"
+
+
+// set higher flags that determine which archs use flash3
+
+// seems like there is a numerical difference between flash2 and flash3
+// not sure which is "better", will set defaults to use flash3 for performance
+// and will fall back to flash2 for other archs (blackwell)
+
+
+#define USE_FLASH3_AMPERE 1
+#define USE_FLASH3_HOPPER 1
+
+
+
 // functions to export
-
-// No need
-// int flash3_attention_init(Dataflow_Handle * dataflow_handle, void * op_table_value)
-
-
-
-
-
-// FOR FLASH3 ATTENTION:
-
-// Only support for FP16, BF16, and FP8
-// if TYPE FP8, output must be BF16
-// Softmax LSE is of type FP32 and has length total_q * num_q_heads
-
-// To compute required size of attn_workspace:
-
-// attn_workspace_size = 0
-
-// Occum and LSE accum:
-// If num_splits > 1:
-//      attn_workspace_size += num_splits * sizeof(float) * num_q_heads * total_q * (1 + head_dim)
-
-// Tile count sem: 
-// If arch >= 90 || num_splits > 1:
-//      attn_workspace_size += sizeof(int)
-
-// Dynamic split ptr for each seq:
-// If num_seqs <= 992:
-//      attn_workspace_size += num_seqs * sizeof(int)
-
-
-// ASSUME CAUSAL
-
-// - cum_q_seqlens should be of length num_seqs + 1, starting with 0
-//		- cumsum of # of queries in each sequence
-// - k_seqlens should be of length num_seqs
-//		- total number of keys in sequence (should be >= # of queries) 
-//			- (assumes that if sequence has Q queries and K keys, the starting position of Q_0
-//				occurs at position K - Q)
 
 int flash_attention_fwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * op, void * op_extra);
 
 // ^ Calls function from libflash3.so:
 
-/* int flash3_fwd_wrapper(CUstream stream, int arch, int num_sm,
+/* int flash[2|3]_fwd_wrapper(CUstream stream, int arch, int num_sm,
                         int flash_dtype_as_int,
                         int num_seqs, int total_q, int total_k,
                         int * cum_q_seqlens, int max_seqlen_q,
@@ -72,7 +46,7 @@ int flash_attention_bwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * o
 
 
 /*
-int flash3_bwd_wrapper(CUstream stream, int arch, int num_sm,
+int flash[2|3]_bwd_wrapper(CUstream stream, int arch, int num_sm,
                             int flash_dtype_as_int, 
                             int num_seqs, int total_q, int total_k, 
                             int * cum_q_seqlens, int max_seqlen_q,

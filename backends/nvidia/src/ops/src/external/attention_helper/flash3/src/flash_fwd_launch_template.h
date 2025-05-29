@@ -159,8 +159,16 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
     };
 
     if (Varlen && params.num_splits_dynamic_ptr && !params.skip_scheduler_metadata_computation) {
-        prepare_varlen_num_blocks(params, stream, PackGQA, kBlockM, kBlockN, Arch >= 90 /*enable_pdl*/);
-        CHECK_CUDA_KERNEL_LAUNCH();
+        if (params.arch >= 80 && params.arch < 90) {
+            prepare_varlen_num_blocks<80>(params, stream, PackGQA, kBlockM, kBlockN, false);
+            CHECK_CUDA_KERNEL_LAUNCH();
+        } else if (params.arch == 90) {
+            prepare_varlen_num_blocks<90>(params, stream, PackGQA, kBlockM, kBlockN, true);
+            CHECK_CUDA_KERNEL_LAUNCH();
+        } else {
+            fprintf(stderr, "Unsupported architecture for prepare_varlen_num_blocks: %d\n", params.arch);
+            return;
+        }
     }
 
     int device;

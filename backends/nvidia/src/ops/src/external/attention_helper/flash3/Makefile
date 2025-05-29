@@ -52,32 +52,6 @@ CU_KERNEL_OBJS_SM100 = ${patsubst src/instantiations/sm100/%.cu, build/instantia
 
 BUILD_CU_KERNEL_OBJS = ${CU_KERNEL_OBJS_SM80} ${CU_KERNEL_OBJS_SM90} ${CU_KERNEL_OBJS_SM100}
 
-CU_COMBINE_SRC = src/flash_fwd_combine.cu
-CU_COMBINE_OBJ = build/flash_fwd_combine.o
-
-CU_PREP_SCHED_SRC = src/flash_prepare_scheduler.cu
-CU_PREP_SCHED_OBJ = build/flash_prepare_scheduler.o
-
-
-## TODO: need to change the flash_api.cpp to ingest arch num as part of 
-## of combine/prepare kernels in order to correctly dispatch. Currently
-## needs seperate build otherwise get "no kernel image is available for this device"
-
-## for now, making h100 settings default in repo...
-
-#CU_COMBINE_ARCH = 80
-#CU_COMBINE_FLAGS = 
-
-CU_COMBINE_ARCH = 90a
-CU_COMBINE_FLAGS = ${NVCC_FLAGS_SM90}
-
-#CU_PREP_SCHED_ARCH = 80
-#CU_PREP_SCHED_FLAGS = 
-
-CU_PREP_SCHED_ARCH = 90a
-CU_PREP_SCHED_FLAGS = ${NVCC_FLAGS_SM90}
-
-
 FLASH_API_SRC = src/flash_api.cpp
 FLASH_API_OBJ = build/flash_api.o
 
@@ -89,17 +63,11 @@ all: create_dirs ${WRAPPER_SHARED_LIB}
 create_dirs:
 	mkdir -p lib && mkdir -p build && mkdir -p build/instantiations && mkdir -p build/instantiations/sm80 && mkdir -p build/instantiations/sm90 && mkdir -p build/instantiations/sm100
 
-${WRAPPER_SHARED_LIB}: ${BUILD_CU_KERNEL_OBJS} ${CU_COMBINE_OBJ} ${CU_PREP_SCHED_OBJ} ${FLASH_API_OBJ} 
+${WRAPPER_SHARED_LIB}: ${BUILD_CU_KERNEL_OBJS} ${FLASH_API_OBJ} 
 	${CXX} ${CXX_FLAGS} -shared ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
 
 ${FLASH_API_OBJ}: ${FLASH_API_SRC}
 	${CXX} ${CXX_FLAGS} ${ALL_INCLUDES} -c -o $@ $<
-
-${CU_COMBINE_OBJ}: ${CU_COMBINE_SRC}
-	${NVCC} ${NVCC_FLAGS} ${CU_COMBINE_FLAGS} ${ALL_INCLUDES} -arch=compute_${CU_COMBINE_ARCH} -code=sm_${CU_COMBINE_ARCH} $< -c -o $@
-
-${CU_PREP_SCHED_OBJ}: ${CU_PREP_SCHED_SRC}
-	${NVCC} ${NVCC_FLAGS} ${CU_PREP_SCHED_FLAGS} ${ALL_INCLUDES} -arch=compute_${CU_PREP_SCHED_ARCH} -code=sm_${CU_PREP_SCHED_ARCH} $< -c -o $@
 
 build/instantiations/sm80/%.o: src/instantiations/sm80/%.cu
 	${NVCC} ${NVCC_FLAGS} ${ALL_INCLUDES} -arch=compute_80 -code=sm_80 $< -c -o $@
@@ -112,7 +80,7 @@ build/instantiations/sm100/%.o: src/instantiations/sm100/%.cu
 
 
 clean:
-	rm -f ${WRAPPER_SHARED_LIB} ${FLASH_API_OBJ} ${CU_COMBINE_OBJ} ${CU_PREP_SCHED_OBJ}
+	rm -f ${WRAPPER_SHARED_LIB} ${FLASH_API_OBJ}
 
 clean_kernels:
-	rm -f ${CU_KERNEL_OBJS}
+	rm -f ${BUILD_CU_KERNEL_OBJS}

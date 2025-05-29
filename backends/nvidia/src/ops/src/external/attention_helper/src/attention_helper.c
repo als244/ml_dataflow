@@ -48,9 +48,7 @@ int flash_attention_fwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * o
 	void * workspace = *((void **) op_args[20]);
 	
 	// FLASH3 only supports SM80, SM86, SM89, SM90
-	// however has bad numerical accuracy on ampere...
-	//if (arch == 80 || arch == 86 || arch == 89 || arch == 90) {
-	if (arch == 90) {
+	if ((arch == 90 && USE_FLASH3_HOPPER) || ((arch == 80 || arch == 86 || arch == 89) && USE_FLASH3_AMPERE)) {
 		return flash3_fwd_wrapper(stream, arch, sm_count,
 									flash_dtype_as_int,
 									num_seqs, total_q, total_k,
@@ -153,9 +151,7 @@ int flash_attention_bwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * o
 	void * workspace = *((void **) op_args[24]);
 
 	// FLASH3 only supports SM80, SM86, SM89, SM90
-	// however has bad numerical accuracy on ampere...
-	//if (arch == 80 || arch == 86 || arch == 89 || arch == 90) {
-	if (arch == 90) {
+	if ((arch == 90 && USE_FLASH3_HOPPER) || ((arch == 80 || arch == 86 || arch == 89) && USE_FLASH3_AMPERE)) {
 		return flash3_bwd_wrapper(stream, arch, sm_count,
 									flash_dtype_as_int,
 									num_seqs, total_q, total_k,

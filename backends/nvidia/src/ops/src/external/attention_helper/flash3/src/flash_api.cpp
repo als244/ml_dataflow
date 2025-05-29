@@ -63,26 +63,50 @@ inline int get_num_splits(Flash_fwd_params const& params) {
     return num_splits_heuristic(total_mblocks, params.num_sm, num_n_blocks, num_m_blocks, size_one_kv_head, params.is_causal || params.is_local, 128);
 }
 
-void run_mha_fwd_combine(Flash_fwd_params &params, cudaStream_t stream, bool enable_pdl) {
+void run_mha_fwd_combine_80(Flash_fwd_params &params, cudaStream_t stream, bool enable_pdl) {
     // If hdim is 96 or 192, it's faster to round them to 128 or 256 respectively
     // so that kBlockM is smaller and we have more parallelism.
     if (params.is_fp32) {
         if (params.dv <= 64) {
-            run_mha_fwd_combine_<float, float, 64>(params, stream, enable_pdl);
+            run_mha_fwd_combine_<80, float, float, 64>(params, stream, enable_pdl);
         } else {
-            run_mha_fwd_combine_<float, float, 128>(params, stream, enable_pdl);
+            run_mha_fwd_combine_<80, float, float, 128>(params, stream, enable_pdl);
         }
     } else if (params.is_bf16) {
         if (params.dv <= 64) {
-            run_mha_fwd_combine_<cutlass::bfloat16_t, float, 64>(params, stream, enable_pdl);
+            run_mha_fwd_combine_<80, cutlass::bfloat16_t, float, 64>(params, stream, enable_pdl);
         } else {
-            run_mha_fwd_combine_<cutlass::bfloat16_t, float, 128>(params, stream, enable_pdl);
+            run_mha_fwd_combine_<80, cutlass::bfloat16_t, float, 128>(params, stream, enable_pdl);
         }
     } else {
         if (params.dv <= 64) {
-            run_mha_fwd_combine_<cutlass::half_t, float, 64>(params, stream, enable_pdl);
+            run_mha_fwd_combine_<80, cutlass::half_t, float, 64>(params, stream, enable_pdl);
         } else {
-            run_mha_fwd_combine_<cutlass::half_t, float, 128>(params, stream, enable_pdl);
+            run_mha_fwd_combine_<80, cutlass::half_t, float, 128>(params, stream, enable_pdl);
+        }
+    }
+}
+
+void run_mha_fwd_combine_90(Flash_fwd_params &params, cudaStream_t stream, bool enable_pdl) {
+    // If hdim is 96 or 192, it's faster to round them to 128 or 256 respectively
+    // so that kBlockM is smaller and we have more parallelism.
+    if (params.is_fp32) {
+        if (params.dv <= 64) {
+            run_mha_fwd_combine_<90, float, float, 64>(params, stream, enable_pdl);
+        } else {
+            run_mha_fwd_combine_<90, float, float, 128>(params, stream, enable_pdl);
+        }
+    } else if (params.is_bf16) {
+        if (params.dv <= 64) {
+            run_mha_fwd_combine_<90, cutlass::bfloat16_t, float, 64>(params, stream, enable_pdl);
+        } else {
+            run_mha_fwd_combine_<90, cutlass::bfloat16_t, float, 128>(params, stream, enable_pdl);
+        }
+    } else {
+        if (params.dv <= 64) {
+            run_mha_fwd_combine_<90, cutlass::half_t, float, 64>(params, stream, enable_pdl);
+        } else {
+            run_mha_fwd_combine_<90, cutlass::half_t, float, 128>(params, stream, enable_pdl);
         }
     }
 }
@@ -157,14 +181,15 @@ void run_mha_fwd(Flash_fwd_params &params, cudaStream_t stream) {
     });
 
     if (params.num_splits > 1){
-        bool enable_pdl = false;
-        if (params.arch >= 90){
-            enable_pdl = true;
+        if (params.arch == 90){
+            run_mha_fwd_combine_90(params, stream, true);
+        } else if (params.arch >= 80 && params.arch < 90) {
+            run_mha_fwd_combine_80(params, stream, false);
         }
-        run_mha_fwd_combine(params, stream, enable_pdl);
+        else{
+            fprintf(stderr, "Unsupported architecture for run_mha_fwd_combine in flash3: %d\n", params.arch);
+        }
     }
-
-    
 }
 
 void run_mha_bwd(Flash_bwd_params &params, cudaStream_t stream) {
@@ -605,21 +630,15 @@ extern "C" {
 
         params.rp_dropout = 1.0f;
     
-        // Having API either be causal or full...
-
-        // Newer updates to repo include attention chunk, which
-        // should be pulled in to this forked repo...
         params.is_causal = is_causal;
-
-        // could add window size left/right to API but kinda confusing...
-        params.is_local = false;
+        params.is_local = !is_causal;
         
         if (is_causal){
             params.window_size_left = max_seqlen_k - 1;
             params.window_size_right = 0;
         }
-        // different from flash2 where those stay at -1 for full attention...
         else{
+            // these might have -1...
             params.window_size_left = max_seqlen_k - 1;
             params.window_size_right = max_seqlen_q - 1;
         }
@@ -723,10 +742,18 @@ extern "C" {
             auto kBlockMN_kernel_args_sm8x = tile_size_fwd_sm8x(params.arch == 86 || params.arch == 89, params.d_rounded, params.dv_rounded, params.is_causal, params.is_local, params.is_e4m3 ? 1 : 2 /*element_size*/, params.page_table, params.num_splits > 1, params.softcap > 0.f, params.knew_ptr);
             int const kBlockM = params.arch >= 90 ? std::get<0>(kBlockMN_kernel_args_sm90) : std::get<0>(kBlockMN_kernel_args_sm8x);
             int const kBlockN = params.arch >= 90 ? std::get<1>(kBlockMN_kernel_args_sm90) : std::get<1>(kBlockMN_kernel_args_sm8x);
-            prepare_varlen_num_blocks(params, stream, params.pack_gqa, kBlockM, kBlockN, false /*enable_pdl*/);
-            CHECK_CUDA_KERNEL_LAUNCH();
+            
+            if (params.arch == 90){
+                prepare_varlen_num_blocks<90>(params, stream, params.pack_gqa, kBlockM, kBlockN, true /*enable_pdl*/);
+                CHECK_CUDA_KERNEL_LAUNCH();
+            } else if (params.arch >= 80 && params.arch < 90) {
+                prepare_varlen_num_blocks<80>(params, stream, params.pack_gqa, kBlockM, kBlockN, false /*enable_pdl*/);
+                CHECK_CUDA_KERNEL_LAUNCH();
+            } else {
+                fprintf(stderr, "Unsupported architecture for prepare_varlen_num_blocks in flash3: %d\n", params.arch);
+                return -1;
+            }
         }
-
 
         // ^ did sched metadata above
         params.skip_scheduler_metadata_computation = true;
