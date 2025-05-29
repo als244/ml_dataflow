@@ -79,11 +79,12 @@ typedef struct seq_batch_recomputed_activations_offsets {
 } Seq_Batch_Recomputed_Activations_Offsets;
 
 typedef struct seq_batch_embedding_config {
-
+	int total_tokens;
 	int num_unique_tokens;
 	// in order to do bwd pass we want to accumulate
 	// gradients for each token id, so nice to have them
 	// sorted for embedding_bwd_w
+
 
 	// device pointers...
 
@@ -268,6 +269,13 @@ struct seq_batch {
 	int chunk_id;
 	int total_tokens;
 	int num_seqs;
+
+	// host memory (part of pinned slab) that is reserved for token ids
+	// and copied intoduring populate_seq_batch_metadata_buffer
+	// useful for debuggingif we want to save down the raw token ids
+	uint32_t * sys_token_ids;
+	uint32_t * sys_labels;
+	int * sys_seq_positions;
 
 	Seq_Batch_Metadata_Offsets metadata_offsets;
 	Seq_Batch_Saved_Activations_Offsets saved_activations_offsets;

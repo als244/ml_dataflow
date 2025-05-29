@@ -460,6 +460,12 @@ int populate_seq_batch_metadata_buffer(Dataflow_Handle * dataflow_handle, int in
             return -1;
         }
 
+
+        // save the host pointers into the seq_batch struct...
+        seq_batch -> sys_token_ids = sys_token_ids;
+        seq_batch -> sys_labels = sys_labels;
+        seq_batch -> sys_seq_positions = sys_seq_positions;
+
         return 0;
 }
 

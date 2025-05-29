@@ -22,6 +22,7 @@ np_norm = np.fromfile(head_norm_path, dtype=np.uint16).reshape(-1, model_dim)
 np_head_out = np.fromfile(head_out_path, dtype=np.uint16).reshape(-1, vocab_size)
 np_logits = np.fromfile(logits_path, dtype=np.uint16).reshape(-1, vocab_size)
 
+num_tokens = np_logits.shape[0]
 
 t_inp = torch.from_numpy(np_inp).view(torch.bfloat16)
 t_norm = torch.from_numpy(np_norm).view(torch.bfloat16)
@@ -30,8 +31,8 @@ t_logits = torch.from_numpy(np_logits).view(torch.bfloat16)
 
 t_max_token_probs, t_max_token_inds = torch.max(t_logits, dim=1)
 
-orig_tokens_path = f"test_transformer_data/token_ids_uint32.dat"
-labels_path = f"test_transformer_data/labels_uint32.dat"
+orig_tokens_path = f"test_transformer_data/chunk_{chunk_id}_token_ids_uint32.dat"
+labels_path = f"test_transformer_data/chunk_{chunk_id}_labels_uint32.dat"
 
 np_orig_tokens = np.fromfile(orig_tokens_path, dtype=np.uint32)
 np_labels = np.fromfile(labels_path, dtype=np.uint32)
