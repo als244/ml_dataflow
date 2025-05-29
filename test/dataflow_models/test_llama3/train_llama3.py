@@ -31,7 +31,7 @@ torch.manual_seed(SEED)
 np.random.seed(SEED)
 random.seed(SEED)
 
-MAX_SEQ_LEN = 1024
+MAX_SEQ_LEN = 2048
 MAX_BATCH_SIZE = 1
 
 MODEL_PATH = "./models/1B_inst/"
@@ -105,7 +105,7 @@ for i in range(1, n_repeats + 1):
 
 
     ## FORWARD PASS
-    print(f"[Step {i}] Starting forward pass...")
+    #print(f"[Step {i}] Starting forward pass...")
     start_fwd = time.time_ns()
     with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
         # Ensure model and inputs are on the same device
@@ -131,7 +131,7 @@ for i in range(1, n_repeats + 1):
     # --- Backward Pass (Triggers Hooks) ---
     start_bwd = time.time_ns()
 
-    print(f"[Step {i}] Backward pass...")
+    #print(f"[Step {i}] Backward pass...")
     
     optimizer.zero_grad()
     loss.backward()
