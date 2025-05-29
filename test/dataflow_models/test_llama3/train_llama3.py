@@ -157,7 +157,7 @@ for i in range(1, n_repeats + 1):
 
 
     # --- 2. Initialize and Run Optimizer ---
-    print(f"[Step {i}] Running optimizer...")
+    #print(f"[Step {i}] Running optimizer...")
     optimizer.step() # Apply gradients to model parameters, updating them
 
     # --- 3. Save Optimizer State Values and Updated Parameters (After Optimizer Step) ---
