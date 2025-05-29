@@ -16,6 +16,7 @@
 namespace flash {
 
 // Declaration of the CUDA kernel
+template<int compiler_arch>
 __global__ void prepare_varlen_num_blocks_kernel(
         int seqlen_q_static, int seqlen_k_static, int seqlen_k_new_static,
         int const* const cu_seqlens_q, int const* const cu_seqlens_k, int const* const cu_seqlens_k_new,
@@ -28,6 +29,7 @@ __global__ void prepare_varlen_num_blocks_kernel(
 
 } // namespace flash
 
+template<int compiler_arch>
 void prepare_varlen_num_blocks(Flash_fwd_params &params, cudaStream_t stream, bool packgqa,
                                int blockM, int blockN, bool enable_pdl);
 

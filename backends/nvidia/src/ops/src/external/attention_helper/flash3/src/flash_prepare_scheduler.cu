@@ -10,6 +10,7 @@
 
 namespace flash {
 
+template<int compiler_arch>
 __global__ void prepare_varlen_num_blocks_kernel(
         int seqlen_q_static, int seqlen_k_static, int seqlen_k_new_static,
         int const* const cu_seqlens_q, int const* const cu_seqlens_k, int const* const cu_seqlens_k_new,
@@ -108,6 +109,7 @@ __global__ void prepare_varlen_num_blocks_kernel(
 
 
 // Definition of the host wrapper function
+template<int compiler_arch>
 void prepare_varlen_num_blocks(Flash_fwd_params &params, cudaStream_t stream, bool packgqa,
                                int blockM, int blockN, bool enable_pdl) {
     int qhead_per_khead = !packgqa ? 1 : cutlass::ceil_div(params.h, params.h_k);
@@ -123,7 +125,7 @@ void prepare_varlen_num_blocks(Flash_fwd_params &params, cudaStream_t stream, bo
                          // Consider the maximum number of batches to process.
     if (params.b == 0) return; // Nothing to do.
 
-    flash::prepare_varlen_num_blocks_kernel<<<gridDim, blockDim, 0, stream>>>(
+    flash::prepare_varlen_num_blocks_kernel<compiler_arch><<<gridDim, blockDim, 0, stream>>>(
         params.seqlen_q, params.seqlen_k, params.seqlen_knew,
         params.cu_seqlens_q, params.cu_seqlens_k, params.cu_seqlens_knew,
         params.seqused_q, params.seqused_k, params.leftpad_k,
