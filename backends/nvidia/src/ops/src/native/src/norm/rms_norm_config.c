@@ -256,7 +256,7 @@ int default_rms_norm_bwd_w_set_launch_config(Cuda_Launch_Config * cuda_launch_co
 	cuda_launch_config -> sharedMemBytes = rms_smem;
 
 	int rms_max_threads_per_block = (cuda_function -> function_config).func_max_threads_per_block;
-	cuda_launch_config -> blockDimX = MY_MIN(256, rms_max_threads_per_block);
+	cuda_launch_config -> blockDimX = rms_max_threads_per_block;
 
 	return 0;
 
@@ -277,15 +277,24 @@ int default_rms_norm_bwd_w_combine_set_launch_config(Cuda_Launch_Config * cuda_l
 
 	void ** op_args = op -> op_args;
 
-	// this is defined within rms_norm_bwd_w_combine.cu
-	int cols_per_block = 128;
+	// these are defined within rms_norm_bwd_w_combine.c
+	int warps_per_block = 32;
+	int cols_per_block = 32;
 
 	int model_dim = *((int *) op_args[1]);
 
 	cuda_launch_config -> gridDimX = MY_CEIL(model_dim, cols_per_block);
 
 	int max_threads_per_block = (cuda_function -> function_config).func_max_threads_per_block;
-	cuda_launch_config -> blockDimX = MY_MIN(cols_per_block, max_threads_per_block);
+
+	int num_threads = warps_per_block * 32;
+
+	if (num_threads > max_threads_per_block){
+		fprintf(stderr, "Error: rms norm bwd w combine will fail. Max threads per block is %d, but requires %d...\n", max_threads_per_block, num_threads);
+		return -1;
+	}
+
+	cuda_launch_config -> blockDimX = num_threads;
 
 	cuda_launch_config -> sharedMemBytes = 0;
 
