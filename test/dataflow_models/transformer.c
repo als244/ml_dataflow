@@ -5,17 +5,17 @@
 #include "host_ops.h"
 
 
-#define HOST_MEM_GB 110
-#define DEV_MEM_GB 21
+#define HOST_MEM_GB 70
+#define DEV_MEM_GB 9
 
 #define MODEL_CONFIG_SIZE_B 8
 #define MODEL_PATH "../data/8B"
 
 // these shoudl be auto-cofigured, testing manually for now...
 // could also take in as command line argument...
-#define NUM_DEV_BLOCKS 6
-#define NUM_DEV_GRAD_BLOCKS 6
-#define NUM_DEV_ACTIVATION_SLOTS 48
+#define NUM_DEV_BLOCKS 2
+#define NUM_DEV_GRAD_BLOCKS 2
+#define NUM_DEV_ACTIVATION_SLOTS 8
 
 
 
@@ -38,7 +38,7 @@
 // the role of this is to be largest possible while still fitting in memory...
 // because it means more shared data can utilize the parameters and update
 // gradients on device without incorruring I/O overhead or gradient accumulation overhead
-#define NUM_SEQ_GROUPS_PER_ROUND 8
+#define NUM_SEQ_GROUPS_PER_ROUND 1
 
 
 // num_chunks = num_chunks_per_seq * num_seq_groups_per_round

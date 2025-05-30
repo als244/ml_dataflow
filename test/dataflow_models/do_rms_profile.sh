@@ -1,0 +1,1 @@
+ncu -o profiling/kernels/rms_bf16_2k --force-overwrite --set detailed --kernel-name default_rms_norm_bf16_kernel --launch-count 1 --section SchedulerStats --section WarpStateStats --kill yes ./transformer

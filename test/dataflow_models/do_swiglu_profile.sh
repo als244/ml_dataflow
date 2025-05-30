@@ -1,0 +1,1 @@
+ncu -o profiling/kernels/swiglu_2k --force-overwrite --set detailed --kernel-name default_swiglu_bf16_kernel --launch-count 1 --section SchedulerStats --section WarpStateStats --kill yes ./transformer
