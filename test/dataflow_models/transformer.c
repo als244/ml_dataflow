@@ -9,10 +9,8 @@
 #define NUM_DEV_BLOCKS 12
 #define NUM_DEV_ACTIVATION_SLOTS 32
 
-#define NUM_DEV_BLOCK_GRADS 2
-#define NUM_SYS_GRAD_RESULTS 34
+#define NUM_DEV_GRAD_BLOCKS 8
 
-#define NUM_ADD_THREADS 12	
 #define NUM_ADAM_THREADS 12	
 
 #define HOST_MEM_GB 110
@@ -81,11 +79,11 @@
 #define TO_PRINT_ACT_WAITING 0
 
 #define TO_PRINT_GRAD_WAITING 0
-#define TO_PRINT_SYS_GRAD_WORKSPACE_WAITING 0
 #define TO_PRINT_FWD_ACT_WAITING 0
 
 #define TO_PRINT_FWD_PREFETCHING 0
 #define TO_PRINT_BWD_PREFETCHING 0
+#define TO_PRINT_GRAD_BLOCK_PREFETCHING 0
 
 #define TO_PRINT_ACT_TRANSFERRING 0
 #define TO_PRINT_CTX_TRANSFERRING 0
@@ -797,15 +795,15 @@ int main(int argc, char * argv[]){
 
 
 	// JUST FOR NOW (while testing for correctness) keeping all block grads on device...
-	int num_dev_block_grads = NUM_DEV_BLOCK_GRADS;
+	int num_dev_grad_blocks = NUM_DEV_GRAD_BLOCKS;
 
-	Transformer_Block ** grad_blocks = malloc(num_dev_block_grads * sizeof(Transformer_Block *));
+	Transformer_Block ** grad_blocks = malloc(num_dev_grad_blocks * sizeof(Transformer_Block *));
 	if (!grad_blocks){
 		fprintf(stderr, "Error: failed to allocate grad_blocks...\n");
 		return -1;
 	}
 
-	for (int i = 0; i < num_dev_block_grads; i++){
+	for (int i = 0; i < num_dev_grad_blocks; i++){
 		grad_blocks[i] = init_transformer_block(i, block_bwd_dt, compute_bwd_dt,
 														norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
 														eps, theta,
@@ -839,15 +837,14 @@ int main(int argc, char * argv[]){
 		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 	}
 
-	sem_t * is_grad_block_ready = malloc(num_dev_block_grads * sizeof(sem_t));
+	sem_t * is_grad_block_ready = malloc(n_layers * sizeof(sem_t));
 	if (!is_grad_block_ready){
 		fprintf(stderr, "Error: failed to allocate is_grad_block_ready...\n");
 		return -1;
 	}
 
-	for (int i = num_dev_block_grads - 1; i >= 0; i--){
+	for (int i = n_layers - 1; i >= 0; i--){
 		sem_init(&(is_grad_block_ready[i]), 0, 0);
-		sem_post(&(is_grad_block_ready[i]));
 	}
 	
 	
@@ -957,42 +954,6 @@ int main(int argc, char * argv[]){
 	// ensure alignment for matmuls..
 	used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
-
-
-
-
-	int num_sys_grad_results = NUM_SYS_GRAD_RESULTS;
-	void ** sys_grad_results = malloc(num_sys_grad_results * sizeof(void *));
-	if (!sys_grad_results){
-		fprintf(stderr, "Error: failed to allocate sys_grad_results...\n");
-		return -1;
-	}
-
-	uint64_t block_bwd_size = aligned_block_bwd_size;
-	uint64_t embedding_bwd_size = sys_grad_embedding_table -> embedding_table_size;
-	uint64_t head_bwd_size = combined_head_bwd_size;
-
-	uint64_t sys_grad_result_size = MY_MAX(block_bwd_size, MY_MAX(embedding_bwd_size, head_bwd_size));
-
-
-
-	for (int i = 0; i < num_sys_grad_results; i++){
-		sys_grad_results[i] = cur_host_mem;
-		cur_host_mem += sys_grad_result_size;
-		used_host_mem += sys_grad_result_size;
-	}
-
-	sem_t * is_sys_grad_result_ready = malloc(num_sys_grad_results * sizeof(sem_t));
-	if (!is_sys_grad_result_ready){
-		fprintf(stderr, "Error: failed to allocate is_sys_grad_result_ready...\n");
-		return -1;
-	}
-
-	for (int i = 0; i < num_sys_grad_results; i++){
-		sem_init(&(is_sys_grad_result_ready[i]), 0, 0);
-		sem_post(&(is_sys_grad_result_ready[i]));
-	}
-	
 
 	
 	
@@ -1832,7 +1793,7 @@ int main(int argc, char * argv[]){
 	printf("\nMEMORY USAGE (GB):\n\tHost: %.3f\n\tDevice: %.3f\n\n\n\n", (float) used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) used_dev_mem / (1024.0 * 1024.0 * 1024.0));
 
 	if ((used_host_mem > host_size_bytes) || (used_dev_mem > dev_size_bytes)) {
-		fprintf(stderr, "ERROR. Cannot run with current configuration of %d dev parameter blocks,%d dev activation slots, %d dev block grads, and %d sys grad results...\n", NUM_DEV_BLOCKS, NUM_DEV_ACTIVATION_SLOTS, NUM_DEV_BLOCK_GRADS, NUM_SYS_GRAD_RESULTS);
+		fprintf(stderr, "ERROR. Cannot run with current configuration of %d dev parameter blocks,%d dev activation slots, %d dev block grads, %d chunk size, and %d seq groups per round...\n", NUM_DEV_BLOCKS, NUM_DEV_ACTIVATION_SLOTS, NUM_DEV_GRAD_BLOCKS, CHUNK_SIZE, NUM_SEQ_GROUPS_PER_ROUND);
 		
 		if (used_host_mem > host_size_bytes){
 			fprintf(stderr, "\nHost Memory Overflow: Have %.3f GB allocated, but requires %.3f GB with current setting...\n", (float) used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) host_size_bytes / (1024.0 * 1024.0 * 1024.0));
@@ -1852,35 +1813,16 @@ int main(int argc, char * argv[]){
 	Transformer_Block_Activations * cur_activations;
 	Seq_Batch_Saved_Activations * cur_fwd_activations;
 
-	int num_add_threads = NUM_ADD_THREADS;
+
 	int num_adam_threads = NUM_ADAM_THREADS;
 	
-	// Dealing with gradient accumulation, optimization, and resetting memory...
-
-	// Ensuring that arguments to the host functions remain intact...
-	// these are populated within the dataflowops helper functions...
-	// + 2 for the head and embedding
-
-
-	Add_Host_Op_Args * add_op_buffers = calloc(n_layers + 2, sizeof(Add_Host_Op_Args));
-	if (!add_op_buffers){
-		fprintf(stderr, "Error: failed to allocate add_op_buffers...\n");
-		return -1;
-	}
-	
+	// Dealing with optimization on host
 	
 	Adam_Host_Op_Args * adam_op_buffers = calloc(n_layers + 2, sizeof(Adam_Host_Op_Args));
 	if (!adam_op_buffers){
 		fprintf(stderr, "Error: failed to allocate adam_op_buffers...\n");
 		return -1;
 	}
-
-	Set_Mem_Host_Op_Args * set_mem_op_buffers = calloc(n_layers + 2, sizeof(Set_Mem_Host_Op_Args));
-	if (!set_mem_op_buffers){
-		fprintf(stderr, "Error: failed to allocate set_mem_op_buffers...\n");
-		return -1;
-	}
-
 
 
 	
@@ -1918,8 +1860,6 @@ int main(int argc, char * argv[]){
 
 	Transformer_Block * working_block;
 
-	void * working_sys_grad_result;
-
 	int final_saved_act_buffer_ind = -1;
 
 
@@ -1929,7 +1869,8 @@ int main(int argc, char * argv[]){
 
 
 	int working_grad_block_ind;
-	int working_sys_grad_result_ind = 0;
+	int replacement_grad_layer_ind;
+	int next_grad_block_id = n_layers - 1 - num_dev_grad_blocks;
 	int cur_fwd_prefetch_act_ind;
 
 
@@ -2021,6 +1962,20 @@ int main(int argc, char * argv[]){
 			dataflow_handle.profiler.range_push(profile_msg);
 
 			is_opt_round = r == (num_rounds_per_step - 1);
+
+			if (r == 0){
+				// no need to prefetch grad blocks for first round...
+				// because gradients will be 0...
+				for (int i = n_layers - 1; i >= (n_layers - num_dev_grad_blocks); i--){
+					sem_post(&(is_grad_block_ready[i]));
+				}
+			}
+
+			// ensure the next grad block is set properly...
+			next_grad_block_id = n_layers - 1 - num_dev_grad_blocks;
+			replacement_grad_layer_ind = 0;
+			working_grad_block_ind = 0;
+
 
 			// ADVANCE ALL SEQUENCES FORWARD...
 
@@ -2289,6 +2244,38 @@ int main(int argc, char * argv[]){
 					}
 					next_layer_id++;
 				}
+				// otherwise see if we need to prefetch a grad block...
+				else{
+					// the first round all gradients will be 0, so no need to prefetch...
+					if ((r > 0) && (next_grad_block_id >= 0)){
+
+						if (TO_PRINT_GRAD_BLOCK_PREFETCHING){
+							printf("\n\nPrefetching next grad block id #%d (replacing grad block at index %d)...\n\n", next_grad_block_id, replacement_grad_layer_ind);
+						}
+
+						// prefetch next grad block...
+						ret = dataflow_handle.submit_dependency(&dataflow_handle, inbound_stream_id, cur_stream_state);
+						if (ret){
+							fprintf(stderr, "Error: failed to submit dependency to prefetch next grad block...\n");
+							return -1;
+						}
+						
+						ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, grad_blocks[replacement_grad_layer_ind] -> buffer, sys_grad_blocks[next_grad_block_id] -> buffer, aligned_block_bwd_size);
+						if (ret){
+							fprintf(stderr, "Error: failed to submit inbound transfer for grad block #%d...\n", next_grad_block_id);
+							return -1;
+						}
+
+						ret = dataflow_handle.submit_host_op(&dataflow_handle, post_sem_callback, (void *) &(is_grad_block_ready[next_grad_block_id]), inbound_stream_id);
+						if (ret){
+							fprintf(stderr, "Error: failed to submit host op to enqueue is_grad_block_ready for next grad block...\n");
+							return -1;
+						}
+
+						replacement_grad_layer_ind = (replacement_grad_layer_ind + 1) % num_dev_grad_blocks;
+						next_grad_block_id--;
+					}
+				}
 
 				// don't move past the the last block as this will be the first one to be used during bwds...
 				if (k < (n_layers - 1)){
@@ -2434,96 +2421,66 @@ int main(int argc, char * argv[]){
 			// pop from "Head"
 			dataflow_handle.profiler.range_pop();
 
-			sprintf(profile_msg, "Waiting for sys mem to be ready for head gradients...");
-			dataflow_handle.profiler.range_push(profile_msg);
-			// Send back grad head to host...
 
-			sem_wait(&(is_sys_grad_result_ready[working_sys_grad_result_ind]));
+			// only send back head on adam step, otherwise accumulate gradients on device...
 
-			working_sys_grad_result = sys_grad_results[working_sys_grad_result_ind];
+			if (is_opt_round){
 
-			dataflow_handle.profiler.range_pop();
-			if (TO_PRINT_GRAD_TRANSFERRING){
-				printf("\n\nSending grad head to host for round #%d...\n\n", r);
-			}
+				if (TO_PRINT_GRAD_TRANSFERRING){
+					printf("\n\nSending grad head to host for round #%d...\n\n", r);
+				}
 
-			cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, compute_stream_id);
-			if (!cur_stream_state){
-				fprintf(stderr, "Error: failed to get stream state for head...\n");
-				return -1;
-			}
-			
-			ret = dataflow_handle.submit_dependency(&dataflow_handle, outbound_stream_id, cur_stream_state);
-			if (ret){
-				fprintf(stderr, "Error: failed to submit dependency to send head to host...\n");
-				return -1;
-			}
+				cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, compute_stream_id);
+				if (!cur_stream_state){
+					fprintf(stderr, "Error: failed to get stream state for head...\n");
+					return -1;
+				}
+				
+				ret = dataflow_handle.submit_dependency(&dataflow_handle, outbound_stream_id, cur_stream_state);
+				if (ret){
+					fprintf(stderr, "Error: failed to submit dependency to send head to host...\n");
+					return -1;
+				}
 
-			ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, outbound_stream_id, working_sys_grad_result, grad_head -> buffer, combined_head_bwd_size);
-			if (ret){
-				fprintf(stderr, "Error: failed to submit outbound transfer to send head to host...\n");
-				return -1;
-			}
+				ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, outbound_stream_id, sys_grad_head -> buffer, grad_head -> buffer, combined_head_bwd_size);
+				if (ret){
+					fprintf(stderr, "Error: failed to submit outbound transfer to send head to host...\n");
+					return -1;
+				}
 
-			// IN REALITY THE HEAD WILL NOT HAVE A SEPERATE STRUCTURE AND DEDICATED GRAD BUFFER ON DEVICE...
+				// IN REALITY THE HEAD WILL NOT HAVE A SEPERATE STRUCTURE AND DEDICATED GRAD BUFFER ON DEVICE...
 
-			// However for correctness for now, need to reset grad workspace buffer for next sequence
-			// because accumulating gradients on host side
-			// So will we need to reset grad workspace buffer for next use...
-			// (along with posting sem when done...)
+				// However for correctness for now, need to reset grad workspace buffer for next sequence
+				// because accumulating gradients on host side
+				// So will we need to reset grad workspace buffer for next use...
+				// (along with posting sem when done...)
 
-			// This really can be submitted after setting dependency on host ops stream...
-			ret = dataflow_handle.set_mem(&dataflow_handle, outbound_stream_id, grad_head -> buffer, 0, combined_head_bwd_size);
-			if (ret){
-				fprintf(stderr, "Error: failed to set mem for grad head...\n");
-				return -1;
-			}
-			
-			
-			// Ensure to add results to existing grad buffers on host then make the results available for reuse...
+				// This really can be submitted after setting dependency on host ops stream...
+				ret = dataflow_handle.set_mem(&dataflow_handle, outbound_stream_id, grad_head -> buffer, 0, combined_head_bwd_size);
+				if (ret){
+					fprintf(stderr, "Error: failed to set mem for grad head...\n");
+					return -1;
+				}
+				
+				
+				// Ensure to add results to existing grad buffers on host then make the results available for reuse...
 
-			cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
-			if (!cur_stream_state){
-				fprintf(stderr, "Error: failed to get stream state for head...\n");
-				return -1;
-			}
+				cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
+				if (!cur_stream_state){
+					fprintf(stderr, "Error: failed to get stream state for head...\n");
+					return -1;
+				}
 
-			ret = dataflow_handle.submit_dependency(&dataflow_handle, host_ops_stream_id, cur_stream_state);
-			if (ret){
-				fprintf(stderr, "Error: failed to submit dependency to submit optimizer op...\n");
-				return -1;
-			}
+				ret = dataflow_handle.submit_dependency(&dataflow_handle, host_ops_stream_id, cur_stream_state);
+				if (ret){
+					fprintf(stderr, "Error: failed to submit dependency to submit optimizer op...\n");
+					return -1;
+				}
+				
+				// if we are about to step we can schedule optimizer to run as soon as this final 
+				// gradient makes its way home...
 
-			// Add results to existing grad buffers on host...
-
-			sprintf(profile_msg, "Host Add, Grad Head");
-			dataflow_handle.profiler.range_push(profile_msg);
-
-			ret = dataflow_submit_add_host(&dataflow_handle, host_ops_stream_id, 
-												&add_host, &(add_op_buffers[n_layers + 1]),
-												block_bwd_dt, block_bwd_dt, block_bwd_dt,
-												num_add_threads, n_layers, head_num_els, 
-												sys_grad_head -> buffer, working_sys_grad_result, sys_grad_head -> buffer,
-												1.0, 1.0);
-			if (ret){
-				fprintf(stderr, "Error: failed to submit add host for grad head...\n");
-				return -1;
-			}
-
-			ret = dataflow_handle.submit_host_op(&dataflow_handle, post_sem_callback, (void *) &(is_sys_grad_result_ready[working_sys_grad_result_ind]), host_ops_stream_id);
-			if (ret){
-				fprintf(stderr, "Error: failed to submit host op to enqueue is_sys_grad_result_ready for next grad block...\n");
-				return -1;
-			}
-
-			dataflow_handle.profiler.range_pop();
-
-			working_sys_grad_result_ind = (working_sys_grad_result_ind + 1) % num_sys_grad_results;
-
-			// if we are about to step we can schedule optimizer to run as soon as this final 
-			// gradient makes its way home...
-
-			if (is_opt_round) {
+	
 				// speicfying adam host functio as adam_step_host and passing this function address 
 				// which will be submitted to the host ops stream...
 				ret = dataflow_submit_adam_step_host(&dataflow_handle, host_ops_stream_id, 
@@ -2537,16 +2494,6 @@ int main(int argc, char * argv[]){
 					fprintf(stderr, "Error: failed to submit adam step host for head...\n");
 					return -1;
 				}
-
-				// Reset gradient accumulation buffer to 0...
-				ret = dataflow_submit_set_mem_host(&dataflow_handle, host_ops_stream_id, 
-							&set_mem_host, &(set_mem_op_buffers[n_layers + 1]),
-							sys_grad_head -> buffer, 0, combined_head_bwd_size);
-
-				if (ret){
-					fprintf(stderr, "Error: failed to submit set mem host for grad head...\n");
-					return -1;
-				}
 			}
 
 			// BACKWARDS PASS...
@@ -2556,7 +2503,6 @@ int main(int argc, char * argv[]){
 			
 			// RESET NEXT LAYER ID TO THE LAST FORWARD BLOCK WE DON"T HAVE...!
 			next_layer_id = n_layers - 1 - num_dev_blocks;
-			working_grad_block_ind = num_dev_block_grads - 1;
 			cur_fwd_prefetch_act_ind = final_saved_act_buffer_ind;
 
 			// working_layer_ind and replacement_layer_ind should be properly set correctly poniting at last block, now working opposite direction...
@@ -2606,16 +2552,25 @@ int main(int argc, char * argv[]){
 					printf("\n\n[Bwd] Waiting for grad block workspace to be ready...\n\n");
 				}
 
-				sprintf(profile_msg, "Waiting for grad block workspace to be ready");
+				sprintf(profile_msg, "Waiting for grad block %d (at index %d) to be ready", k, working_grad_block_ind);
 				dataflow_handle.profiler.range_push(profile_msg);
 
-				sem_wait(&(is_grad_block_ready[working_grad_block_ind]));
+				sem_wait(&(is_grad_block_ready[k]));
 
 				dataflow_handle.profiler.range_pop();
 
 				working_grad_block = grad_blocks[working_grad_block_ind];
 
 				working_grad_block -> layer_id = k;
+
+				if (r == 0){
+					// enusre that grad block is set to 0...
+					ret = dataflow_handle.set_mem(&dataflow_handle, compute_stream_id, working_grad_block -> buffer, 0, aligned_block_bwd_size);
+					if (ret){
+						fprintf(stderr, "Error: failed to set mem for grad block #%d...\n", working_grad_block_ind);
+						return -1;
+					}
+				}
 
 				// PROCESS EACH SEQUENCE IN REVERSE AS FORWARDS AND REVERSED WITHIN SEQUENCE...
 				// would be better to process in same sequence order, but not implementing this for now...
@@ -2913,12 +2868,111 @@ int main(int argc, char * argv[]){
 					return -1;
 				}
 
-				// PREFETCHING NEXT (= PREVIOUS) FORWARD BLOCK...
 
-				if (next_layer_id >= 0){
 
+				// send back gradient to host, and run optimizer if needed
+
+				ret = dataflow_handle.submit_dependency(&dataflow_handle, outbound_stream_id, cur_stream_state);
+				if (ret){
+					fprintf(stderr, "Error: failed to submit dependency to send grad block #%d to host...\n", k);
+					return -1;
+				}
+				
+				ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, outbound_stream_id, sys_grad_blocks[k] -> buffer, working_grad_block -> buffer, aligned_block_bwd_size);
+				if (ret){
+					fprintf(stderr, "Error: failed to submit outbound transfer to send grad block #%d to host...\n", k);
+					return -1;
+				}
+
+				// PREFETCHING NEXT NEEDED (which is) <= PREVIOUS LAYER ID) FORWARD BLOCK and GRADIENT BLOCK...
+				// choose the one that is needed next, or both if both are needed...
+				
+				if ((next_layer_id == next_grad_block_id) && (next_layer_id >= 0)) {
+
+
+					// will will definitely need the forward block next...
 					if (TO_PRINT_BWD_PREFETCHING){
-						printf("[Bwd] Prefetching block layer id %d into slot %d...\n\n", next_layer_id, replacement_layer_ind);
+						printf("[Bwd] Prefetching fwd block layer id %d into slot %d...\n\n", next_layer_id, replacement_layer_ind);
+					}
+
+					ret = dataflow_handle.submit_dependency(&dataflow_handle, inbound_stream_id, cur_stream_state);
+					if (ret){
+						fprintf(stderr, "Error: failed to submit dependency to prefetch block #%d...\n", next_layer_id);
+						return -1;
+					}
+
+					ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, blocks[replacement_layer_ind] -> buffer, sys_blocks[next_layer_id] -> buffer, aligned_block_size);
+					if (ret){
+						fprintf(stderr, "Error: failed to submit inbound transfer for block #%d...\n", next_layer_id);
+						return -1;
+					}
+
+					ret = dataflow_handle.submit_host_op(&dataflow_handle, post_sem_callback, (void *) &(is_block_ready[next_layer_id]), inbound_stream_id);
+					if (ret){
+						fprintf(stderr, "Error: failed to submit host op to enqueue is_block_ready for next block...\n");
+						return -1;
+					}
+
+					if (next_layer_id > 0){
+						if (replacement_layer_ind > 0){
+							replacement_layer_ind -= 1;
+						}
+						else{
+							replacement_layer_ind = num_dev_blocks - 1;
+						}
+					}
+					next_layer_id--;
+
+					// if we need the next grad block next then we should also prefetch it...
+					// otherwise will get it next time around...
+					if ((next_grad_block_id >= 0) && (next_grad_block_id == k - 1)){
+
+						
+
+						if (TO_PRINT_GRAD_BLOCK_PREFETCHING){
+							printf("\n\nPrefetching next grad block id #%d (replacing grad block at index %d)...\n\n", next_grad_block_id, replacement_grad_layer_ind);
+						}
+
+						// need to set dependency for the outbound stream to ensure this grad block has finished making its way home..
+						if (working_grad_block_ind == replacement_grad_layer_ind){
+							cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
+							if (!cur_stream_state){
+								fprintf(stderr, "Error: failed to get stream state for grad block #%d...\n", k);
+								return -1;
+							}	
+						}
+
+						// here cur stream state is either done with computation (if replacement ind is different than working ind, 
+						// or it is waiting for the grad block to have finished making its way home if replacement ind is same as working ind)
+
+						// prefetch next grad block...
+						ret = dataflow_handle.submit_dependency(&dataflow_handle, inbound_stream_id, cur_stream_state);
+						if (ret){
+							fprintf(stderr, "Error: failed to submit dependency to prefetch next grad block...\n");
+							return -1;
+						}
+						
+						ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, grad_blocks[replacement_grad_layer_ind] -> buffer, sys_grad_blocks[next_grad_block_id] -> buffer, aligned_block_bwd_size);
+						if (ret){
+							fprintf(stderr, "Error: failed to submit inbound transfer for grad block #%d...\n", next_grad_block_id);
+							return -1;
+						}
+
+						ret = dataflow_handle.submit_host_op(&dataflow_handle, post_sem_callback, (void *) &(is_grad_block_ready[next_grad_block_id]), inbound_stream_id);
+						if (ret){
+							fprintf(stderr, "Error: failed to submit host op to enqueue is_grad_block_ready for next grad block...\n");
+							return -1;
+						}
+
+						replacement_grad_layer_ind = (replacement_grad_layer_ind + 1) % num_dev_grad_blocks;
+						next_grad_block_id--;
+					}
+				}
+				// only forward block is needed...
+				else if ((next_layer_id > next_grad_block_id) && (next_layer_id >= 0)){
+					// will will definitely need the forward block next...
+					if (TO_PRINT_BWD_PREFETCHING){
+						printf("[Bwd] Prefetching fwd block layer id %d into slot %d...\n\n", next_layer_id, replacement_layer_ind);
 					}
 
 					ret = dataflow_handle.submit_dependency(&dataflow_handle, inbound_stream_id, cur_stream_state);
@@ -2949,106 +3003,49 @@ int main(int argc, char * argv[]){
 					}
 					next_layer_id--;
 				}
+				// only gradient block is needed...
+				else if ((next_grad_block_id > next_layer_id) && (next_grad_block_id >= 0)){
+					
+					if (TO_PRINT_GRAD_BLOCK_PREFETCHING){
+							printf("\n\nPrefetching next grad block id #%d (replacing grad block at index %d)...\n\n", next_grad_block_id, replacement_grad_layer_ind);
+						}
 
-				// in case num_rounds_per_step > 1, we will follow up another forward pass
-				// and don't want to lose the position of first layer, so only update if k > 0
-				if (k > 0){
-					if (working_layer_ind > 0){
-						working_layer_ind -= 1;
-					}
-					else{
-						working_layer_ind = num_dev_blocks - 1;
-					}
+						// need to set dependency for the outbound stream to ensure this grad block has finished making its way home..
+						if (working_grad_block_ind == replacement_grad_layer_ind){
+							cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
+							if (!cur_stream_state){
+								fprintf(stderr, "Error: failed to get stream state for grad block #%d...\n", k);
+								return -1;
+							}	
+						}
+
+						// here cur stream state is either done with computation (if replacement ind is different than working ind, 
+						// or it is waiting for the grad block to have finished making its way home if replacement ind is same as working ind)
+
+						// prefetch next grad block...
+						ret = dataflow_handle.submit_dependency(&dataflow_handle, inbound_stream_id, cur_stream_state);
+						if (ret){
+							fprintf(stderr, "Error: failed to submit dependency to prefetch next grad block...\n");
+							return -1;
+						}
+						
+						ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, grad_blocks[replacement_grad_layer_ind] -> buffer, sys_grad_blocks[next_grad_block_id] -> buffer, aligned_block_bwd_size);
+						if (ret){
+							fprintf(stderr, "Error: failed to submit inbound transfer for grad block #%d...\n", next_grad_block_id);
+							return -1;
+						}
+
+						ret = dataflow_handle.submit_host_op(&dataflow_handle, post_sem_callback, (void *) &(is_grad_block_ready[next_grad_block_id]), inbound_stream_id);
+						if (ret){
+							fprintf(stderr, "Error: failed to submit host op to enqueue is_grad_block_ready for next grad block...\n");
+							return -1;
+						}
+
+						replacement_grad_layer_ind = (replacement_grad_layer_ind + 1) % num_dev_grad_blocks;
+						next_grad_block_id--;
 				}
 
-				// send back gradient to host, and run optimizer...
-
-				// SENDING BACK GRAD BLOCK...
-
-
-				if (TO_PRINT_SYS_GRAD_WORKSPACE_WAITING){
-						printf("\n\n[Bwd] Waiting for sys grad result #%d to be ready...\n\n", working_sys_grad_result_ind);
-				}
-
-				sprintf(profile_msg, "Waiting for sys grad result #%d to be ready", working_sys_grad_result_ind);
-				dataflow_handle.profiler.range_push(profile_msg);
-
-				sem_wait(&(is_sys_grad_result_ready[working_sys_grad_result_ind]));
-
-				working_sys_grad_result = sys_grad_results[working_sys_grad_result_ind];
-
-				dataflow_handle.profiler.range_pop();
-
-				if (TO_PRINT_GRAD_TRANSFERRING){
-					printf("[Bwd] Sending back grad block for round #%d, layer id %d at index %d...\n\n", r, k, working_grad_block_ind);
-				}
-
-				ret = dataflow_handle.submit_dependency(&dataflow_handle, outbound_stream_id, cur_stream_state);
-				if (ret){
-					fprintf(stderr, "Error: failed to submit dependency to send grad block #%d to host...\n", k);
-					return -1;
-				}
-
-		
-				ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, outbound_stream_id, working_sys_grad_result, working_grad_block -> buffer, aligned_block_size);
-				if (ret){
-					fprintf(stderr, "Error: failed to submit outbound transfer to send grad block #%d to host...\n", k);
-					return -1;
-				}
-
-				// After completing, can reset the grad buffer for next use...
-				ret = dataflow_handle.set_mem(&dataflow_handle, outbound_stream_id, working_grad_block -> buffer, 0, aligned_block_size);
-				if (ret){
-					fprintf(stderr, "Error: failed to set mem for grad block #%d...\n", k);
-					return -1;
-				}
-
-				ret = dataflow_handle.submit_host_op(&dataflow_handle, post_sem_callback, (void *) &(is_grad_block_ready[working_grad_block_ind]), outbound_stream_id);
-				if (ret){
-					fprintf(stderr, "Error: failed to submit host op to enqueue is_grad_block_ready for next grad block...\n");
-					return -1;
-				}
-
-
-				// Ensure to add results to existing grad buffers on host then make the results available for reuse...
-
-				cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
-				if (!cur_stream_state){
-					fprintf(stderr, "Error: failed to get stream state for head...\n");
-					return -1;
-				}
-
-				ret = dataflow_handle.submit_dependency(&dataflow_handle, host_ops_stream_id, cur_stream_state);
-				if (ret){
-					fprintf(stderr, "Error: failed to submit dependency to submit optimizer op...\n");
-					return -1;
-				}
-
-				// Add results to existing grad buffers on host...
-
-				sprintf(profile_msg, "Host Add, Layer: %d", k);
-				dataflow_handle.profiler.range_push(profile_msg);
-
-				ret = dataflow_submit_add_host(&dataflow_handle, host_ops_stream_id, 
-												&add_host, &(add_op_buffers[k + 1]),
-												block_bwd_dt, block_bwd_dt, block_bwd_dt,
-												num_add_threads, k, block_aligned_num_els, 
-												sys_grad_blocks[k] -> buffer, working_sys_grad_result, sys_grad_blocks[k] -> buffer,
-												1.0, 1.0);
-				if (ret){
-					fprintf(stderr, "Error: failed to submit add host for grad block #%d...\n", k);
-					return -1;
-				}
-
-				ret = dataflow_handle.submit_host_op(&dataflow_handle, post_sem_callback, (void *) &(is_sys_grad_result_ready[working_sys_grad_result_ind]), host_ops_stream_id);
-				if (ret){
-					fprintf(stderr, "Error: failed to submit host op to enqueue is_sys_grad_result_ready for next grad block...\n");
-					return -1;
-				}
-
-				dataflow_handle.profiler.range_pop();
-
-				working_sys_grad_result_ind = (working_sys_grad_result_ind + 1) % num_sys_grad_results;
+			
 
 
 				// Calling optimizer step...
@@ -3056,6 +3053,19 @@ int main(int argc, char * argv[]){
 				// if this is the last round before opt step, then we can schedule the optimizer to run
 				// after this gradient update makes its way home...
 				if (is_opt_round) {
+
+					// ensure this grad block has finished making its way home...
+					cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
+					if (!cur_stream_state){
+						fprintf(stderr, "Error: failed to get stream state for grad block #%d...\n", k);
+						return -1;
+					}
+
+					ret = dataflow_handle.submit_dependency(&dataflow_handle, host_ops_stream_id, cur_stream_state);
+					if (ret){
+						fprintf(stderr, "Error: failed to submit dependency to submit optimizer op...\n");
+						return -1;
+					}
 					
 
 					// speicfying adam host functio as adam_step_host and passing this function address 
@@ -3071,26 +3081,23 @@ int main(int argc, char * argv[]){
 						fprintf(stderr, "Error: failed to submit adam step host for block #%d...\n", k);
 						return -1;
 					}
+				}
 
-					// Reset gradient accumulation buffer to 0...
-					ret = dataflow_submit_set_mem_host(&dataflow_handle, host_ops_stream_id, 
-							&set_mem_host, &(set_mem_op_buffers[k + 1]),
-							sys_grad_blocks[k] -> buffer, 0, aligned_block_size);
 
-					if (ret){
-						fprintf(stderr, "Error: failed to submit set mem host for grad block #%d...\n", k);
-						return -1;
+				// in case num_rounds_per_step > 1, we will follow up another forward pass
+				// and don't want to lose the position of first layer, so only update if k > 0
+				if (k > 0){
+					if (working_layer_ind > 0){
+						working_layer_ind -= 1;
+					}
+					else{
+						working_layer_ind = num_dev_blocks - 1;
 					}
 				}
 
 				// update the working grad block index...
-
-				if (working_grad_block_ind > 0){
-					working_grad_block_ind -= 1;
-				}
-				else{
-					working_grad_block_ind = num_dev_block_grads - 1;
-				}
+				// this gets reset to 0 at the beginning of every round...
+				working_grad_block_ind = (working_grad_block_ind + 1) % num_dev_grad_blocks;
 			}
 
 
@@ -3134,101 +3141,73 @@ int main(int argc, char * argv[]){
 			// pop from "Embedding"
 			dataflow_handle.profiler.range_pop();
 
-			sprintf(profile_msg, "Waiting for sys grad to send back dW for embed...");
-			dataflow_handle.profiler.range_push(profile_msg);
+	
+			// only send back head on adam step, otherwise accumulate gradients on device...
 
-			sem_wait(&(is_sys_grad_result_ready[working_sys_grad_result_ind]));
+			if (is_opt_round){
 
-			working_sys_grad_result = sys_grad_results[working_sys_grad_result_ind];
+				if (TO_PRINT_GRAD_TRANSFERRING){
+					printf("\n\nSending grad embedding table to host for round #%d...\n\n", r);
+				}
 
-			dataflow_handle.profiler.range_pop();
+				cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, compute_stream_id);
+				if (!cur_stream_state){
+					fprintf(stderr, "Error: failed to get stream state for embedding table...\n");
+					return -1;
+				}
+				
+				ret = dataflow_handle.submit_dependency(&dataflow_handle, outbound_stream_id, cur_stream_state);
+				if (ret){
+					fprintf(stderr, "Error: failed to submit dependency to send embedding table to host...\n");
+					return -1;
+				}
 
-			cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, compute_stream_id);
-			if (!cur_stream_state){
-				fprintf(stderr, "Error: failed to get stream state for embedding table...\n");
-				return -1;
-			}
-			
-			ret = dataflow_handle.submit_dependency(&dataflow_handle, outbound_stream_id, cur_stream_state);
-			if (ret){
-				fprintf(stderr, "Error: failed to submit dependency to send embedding table to host...\n");
-				return -1;
-			}
+				ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, outbound_stream_id, sys_grad_embedding_table -> embedding_table, grad_embedding_table -> embedding_table, grad_embedding_table -> embedding_table_size);
+				if (ret){
+					fprintf(stderr, "Error: failed to submit outbound transfer to send embedding table to host...\n");
+					return -1;
+				}
 
-			if (TO_PRINT_GRAD_TRANSFERRING){
-				printf("[Bwd] Sending back grad embedding table for round #%d...\n\n", r);
-			}
+				// IN REALITY THE HEAD WILL NOT HAVE A SEPERATE STRUCTURE AND DEDICATED GRAD BUFFER ON DEVICE...
 
-			ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, outbound_stream_id, working_sys_grad_result, grad_embedding_table -> embedding_table, grad_embedding_table -> embedding_table_size);
-			if (ret){
-				fprintf(stderr, "Error: failed to submit outbound transfer to send embedding table to host...\n");
-				return -1;
-			}
+				// However for correctness for now, need to reset grad workspace buffer for next sequence
+				// because accumulating gradients on host side
+				// So will we need to reset grad workspace buffer for next use...
+				// (along with posting sem when done...)
 
-			// IN REALITY THE EMBEDDING TABLE WILL NOT HAVE A SEPERATE STRUCTURE AND DEDICATED GRAD BUFFER ON DEVICE...
+				// This really can be submitted after setting dependency on host ops stream...
+				ret = dataflow_handle.set_mem(&dataflow_handle, outbound_stream_id, grad_embedding_table -> embedding_table, 0, grad_embedding_table -> embedding_table_size);
+				if (ret){
+					fprintf(stderr, "Error: failed to set mem for grad embedding table...\n");
+					return -1;
+				}
+				
+				
+				// Ensure to add results to existing grad buffers on host then make the results available for reuse...
 
-			// However for correctness for now, need to reset grad workspace buffer for next sequence
-			// because accumulating gradients on host side
-			// So will we need to reset grad workspace buffer for next use...
-			// (along with posting sem when done...)
+				cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
+				if (!cur_stream_state){
+					fprintf(stderr, "Error: failed to get stream state for head...\n");
+					return -1;
+				}
 
-			// This really can be submitted after setting dependency on host ops stream...
-			ret = dataflow_handle.set_mem(&dataflow_handle, outbound_stream_id, grad_embedding_table -> embedding_table, 0, grad_embedding_table -> embedding_table_size);
-			if (ret){
-				fprintf(stderr, "Error: failed to set mem for grad embedding table...\n");
-				return -1;
-			}
-			
-			
-			// Ensure to add results to existing grad buffers on host then make the results available for reuse...
+				ret = dataflow_handle.submit_dependency(&dataflow_handle, host_ops_stream_id, cur_stream_state);
+				if (ret){
+					fprintf(stderr, "Error: failed to submit dependency to submit optimizer op...\n");
+					return -1;
+				}
+				
+				// if we are about to step we can schedule optimizer to run as soon as this final 
+				// gradient makes its way home...
 
-			cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
-			if (!cur_stream_state){
-				fprintf(stderr, "Error: failed to get stream state for embedding table...\n");
-				return -1;
-			}
-
-			ret = dataflow_handle.submit_dependency(&dataflow_handle, host_ops_stream_id, cur_stream_state);
-			if (ret){
-				fprintf(stderr, "Error: failed to submit dependency to submit optimizer op...\n");
-				return -1;
-			}
-
-			// Add results to existing grad buffers on host...
-
-
-			sprintf(profile_msg, "Host Add, Grad Embedding");
-			dataflow_handle.profiler.range_push(profile_msg);
-
-			ret = dataflow_submit_add_host(&dataflow_handle, host_ops_stream_id, 
-												&add_host, &(add_op_buffers[0]),
-												block_bwd_dt, block_bwd_dt, block_bwd_dt,
-												num_add_threads, -1, embedding_num_els, 
-												sys_grad_embedding_table -> embedding_table, working_sys_grad_result, sys_grad_embedding_table -> embedding_table,
-												1.0, 1.0);
-			if (ret){
-				fprintf(stderr, "Error: failed to submit add host for grad embedding table...\n");
-				return -1;
-			}
-
-			ret = dataflow_handle.submit_host_op(&dataflow_handle, post_sem_callback, (void *) &(is_sys_grad_result_ready[working_sys_grad_result_ind]), host_ops_stream_id);
-			if (ret){
-				fprintf(stderr, "Error: failed to submit host op to enqueue is_sys_grad_result_ready for next grad block...\n");
-				return -1;
-			}
-
-			dataflow_handle.profiler.range_pop();
-
-			working_sys_grad_result_ind = (working_sys_grad_result_ind + 1) % num_sys_grad_results;
-
-			if (is_opt_round) {
+	
 				// speicfying adam host functio as adam_step_host and passing this function address 
 				// which will be submitted to the host ops stream...
 				ret = dataflow_submit_adam_step_host(&dataflow_handle, host_ops_stream_id, 
 									&adam_step_host, &(adam_op_buffers[0]),
 									block_dt, block_bwd_dt, 
 									opt_mean_dt, opt_var_dt,
-									num_adam_threads, t, -1, embedding_num_els, 
+									num_adam_threads, t, n_layers, embedding_num_els, 
 									lr, beta1, beta2, weight_decay, epsilon,
 									sys_embedding_table -> embedding_table, sys_grad_embedding_table -> embedding_table, sys_opt_mean_embedding_table -> embedding_table, sys_opt_var_embedding_table -> embedding_table);
 				if (ret){
@@ -3236,15 +3215,10 @@ int main(int argc, char * argv[]){
 					return -1;
 				}
 
-				// Reset gradient accumulation buffer to 0...
-				ret = dataflow_submit_set_mem_host(&dataflow_handle, host_ops_stream_id, 
-							&set_mem_host, &(set_mem_op_buffers[0]),
-							sys_grad_embedding_table -> embedding_table, 0, sys_grad_embedding_table -> embedding_table_size);
 
-				if (ret){
-					fprintf(stderr, "Error: failed to submit set mem host for grad head...\n");
-					return -1;
-				}
+
+				/* GET PREPARED FOR NEXT STEP */
+			
 
 				// if we have more seqs to process, then we need to load updated layers after step...
 				if (t < num_steps){
