@@ -10,7 +10,7 @@
 #define NUM_DEV_ACTIVATION_SLOTS 32
 
 #define NUM_DEV_BLOCK_GRADS 2
-#define NUM_SYS_GRAD_RESULTS 2
+#define NUM_SYS_GRAD_RESULTS 34
 
 #define NUM_ADD_THREADS 12	
 #define NUM_ADAM_THREADS 12	
@@ -53,7 +53,7 @@
 // 		chunk_size % seqlen == 0
 
 // up to num_chunks (per round for now, because just repeating) to save...
-#define NUM_RAW_CHUNK_IDS_LABELS_TO_SAVE 1
+#define NUM_RAW_CHUNK_IDS_LABELS_TO_SAVE 0
 
 
 
@@ -61,7 +61,7 @@
 // the optimizer...
 #define NUM_ROUNDS_PER_STEP 1
 
-#define NUM_STEPS 1
+#define NUM_STEPS 10
 
 
 

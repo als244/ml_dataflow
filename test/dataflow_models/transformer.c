@@ -9,8 +9,8 @@
 #define NUM_DEV_BLOCKS 12
 #define NUM_DEV_ACTIVATION_SLOTS 32
 
-#define NUM_DEV_BLOCK_GRADS 12
-#define NUM_SYS_GRAD_RESULTS 12
+#define NUM_DEV_BLOCK_GRADS 2
+#define NUM_SYS_GRAD_RESULTS 34
 
 #define NUM_ADD_THREADS 12	
 #define NUM_ADAM_THREADS 12	
@@ -18,22 +18,21 @@
 #define HOST_MEM_GB 110
 #define DEV_MEM_GB 21
 
-#define MODEL_CONFIG_SIZE_B 1
-#define MODEL_PATH "../data/1B"
+#define MODEL_CONFIG_SIZE_B 8
+#define MODEL_PATH "../data/8B"
 
 
 // this is just for testing...
-#define NUM_TOKENS_EXAMPLE_SEQ 4096
+#define NUM_TOKENS_EXAMPLE_SEQ 2048
+
+#define MAX_SEQLEN NUM_TOKENS_EXAMPLE_SEQ
 
 // this is just for testing,.. in 
 // reality determined dynamically...
-#define CHUNK_SIZE 4096
+#define CHUNK_SIZE 2048
 
-#define TOKEN_IDS_PATH "../data/8192_token_ids_uint32.dat"
-#define TOKEN_LABELS_PATH "../data/8192_labels_uint32.dat"
-
-
-#define MAX_SEQLEN NUM_TOKENS_EXAMPLE_SEQ
+#define TOKEN_IDS_PATH "../data/2048_token_ids_uint32.dat"
+#define TOKEN_LABELS_PATH "../data/2048_labels_uint32.dat"
 
 
 // this determines total number of chunks / activations we need to store in 
@@ -53,6 +52,9 @@
 // if seqlen < chunk_size:
 // 		chunk_size % seqlen == 0
 
+// up to num_chunks (per round for now, because just repeating) to save...
+#define NUM_RAW_CHUNK_IDS_LABELS_TO_SAVE 0
+
 
 
 // this (along with num seqs per round)modulates how frequently we will step 
@@ -61,9 +63,6 @@
 
 #define NUM_STEPS 10
 
-
-// up to num_chunks (per round for now, because just repeating) to save...
-#define NUM_RAW_CHUNK_IDS_LABELS_TO_SAVE 1
 
 
 // config for what to print...
