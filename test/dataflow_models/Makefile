@@ -29,7 +29,7 @@ HOST_OPS_LIB = -ldataflow_hostops
 ALL_INCLUDES = -I${DATAFLOW_LIB_INCLUDE_DIR} -I${CUDA_DATAFLOW_BACKEND_INCLUDE_DIR} -I${CUDA_INCLUDE_DIR} -I${DATAFLOW_OPS_INCLUDE_DIR} -I${DATAFLOW_MODELS_INCLUDE_DIR} -I${HOST_OPS_INCLUDE_DIR}
 ALL_LIBS = -L${DATAFLOW_LIB_DIR} -L${CUDA_DATAFLOW_BACKEND_LIB_DIR} -L${DATAFLOW_OPS_LIB_DIR} -L${DATAFLOW_MODELS_LIB_DIR} -L${HOST_OPS_LIB_DIR} ${DATAFLOW_LIB} ${CUDA_DATAFLOW_BACKEND_LIBS} ${DATAFLOW_OPS_LIB} ${DATAFLOW_MODELS_LIB} ${HOST_OPS_LIB} -Wl,-rpath,${DATAFLOW_LIB_DIR} -Wl,-rpath,${CUDA_DATAFLOW_BACKEND_LIB_DIR} -Wl,-rpath,${DATAFLOW_OPS_LIB_DIR} -Wl,-rpath,${DATAFLOW_MODELS_LIB_DIR} -Wl,-rpath,${HOST_OPS_LIB_DIR}
 
-EXECS = naiveTransformer transformerHostAdd transformer
+EXECS = naiveTransformer transformerHostAccumOpt transformerHostOpt transformer
 
 all: create_data_dirs ${EXECS}
 
@@ -57,16 +57,24 @@ create_data_dirs:
 	mkdir -p correct_transformer_data/optimizer_states; \
 	mkdir -p profiling
 
-naiveTransformer: naive_transformer.c
-	${CC} ${CFLAGS} ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
 
-
+## version where host just stores temporary data and all ops are on device
 transformer: transformer.c
 	${CC} ${CFLAGS} ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
 
-
-transformerHostAdd: transformer_host_add.c
+## version where the host runs adam optimizer (makes sense in distributed case)
+transformerHostOpt: transformer_host_opt.c
 	${CC} ${CFLAGS} ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
+
+## version where the host accumulates gradients and run adam optimizer (doesn't make sense, but here for reference)
+transformerHostAccumOpt: transformer_host_accum_opt.c
+	${CC} ${CFLAGS} ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
+
+
+## no data transfers at all, everything is on device
+naiveTransformer: naive_transformer.c
+	${CC} ${CFLAGS} ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
+
 
 
 clean:
