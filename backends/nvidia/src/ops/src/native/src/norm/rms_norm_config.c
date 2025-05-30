@@ -219,15 +219,29 @@ int default_rms_norm_bwd_w_set_launch_config(Cuda_Launch_Config * cuda_launch_co
 	int min_num_blocks = MY_CEIL(num_rows, rms_max_rows_per_block);
 
 	int sm_count = device_info -> sm_count;
-	
 
+	uint64_t workspaceBytes = *((uint64_t *)op_args[8]);
+
+	// output size is num blocks * model_dim * dtype_size
+	uint64_t output_size_factor = model_dim * helper_data_dtype_size;
+
+	int max_blocks = workspaceBytes / output_size_factor;
+
+	if (min_num_blocks > max_blocks){
+		fprintf(stderr, "Error: rms norm bwd w will fail. Output size is greater than workspace bytes...\n");
+		return -1;
+	}
+	
 	// could parallelize more, by having more blocks that use less than max rows per block...
 	if (min_num_blocks <= sm_count) {
-		cuda_launch_config -> gridDimX = sm_count;
+		cuda_launch_config -> gridDimX = MY_MIN(sm_count, max_blocks);
 	}
 	else{
 		cuda_launch_config -> gridDimX = min_num_blocks;
 	}
+
+	cuda_launch_config -> gridDimX = MY_MIN(cuda_launch_config -> gridDimX, num_rows);
+
 
 	int max_rows_per_block = MY_CEIL(num_rows, (cuda_launch_config -> gridDimX));
 
@@ -242,10 +256,41 @@ int default_rms_norm_bwd_w_set_launch_config(Cuda_Launch_Config * cuda_launch_co
 	cuda_launch_config -> sharedMemBytes = rms_smem;
 
 	int rms_max_threads_per_block = (cuda_function -> function_config).func_max_threads_per_block;
-	cuda_launch_config -> blockDimX = rms_max_threads_per_block;
+	cuda_launch_config -> blockDimX = MY_MIN(256, rms_max_threads_per_block);
 
 	return 0;
 
+}
+
+int default_rms_norm_bwd_w_combine_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Dataflow_Handle * dataflow_handle, Cuda_Function * cuda_function, Op * op){
+
+	Op_Skeleton * op_skeleton = &(cuda_function -> op_skeleton);
+
+	Op_Skeleton_Header * op_skeleton_header = &(op_skeleton -> header);
+
+	DataflowDatatype * arg_dtypes = op_skeleton_header -> arg_dtypes;
+
+	cuda_launch_config -> gridDimY = 1;
+	cuda_launch_config -> gridDimZ = 1;
+	cuda_launch_config -> blockDimY = 1;
+	cuda_launch_config -> blockDimZ = 1;
+
+	void ** op_args = op -> op_args;
+
+	// this is defined within rms_norm_bwd_w_combine.cu
+	int cols_per_block = 128;
+
+	int model_dim = *((int *) op_args[1]);
+
+	cuda_launch_config -> gridDimX = MY_CEIL(model_dim, cols_per_block);
+
+	int max_threads_per_block = (cuda_function -> function_config).func_max_threads_per_block;
+	cuda_launch_config -> blockDimX = MY_MIN(cols_per_block, max_threads_per_block);
+
+	cuda_launch_config -> sharedMemBytes = 0;
+
+	return 0;
+	
 }
 
 

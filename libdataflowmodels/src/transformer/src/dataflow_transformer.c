@@ -1012,7 +1012,8 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
                                head_activations -> head_norm_rms_vals,  // RMS values from forward pass
                                head_activations -> head_out,            // Original input
                                head_activations -> head_norm_out,         // Upstream gradient
-                               grad_transformer_head -> w_head_norm);   // Output gradient
+                               grad_transformer_head -> w_head_norm,
+							   head_activations -> kernelWorkspaceBytes, head_activations -> kernelWorkspace);   // Output gradient
 	if (ret) {
         fprintf(stderr, "Error: Failed to submit bwd w rms norm in transformer head...\n");
         return ret;
@@ -1289,7 +1290,8 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 								fwd_activations -> ffn_norm_rms_vals,
 								fwd_activations -> x_o,
 								activation_workspace -> x_temp,
-								grad_weights -> w_ffn_norm);
+								grad_weights -> w_ffn_norm,
+								kernelWorkspaceBytes, kernelWorkspace);
 	if (ret){
 		fprintf(stderr, "Error: failed to submit ffn norm weight gradient computation during bwd_x...\n");
 		return -1;
@@ -1670,7 +1672,8 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 								fwd_activations -> attn_norm_rms_vals,
 								fwd_activations -> x_inp,
 								activation_workspace -> x_temp,
-								grad_weights -> w_attn_norm);
+								grad_weights -> w_attn_norm,
+								kernelWorkspaceBytes, kernelWorkspace);
 	if (ret){
 		fprintf(stderr, "Error: failed to submit attention norm weight gradient computation during bwd_w...\n");
 		return -1;

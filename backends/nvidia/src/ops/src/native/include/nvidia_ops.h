@@ -71,15 +71,17 @@ extern "C" __global__ void default_rms_norm_bwd_x_fp8e5m2_fp16_kernel(int n_rows
 extern "C" __global__ void default_rms_norm_bwd_x_fp8e5m2_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e5m2 * rms_weight, __nv_fp8_e5m2 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX, __nv_fp8_e5m2 * X_out);
 
 // Backward Weights
-extern "C" __global__ void default_rms_norm_bwd_w_fp32_fp32_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, float * X_inp, float * upstream_dX, float * dW);
-extern "C" __global__ void default_rms_norm_bwd_w_fp16_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __half * X_inp, __half * upstream_dX, __half * dW);
-extern "C" __global__ void default_rms_norm_bwd_w_bf16_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_bfloat16 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dW);
-extern "C" __global__ void default_rms_norm_bwd_w_fp8e4m3_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e4m3 * X_inp, __half * upstream_dX, __half * dW);
-extern "C" __global__ void default_rms_norm_bwd_w_fp8e4m3_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e4m3 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dW);
-extern "C" __global__ void default_rms_norm_bwd_w_fp8e5m2_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e5m2 * X_inp, __half * upstream_dX, __half * dW);
-extern "C" __global__ void default_rms_norm_bwd_w_fp8e5m2_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e5m2 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dW);
+extern "C" __global__ void default_rms_norm_bwd_w_fp32_fp32_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, float * X_inp, float * upstream_dX, float * dW_workspace, int * ret_num_blocks_launched);
+extern "C" __global__ void default_rms_norm_bwd_w_fp16_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __half * X_inp, __half * upstream_dX, __half * dW_workspace, int * ret_num_blocks_launched);
+extern "C" __global__ void default_rms_norm_bwd_w_bf16_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_bfloat16 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dW_workspace, int * ret_num_blocks_launched);
+extern "C" __global__ void default_rms_norm_bwd_w_fp8e4m3_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e4m3 * X_inp, __half * upstream_dX, __half * dW_workspace, int * ret_num_blocks_launched);
+extern "C" __global__ void default_rms_norm_bwd_w_fp8e4m3_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e4m3 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dW_workspace, int * ret_num_blocks_launched);
+extern "C" __global__ void default_rms_norm_bwd_w_fp8e5m2_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e5m2 * X_inp, __half * upstream_dX, __half * dW_workspace, int * ret_num_blocks_launched);
+extern "C" __global__ void default_rms_norm_bwd_w_fp8e5m2_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e5m2 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dW_workspace, int * ret_num_blocks_launched);
 
-
+extern "C" __global__ void default_rms_norm_bwd_w_combine_fp32_kernel(int * num_orig_blocks_launched, int model_dim, float * dW_workspace, float * dW);
+extern "C" __global__ void default_rms_norm_bwd_w_combine_fp16_kernel(int * num_orig_blocks_launched, int model_dim, __half * dW_workspace, __half * dW);
+extern "C" __global__ void default_rms_norm_bwd_w_combine_bf16_kernel(int * num_orig_blocks_launched, int model_dim, __nv_bfloat16 * dW_workspace, __nv_bfloat16 * dW);
 
 // No Scale RMS Norm (QK Norm...)
 extern "C" __global__ void default_rms_norm_noscale_fp32_kernel(int n_rows, int n_cols, float eps, float * X, float * out, float * rms_vals);

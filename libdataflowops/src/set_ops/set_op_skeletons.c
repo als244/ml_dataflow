@@ -23,6 +23,9 @@ int dataflow_set_op_skeleton(Op_Skeleton * skeleton, char * op_name, DataflowDat
 	else if (strcmp(op_name, "default_rms_norm_bwd_w") == 0) {
 		dataflow_set_default_rms_norm_bwd_w_skeleton(skeleton, fwd_dt, bwd_dt);
 	}
+	else if (strcmp(op_name, "default_rms_norm_bwd_w_combine") == 0) {
+		dataflow_set_default_rms_norm_bwd_w_combine_skeleton(skeleton, bwd_dt);
+	}
 	else if (strcmp(op_name, "default_rms_norm_noscale") == 0) {
 		dataflow_set_default_rms_norm_noscale_skeleton(skeleton, fwd_dt);
 	}
@@ -482,7 +485,8 @@ void dataflow_set_default_rms_norm_bwd_w_skeleton(Op_Skeleton * skeleton, Datafl
 	// last character must be null no matter what, if nickname is less than null bytes were added prior
 	(skeleton_header -> op_nickname)[MAX_OP_NICKNAME_SIZE] = '\0'; 
 	
-	int num_args = 7;
+	// this is the number of args we launch the kernel with...
+	int num_args = 8;
 
 	skeleton_header -> num_args = num_args;
 
@@ -495,13 +499,56 @@ void dataflow_set_default_rms_norm_bwd_w_skeleton(Op_Skeleton * skeleton, Datafl
 	arg_dtypes[4] = fwd_datatype;
 	arg_dtypes[5] = bwd_datatype;
 	arg_dtypes[6] = bwd_datatype;
+	// * ret_num_blocks_launched
+	arg_dtypes[7] = DATAFLOW_INT;
 
+	// we only pass 7 args to kernel but we actually use 8 args because we look
+	// at workspaceBytes in the config check...
+	arg_dtypes[8] = DATAFLOW_UINT64_SCALAR;
+
+	// special case for bwd_w....
+	for (int i = num_args + 1; i < MAX_OP_ARGS; i++){
+		arg_dtypes[i] = DATAFLOW_NONE;
+	}
+
+	dataflow_do_fingerprinting(skeleton_header, sizeof(Op_Skeleton_Header), (skeleton -> identifier).fingerprint);
+}
+
+void dataflow_set_default_rms_norm_bwd_w_combine_skeleton(Op_Skeleton * skeleton, DataflowDatatype bwd_datatype) {
+
+	Op_Skeleton_Header * skeleton_header = &(skeleton -> header);
+
+	char op_nickname[MAX_OP_NICKNAME_SIZE];
+
+	sprintf(op_nickname, "%s_%s", "default_rms_norm_bwd_w_combine", dataflow_datatype_as_string(bwd_datatype));
+
+	// MAX nicknmae size is set to 255 with 256 allocated space...
+	strncpy(skeleton_header -> op_nickname, op_nickname, MAX_OP_NICKNAME_SIZE);
+	// last character must be null no matter what, if nickname is less than null bytes were added prior
+	(skeleton_header -> op_nickname)[MAX_OP_NICKNAME_SIZE] = '\0'; 
+	
+	int num_args = 4;
+
+	skeleton_header -> num_args = num_args;
+
+	DataflowDatatype * arg_dtypes = skeleton_header -> arg_dtypes;
+
+	// poitner to int on device of num_blocks_launched
+	arg_dtypes[0] = DATAFLOW_INT;
+	// model dim
+	arg_dtypes[1] = DATAFLOW_INT_SCALAR;
+	// bwd_w
+	arg_dtypes[2] = bwd_datatype;
+	// bwd_w_grad
+	arg_dtypes[3] = bwd_datatype;
+	
 	for (int i = num_args; i < MAX_OP_ARGS; i++){
 		arg_dtypes[i] = DATAFLOW_NONE;
 	}
 
 	dataflow_do_fingerprinting(skeleton_header, sizeof(Op_Skeleton_Header), (skeleton -> identifier).fingerprint);
 }
+
 
 void dataflow_set_default_rms_norm_noscale_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype){
 

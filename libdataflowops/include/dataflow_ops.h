@@ -175,7 +175,8 @@ int dataflow_submit_default_rms_norm_bwd_x(Dataflow_Handle * handle, int stream_
 int dataflow_submit_default_rms_norm_bwd_w(Dataflow_Handle * handle, int stream_id, 
 								DataflowDatatype fwd_dt, DataflowDatatype bwd_dt, 
 								int n_rows, int n_cols, float eps, 
-								float * fwd_rms_vals, void * X_inp, void * upstream_dX, void * dW);
+								float * fwd_rms_vals, void * X_inp, void * upstream_dX, void * dW, 
+								uint64_t workspaceBytes, void * workspace);
 
 
 

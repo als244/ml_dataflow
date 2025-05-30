@@ -7,6 +7,7 @@
 #include "norm/rms_norm.cu"
 #include "norm/rms_norm_bwd_x.cu"
 #include "norm/rms_norm_bwd_w.cu"
+#include "norm/rms_norm_bwd_w_combine.cu"
 #include "norm/rms_norm_noscale.cu"
 #include "norm/rms_norm_noscale_bwd_x.cu"
 

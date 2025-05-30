@@ -85,9 +85,9 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 	
 	// cross entropy loss doesn't have function for fp8 yet...
 	bool num_fwd_ops[8] = {5, 5, 5, 5, 5, 5, 7, 3};
-	bool num_bwd_ops[8] = {3, 14, 7, 3, 0, 7, 0, 0};
+	bool num_bwd_ops[8] = {3, 17, 7, 3, 0, 7, 0, 0};
 
-	int num_funcs = 74;
+	int num_funcs = 77;
 
 	bool has_bwd_x[8] = {false, true, true, true, false, true, false, false};
 	bool has_bwd_w[8] = {true, true, false, false, false, false, false, false};
@@ -229,6 +229,18 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 					sprintf(native_func_symbols[cur_func], "%s_%s_%s", op_base_bwd_extented, bwd_strs[s], suffix);
 					sprintf(native_func_launch_symbols[cur_func], "%s_set_launch_config", op_base_bwd_extented);
 					dataflow_set_op_skeleton(&native_op_skeletons[cur_func], op_base_bwd_extented, DATAFLOW_NONE, bwd_datatypes[s]);
+					cur_func++;
+				}
+			}
+
+			// rms_norm_bwd_w_combine only takes in the bwd_dt...
+			if (strcmp(op_base_bwd_extented, "default_rms_norm_bwd_w") == 0){
+				char new_op_base_bwd_extented[PATH_MAX];
+				sprintf(new_op_base_bwd_extented, "%s_combine", op_base_bwd_extented);
+				for (int s = 0; s < num_bwd_datatypes; s++){
+					sprintf(native_func_symbols[cur_func], "%s_%s_%s", new_op_base_bwd_extented, bwd_strs[s], suffix);
+					sprintf(native_func_launch_symbols[cur_func], "%s_set_launch_config", new_op_base_bwd_extented);	
+					dataflow_set_op_skeleton(&native_op_skeletons[cur_func], new_op_base_bwd_extented, DATAFLOW_NONE, bwd_datatypes[s]);
 					cur_func++;
 				}
 			}
