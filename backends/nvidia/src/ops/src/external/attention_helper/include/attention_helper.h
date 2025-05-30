@@ -16,11 +16,9 @@
 
 // set higher flags that determine which archs use flash3
 
-// seems like there is a numerical difference between flash2 and flash3
+// seems like there is a numerical difference between flash2 and flash3 bwd
 // not sure which is "better", will set defaults to use flash3 for performance
 // and will fall back to flash2 for other archs (blackwell)
-
-
 #define USE_FLASH3_AMPERE 1
 #define USE_FLASH3_HOPPER 1
 
