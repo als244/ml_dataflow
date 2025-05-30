@@ -6,10 +6,10 @@
 
 // these shoudl be auto-cofigured, testing manually for now...
 // could also take in as command line argument...
-#define NUM_DEV_BLOCKS 12
-#define NUM_DEV_ACTIVATION_SLOTS 32
+#define NUM_DEV_BLOCKS 6
+#define NUM_DEV_ACTIVATION_SLOTS 48
 
-#define NUM_DEV_GRAD_BLOCKS 8
+#define NUM_DEV_GRAD_BLOCKS 4
 
 #define NUM_ADAM_THREADS 12	
 
@@ -39,7 +39,7 @@
 // the role of this is to be largest possible while still fitting in memory...
 // because it means more shared data can utilize the parameters and update
 // gradients on device without incorruring I/O overhead or gradient accumulation overhead
-#define NUM_SEQ_GROUPS_PER_ROUND 1
+#define NUM_SEQ_GROUPS_PER_ROUND 8
 
 
 // num_chunks = num_chunks_per_seq * num_seq_groups_per_round
@@ -57,7 +57,7 @@
 
 // this (along with num seqs per round)modulates how frequently we will step 
 // the optimizer...
-#define NUM_ROUNDS_PER_STEP 1
+#define NUM_ROUNDS_PER_STEP 6
 
 #define NUM_STEPS 10
 
@@ -78,7 +78,7 @@
 #define TO_PRINT_BWD_WAITING 0
 #define TO_PRINT_ACT_WAITING 0
 
-#define TO_PRINT_GRAD_WAITING 0
+#define TO_PRINT_GRAD_BLOCK_WAITING 0
 #define TO_PRINT_FWD_ACT_WAITING 0
 
 #define TO_PRINT_FWD_PREFETCHING 0
@@ -1868,9 +1868,10 @@ int main(int argc, char * argv[]){
 	Transformer_Block_Transition * grad_stream_from_head;
 
 
-	int working_grad_block_ind;
-	int replacement_grad_layer_ind;
-	int next_grad_block_id = n_layers - 1 - num_dev_grad_blocks;
+	int working_grad_block_ind = 0;
+	int replacement_grad_layer_ind = 0;
+	// every round starts with the last grad block...
+	int next_grad_block_id = n_layers - 1;
 	int cur_fwd_prefetch_act_ind;
 
 
@@ -1972,7 +1973,7 @@ int main(int argc, char * argv[]){
 			}
 
 			// ensure the next grad block is set properly...
-			next_grad_block_id = n_layers - 1 - num_dev_grad_blocks;
+			next_grad_block_id = n_layers - 1;
 			replacement_grad_layer_ind = 0;
 			working_grad_block_ind = 0;
 
@@ -2225,6 +2226,9 @@ int main(int argc, char * argv[]){
 						return -1;
 					}
 
+					sprintf(profile_msg, "Prefetching next layer id #%d...", next_layer_id);
+					dataflow_handle.profiler.range_push(profile_msg);
+
 					ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, blocks[replacement_layer_ind] -> buffer, sys_blocks[next_layer_id] -> buffer, aligned_block_size);
 					if (ret){
 						fprintf(stderr, "Error: failed to submit inbound transfer for transformer block #%d...\n", next_layer_id);
@@ -2236,6 +2240,8 @@ int main(int argc, char * argv[]){
 						fprintf(stderr, "Error: failed to submit host op to enqueue is_block_ready for next layer...\n");
 						return -1;
 					}
+
+					dataflow_handle.profiler.range_pop();
 							
 					// ensure the last layer will be the first one to be used during bwds, don't increment past it...
 					if (next_layer_id < (n_layers - 1)){
@@ -2246,8 +2252,10 @@ int main(int argc, char * argv[]){
 				}
 				// otherwise see if we need to prefetch a grad block...
 				else{
+
+					
 					// the first round all gradients will be 0, so no need to prefetch...
-					if ((r > 0) && (next_grad_block_id >= 0)){
+					if ((r > 0) && (next_grad_block_id >= (n_layers - num_dev_grad_blocks))){
 
 						if (TO_PRINT_GRAD_BLOCK_PREFETCHING){
 							printf("\n\nPrefetching next grad block id #%d (replacing grad block at index %d)...\n\n", next_grad_block_id, replacement_grad_layer_ind);
@@ -2259,6 +2267,9 @@ int main(int argc, char * argv[]){
 							fprintf(stderr, "Error: failed to submit dependency to prefetch next grad block...\n");
 							return -1;
 						}
+
+						sprintf(profile_msg, "Prefetching next grad block id #%d...", next_grad_block_id);
+						dataflow_handle.profiler.range_push(profile_msg);
 						
 						ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, grad_blocks[replacement_grad_layer_ind] -> buffer, sys_grad_blocks[next_grad_block_id] -> buffer, aligned_block_bwd_size);
 						if (ret){
@@ -2271,6 +2282,8 @@ int main(int argc, char * argv[]){
 							fprintf(stderr, "Error: failed to submit host op to enqueue is_grad_block_ready for next grad block...\n");
 							return -1;
 						}
+
+						dataflow_handle.profiler.range_pop();
 
 						replacement_grad_layer_ind = (replacement_grad_layer_ind + 1) % num_dev_grad_blocks;
 						next_grad_block_id--;
@@ -2291,6 +2304,32 @@ int main(int argc, char * argv[]){
 
 			// pop from "Fwd"
 			dataflow_handle.profiler.range_pop();
+
+
+			int num_grad_blocks_to_prefetch = (next_grad_block_id + 1) - (n_layers - num_dev_grad_blocks);
+			if (num_grad_blocks_to_prefetch > 0){
+				sprintf(profile_msg, "Prefetching remaining %d grad blocks to fill buffer...", num_grad_blocks_to_prefetch);
+				dataflow_handle.profiler.range_push(profile_msg);
+
+				while (next_grad_block_id >= (n_layers - num_dev_grad_blocks)){
+					ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, grad_blocks[replacement_grad_layer_ind] -> buffer, sys_grad_blocks[next_grad_block_id] -> buffer, aligned_block_bwd_size);
+					if (ret){
+						fprintf(stderr, "Error: failed to submit inbound transfer for grad block #%d...\n", next_grad_block_id);
+						return -1;
+					}
+
+					ret = dataflow_handle.submit_host_op(&dataflow_handle, post_sem_callback, (void *) &(is_grad_block_ready[next_grad_block_id]), inbound_stream_id);
+					if (ret){
+						fprintf(stderr, "Error: failed to submit host op to enqueue is_grad_block_ready for next grad block...\n");
+						return -1;
+					}
+
+					replacement_grad_layer_ind = (replacement_grad_layer_ind + 1) % num_dev_grad_blocks;
+					next_grad_block_id--;
+				}
+
+				dataflow_handle.profiler.range_pop();
+			}
 
 			sprintf(profile_msg, "Head");
 			dataflow_handle.profiler.range_push(profile_msg);
@@ -2442,11 +2481,16 @@ int main(int argc, char * argv[]){
 					return -1;
 				}
 
+				sprintf(profile_msg, "Sending grad head to host...");
+				dataflow_handle.profiler.range_push(profile_msg);
+
 				ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, outbound_stream_id, sys_grad_head -> buffer, grad_head -> buffer, combined_head_bwd_size);
 				if (ret){
 					fprintf(stderr, "Error: failed to submit outbound transfer to send head to host...\n");
 					return -1;
 				}
+
+				dataflow_handle.profiler.range_pop();
 
 				// IN REALITY THE HEAD WILL NOT HAVE A SEPERATE STRUCTURE AND DEDICATED GRAD BUFFER ON DEVICE...
 
@@ -2480,6 +2524,9 @@ int main(int argc, char * argv[]){
 				// if we are about to step we can schedule optimizer to run as soon as this final 
 				// gradient makes its way home...
 
+				sprintf(profile_msg, "Submitting adam step for head...");
+				dataflow_handle.profiler.range_push(profile_msg);
+
 	
 				// speicfying adam host functio as adam_step_host and passing this function address 
 				// which will be submitted to the host ops stream...
@@ -2494,6 +2541,8 @@ int main(int argc, char * argv[]){
 					fprintf(stderr, "Error: failed to submit adam step host for head...\n");
 					return -1;
 				}
+
+				dataflow_handle.profiler.range_pop();
 			}
 
 			// BACKWARDS PASS...
@@ -2548,8 +2597,8 @@ int main(int argc, char * argv[]){
 				working_block -> layer_id = k;
 
 				// Ensure we have a fresh gradient buffer to work over...
-				if (TO_PRINT_GRAD_WAITING){
-					printf("\n\n[Bwd] Waiting for grad block workspace to be ready...\n\n");
+				if (TO_PRINT_GRAD_BLOCK_WAITING){
+					printf("\n\n[Bwd] Waiting for grad block %d (at index %d) to be ready...\n\n", k, working_grad_block_ind);
 				}
 
 				sprintf(profile_msg, "Waiting for grad block %d (at index %d) to be ready", k, working_grad_block_ind);
@@ -2877,12 +2926,17 @@ int main(int argc, char * argv[]){
 					fprintf(stderr, "Error: failed to submit dependency to send grad block #%d to host...\n", k);
 					return -1;
 				}
+
+				sprintf(profile_msg, "Sending grad block #%d to host...", k);
+				dataflow_handle.profiler.range_push(profile_msg);
 				
 				ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, outbound_stream_id, sys_grad_blocks[k] -> buffer, working_grad_block -> buffer, aligned_block_bwd_size);
 				if (ret){
 					fprintf(stderr, "Error: failed to submit outbound transfer to send grad block #%d to host...\n", k);
 					return -1;
 				}
+
+				dataflow_handle.profiler.range_pop();
 
 				// PREFETCHING NEXT NEEDED (which is) <= PREVIOUS LAYER ID) FORWARD BLOCK and GRADIENT BLOCK...
 				// choose the one that is needed next, or both if both are needed...
@@ -2901,6 +2955,9 @@ int main(int argc, char * argv[]){
 						return -1;
 					}
 
+					sprintf(profile_msg, "Prefetching fwd block layer id %d...", next_layer_id);	
+					dataflow_handle.profiler.range_push(profile_msg);
+
 					ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, blocks[replacement_layer_ind] -> buffer, sys_blocks[next_layer_id] -> buffer, aligned_block_size);
 					if (ret){
 						fprintf(stderr, "Error: failed to submit inbound transfer for block #%d...\n", next_layer_id);
@@ -2912,6 +2969,8 @@ int main(int argc, char * argv[]){
 						fprintf(stderr, "Error: failed to submit host op to enqueue is_block_ready for next block...\n");
 						return -1;
 					}
+
+					dataflow_handle.profiler.range_pop();
 
 					if (next_layer_id > 0){
 						if (replacement_layer_ind > 0){
@@ -2951,6 +3010,9 @@ int main(int argc, char * argv[]){
 							fprintf(stderr, "Error: failed to submit dependency to prefetch next grad block...\n");
 							return -1;
 						}
+
+						sprintf(profile_msg, "Prefetching next grad block id #%d...", next_grad_block_id);
+						dataflow_handle.profiler.range_push(profile_msg);
 						
 						ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, grad_blocks[replacement_grad_layer_ind] -> buffer, sys_grad_blocks[next_grad_block_id] -> buffer, aligned_block_bwd_size);
 						if (ret){
@@ -2963,6 +3025,8 @@ int main(int argc, char * argv[]){
 							fprintf(stderr, "Error: failed to submit host op to enqueue is_grad_block_ready for next grad block...\n");
 							return -1;
 						}
+
+						dataflow_handle.profiler.range_pop();
 
 						replacement_grad_layer_ind = (replacement_grad_layer_ind + 1) % num_dev_grad_blocks;
 						next_grad_block_id--;
@@ -2981,6 +3045,9 @@ int main(int argc, char * argv[]){
 						return -1;
 					}
 
+					sprintf(profile_msg, "Prefetching fwd block layer id %d...", next_layer_id);	
+					dataflow_handle.profiler.range_push(profile_msg);
+
 					ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, blocks[replacement_layer_ind] -> buffer, sys_blocks[next_layer_id] -> buffer, aligned_block_size);
 					if (ret){
 						fprintf(stderr, "Error: failed to submit inbound transfer for block #%d...\n", next_layer_id);
@@ -2992,6 +3059,8 @@ int main(int argc, char * argv[]){
 						fprintf(stderr, "Error: failed to submit host op to enqueue is_block_ready for next block...\n");
 						return -1;
 					}
+
+					dataflow_handle.profiler.range_pop();
 
 					if (next_layer_id > 0){
 						if (replacement_layer_ind > 0){
@@ -3028,6 +3097,9 @@ int main(int argc, char * argv[]){
 							fprintf(stderr, "Error: failed to submit dependency to prefetch next grad block...\n");
 							return -1;
 						}
+
+						sprintf(profile_msg, "Prefetching next grad block id #%d...", next_grad_block_id);
+						dataflow_handle.profiler.range_push(profile_msg);
 						
 						ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, grad_blocks[replacement_grad_layer_ind] -> buffer, sys_grad_blocks[next_grad_block_id] -> buffer, aligned_block_bwd_size);
 						if (ret){
@@ -3040,6 +3112,8 @@ int main(int argc, char * argv[]){
 							fprintf(stderr, "Error: failed to submit host op to enqueue is_grad_block_ready for next grad block...\n");
 							return -1;
 						}
+
+						dataflow_handle.profiler.range_pop();
 
 						replacement_grad_layer_ind = (replacement_grad_layer_ind + 1) % num_dev_grad_blocks;
 						next_grad_block_id--;
@@ -3067,6 +3141,8 @@ int main(int argc, char * argv[]){
 						return -1;
 					}
 					
+					sprintf(profile_msg, "Submitting adam step for block #%d...", k);
+					dataflow_handle.profiler.range_push(profile_msg);
 
 					// speicfying adam host functio as adam_step_host and passing this function address 
 					// which will be submitted to the host ops stream...
@@ -3081,6 +3157,8 @@ int main(int argc, char * argv[]){
 						fprintf(stderr, "Error: failed to submit adam step host for block #%d...\n", k);
 						return -1;
 					}
+
+					dataflow_handle.profiler.range_pop();
 				}
 
 
@@ -3150,6 +3228,8 @@ int main(int argc, char * argv[]){
 					printf("\n\nSending grad embedding table to host for round #%d...\n\n", r);
 				}
 
+				
+
 				cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, compute_stream_id);
 				if (!cur_stream_state){
 					fprintf(stderr, "Error: failed to get stream state for embedding table...\n");
@@ -3162,11 +3242,16 @@ int main(int argc, char * argv[]){
 					return -1;
 				}
 
+				sprintf(profile_msg, "Sending grad embedding table to host...");
+				dataflow_handle.profiler.range_push(profile_msg);
+
 				ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, outbound_stream_id, sys_grad_embedding_table -> embedding_table, grad_embedding_table -> embedding_table, grad_embedding_table -> embedding_table_size);
 				if (ret){
 					fprintf(stderr, "Error: failed to submit outbound transfer to send embedding table to host...\n");
 					return -1;
 				}
+
+				dataflow_handle.profiler.range_pop();
 
 				// IN REALITY THE HEAD WILL NOT HAVE A SEPERATE STRUCTURE AND DEDICATED GRAD BUFFER ON DEVICE...
 
@@ -3200,6 +3285,8 @@ int main(int argc, char * argv[]){
 				// if we are about to step we can schedule optimizer to run as soon as this final 
 				// gradient makes its way home...
 
+				sprintf(profile_msg, "Submitting adam step for embedding table...");
+				dataflow_handle.profiler.range_push(profile_msg);
 	
 				// speicfying adam host functio as adam_step_host and passing this function address 
 				// which will be submitted to the host ops stream...
@@ -3215,7 +3302,7 @@ int main(int argc, char * argv[]){
 					return -1;
 				}
 
-
+				dataflow_handle.profiler.range_pop();
 
 				/* GET PREPARED FOR NEXT STEP */
 			
