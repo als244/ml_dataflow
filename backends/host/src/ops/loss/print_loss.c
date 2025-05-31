@@ -25,6 +25,7 @@ int print_round_loss_host(void * _print_round_loss_host_op_args){
 
     int step_num = args -> step_num;
     int round_num = args -> round_num;
+    int num_seqs = args -> num_seqs;
     int num_chunks = args -> num_chunks;
     int total_tokens = args -> total_tokens;
     float * per_chunk_avg_loss = args -> per_chunk_avg_loss;
@@ -37,7 +38,7 @@ int print_round_loss_host(void * _print_round_loss_host_op_args){
 
     float avg_chunk_loss = total_avg_chunk_loss / num_chunks;
 
-    printf("[LOSS: Step %d, Round %d, Num Chunks: %d, Total Tokens: %d] Avg Loss: %f\n", step_num, round_num, num_chunks, total_tokens, avg_chunk_loss);
+    printf("[LOSS: Step %d, Round %d, Num Seqs: %d (%d chunks), Total Tokens: %d] Avg Loss: %f\n", step_num, round_num, num_seqs, num_chunks, total_tokens, avg_chunk_loss);
 
     return 0;
 }

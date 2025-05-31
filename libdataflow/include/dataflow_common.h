@@ -8,7 +8,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <math.h>
-
+#include <time.h>
 #include <assert.h>
 #include <errno.h>
 

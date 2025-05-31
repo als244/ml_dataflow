@@ -252,61 +252,25 @@ int dataflow_submit_default_cross_entropy_loss(Dataflow_Handle * handle, int str
 
 
 
-/// HOST OPS
-typedef struct Print_Chunk_Loss_Host_Op_Args{
-    int step_num;
-    int round_num;
-    int seq_id;
-    int chunk_id;
-    int num_tokens;
-    float * avg_loss_ref;
-} Print_Chunk_Loss_Host_Op_Args;
+/* HOST OPS */
 
-typedef struct Print_Round_Loss_Host_Op_Args{
-	int step_num;
-	int round_num;
-	int num_chunks;
-	int total_tokens;
-	float * per_chunk_avg_loss;
-} Print_Round_Loss_Host_Op_Args;
-
-// Require user to pass in host function pointer...
-
-// this is within loss_misc_ops.c
-int dataflow_submit_print_chunk_loss_host(Dataflow_Handle * handle, int stream_id,
-									void * print_chunk_loss_host_func, Print_Chunk_Loss_Host_Op_Args * op_buffer,
-									int step_num, int round_num, int seq_id, int chunk_id, int num_tokens, float * avg_loss_ref);
-
-int dataflow_submit_print_round_loss_host(Dataflow_Handle * handle, int stream_id,
-									void * print_round_loss_host_func, Print_Round_Loss_Host_Op_Args * op_buffer,
-									int step_num, int round_num, int num_chunks, int total_tokens, float * per_chunk_avg_loss);
+// Require user to pass in host function pointer the backend implementation of the op
+// The arguments passed in need to populated in memory at the the execution time of the op
+// but this is uncertain, so it is user responssibility to pass in buffer that will be populated
+// by these submission functions and shoudn't be overwritten until after the op has completed execution...
 
 
-typedef struct Adam_Host_Op_Args{
-    DataflowDatatype param_dt;
-    DataflowDatatype grad_dt;
-    DataflowDatatype mean_dt;
-    DataflowDatatype var_dt;
-    int num_threads;
-    int step_num;
-    int layer_id;
-    uint64_t num_els;
-    float lr;
-    float beta1;
-    float beta2;
-    float weight_decay;
-    float epsilon;
-    void * param;
-    void * grad;
-    void * mean;
-    void * var;
-} Adam_Host_Op_Args;
-
+// GENERAL / OPTIMIZER OPS
 typedef struct set_mem_host_op_args{
     void * ptr;
     size_t size_bytes;
     int value;
 } Set_Mem_Host_Op_Args;
+
+int dataflow_submit_set_mem_host(Dataflow_Handle * handle, int stream_id, 
+                        void * set_mem_host_func, Set_Mem_Host_Op_Args * op_buffer,
+                        void * ptr, int value, size_t size_bytes);
+
 
 // C = alpha * A + beta * B
 typedef struct add_host_op_args{
@@ -330,6 +294,29 @@ int dataflow_submit_add_host(Dataflow_Handle * handle, int stream_id,
                         int num_threads, int layer_id, size_t num_els, void * A, void * B, void * C,
                         float alpha, float beta);
 
+
+typedef struct Adam_Host_Op_Args{
+    DataflowDatatype param_dt;
+    DataflowDatatype grad_dt;
+    DataflowDatatype mean_dt;
+    DataflowDatatype var_dt;
+    int num_threads;
+    int step_num;
+    int layer_id;
+    uint64_t num_els;
+    float lr;
+    float beta1;
+    float beta2;
+    float weight_decay;
+    float epsilon;
+    void * param;
+    void * grad;
+    void * mean;
+    void * var;
+} Adam_Host_Op_Args;
+
+
+
 int dataflow_submit_adam_step_host(Dataflow_Handle * handle, int stream_id, 
                         void * adam_host_func, Adam_Host_Op_Args * op_buffer,
 						DataflowDatatype param_dt, DataflowDatatype grad_dt, 
@@ -339,9 +326,95 @@ int dataflow_submit_adam_step_host(Dataflow_Handle * handle, int stream_id,
                         void * param, void * grad, void * mean, void * var);
 
 
-int dataflow_submit_set_mem_host(Dataflow_Handle * handle, int stream_id, 
-                        void * set_mem_host_func, Set_Mem_Host_Op_Args * op_buffer,
-                        void * ptr, int value, size_t size_bytes);
+// LOSS STUFF
+
+typedef struct Print_Chunk_Loss_Host_Op_Args{
+    int step_num;
+    int round_num;
+    int seq_id;
+    int chunk_id;
+    int num_tokens;
+    float * avg_loss_ref;
+} Print_Chunk_Loss_Host_Op_Args;
+
+
+int dataflow_submit_print_chunk_loss_host(Dataflow_Handle * handle, int stream_id,
+									void * print_chunk_loss_host_func, Print_Chunk_Loss_Host_Op_Args * op_buffer,
+									int step_num, int round_num, int seq_id, int chunk_id, int num_tokens, float * avg_loss_ref);
+
+
+typedef struct Print_Round_Loss_Host_Op_Args{
+	int step_num;
+	int round_num;
+	int num_seqs;
+	int num_chunks;
+	int total_tokens;
+	float * per_chunk_avg_loss;
+} Print_Round_Loss_Host_Op_Args;
+
+
+
+int dataflow_submit_print_round_loss_host(Dataflow_Handle * handle, int stream_id,
+									void * print_round_loss_host_func, Print_Round_Loss_Host_Op_Args * op_buffer,
+									int step_num, int round_num, int num_seqs, int num_chunks, int total_tokens, float * per_chunk_avg_loss);
+
+
+
+// METRICS
+
+#define MAX_SEQS_PER_STEP 65536
+typedef struct Step_Throughput_Host_Op_Args{
+	// populated at beginning of training for all steps
+	int model_dim;
+	int kv_dim;
+	int num_shared_experts;
+	int num_total_routed_experts;
+	int num_active_routed_experts;
+	int expert_dim;
+	int vocab_size;
+	int num_layers;
+	float peak_hardware_flop_rate;
+	bool to_print_metrics;
+	bool to_print_verbose;
+
+	// these are populated as input to start_step_metrics()
+	int step_num;
+	int num_seqs;
+	int seqlens[MAX_SEQS_PER_STEP];
+
+	// populated during start_step_metrics()
+	struct timespec start_time;
+	int total_tokens;
+	float total_fwd_flops;
+	float total_head_flops;
+	float total_bwd_x_flops;
+	float total_bwd_w_flops;
+	// sum of above 3
+	float total_computation_flops;
+	// these get populated during end_step_metrics()
+	struct timespec end_time;
+	uint64_t duration_ns;
+	float duration_s;
+	// duration_s / total_computation_flops
+	float achieved_flop_rate;
+	// duration_s / (total_computation_flops / peak_hardware_flop_rate)
+	float mfu;
+	// total_tokens / duration_s
+	float tokens_per_second;
+} Step_Throughput_Host_Op_Args;
+
+// assumes that the op_buffer is already allocated and populated with the static model info...
+int dataflow_submit_start_step_metrics_host(Dataflow_Handle * handle, int stream_id, 
+                        void * start_step_metrics_func, Step_Throughput_Host_Op_Args * op_buffer,
+						int step_num, int num_seqs, int * seqlens);
+
+// assumes the same op_buffer that was used in the start_step_metrics_host op
+int dataflow_submit_end_step_metrics_host(Dataflow_Handle * handle, int stream_id, 
+                        void * end_step_metrics_func, Step_Throughput_Host_Op_Args * op_buffer);
+
+
+
+
 
 
 

@@ -4,6 +4,12 @@
 #include "register_ops.h"
 #include "host_ops.h"
 
+#define RTX_3090_PEAK_BF16_TFLOPS 7.1e13
+#define RTX_5090_PEAK_BF16_TFLOPS 2.095e14
+#define H100_PEAK_BF16_TFLOPS 9.89e14
+
+#define PEAK_BF16_TFLOPS RTX_5090_PEAK_BF16_TFLOPS
+
 
 #define HOST_MEM_GB 110
 #define DEV_MEM_GB 21
@@ -65,7 +71,13 @@
 
 
 
+
+
+
 // config for what to print...
+
+#define TO_PRINT_THROUGHPUT_METRICS 1
+#define TO_PRINT_THROUGHPUT_METRICS_VERBOSE 1
 
 #define TO_PRINT_ROUND_LOSS 1
 #define TO_PRINT_CHUNK_LOSS 0
@@ -247,6 +259,7 @@ int main(int argc, char * argv[]){
 	int model_dim;
 	int kv_dim;
 	int vocab_size;
+	
 
 	if (MODEL_CONFIG_SIZE_B == 70){
 	// llama3 70B config
@@ -285,6 +298,12 @@ int main(int argc, char * argv[]){
 		fprintf(stderr, "Error: invalid model config size (B): %d\n", MODEL_CONFIG_SIZE_B);
 		return -1;
 	}
+
+
+	int num_shared_experts = 1;
+	int num_total_routed_experts = 0;
+	int num_active_routed_experts = 0;
+	int expert_dim = ffn_dim;
 	
 
 	MoE_Config * moe_config = NULL;
@@ -1814,14 +1833,14 @@ int main(int argc, char * argv[]){
 	printf("\nMEMORY USAGE (GB):\n\tHost: %.3f\n\tDevice: %.3f\n\n\n\n", (float) used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) used_dev_mem / (1024.0 * 1024.0 * 1024.0));
 
 	if ((used_host_mem > host_size_bytes) || (used_dev_mem > dev_size_bytes)) {
-		fprintf(stderr, "ERROR. Cannot run with current configuration of %d dev parameter blocks,%d dev activation slots, %d dev block grads, %d chunk size, and %d seq groups per round...\n", NUM_DEV_BLOCKS, NUM_DEV_ACTIVATION_SLOTS, NUM_DEV_GRAD_BLOCKS, CHUNK_SIZE, NUM_SEQ_GROUPS_PER_ROUND);
+		fprintf(stderr, "ERROR. Cannot run with current configuration of %d dev parameter blocks,%d dev activation slots, %d dev block grads, %d chunk size, and %d seq groups per round => %d chunks per round...\n", NUM_DEV_BLOCKS, NUM_DEV_ACTIVATION_SLOTS, NUM_DEV_GRAD_BLOCKS, CHUNK_SIZE, NUM_SEQ_GROUPS_PER_ROUND, num_chunks);
 		
 		if (used_host_mem > host_size_bytes){
-			fprintf(stderr, "\nHost Memory Overflow: Have %.3f GB allocated, but requires %.3f GB with current setting...\n", (float) used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) host_size_bytes / (1024.0 * 1024.0 * 1024.0));
+			fprintf(stderr, "\nHost Memory Overflow: Have %.3f GB allocated, but requires %.3f GB with current setting...\n", (float) host_size_bytes / (1024.0 * 1024.0 * 1024.0), (float) used_host_mem / (1024.0 * 1024.0 * 1024.0));
 		}
 
 		if (used_dev_mem > dev_size_bytes){
-			fprintf(stderr, "\nDevice Memory Overflow: Have %.3f GB allocated, but requires %.3f GB with current setting...\n", (float) used_dev_mem / (1024.0 * 1024.0 * 1024.0), (float) dev_size_bytes / (1024.0 * 1024.0 * 1024.0));
+			fprintf(stderr, "\nDevice Memory Overflow: Have %.3f GB allocated, but requires %.3f GB with current setting...\n", (float) dev_size_bytes / (1024.0 * 1024.0 * 1024.0), (float) used_dev_mem / (1024.0 * 1024.0 * 1024.0));
 		}
 		
 		return -1;
@@ -1953,11 +1972,70 @@ int main(int argc, char * argv[]){
 	int total_train_tokens = num_steps * total_pred_tokens_in_step;
 	printf("Total train tokens: %d\n\n", total_train_tokens);
 
+
+	// Prepare to save down metrics...
+	Step_Throughput_Host_Op_Args * step_throughput_op_buffers = calloc(num_steps, sizeof(Step_Throughput_Host_Op_Args));
+	if (!step_throughput_op_buffers){
+		fprintf(stderr, "Error: failed to allocate step_throughput_op_buffers...\n");
+		return -1;
+	}
+
+	// Populate with static model info...
+
+	for (int t = 0; t < num_steps; t++){
+		step_throughput_op_buffers[t].model_dim = model_dim;
+		step_throughput_op_buffers[t].kv_dim = kv_dim;
+		step_throughput_op_buffers[t].num_shared_experts = num_shared_experts;
+		step_throughput_op_buffers[t].num_total_routed_experts = num_total_routed_experts;
+		step_throughput_op_buffers[t].num_active_routed_experts = num_active_routed_experts;
+		step_throughput_op_buffers[t].expert_dim = expert_dim;
+		step_throughput_op_buffers[t].vocab_size = vocab_size;
+		step_throughput_op_buffers[t].num_layers = n_layers;
+		step_throughput_op_buffers[t].peak_hardware_flop_rate = PEAK_BF16_TFLOPS;
+		step_throughput_op_buffers[t].to_print_metrics = TO_PRINT_THROUGHPUT_METRICS;
+		step_throughput_op_buffers[t].to_print_verbose = TO_PRINT_THROUGHPUT_METRICS_VERBOSE;
+	}
+
+	// JUST FOR DEMO we are using the same sequence distribution for every round and eveyr step...
+
+	// seqs per chunk = 1 if seq uses >= 1 chunks, otherwise packing multiple seqs per chunk...
+	int seqs_per_round = num_seq_groups_per_round / (num_seqs_per_chunk);
+	int seqs_per_step = seqs_per_round * num_rounds_per_step;
+	printf("Chunk size: %d\n", chunk_size);
+	printf("Chunks per round: %d\n", num_chunks);
+	printf("Num rounds per step: %d\n\n", num_rounds_per_step);
+	printf("Seqlen: %d\n", MAX_SEQLEN);
+	printf("Seqs per round: %d\n", seqs_per_round);
+	printf("Seqs per step: %d\n\n", seqs_per_step);
+
+	printf("# Model Params: %.2fB\n\n", all_model_num_els / 1e9);
+	
+
+	int * seqlens = calloc(seqs_per_step, sizeof(int));
+	if (!seqlens){
+		fprintf(stderr, "Error: failed to allocate seqlens...\n");
+		return -1;
+	}
+
+	// all seqs use the same length...
+	for (int i = 0; i < seqs_per_step; i++){
+		seqlens[i] = MAX_SEQLEN;
+	}
+
+	
+	
+	
+	
+
 	printf("------ STARTING TRAINING ------\n\n");
+
+	int cur_round_num_seqs;
+	int cur_round_num_chunks;
+	int cur_round_num_tokens;
 
 	// start profiling...
 
-	printf("Starting profiling...\n");
+	//printf("Starting profiling...\n\n");
 	ret = dataflow_handle.profiler.start();
 	if (ret){
 		fprintf(stderr, "Error: failed to start profiling...\n");
@@ -1971,6 +2049,15 @@ int main(int argc, char * argv[]){
 		sprintf(profile_msg, "Step #%d", t);
 		dataflow_handle.profiler.range_push(profile_msg);
 
+		// start the metrics for this step...
+		ret = dataflow_submit_start_step_metrics_host(&dataflow_handle, host_ops_stream_id, 
+                        start_step_metrics, &(step_throughput_op_buffers[t - 1]),
+						t, seqs_per_step, seqlens);
+		if (ret){
+			fprintf(stderr, "Error: failed to submit start step metrics for step #%d...\n", t);
+			return -1;
+		}
+
 		// at init, or after each step, reset the layer indices...
 		// (if # layers non-divisible by # blocks in dev, then these might get of out whack, 
 		// within rounds, but that is ok, because they are properly being ping/ponged 
@@ -1979,6 +2066,11 @@ int main(int argc, char * argv[]){
 		replacement_layer_ind = 0;
 
 		for (int r = 0; r < num_rounds_per_step; r++){
+
+			// in reality these wouldn't be the same every round...
+			cur_round_num_seqs = seqs_per_round;
+			cur_round_num_chunks = num_chunks;
+			cur_round_num_tokens = round_tokens;
 
 			sprintf(profile_msg, "Round #%d", r);
 			dataflow_handle.profiler.range_push(profile_msg);
@@ -2480,7 +2572,7 @@ int main(int argc, char * argv[]){
 
 				ret = dataflow_submit_print_round_loss_host(&dataflow_handle, loss_stream_id,
 											&print_round_loss_host, &(print_round_loss_op_buffer[(t - 1) * num_rounds_per_step + r]),
-											t, r, num_chunks, round_tokens, &(sys_loss_tracker[(t - 1) * num_rounds_per_step * num_chunks + r * num_chunks]));
+											t, r, cur_round_num_seqs, cur_round_num_chunks, cur_round_num_tokens, &(sys_loss_tracker[(t - 1) * num_rounds_per_step * num_chunks + r * num_chunks]));
 
 				if (ret){
 					fprintf(stderr, "Error: failed to submit print step loss host...\n");
@@ -3340,6 +3432,17 @@ int main(int argc, char * argv[]){
 				}
 
 				dataflow_handle.profiler.range_pop();
+
+				// FINISHED STEP HERE...!
+
+				// get step metrics...!
+
+				ret = dataflow_submit_end_step_metrics_host(&dataflow_handle, host_ops_stream_id, 
+                        						end_step_metrics, &(step_throughput_op_buffers[t - 1]));
+				if (ret){
+					fprintf(stderr, "Error: failed to submit end step metrics for step #%d...\n", t);
+					return -1;
+				}
 
 				/* GET PREPARED FOR NEXT STEP */
 			

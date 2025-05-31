@@ -17,17 +17,19 @@ HOST_OPS_SRC_DIR = src/ops
 
 HOST_OPS_OBJ_DIR = ${HOST_OPS_SRC_DIR}/objs
 
+METRICS_SRC_DIR = ${HOST_OPS_SRC_DIR}/metrics
 LOSS_SRC_DIR = ${HOST_OPS_SRC_DIR}/loss
 MEMORY_SRC_DIR = ${HOST_OPS_SRC_DIR}/memory
 ADD_SRC_DIR = ${HOST_OPS_SRC_DIR}/add
 OPTIMIZER_SRC_DIR = ${HOST_OPS_SRC_DIR}/optimizer
 
+METRICS_OBJS = ${HOST_OPS_OBJ_DIR}/throughput.o
 LOSS_OBJS = ${HOST_OPS_OBJ_DIR}/print_loss.o
 MEMORY_OBJS = ${HOST_OPS_OBJ_DIR}/set_mem.o
 ADD_OBJS = ${HOST_OPS_OBJ_DIR}/add_dispatch.o ${HOST_OPS_OBJ_DIR}/add.o ${HOST_OPS_OBJ_DIR}/add_avx2.o ${HOST_OPS_OBJ_DIR}/add_avx512.o
 OPTIMIZER_OBJS = ${HOST_OPS_OBJ_DIR}/adam_dispatch.o ${HOST_OPS_OBJ_DIR}/adam_step.o ${HOST_OPS_OBJ_DIR}/adam_step_avx2.o ${HOST_OPS_OBJ_DIR}/adam_step_avx512.o
 
-HOST_OPS_OBJS = ${LOSS_OBJS} ${MEMORY_OBJS} ${ADD_OBJS} ${OPTIMIZER_OBJS} 
+HOST_OPS_OBJS = ${METRICS_OBJS} ${LOSS_OBJS} ${MEMORY_OBJS} ${ADD_OBJS} ${OPTIMIZER_OBJS} 
 HOST_OPS_LIB = lib/libdataflow_hostops.so
 
 AVX2_FLAGS = -mavx2 -mfma -mf16c
@@ -43,7 +45,9 @@ create_dirs:
 ${HOST_OPS_LIB}: ${HOST_OPS_OBJS}
 	${CC} ${CFLAGS} -shared ${ALL_INCLUDES} $^ -o $@ ${ALL_LIB_DEPENDS}
 
-
+## metrics related ops
+${HOST_OPS_OBJ_DIR}/throughput.o: ${METRICS_SRC_DIR}/throughput.c
+	${CC} ${CFLAGS} ${ALL_INCLUDES} -c $< -o $@
 
 ## loss related ops
 ${HOST_OPS_OBJ_DIR}/print_loss.o: ${LOSS_SRC_DIR}/print_loss.c

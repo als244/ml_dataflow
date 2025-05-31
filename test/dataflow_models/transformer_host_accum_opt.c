@@ -1990,11 +1990,29 @@ int main(int argc, char * argv[]){
 	int total_train_tokens = num_steps * total_pred_tokens_in_step;
 	printf("Total train tokens: %d\n\n", total_train_tokens);
 
+	// JUST FOR DEMO we are using the same sequence distribution for every round and eveyr step...
+
+	// seqs per chunk = 1 if seq uses >= 1 chunks, otherwise packing multiple seqs per chunk...
+	int seqs_per_round = num_seq_groups_per_round / (num_seqs_per_chunk);
+	int seqs_per_step = seqs_per_round * num_rounds_per_step;
+	printf("Chunk size: %d\n", chunk_size);
+	printf("Chunks per round: %d\n", num_chunks);
+	printf("Num rounds per step: %d\n\n", num_rounds_per_step);
+	printf("Seqlen: %d\n", MAX_SEQLEN);
+	printf("Seqs per round: %d\n", seqs_per_round);
+	printf("Seqs per step: %d\n\n", seqs_per_step);
+
+	printf("# Model Params: %.2fB\n\n", all_model_num_els / 1e9);
+
 	printf("------ STARTING TRAINING ------\n\n");
+
+	int cur_round_num_seqs;
+	int cur_round_num_chunks;
+	int cur_round_num_tokens;
 
 	// start profiling...
 
-	printf("Starting profiling...\n");
+	//printf("Starting profiling...\n");
 	ret = dataflow_handle.profiler.start();
 	if (ret){
 		fprintf(stderr, "Error: failed to start profiling...\n");
@@ -2016,6 +2034,10 @@ int main(int argc, char * argv[]){
 		replacement_layer_ind = 0;
 
 		for (int r = 0; r < num_rounds_per_step; r++){
+
+			cur_round_num_seqs = seqs_per_round;
+			cur_round_num_chunks = num_chunks;
+			cur_round_num_tokens = round_tokens;
 
 			sprintf(profile_msg, "Round #%d", r);
 			dataflow_handle.profiler.range_push(profile_msg);
@@ -2423,7 +2445,7 @@ int main(int argc, char * argv[]){
 
 				ret = dataflow_submit_print_round_loss_host(&dataflow_handle, loss_stream_id,
 											&print_round_loss_host, &(print_round_loss_op_buffer[(t - 1) * num_rounds_per_step + r]),
-											t, r, num_chunks, round_tokens, &(sys_loss_tracker[(t - 1) * num_rounds_per_step * num_chunks + r * num_chunks]));
+											t, r, cur_round_num_seqs, cur_round_num_chunks, cur_round_num_tokens, &(sys_loss_tracker[(t - 1) * num_rounds_per_step * num_chunks + r * num_chunks]));
 
 				if (ret){
 					fprintf(stderr, "Error: failed to submit print step loss host...\n");
