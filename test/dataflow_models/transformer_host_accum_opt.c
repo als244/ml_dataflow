@@ -1993,7 +1993,7 @@ int main(int argc, char * argv[]){
 	// JUST FOR DEMO we are using the same sequence distribution for every round and eveyr step...
 
 	// seqs per chunk = 1 if seq uses >= 1 chunks, otherwise packing multiple seqs per chunk...
-	int seqs_per_round = num_seq_groups_per_round / (num_seqs_per_chunk);
+	int seqs_per_round = (num_seq_groups_per_round * num_chunks_per_seq) * num_seqs_per_chunk;
 	int seqs_per_step = seqs_per_round * num_rounds_per_step;
 	printf("Chunk size: %d\n", chunk_size);
 	printf("Chunks per round: %d\n", num_chunks);

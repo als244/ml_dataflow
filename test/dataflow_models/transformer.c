@@ -21,7 +21,7 @@
 // could also take in as command line argument...
 #define NUM_DEV_BLOCKS 6
 #define NUM_DEV_GRAD_BLOCKS 6
-#define NUM_DEV_ACTIVATION_SLOTS 48
+#define NUM_DEV_ACTIVATION_SLOTS 24
 
 
 
@@ -32,7 +32,7 @@
 
 // this is just for testing,.. in 
 // reality determined dynamically...
-#define CHUNK_SIZE 2048
+#define CHUNK_SIZE 4096
 
 #define TOKEN_IDS_PATH "../data/2048_token_ids_uint32.dat"
 #define TOKEN_LABELS_PATH "../data/2048_labels_uint32.dat"
@@ -44,7 +44,7 @@
 // the role of this is to be largest possible while still fitting in memory...
 // because it means more shared data can utilize the parameters and update
 // gradients on device without incorruring I/O overhead or gradient accumulation overhead
-#define NUM_SEQ_GROUPS_PER_ROUND 8
+#define NUM_SEQ_GROUPS_PER_ROUND 4
 
 
 // num_chunks = num_chunks_per_seq * num_seq_groups_per_round
@@ -976,6 +976,12 @@ int main(int argc, char * argv[]){
 	used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
+
+	uint64_t model_used_dev_mem = used_dev_mem;
+	uint64_t model_used_host_mem = used_host_mem;
+
+	
+
 	
 	
 	
@@ -1058,7 +1064,7 @@ int main(int argc, char * argv[]){
 
 	// Now we can prepare seq batch...
 
-	printf("Preparing seq batch...\n");
+	printf("\n\n\nPreparing seq batch...\n");
 
 
 	// ensuring we can populate the seq batch/chunk with correct amount of tokens...
@@ -1086,7 +1092,7 @@ int main(int argc, char * argv[]){
 
 	uint64_t metadata_buffer_size = get_seq_batch_metadata_buffer_size(num_seqs_per_chunk, max_tokens_per_chunk);
 
-	printf("Batch Config:\n\tTotal Tokens: %d\n\tNum Seqs Per Chunk: %d\n\n\tSeq Batch Metadata Buffer Size: %lu\n\n\n", max_tokens_per_chunk, num_seqs_per_chunk, metadata_buffer_size);
+	printf("Batch Config:\n\tTotal Tokens: %d\n\tNum Seqs Per Chunk: %d\n\n\n", max_tokens_per_chunk, num_seqs_per_chunk);
 
 	Seq_Batch ** seq_batches = malloc(num_chunks * sizeof(Seq_Batch *));
 	if (!seq_batches){
@@ -1096,8 +1102,10 @@ int main(int argc, char * argv[]){
 
 	int max_total_local_expert_tokens = max_tokens_per_chunk;
 
+	printf("MEMORY BREAKDOWN...\n\n");
 
 
+	printf("Model:\n\tUsed Host Mem: %.3f GB\n\tUsed Dev Mem: %.3f GB\n", (float) model_used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) model_used_dev_mem / (1024.0 * 1024.0 * 1024.0));
 
 
 
@@ -1287,6 +1295,13 @@ int main(int argc, char * argv[]){
 	size_t wrote_els;
 	FILE * f_labels;
 
+
+	uint64_t metadata_used_dev_mem = used_dev_mem - model_used_dev_mem;
+	uint64_t metadata_used_host_mem = used_host_mem - model_used_host_mem;
+
+	printf("Metadata:\n\tUsed Host Mem: %.3f GB\n\tUsed Dev Mem: %.3f GB\n", (float) metadata_used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) metadata_used_dev_mem / (1024.0 * 1024.0 * 1024.0));
+
+	
 	char file_path[PATH_MAX];
 	for (int i = 0; i < NUM_RAW_CHUNK_IDS_LABELS_TO_SAVE; i++){
 
@@ -1429,7 +1444,10 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 	
-	
+	uint64_t context_used_dev_mem = used_dev_mem - model_used_dev_mem - metadata_used_dev_mem;
+	uint64_t context_used_host_mem = used_host_mem - model_used_host_mem - metadata_used_host_mem;
+
+	printf("Context:\n\tUsed Host Mem: %.3f GB\n\tUsed Dev Mem: %.3f GB\n", (float) context_used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) context_used_dev_mem / (1024.0 * 1024.0 * 1024.0));
 	
 
 	
@@ -1492,9 +1510,15 @@ int main(int argc, char * argv[]){
 		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 	}
 
+	uint64_t block_transition_used_dev_mem = used_dev_mem - model_used_dev_mem - metadata_used_dev_mem - context_used_dev_mem;
+	uint64_t block_transition_used_host_mem = used_host_mem - model_used_host_mem - metadata_used_host_mem - context_used_host_mem;
+	
+	printf("Block Transition:\n\tUsed Host Mem: %.3f GB\n\tUsed Dev Mem: %.3f GB\n", (float) block_transition_used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) block_transition_used_dev_mem / (1024.0 * 1024.0 * 1024.0));
+	
 	// SAME KERNEL WORKSPACE ACROSS ALL COMPUTATIONS!
 
-	uint64_t kernelWorkspaceBytes = 1UL << 28;
+	// attention kernel bwd needs good amount of workspace...
+	uint64_t kernelWorkspaceBytes = 1UL << 29;
 	void * kernelWorkspace = cur_dev_mem;
 	cur_dev_mem += kernelWorkspaceBytes;
 	used_dev_mem += kernelWorkspaceBytes;
@@ -1541,7 +1565,7 @@ int main(int argc, char * argv[]){
 	int num_saved_activation_buffers = MY_MIN(total_acts, NUM_DEV_ACTIVATION_SLOTS);
 
 	int total_home_acts = total_acts - num_saved_activation_buffers;
-
+	int total_dev_acts = num_saved_activation_buffers;
 
 
 	// Saved Actviations will live on device and might be transferred back to host and retrieved prior to bwd pass...
@@ -1584,11 +1608,6 @@ int main(int argc, char * argv[]){
 	for (int i = 0; i < num_saved_activation_buffers; i++){
 
 		saved_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batches[(i % num_chunks)]);
-		
-		if (i == 0){
-			printf("Saved Activations buffer size: %lu\n\n", saved_activations_buffer_size);
-		
-		}
 
 		ret = bind_seq_batch_saved_activations_buffer(seq_batches[(i % num_chunks)], &(saved_activations[i]), cur_dev_mem, saved_activations_buffer_size, i);
 		if (ret){
@@ -1652,6 +1671,8 @@ int main(int argc, char * argv[]){
 	for (int i = 0; i < num_chunks * n_layers; i++){
 		dev_act_ind[i] = -1;
 	}
+	
+
 	
 	
 	
@@ -1823,6 +1844,12 @@ int main(int argc, char * argv[]){
 	// ensure alignment for matmuls..
 	used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 	cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
+
+
+	uint64_t activations_used_dev_mem = used_dev_mem - model_used_dev_mem - metadata_used_dev_mem - context_used_dev_mem - block_transition_used_dev_mem;
+	uint64_t activations_used_host_mem = used_host_mem - model_used_host_mem - metadata_used_host_mem - context_used_host_mem - block_transition_used_host_mem;
+
+	printf("Activations (+ additional workspace):\n\t(Chunk, Layer) Activation Size: %.3f GB\n\tHost # Acts: %d\n\tDev # Acts: %d\n\tUsed Host Mem: %.3f GB\n\tUsed Dev Mem: %.3f GB\n\n\n", saved_activations_buffer_size / (1024.0 * 1024.0 * 1024.0), total_home_acts, total_dev_acts, (float) activations_used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) activations_used_dev_mem / (1024.0 * 1024.0 * 1024.0));
 
 
 
@@ -1999,7 +2026,7 @@ int main(int argc, char * argv[]){
 	// JUST FOR DEMO we are using the same sequence distribution for every round and eveyr step...
 
 	// seqs per chunk = 1 if seq uses >= 1 chunks, otherwise packing multiple seqs per chunk...
-	int seqs_per_round = num_seq_groups_per_round / (num_seqs_per_chunk);
+	int seqs_per_round = (num_seq_groups_per_round * num_chunks_per_seq) * num_seqs_per_chunk;
 	int seqs_per_step = seqs_per_round * num_rounds_per_step;
 	printf("Chunk size: %d\n", chunk_size);
 	printf("Chunks per round: %d\n", num_chunks);
@@ -3547,7 +3574,7 @@ int main(int argc, char * argv[]){
 	
 
 
-	printf("Finished enqueueing all dataflow operations! Stopping profiler & waiting to sync...\n\n");
+	printf("\n\n\nFinished enqueueing all dataflow operations!\nWaiting to sync...\n\n");
 
 
 	ret = dataflow_handle.sync_stream(&dataflow_handle, host_ops_stream_id);
