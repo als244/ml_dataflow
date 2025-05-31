@@ -17,9 +17,11 @@
 // set higher flags that determine which archs use flash3
 
 // seems like there is a numerical difference between flash2 and flash3 bwd
-// not sure which is "better", will set defaults to use flash3 for performance
-// and will fall back to flash2 for other archs (blackwell)
-#define USE_FLASH3_AMPERE 1
+// not sure which is "better"
+
+// on rtx 3090, it seems like flash2 is same perf but appears more stable...
+#define USE_FLASH3_AMPERE 0
+
 #define USE_FLASH3_HOPPER 1
 
 
