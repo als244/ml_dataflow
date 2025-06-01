@@ -15,6 +15,8 @@
 #include "attention_misc/rope_bwd_x.cu"
 #include "attention_misc/copy_to_seq_context.cu"
 
+#include "optimizer/adamw_step.cu"
+
 #include "moe/select_experts.cu"
 
 #include "activations/swiglu.cu"

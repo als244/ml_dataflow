@@ -281,7 +281,18 @@ print(f"Saved model parameter gradients to {param_grads_save_path}")
 
 # --- 2. Initialize and Run Optimizer ---
 print("Initializing Adam optimizer and performing optimization step...")
+
+"""
 optimizer = optim.Adam(
+    model.parameters(), # Pass all model parameters to the optimizer
+    lr=1e-4,
+    betas=(0.9, 0.999), # (beta1, beta2)
+    eps=1e-8,           # epsilon
+    weight_decay=1e-3
+)
+"""
+
+optimizer = optim.AdamW(
     model.parameters(), # Pass all model parameters to the optimizer
     lr=1e-4,
     betas=(0.9, 0.999), # (beta1, beta2)

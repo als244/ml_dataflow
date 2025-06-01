@@ -14,13 +14,13 @@
 #define HOST_MEM_GB 110
 #define DEV_MEM_GB 21
 
-#define MODEL_CONFIG_SIZE_B 8
-#define MODEL_PATH "../data/8B"
+#define MODEL_CONFIG_SIZE_B 1
+#define MODEL_PATH "../data/1B"
 
 // these shoudl be auto-cofigured, testing manually for now...
 // could also take in as command line argument...
-#define NUM_DEV_BLOCKS 6
-#define NUM_DEV_GRAD_BLOCKS 6
+#define NUM_DEV_BLOCKS 16
+#define NUM_DEV_GRAD_BLOCKS 16
 #define NUM_DEV_ACTIVATION_SLOTS 24
 
 
@@ -32,7 +32,7 @@
 
 // this is just for testing,.. in 
 // reality determined dynamically...
-#define CHUNK_SIZE 4096
+#define CHUNK_SIZE 2048
 
 #define TOKEN_IDS_PATH "../data/2048_token_ids_uint32.dat"
 #define TOKEN_LABELS_PATH "../data/2048_labels_uint32.dat"
@@ -44,7 +44,7 @@
 // the role of this is to be largest possible while still fitting in memory...
 // because it means more shared data can utilize the parameters and update
 // gradients on device without incorruring I/O overhead or gradient accumulation overhead
-#define NUM_SEQ_GROUPS_PER_ROUND 4
+#define NUM_SEQ_GROUPS_PER_ROUND 1
 
 
 // num_chunks = num_chunks_per_seq * num_seq_groups_per_round
@@ -56,16 +56,16 @@
 // 		chunk_size % seqlen == 0
 
 // up to num_chunks (per round for now, because just repeating) to save...
-#define NUM_RAW_CHUNK_IDS_LABELS_TO_SAVE 0
+#define NUM_RAW_CHUNK_IDS_LABELS_TO_SAVE 1
 
 
 
 // this (along with num seqs per round)modulates how frequently we will step 
 // the optimizer...
-#define NUM_ROUNDS_PER_STEP 6
+#define NUM_ROUNDS_PER_STEP 1
 
 
-#define NUM_STEPS 2
+#define NUM_STEPS 1
 
 #define NUM_ADAM_THREADS 12	
 
@@ -571,10 +571,10 @@ int main(int argc, char * argv[]){
 			return -1;
 		}
 
-		cur_host_mem += aligned_block_size;
-		used_host_mem += aligned_block_size;
+		cur_host_mem += block_aligned_num_els * opt_mean_dt_size;
+		used_host_mem += block_aligned_num_els * opt_mean_dt_size;
 
-		memset(sys_opt_mean_blocks[i] -> buffer, 0, aligned_block_size);
+		memset(sys_opt_mean_blocks[i] -> buffer, 0, block_aligned_num_els * opt_mean_dt_size);
 		
 
 		sys_opt_var_blocks[i] = init_transformer_block(i, opt_var_dt, compute_dt,
@@ -595,10 +595,10 @@ int main(int argc, char * argv[]){
 			return -1;
 		}
 
-		memset(sys_opt_var_blocks[i] -> buffer, 0, aligned_block_size);
+		memset(sys_opt_var_blocks[i] -> buffer, 0, block_aligned_num_els * opt_var_dt_size);
 
-		cur_host_mem += aligned_block_size;
-		used_host_mem += aligned_block_size;
+		cur_host_mem += block_aligned_num_els * opt_var_dt_size;
+		used_host_mem += block_aligned_num_els * opt_var_dt_size;
 	}
 
 
@@ -619,8 +619,8 @@ int main(int argc, char * argv[]){
 	sys_opt_mean_head -> w_head_norm = sys_opt_mean_head -> buffer;
 	sys_opt_mean_head -> w_head = sys_opt_mean_head -> w_head_norm + (uint64_t) model_dim * (uint64_t) opt_mean_dt_size;
 
-	cur_host_mem += combined_head_size;
-	used_host_mem += combined_head_size;
+	cur_host_mem += head_num_els * opt_mean_dt_size;
+	used_host_mem += head_num_els * opt_mean_dt_size;
 
 	Transformer_Head * sys_opt_var_head = malloc(sizeof(Transformer_Head));
 	if (!sys_opt_var_head){
@@ -637,8 +637,8 @@ int main(int argc, char * argv[]){
 	sys_opt_var_head -> w_head_norm = sys_opt_var_head -> buffer;
 	sys_opt_var_head -> w_head = sys_opt_var_head -> w_head_norm + (uint64_t) model_dim * (uint64_t) opt_var_dt_size;
 
-	cur_host_mem += combined_head_size;
-	used_host_mem += combined_head_size;
+	cur_host_mem += head_num_els * opt_var_dt_size;
+	used_host_mem += head_num_els * opt_var_dt_size;
 	
 	
 

@@ -5,6 +5,8 @@
 #define OPS_ROOT_DIR "."
 #endif
 
+typedef void (*opt_base_register_skeleton_func)(Op_Skeleton * skeleton, DataflowDatatype param_dt, DataflowDatatype grad_dt, DataflowDatatype mean_dt, DataflowDatatype var_dt);
+
 int dataflow_register_external_ops(Dataflow_Handle * dataflow_handle) {
 
     int added_funcs;
@@ -87,7 +89,7 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 	bool num_fwd_ops[8] = {5, 5, 5, 5, 5, 5, 7, 3};
 	bool num_bwd_ops[8] = {3, 17, 7, 3, 0, 7, 0, 0};
 
-	int num_funcs = 77;
+	int num_base_funcs = 77;
 
 	bool has_bwd_x[8] = {false, true, true, true, false, true, false, false};
 	bool has_bwd_w[8] = {true, true, false, false, false, false, false, false};
@@ -105,7 +107,42 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 	DataflowDatatype bwd_combo_bwd_dts[] = {DATAFLOW_FP32, DATAFLOW_FP16, DATAFLOW_BF16, 
 											DATAFLOW_FP16, DATAFLOW_BF16, DATAFLOW_FP16, DATAFLOW_BF16};
 
+
 	char * suffix = "kernel";
+
+
+	int num_opt_base_funcs = 1;
+	char * opt_base_names[] = {"default_adamw_step"};
+	opt_base_register_skeleton_func opt_base_register_skeleton_funcs[] = {dataflow_set_default_adamw_step_skeleton};
+	char * opt_init_symbols[] = {NULL};
+
+	int num_opt_funcs_per_base[] = {1};
+
+	// [base_funcs][opt_funcs_per_base[i]][4]
+	DataflowDatatype opt_dt_combos[1][1][4] = {{{DATAFLOW_BF16, DATAFLOW_BF16, DATAFLOW_BF16, DATAFLOW_BF16}}};
+
+	// [base_funcs][opt_funcs_per_base[i]]
+	char * opt_dt_str_combos[1][1] = {{"bf16_bf16_bf16_bf16"}};
+
+
+
+	
+
+	int total_opt_funcs = 0;
+
+	for (int i = 0; i < num_opt_base_funcs; i++){
+		total_opt_funcs += num_opt_funcs_per_base[i];
+	}
+
+	char * opt_suffix = "kernel";
+
+
+
+	int num_funcs = num_base_funcs + total_opt_funcs;
+
+
+
+
 
 	Op_Skeleton * native_op_skeletons = (Op_Skeleton *) malloc(num_funcs * sizeof(Op_Skeleton));
 
@@ -244,6 +281,20 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 					cur_func++;
 				}
 			}
+		}
+	}
+
+	for (int i = 0; i < num_opt_base_funcs; i++){
+		
+		for (int j = 0; j < num_opt_funcs_per_base[i]; j++){
+			if (opt_init_symbols[i]){
+				native_func_init_symbols[cur_func] = calloc(FUNC_SYMBOL_MAX_LEN, sizeof(char));
+				sprintf(native_func_init_symbols[cur_func], "%s", opt_init_symbols[i]);
+			}
+			sprintf(native_func_symbols[cur_func], "%s_%s_%s", opt_base_names[i], opt_dt_str_combos[i][j], opt_suffix);
+			sprintf(native_func_launch_symbols[cur_func], "%s_set_launch_config", opt_base_names[i]);
+			opt_base_register_skeleton_funcs[i](&native_op_skeletons[cur_func], opt_dt_combos[i][j][0], opt_dt_combos[i][j][1], opt_dt_combos[i][j][2], opt_dt_combos[i][j][3]);
+			cur_func++;
 		}
 	}
 

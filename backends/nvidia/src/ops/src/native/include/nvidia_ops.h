@@ -157,6 +157,25 @@ extern "C" __global__ void default_cross_entropy_loss_fp16_kernel(int n_rows, in
 extern "C" __global__ void default_cross_entropy_loss_bf16_kernel(int n_rows, int n_cols, __nv_bfloat16 * pred_logits, uint32_t * labels, float * loss_vec);
 
 
+// Optimizer Ops
+
+
+extern "C" __global__ void default_adamw_step_bf16_bf16_bf16_bf16_kernel(uint64_t num_els, int step_num, float lr, float beta1, float beta2, float weight_decay, float epsilon, __nv_bfloat16 * param, __nv_bfloat16 * grad, __nv_bfloat16 * mean, __nv_bfloat16 * var);
+
+/* will make scripts to generate these other variants later... */
+
+/*
+extern "C" __global__ void default_adamw_step_fp32_fp32_fp32_fp32_kernel(uint64_t num_els, int step_num, float lr, float beta1, float beta2, float weight_decay, float epsilon, float * param, float * grad, float * mean, float * var);
+extern "C" __global__ void default_adamw_step_fp16_fp16_fp16_fp16_kernel(uint64_t num_els, int step_num, float lr, float beta1, float beta2, float weight_decay, float epsilon, __half * param, __half * grad, __half * mean, __half * var);
+extern "C" __global__ void default_adamw_step_fp32_fp8e4m3_bf16_bf16_kernel(uint64_t num_els, int step_num, float lr, float beta1, float beta2, float weight_decay, float epsilon, __nv_bfloat16 * param, __nv_bfloat16 * grad, __nv_bfloat16 * mean, __nv_bfloat16 * var);
+AND MANY MORE...
+COULD USE TEMPLATE BUT THE NAME MANGLING IS A PAIN...
+*/
+
+
+
+
+
 
 // OTHERS
 

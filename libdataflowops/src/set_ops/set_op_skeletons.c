@@ -859,6 +859,43 @@ void dataflow_set_default_cross_entropy_loss_skeleton(Op_Skeleton * skeleton, Da
 }
 
 
+void dataflow_set_default_adamw_step_skeleton(Op_Skeleton * skeleton, DataflowDatatype param_dt, DataflowDatatype grad_dt, DataflowDatatype mean_dt, DataflowDatatype var_dt){
+
+	Op_Skeleton_Header * skeleton_header = &(skeleton -> header);
+
+	char op_nickname[MAX_OP_NICKNAME_SIZE];
+
+	sprintf(op_nickname, "%s_%s_%s_%s_%s", "default_adamw_step", dataflow_datatype_as_string(param_dt), dataflow_datatype_as_string(grad_dt), dataflow_datatype_as_string(mean_dt), dataflow_datatype_as_string(var_dt));
+
+	// MAX nicknmae size is set to 255 with 256 allocated space...
+	strncpy(skeleton_header -> op_nickname, op_nickname, MAX_OP_NICKNAME_SIZE);
+	// last character must be null no matter what, if nickname is less than null bytes were added prior
+	(skeleton_header -> op_nickname)[MAX_OP_NICKNAME_SIZE] = '\0';
+
+	int num_args = 11;
+
+	skeleton_header -> num_args = num_args;
+
+	DataflowDatatype * arg_dtypes = skeleton_header -> arg_dtypes;
+
+	arg_dtypes[0] = DATAFLOW_UINT64_SCALAR;
+	arg_dtypes[1] = DATAFLOW_INT_SCALAR;
+	arg_dtypes[2] = DATAFLOW_FP32_SCALAR;
+	arg_dtypes[3] = DATAFLOW_FP32_SCALAR;
+	arg_dtypes[4] = DATAFLOW_FP32_SCALAR;
+	arg_dtypes[5] = DATAFLOW_FP32_SCALAR;
+	arg_dtypes[6] = DATAFLOW_FP32_SCALAR;
+	arg_dtypes[7] = param_dt;
+	arg_dtypes[8] = grad_dt;
+	arg_dtypes[9] = mean_dt;
+	arg_dtypes[10] = var_dt;
+	
+	for (int i = num_args; i < MAX_OP_ARGS; i++){
+		arg_dtypes[i] = DATAFLOW_NONE;
+	}
+
+	dataflow_do_fingerprinting(skeleton_header, sizeof(Op_Skeleton_Header), (skeleton -> identifier).fingerprint);
+}
 
 
 

@@ -31,7 +31,7 @@ torch.manual_seed(SEED)
 np.random.seed(SEED)
 random.seed(SEED)
 
-MAX_SEQ_LEN = 4096
+MAX_SEQ_LEN = 2048
 MAX_BATCH_SIZE = 1
 
 MODEL_PATH = "./models/1B_inst/"
@@ -70,8 +70,8 @@ print(f"Finished Initialized Model!\n\tRuntime: {time_ms} ms\n")
 
 device = torch.device("cuda:0")
 
-token_id_file = "8192_token_ids_uint32.dat"
-token_labels_file = "8192_labels_uint32.dat"
+token_id_file = "2048_token_ids_uint32.dat"
+token_labels_file = "2048_labels_uint32.dat"
 np_inp_tokens = np.fromfile(token_id_file, dtype=np.uint32)[:MAX_SEQ_LEN]
 np_labels = np.fromfile(token_labels_file, dtype=np.uint32)[:MAX_SEQ_LEN]
 
@@ -90,7 +90,17 @@ model.to(device)
 criterion = torch.nn.CrossEntropyLoss()
 
 
+"""
 optimizer = optim.Adam(
+    model.parameters(), # Pass all model parameters to the optimizer
+    lr=1e-4,
+    betas=(0.9, 0.999), # (beta1, beta2)
+    eps=1e-8,           # epsilon
+    weight_decay=1e-3
+)
+"""
+
+optimizer = optim.AdamW(
     model.parameters(), # Pass all model parameters to the optimizer
     lr=1e-4,
     betas=(0.9, 0.999), # (beta1, beta2)

@@ -552,10 +552,10 @@ int main(int argc, char * argv[]){
 			return -1;
 		}
 
-		cur_host_mem += aligned_block_size;
-		used_host_mem += aligned_block_size;
+		cur_host_mem += block_aligned_num_els * opt_mean_dt_size;
+		used_host_mem += block_aligned_num_els * opt_mean_dt_size;
 
-		memset(sys_opt_mean_blocks[i] -> buffer, 0, aligned_block_size);
+		memset(sys_opt_mean_blocks[i] -> buffer, 0, block_aligned_num_els * opt_mean_dt_size);
 		
 
 		sys_opt_var_blocks[i] = init_transformer_block(i, opt_var_dt, compute_dt,
@@ -576,10 +576,10 @@ int main(int argc, char * argv[]){
 			return -1;
 		}
 
-		memset(sys_opt_var_blocks[i] -> buffer, 0, aligned_block_size);
+		memset(sys_opt_var_blocks[i] -> buffer, 0, block_aligned_num_els * opt_var_dt_size);
 
-		cur_host_mem += aligned_block_size;
-		used_host_mem += aligned_block_size;
+		cur_host_mem += block_aligned_num_els * opt_var_dt_size;
+		used_host_mem += block_aligned_num_els * opt_var_dt_size;
 	}
 
 
@@ -600,8 +600,8 @@ int main(int argc, char * argv[]){
 	sys_opt_mean_head -> w_head_norm = sys_opt_mean_head -> buffer;
 	sys_opt_mean_head -> w_head = sys_opt_mean_head -> w_head_norm + (uint64_t) model_dim * (uint64_t) opt_mean_dt_size;
 
-	cur_host_mem += combined_head_size;
-	used_host_mem += combined_head_size;
+	cur_host_mem += head_num_els * opt_mean_dt_size;
+	used_host_mem += head_num_els * opt_mean_dt_size;
 
 	Transformer_Head * sys_opt_var_head = malloc(sizeof(Transformer_Head));
 	if (!sys_opt_var_head){
@@ -618,8 +618,8 @@ int main(int argc, char * argv[]){
 	sys_opt_var_head -> w_head_norm = sys_opt_var_head -> buffer;
 	sys_opt_var_head -> w_head = sys_opt_var_head -> w_head_norm + (uint64_t) model_dim * (uint64_t) opt_var_dt_size;
 
-	cur_host_mem += combined_head_size;
-	used_host_mem += combined_head_size;
+	cur_host_mem += head_num_els * opt_var_dt_size;
+	used_host_mem += head_num_els * opt_var_dt_size;
 	
 	
 
