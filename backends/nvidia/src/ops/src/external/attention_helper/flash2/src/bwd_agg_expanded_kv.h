@@ -59,7 +59,7 @@ __global__ void bwd_agg_expanded_kv(int num_seqs, int * k_seq_offsets, int * k_s
     __syncthreads();
 
 
-    int head_dim_ratio = n_kv_heads / n_q_heads;
+    int head_dim_ratio = n_q_heads / n_kv_heads;
 
     for (int kv_head = 0; kv_head < n_kv_heads; kv_head++) {
         for (int q_head_ind = kv_head * head_dim_ratio; q_head_ind < (kv_head + 1) * head_dim_ratio; q_head_ind++) {
