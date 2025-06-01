@@ -65,7 +65,7 @@
 #define NUM_ROUNDS_PER_STEP 1
 
 
-#define NUM_STEPS 10
+#define NUM_STEPS 1
 
 
 
@@ -75,8 +75,8 @@
 
 // config for what to print...
 
-#define TO_PRINT_THROUGHPUT_METRICS 1
-#define TO_PRINT_THROUGHPUT_METRICS_VERBOSE 1
+#define TO_PRINT_THROUGHPUT_METRICS 0
+#define TO_PRINT_THROUGHPUT_METRICS_VERBOSE 0
 
 #define TO_PRINT_ROUND_LOSS 1
 #define TO_PRINT_CHUNK_LOSS 0
