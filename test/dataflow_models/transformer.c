@@ -90,6 +90,7 @@
 #define TO_PRINT_FWD_WAITING 0
 #define TO_PRINT_BWD_WAITING 0
 #define TO_PRINT_ACT_WAITING 0
+#define TO_PRINT_OPT_STEP_WAITING 0
 
 #define TO_PRINT_GRAD_BLOCK_WAITING 0
 #define TO_PRINT_FWD_ACT_WAITING 0
@@ -2389,6 +2390,7 @@ int main(int argc, char * argv[]){
 
 			cur_act = 0;
 			working_act_buffer_ind = 0;
+			final_saved_act_buffer_ind = -1;
 
 			// EMBEDDING...
 
@@ -3134,7 +3136,7 @@ int main(int argc, char * argv[]){
 								prior_group_dev_saved_activations = &(saved_activations[prior_group_dev_saved_act_ind]);
 
 								if (TO_PRINT_CTX_TRANSFERRING){
-									printf("\n\n[Bwd] Transferring prior layer's saved context from self at dev index %d...\n\n", prior_group_dev_saved_act_ind);
+									printf("\n\n[Bwd] Transferring prior group/layer (act index %d) saved context from self memory at dev index %d...\n\n", next_home_act_ind_context, prior_group_dev_saved_act_ind);
 								}
 
 								ret = dataflow_handle.submit_peer_transfer(&dataflow_handle, inbound_fwd_ctx_stream_id, global_fwd_ctx_k_dest, prior_group_dev_saved_activations -> x_k_local, cur_tokens * kv_dim * block_dt_size);
@@ -3165,8 +3167,9 @@ int main(int argc, char * argv[]){
 						sprintf(profile_msg, "Bwd W: seq group #%d, chunk #%d, block #%d", seq_group, chunk_id, k);
 						dataflow_handle.profiler.range_push(profile_msg);
 
+						// uses the same input transition as bwd_x...
 						ret = dataflow_submit_transformer_block_bwd_w(&dataflow_handle, compute_stream_id,
-											&(block_transitions[2 * chunk_id + ((k + 1) % 2)]),
+											&(block_transitions[2 * chunk_id + (k % 2)]),
 											cur_fwd_activations, 
 											grad_activations, 
 											working_grad_block);
@@ -3816,20 +3819,32 @@ int main(int argc, char * argv[]){
 		for (int k = 0; k < n_layers; k++){
 
 			// ensure we have the layer, grad, and opt state state ready...
-			sprintf(profile_msg, "Opt Step %d: Waiting for layer #%d to be ready...", t, k);
+
+			if (TO_PRINT_OPT_STEP_WAITING){
+				printf("\n\nOpt Step %d: Waiting for layer #%d to be ready (at index %d)...", t, k, working_layer_ind);
+			}
+			sprintf(profile_msg, "Opt Step %d: Waiting for layer #%d to be ready (at index %d)...", t, k, working_layer_ind);
 			dataflow_handle.profiler.range_push(profile_msg);
 			sem_wait(&(is_block_ready[k]));
 			dataflow_handle.profiler.range_pop();
 			working_block = blocks[working_layer_ind];
 
-			sprintf(profile_msg, "Opt Step %d: Waiting for grad block #%d to be ready...", t, k);
+			if (TO_PRINT_OPT_STEP_WAITING){
+				printf("\n\nOpt Step %d: Waiting for grad block #%d to be ready (at index %d)...", t, k, working_grad_block_ind);
+			}
+
+			sprintf(profile_msg, "Opt Step %d: Waiting for grad block #%d to be ready (at index %d)...", t, k, working_grad_block_ind);
 			dataflow_handle.profiler.range_push(profile_msg);
 			sem_wait(&(is_grad_block_ready[k]));
 			dataflow_handle.profiler.range_pop();
 
 			working_grad_block = grad_blocks[working_grad_block_ind];
 
-			sprintf(profile_msg, "Opt Step %d: Waiting for opt block #%d to be ready...", t, k);
+			if (TO_PRINT_OPT_STEP_WAITING){
+				printf("\n\nOpt Step %d: Waiting for opt block #%d to be ready (at index %d)...", t, k, working_opt_layer_ind);
+			}
+
+			sprintf(profile_msg, "Opt Step %d: Waiting for opt block #%d to be ready (at index %d)...", t, k, working_opt_layer_ind);
 			dataflow_handle.profiler.range_push(profile_msg);
 			sem_wait(&(is_opt_layer_ready[k]));
 			dataflow_handle.profiler.range_pop();

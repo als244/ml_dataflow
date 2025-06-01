@@ -2840,7 +2840,7 @@ int main(int argc, char * argv[]){
 						dataflow_handle.profiler.range_push(profile_msg);
 
 						ret = dataflow_submit_transformer_block_bwd_w(&dataflow_handle, compute_stream_id,
-											&(block_transitions[2 * chunk_id + ((k + 1) % 2)]),
+											&(block_transitions[2 * chunk_id + (k % 2)]),
 											cur_fwd_activations, 
 											grad_activations, 
 											working_grad_block);

@@ -612,6 +612,14 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 		return -1;
 	}
 
+	if ((layer_id == 1) || (layer_id == 0)){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_1", (working_activations -> x_1)[0], total_q, ffn_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_1 file...\n");
+			return -1;
+		}
+	}
+
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
 		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_1", (working_activations -> x_1)[0], total_q, ffn_dim, fwd_dt);
 		if (ret){
@@ -632,6 +640,14 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	if (ret){
 		fprintf(stderr, "Error: failed to submit w3 matmul proj...\n");
 		return -1;
+	}
+
+	if ((layer_id == 1) || (layer_id == 0)){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_3", (working_activations -> x_3)[0], total_q, ffn_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_3 file...\n");
+			return -1;
+		}
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
@@ -656,6 +672,14 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	if (ret){
 		fprintf(stderr, "Error: failed to submit swiglu activation...\n");
 		return -1;
+	}
+
+	if ((layer_id == 1) || (layer_id == 0)){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_swiglu", activation_workspace -> x_temp_mlp, total_q, ffn_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_swiglu file...\n");
+			return -1;
+		}
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
@@ -1263,6 +1287,13 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 		return -1;
 	}
 
+	// ensure to save ths gradient flowing out of the ffn norm (and into the attn out proj...)
+	ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, working_activations -> x_o, next_grad_stream -> X, (uint64_t) total_q * (uint64_t) model_dim * (uint64_t) x_el_bwd_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit memcpy to update the the working gradient stream...\n");
+		return -1;
+	}
+
 	if (TO_SAVE_DATA && TO_SAVE_BWD_LAYER && ((BWD_LAYER_ID_TO_SAVE == -1) || (layer_id == BWD_LAYER_ID_TO_SAVE))){
 		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "x_ffn_norm_inp_plus_upstream_grad", next_grad_stream -> X, total_q, model_dim, bwd_dt);
 		if (ret){
@@ -1708,6 +1739,7 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
     DataflowDatatype compute_dt = (grad_weights -> config).compute_dt;
 
     Seq_Batch * seq_batch = grad_stream -> seq_batch;
+	int seq_id = seq_batch -> seq_id;
 	int chunk_id = seq_batch -> chunk_id;
 
 	Seq_Batch_Attention_Config * batch_attention_config = &(seq_batch -> attention_config);
@@ -1735,6 +1767,7 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
 	// 1.) Recompute-Swiglu in order to compute w2 grad
 	if (TO_PRINT){
 		printf("Recomputing SwiGLU to get input of W2 FFN...\n");
+		
 	}
 
 	ret = dataflow_submit_default_swiglu(dataflow_handle, compute_stream_id,
@@ -1755,7 +1788,7 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
 	}
 
     ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
-                    bwd_dt, bwd_dt, bwd_dt, bwd_dt,
+                    fwd_dt, bwd_dt, bwd_dt, bwd_dt,
                     compute_dt,
                     to_transa, to_transb,
                     ffn_dim, total_q, model_dim, 
@@ -1831,6 +1864,20 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
 
 	if (TO_PRINT){
 		printf("Submitting Matmul to get dW_o..\n");
+	}
+
+	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS && TO_SAVE_MODEL_GRAD_CHUNK_ID == chunk_id){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "bwd_x_o", (bwd_activations -> x_o), model_dim, model_dim, bwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save head w_3 file...\n");
+			return -1;
+		}
+
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "fwd_x_o", (fwd_activations -> x_o), model_dim, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save head w_3 file...\n");
+			return -1;
+		}
 	}
 
     // 4. Attention output projection weight gradients
