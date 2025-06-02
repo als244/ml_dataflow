@@ -987,7 +987,7 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
                                embedding_size,
                                grad_transformer_head -> eps,
                                head_activations -> head_norm_rms_vals,  // RMS values from forward pass
-                               head_activations -> head_out,            // Original input
+                               block_input -> X,           				// Original input
                                head_activations -> head_norm_out,         // Upstream gradient
                                grad_transformer_head -> w_head_norm,
 							   head_activations -> kernelWorkspaceBytes, head_activations -> kernelWorkspace);   // Output gradient
