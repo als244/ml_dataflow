@@ -3,11 +3,11 @@
 
 // toggle to print out before submitting any ops...
 // verbose printing of each op
-#define TO_PRINT 0
+#define TO_PRINT 1
 
 // meta-toggle required to be set to 1 to save any data
 // when set to 0, nothing will be saved
-#define TO_SAVE_DATA 0
+#define TO_SAVE_DATA 1
 
 
 // DETERMINES WHAT DATA TO SAVE...
@@ -612,22 +612,6 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 		return -1;
 	}
 
-	if ((layer_id == 1) || (layer_id == 0)){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_1", (working_activations -> x_1)[0], total_q, ffn_dim, fwd_dt);
-		if (ret){
-			fprintf(stderr, "Error: failed to save x_1 file...\n");
-			return -1;
-		}
-	}
-
-	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_1", (working_activations -> x_1)[0], total_q, ffn_dim, fwd_dt);
-		if (ret){
-			fprintf(stderr, "Error: failed to save x_1 file...\n");
-			return -1;
-		}
-	}
-
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
 					fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
 					compute_dt,
@@ -640,22 +624,6 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	if (ret){
 		fprintf(stderr, "Error: failed to submit w3 matmul proj...\n");
 		return -1;
-	}
-
-	if ((layer_id == 1) || (layer_id == 0)){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_3", (working_activations -> x_3)[0], total_q, ffn_dim, fwd_dt);
-		if (ret){
-			fprintf(stderr, "Error: failed to save x_3 file...\n");
-			return -1;
-		}
-	}
-
-	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_3", (working_activations -> x_3)[0], total_q, ffn_dim, fwd_dt);
-		if (ret){
-			fprintf(stderr, "Error: failed to save x_3 file...\n");
-			return -1;
-		}
 	}
 
 
@@ -672,22 +640,6 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 	if (ret){
 		fprintf(stderr, "Error: failed to submit swiglu activation...\n");
 		return -1;
-	}
-
-	if ((layer_id == 1) || (layer_id == 0)){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_swiglu", activation_workspace -> x_temp_mlp, total_q, ffn_dim, fwd_dt);
-		if (ret){
-			fprintf(stderr, "Error: failed to save x_swiglu file...\n");
-			return -1;
-		}
-	}
-
-	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_swiglu", activation_workspace -> x_temp_mlp, total_q, ffn_dim, fwd_dt);
-		if (ret){
-			fprintf(stderr, "Error: failed to save x_swiglu file...\n");
-			return -1;
-		}
 	}
 
 
@@ -1353,7 +1305,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 					to_transa, to_transb,
 					model_dim, model_dim, total_q,  // M = model_dim, K = model_dim, N = num_tokens
 					1.0, 0.0,
-					transformer_block -> w_o, next_grad_stream -> X, NULL, activation_workspace -> x_temp,
+					transformer_block -> w_o, working_activations -> x_o, NULL, activation_workspace -> x_temp,
 					kernelWorkspaceBytes, kernelWorkspace);
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit attention output backward matmul...\n");
