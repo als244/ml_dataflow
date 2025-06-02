@@ -56,7 +56,7 @@
 // 		chunk_size % seqlen == 0
 
 // up to num_chunks (per round for now, because just repeating) to save...
-#define NUM_RAW_CHUNK_IDS_LABELS_TO_SAVE 1
+#define NUM_RAW_CHUNK_IDS_LABELS_TO_SAVE 0
 
 
 
