@@ -30,10 +30,10 @@ void run_bwd_agg_expanded_kv_<100, __nv_bfloat16>(cudaStream_t stream,
     // read in new dk, dv expanded in bf16
     int smem_size = 2 * sizeof(float) * kv_dim + 2 * sizeof(__nv_bfloat16) * model_dim;
 
-    bwd_agg_expanded_kv<__nv_bfloat16><<<grid, block, smem_size, stream>>>(num_seqs, k_seq_offsets, k_seq_lens, 
+    bwd_agg_expanded_kv_bf16<100><<<grid, block, smem_size, stream>>>(num_seqs, k_seq_offsets, k_seq_lens, 
                                                                            head_dim, n_q_heads, n_kv_heads,
-                                                                           static_cast<const __nv_bfloat16*>(new_dk_expanded), static_cast<const __nv_bfloat16*>(new_dv_expanded),
-                                                                           static_cast<__nv_bfloat16*>(orig_dk), static_cast<__nv_bfloat16*>(orig_dv));
+                                                                           (__nv_bfloat16 *) new_dk_expanded, (__nv_bfloat16 *) new_dv_expanded,
+                                                                           (__nv_bfloat16 *) orig_dk, (__nv_bfloat16 *) orig_dv);
 }
 
 } // namespace FLASH_NAMESPACE

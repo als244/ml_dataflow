@@ -4,7 +4,7 @@ import glob
 import json
 
 from llama3_tokenizer import Tokenizer
-from llama3_model import ModelArgs, Transformer, TransformerBlock, Attention, FeedForward
+from llama3_model_flash2 import ModelArgs, Transformer, TransformerBlock, Attention, FeedForward, SeqlensInfo
 
 import torch.optim as optim
 
@@ -77,6 +77,13 @@ np_labels = np.fromfile(token_labels_file, dtype=np.uint32)
 ## expects [bsz, seqlen] as input....
 token_ids = torch.from_numpy(np_inp_tokens).long().to(device).unsqueeze(0)
 labels = torch.from_numpy(np_labels).long().to(device).unsqueeze(0)
+
+seqlens_q_np = np.array([MAX_SEQ_LEN], dtype=np.int32)
+seqlens_k_np = np.array([MAX_SEQ_LEN], dtype=np.int32)
+
+device = torch.device("cuda:0")
+
+seqlens_info = SeqlensInfo(seqlens_q_np, seqlens_k_np, device)
 
 
 model.to(device)
@@ -227,7 +234,7 @@ print("Starting forward pass...")
 start_fwd = time.time_ns()
 with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
     # Ensure model and inputs are on the same device
-    predictions = model.forward(token_ids.to(device)) # Shape: (bsz, seqlen, vocab_size)
+    predictions = model.forward(token_ids.to(device), seqlens_info) # Shape: (bsz, seqlen, vocab_size)
 stop_fwd = time.time_ns()
 time_fwd_ms = (stop_fwd - start_fwd) / 1e6
 print(f"Forward pass completed in {time_fwd_ms:.2f} ms")
