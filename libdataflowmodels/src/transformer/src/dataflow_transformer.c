@@ -3,11 +3,11 @@
 
 // toggle to print out before submitting any ops...
 // verbose printing of each op
-#define TO_PRINT 1
+#define TO_PRINT 0
 
 // meta-toggle required to be set to 1 to save any data
 // when set to 0, nothing will be saved
-#define TO_SAVE_DATA 1
+#define TO_SAVE_DATA 0
 
 
 // DETERMINES WHAT DATA TO SAVE...
@@ -492,6 +492,7 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 		// assert (context -> cur_tokens_populated == total_q);
 
 	}
+
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))) {
 		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_k_global_attn_inp", x_k_global, context -> cur_tokens_populated, kv_dim, fwd_dt);
@@ -1371,7 +1372,6 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 		}
 	}
 
-
 	// 7. Backprop through attention
 	ret = dataflow_submit_attention_bwd(dataflow_handle, compute_stream_id,
 							bwd_dt,
@@ -1818,19 +1818,6 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
 		printf("Submitting Matmul to get dW_o..\n");
 	}
 
-	if (TO_SAVE_DATA && TO_SAVE_MODEL_GRADS && TO_SAVE_MODEL_GRAD_CHUNK_ID == chunk_id){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "bwd_x_o", (bwd_activations -> x_o), model_dim, model_dim, bwd_dt);
-		if (ret){
-			fprintf(stderr, "Error: failed to save head w_3 file...\n");
-			return -1;
-		}
-
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, true, "fwd_x_o", (fwd_activations -> x_o), model_dim, model_dim, fwd_dt);
-		if (ret){
-			fprintf(stderr, "Error: failed to save head w_3 file...\n");
-			return -1;
-		}
-	}
 
     // 4. Attention output projection weight gradients
     ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
@@ -1864,7 +1851,7 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
                     bwd_dt, bwd_dt, bwd_dt, bwd_dt,
                     compute_dt,
                     to_transa, to_transb,
-                    model_dim, kv_dim, total_q,
+                    model_dim, total_q, kv_dim,
                     1.0, 1.0,  // Accumulate gradients
                     bwd_activations -> recomputed_activations -> recomputed_attn_norm, bwd_activations -> x_v_local, grad_weights -> w_v, grad_weights -> w_v,
                     kernelWorkspaceBytes, kernelWorkspace);
