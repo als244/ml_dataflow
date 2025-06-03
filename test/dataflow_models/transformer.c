@@ -12,7 +12,7 @@
 
 
 	#define HOST_MEM_GB 110
-	#define DEV_MEM_GB 21
+	#define DEV_MEM_GB 23
 
 	#define MODEL_CONFIG_SIZE_B 8
 	#define MODEL_PATH "../data/8B"
@@ -21,7 +21,7 @@
 	// could also take in as command line argument...
 	#define NUM_DEV_BLOCKS 4
 	#define NUM_DEV_GRAD_BLOCKS 2
-	#define NUM_DEV_ACTIVATION_SLOTS 32
+	#define NUM_DEV_ACTIVATION_SLOTS 8
 
 
 
@@ -32,7 +32,7 @@
 
 	// this is just for testing,.. in 
 	// reality determined dynamically...
-	#define CHUNK_SIZE 2048
+	#define CHUNK_SIZE 8192
 
 	#define TOKEN_IDS_PATH "../data/2048_token_ids_uint32.dat"
 	#define TOKEN_LABELS_PATH "../data/2048_labels_uint32.dat"
@@ -44,7 +44,7 @@
 	// the role of this is to be largest possible while still fitting in memory...
 	// because it means more shared data can utilize the parameters and update
 	// gradients on device without incorruring I/O overhead or gradient accumulation overhead
-	#define NUM_SEQ_GROUPS_PER_ROUND 8
+	#define NUM_SEQ_GROUPS_PER_ROUND 2
 
 
 	// num_chunks = num_chunks_per_seq * num_seq_groups_per_round
@@ -65,7 +65,7 @@
 	#define NUM_ROUNDS_PER_STEP 10
 
 
-	#define NUM_STEPS 3
+	#define NUM_STEPS 10
 
 
 
