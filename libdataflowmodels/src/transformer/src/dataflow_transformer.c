@@ -3,11 +3,11 @@
 
 // toggle to print out before submitting any ops...
 // verbose printing of each op
-#define TO_PRINT 1
+#define TO_PRINT 0
 
 // meta-toggle required to be set to 1 to save any data
 // when set to 0, nothing will be saved
-#define TO_SAVE_DATA 1
+#define TO_SAVE_DATA 0
 
 
 // DETERMINES WHAT DATA TO SAVE...
