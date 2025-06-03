@@ -498,7 +498,7 @@ void dataflow_set_default_rms_norm_bwd_w_skeleton(Op_Skeleton * skeleton, Datafl
 	arg_dtypes[3] = DATAFLOW_FP32;
 	arg_dtypes[4] = fwd_datatype;
 	arg_dtypes[5] = bwd_datatype;
-	arg_dtypes[6] = bwd_datatype;
+	arg_dtypes[6] = DATAFLOW_FP32;
 	// * ret_num_blocks_launched
 	arg_dtypes[7] = DATAFLOW_INT;
 
@@ -538,7 +538,7 @@ void dataflow_set_default_rms_norm_bwd_w_combine_skeleton(Op_Skeleton * skeleton
 	// model dim
 	arg_dtypes[1] = DATAFLOW_INT_SCALAR;
 	// bwd_w
-	arg_dtypes[2] = bwd_datatype;
+	arg_dtypes[2] = DATAFLOW_FP32;
 	// bwd_w_grad
 	arg_dtypes[3] = bwd_datatype;
 	

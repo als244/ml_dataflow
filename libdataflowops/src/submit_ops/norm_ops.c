@@ -75,7 +75,7 @@ int dataflow_submit_default_rms_norm_bwd_w(Dataflow_Handle * handle, int stream_
 	Op rms_norm_bwd_w_op;
 
 	int * ret_num_blocks_launched = (int *)workspace;
-	void * dW_workspace = workspace + 256;
+	float * dW_workspace = (float *) (workspace + 256);
 
 	dataflow_set_default_rms_norm_bwd_w_skeleton(&rms_norm_bwd_w_op.op_skeleton, fwd_dt, bwd_dt);
 

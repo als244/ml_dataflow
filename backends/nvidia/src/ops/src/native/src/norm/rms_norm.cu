@@ -132,7 +132,7 @@ extern "C" __global__ void default_rms_norm_fp16_kernel(int n_rows, int n_cols, 
 	extern __shared__ uint8_t sdata[];
 
 	__half * row = (__half *) sdata;
-	float * weights = (float *) (row + n_cols);
+	__half * weights = (row + n_cols);
 
 	// every warp will have a reduced value
 	__shared__ float reduction_data_sq[32];
@@ -164,7 +164,7 @@ extern "C" __global__ void default_rms_norm_fp16_kernel(int n_rows, int n_cols, 
 
 	// Load weights which are shared between all rows (when doing output in item 3...)
 	for (uint64_t i = thread_id; i < n_cols; i+=blockDim.x){
-		weights[i] = __half2float(rms_weight[i]);
+		weights[i] = rms_weight[i];
 	}
 	__syncthreads();
 
@@ -241,7 +241,7 @@ extern "C" __global__ void default_rms_norm_fp16_kernel(int n_rows, int n_cols, 
 			// copying casting locations as in llama3
 			rms_val =  __half2float(row[i]) * recip_avg;
 
-			out[row_ind_start + i] = __float2half(rms_val * weights[i]);
+			out[row_ind_start + i] = __float2half(rms_val) * weights[i];
 		}
 
 		// ensure all threads are complete before we start overwriting row in smem

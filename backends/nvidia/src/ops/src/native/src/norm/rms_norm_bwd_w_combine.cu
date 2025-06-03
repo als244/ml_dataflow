@@ -102,7 +102,7 @@ extern "C" __global__ void default_rms_norm_bwd_w_combine_fp32_kernel(int * num_
     }
 }
 
-extern "C" __global__ void default_rms_norm_bwd_w_combine_fp16_kernel(int * num_orig_blocks_launched, int model_dim, __half * dW_workspace, __half * dW){
+extern "C" __global__ void default_rms_norm_bwd_w_combine_fp16_kernel(int * num_orig_blocks_launched, int model_dim, float * dW_workspace, __half * dW){
 
      int dim_offset = BWD_W_ORIG_COLS_PER_BLOCK * blockIdx.x;
 
@@ -154,7 +154,7 @@ extern "C" __global__ void default_rms_norm_bwd_w_combine_fp16_kernel(int * num_
         // load in values for this warp
         for (int d = lane_id; d < BWD_W_ORIG_COLS_PER_BLOCK; d+=WARP_SIZE){
             if (d < num_dims){
-                val = __half2float(dW_workspace[cur_row * model_dim + dim_offset + d]);
+                val = dW_workspace[cur_row * model_dim + dim_offset + d];
                 warp_agg_block[warp_id][d] += val;
             }
         }
@@ -197,7 +197,7 @@ extern "C" __global__ void default_rms_norm_bwd_w_combine_fp16_kernel(int * num_
 
 }
 
-extern "C" __global__ void default_rms_norm_bwd_w_combine_bf16_kernel(int * num_orig_blocks_launched, int model_dim, __nv_bfloat16 * dW_workspace, __nv_bfloat16 * dW){
+extern "C" __global__ void default_rms_norm_bwd_w_combine_bf16_kernel(int * num_orig_blocks_launched, int model_dim, float * dW_workspace, __nv_bfloat16 * dW){
     
      int dim_offset = BWD_W_ORIG_COLS_PER_BLOCK * blockIdx.x;
 
@@ -251,7 +251,7 @@ extern "C" __global__ void default_rms_norm_bwd_w_combine_bf16_kernel(int * num_
         // load in values for this warp
         for (int d = lane_id; d < BWD_W_ORIG_COLS_PER_BLOCK; d+=WARP_SIZE){
             if (d < num_dims){
-                val = __bfloat162float(dW_workspace[cur_row * model_dim + dim_offset + d]);
+                val = dW_workspace[cur_row * model_dim + dim_offset + d];
                 warp_agg_block[warp_id][d] += val;
             }
         }

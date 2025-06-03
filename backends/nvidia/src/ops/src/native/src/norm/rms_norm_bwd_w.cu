@@ -113,7 +113,7 @@ extern "C" __global__ void default_rms_norm_bwd_w_fp32_fp32_kernel(int n_rows, i
 // cannot launch with more threads and n_cols otherwise will be bugs
 // # blocks launched is a performance optimization and might be better with less due to less atomicAdds...
 // definitely shouldn't launch with more than n_rows
-extern "C" __global__ void default_rms_norm_bwd_w_fp16_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __half * X_inp, __half * upstream_dX, __half * dW_workspace, int * ret_num_blocks_launched){
+extern "C" __global__ void default_rms_norm_bwd_w_fp16_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __half * X_inp, __half * upstream_dX, float * dW_workspace, int * ret_num_blocks_launched){
 	
 	if (blockIdx.x == 0 && threadIdx.x == 0){
 		*ret_num_blocks_launched = gridDim.x;
@@ -211,12 +211,12 @@ extern "C" __global__ void default_rms_norm_bwd_w_fp16_fp16_kernel(int n_rows, i
 
 	// now need to do atomic add into the global dW for this section of rows
 	for (uint64_t dim = thread_id; dim < n_cols; dim+=blockDim.x){
-		dW_workspace[blockIdx.x * n_cols + dim] = __float2half(weight_derivs[dim]);
+		dW_workspace[blockIdx.x * n_cols + dim] = weight_derivs[dim];
 	}
 }
 
 
-extern "C" __global__ void default_rms_norm_bwd_w_bf16_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_bfloat16 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dW_workspace, int * ret_num_blocks_launched){
+extern "C" __global__ void default_rms_norm_bwd_w_bf16_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_bfloat16 * X_inp, __nv_bfloat16 * upstream_dX, float * dW_workspace, int * ret_num_blocks_launched){
 	
 	if (blockIdx.x == 0 && threadIdx.x == 0){
 		*ret_num_blocks_launched = gridDim.x;
@@ -315,11 +315,11 @@ extern "C" __global__ void default_rms_norm_bwd_w_bf16_bf16_kernel(int n_rows, i
 
 	// now need to do atomic add into the global dW for this section of rows
 	for (uint64_t dim = thread_id; dim < n_cols; dim+=blockDim.x){
-		dW_workspace[blockIdx.x * n_cols + dim] = __float2bfloat16(weight_derivs[dim]);
+		dW_workspace[blockIdx.x * n_cols + dim] = weight_derivs[dim];
 	}
 }
 
-extern "C" __global__ void default_rms_norm_bwd_w_fp8e4m3_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e4m3 * X_inp, __half * upstream_dX, __half * dW_workspace, int * ret_num_blocks_launched){
+extern "C" __global__ void default_rms_norm_bwd_w_fp8e4m3_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e4m3 * X_inp, __half * upstream_dX, float * dW_workspace, int * ret_num_blocks_launched){
 	
 	if (blockIdx.x == 0 && threadIdx.x == 0){
 		*ret_num_blocks_launched = gridDim.x;
@@ -418,12 +418,12 @@ extern "C" __global__ void default_rms_norm_bwd_w_fp8e4m3_fp16_kernel(int n_rows
 
 	// now need to do atomic add into the global dW for this section of rows
 	for (uint64_t dim = thread_id; dim < n_cols; dim+=blockDim.x){
-		dW_workspace[blockIdx.x * n_cols + dim] = __float2half(weight_derivs[dim]);
+		dW_workspace[blockIdx.x * n_cols + dim] = weight_derivs[dim];
 	}
 }
 
 
-extern "C" __global__ void default_rms_norm_bwd_w_fp8e4m3_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e4m3 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dW_workspace, int * ret_num_blocks_launched) {
+extern "C" __global__ void default_rms_norm_bwd_w_fp8e4m3_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e4m3 * X_inp, __nv_bfloat16 * upstream_dX, float * dW_workspace, int * ret_num_blocks_launched) {
 	
 	if (blockIdx.x == 0 && threadIdx.x == 0){
 		*ret_num_blocks_launched = gridDim.x;
@@ -522,11 +522,11 @@ extern "C" __global__ void default_rms_norm_bwd_w_fp8e4m3_bf16_kernel(int n_rows
 
 	// now need to do atomic add into the global dW for this section of rows
 	for (uint64_t dim = thread_id; dim < n_cols; dim+=blockDim.x){
-		dW_workspace[blockIdx.x * n_cols + dim] = __float2bfloat16(weight_derivs[dim]);
+		dW_workspace[blockIdx.x * n_cols + dim] = weight_derivs[dim];
 	}
 }
 
-extern "C" __global__ void default_rms_norm_bwd_w_fp8e5m2_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e5m2 * X_inp, __half * upstream_dX, __half * dW_workspace, int * ret_num_blocks_launched){
+extern "C" __global__ void default_rms_norm_bwd_w_fp8e5m2_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e5m2 * X_inp, __half * upstream_dX, float * dW_workspace, int * ret_num_blocks_launched){
 	
 	if (blockIdx.x == 0 && threadIdx.x == 0){
 		*ret_num_blocks_launched = gridDim.x;
@@ -625,12 +625,12 @@ extern "C" __global__ void default_rms_norm_bwd_w_fp8e5m2_fp16_kernel(int n_rows
 
 	// now need to do atomic add into the global dW for this section of rows
 	for (uint64_t dim = thread_id; dim < n_cols; dim+=blockDim.x){
-		dW_workspace[blockIdx.x * n_cols + dim] = __float2half(weight_derivs[dim]);
+		dW_workspace[blockIdx.x * n_cols + dim] = weight_derivs[dim];
 	}
 }
 
 
-extern "C" __global__ void default_rms_norm_bwd_w_fp8e5m2_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e5m2 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dW_workspace, int * ret_num_blocks_launched){
+extern "C" __global__ void default_rms_norm_bwd_w_fp8e5m2_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e5m2 * X_inp, __nv_bfloat16 * upstream_dX, float * dW_workspace, int * ret_num_blocks_launched){
 	
 	if (blockIdx.x == 0 && threadIdx.x == 0){
 		*ret_num_blocks_launched = gridDim.x;
@@ -731,6 +731,6 @@ extern "C" __global__ void default_rms_norm_bwd_w_fp8e5m2_bf16_kernel(int n_rows
 
 	
 	for (uint64_t dim = thread_id; dim < n_cols; dim+=blockDim.x){
-		dW_workspace[blockIdx.x * n_cols + dim] = __float2bfloat16(weight_derivs[dim]);
+		dW_workspace[blockIdx.x * n_cols + dim] = weight_derivs[dim];
 	}
 }

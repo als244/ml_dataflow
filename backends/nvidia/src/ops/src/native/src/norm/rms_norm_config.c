@@ -222,8 +222,8 @@ int default_rms_norm_bwd_w_set_launch_config(Cuda_Launch_Config * cuda_launch_co
 
 	uint64_t workspaceBytes = *((uint64_t *)op_args[8]);
 
-	// output size is num blocks * model_dim * dtype_size
-	uint64_t output_size_factor = model_dim * helper_data_dtype_size;
+	// output size is num blocks * model_dim * float
+	uint64_t output_size_factor = model_dim * sizeof(float);
 
 	int max_blocks = workspaceBytes / output_size_factor;
 
