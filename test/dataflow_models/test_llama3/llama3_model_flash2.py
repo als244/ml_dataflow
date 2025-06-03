@@ -132,6 +132,7 @@ class Attention(nn.Module):
         freqs_cis: torch.Tensor,
         seqlens_info: SeqlensInfo,
         mask: Optional[torch.Tensor],
+        step_num: int,
     ):
         
         bsz, seqlen, _ = x.shape
@@ -155,6 +156,8 @@ class Attention(nn.Module):
             deterministic=True,
             causal=True
         )
+
+        torch.save(output.cpu(), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_out.pt")
 
         output = output.view(bsz, seqlen, -1)
 
@@ -234,11 +237,12 @@ class TransformerBlock(nn.Module):
         freqs_cis: torch.Tensor,
         seqlens_info: SeqlensInfo,
         mask: Optional[torch.Tensor],
+        step_num: int,
     ):
         
         norm = self.attention_norm(x)
 
-        h = x + self.attention(norm, freqs_cis, seqlens_info, mask)
+        h = x + self.attention(norm, freqs_cis, seqlens_info, mask, step_num)
 
         ffn_norm = self.ffn_norm(h)
 
@@ -271,7 +275,7 @@ class Transformer(nn.Module):
         )
 
 
-    def forward(self, tokens: torch.Tensor, seqlens_info: SeqlensInfo):
+    def forward(self, tokens: torch.Tensor, seqlens_info: SeqlensInfo, step_num: int):
         
         inp_device = tokens.device
 
@@ -289,7 +293,7 @@ class Transformer(nn.Module):
             mask = torch.triu(mask, diagonal=1)
         
         for layer in self.layers:
-            h = layer(h, freqs_cis, seqlens_info, mask)
+            h = layer(h, freqs_cis, seqlens_info, mask, step_num)
         
         h = self.norm(h)
         output = self.output(h)
