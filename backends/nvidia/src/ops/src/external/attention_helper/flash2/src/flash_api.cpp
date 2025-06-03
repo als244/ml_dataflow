@@ -269,7 +269,7 @@ extern "C" {
 
 
 
-        uint64_t softmax_size = num_q_heads * (total_q + 128 * num_seqs) * sizeof(float);
+        uint64_t softmax_size = (uint64_t)num_q_heads * (uint64_t)(total_q + 128 * num_seqs) * sizeof(float);
 
         params.dsoftmax_sum = cur_attn_workspace;
 
@@ -279,7 +279,7 @@ extern "C" {
 
         if (num_q_heads != num_kv_heads){
             uint64_t kv_dtype_size = 2;
-            uint64_t dkv_expanded_size = total_k * num_q_heads * head_dim_rounded * kv_dtype_size;
+            uint64_t dkv_expanded_size = (uint64_t)total_k * (uint64_t)num_q_heads * (uint64_t)head_dim_rounded * (uint64_t)kv_dtype_size;
             
             params.dk_accum_ptr = cur_attn_workspace;
             cur_attn_workspace += dkv_expanded_size;
@@ -296,9 +296,10 @@ extern "C" {
 
         const int nsplits = (num_sms + num_seqs * num_q_heads - 1) / (num_seqs * num_q_heads);
 
-        uint64_t dq_accum_size = nsplits * (total_q + 128 * num_seqs) * num_q_heads * head_dim_rounded * sizeof(float);
+        uint64_t per_split_size = (uint64_t)(total_q + 128 * num_seqs) * (uint64_t)num_q_heads * (uint64_t)head_dim_rounded * sizeof(float);
+        uint64_t dq_accum_size = (uint64_t) nsplits * per_split_size;
 
-        params.dq_accum_split_stride = (total_q + 128 * num_seqs) * num_q_heads * head_dim_rounded;
+        params.dq_accum_split_stride = per_split_size;
 
         params.dq_accum_ptr = cur_attn_workspace;
         cur_attn_workspace += dq_accum_size;
@@ -445,12 +446,12 @@ extern "C" {
 
         // These are from flash3 lib but make sense here too...
         if (is_causal){
-            params.window_size_left = max_seqlen_k - 1;
+            params.window_size_left = max_seqlen_k;
             params.window_size_right = 0;
         }
         else{
-            params.window_size_left = -1;
-            params.window_size_right = -1;
+            params.window_size_left = max_seqlen_k;
+            params.window_size_right = max_seqlen_k;
         }
         
         params.rotary_dim = 0;
@@ -634,7 +635,7 @@ extern "C" {
         }
 
         CUresult res;
-        if (set_to_zero_start){
+        if (set_to_zero_size > 0){
             res = cuMemsetD8Async((CUdeviceptr) set_to_zero_start, 0, set_to_zero_size, stream);
             if (res != CUDA_SUCCESS){
                 fprintf(stderr, "Error: cuMemset within flash2_bwd_wrapper failed...\n");
