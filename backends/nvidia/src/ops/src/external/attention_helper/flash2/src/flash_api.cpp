@@ -244,7 +244,7 @@ extern "C" {
                                     int num_sms,
                                     int total_k,
                                     void * attn_bwd_workspace,
-                                    uint64_t * ret_used_workspace_size, void ** ret_set_to_zero_start, size_t * ret_set_to_zero_size){
+                                    uint64_t * ret_used_workspace_size, void ** ret_set_to_zero_start, uint64_t * ret_set_to_zero_size){
 
 
        
@@ -621,7 +621,7 @@ extern "C" {
 
         uint64_t used_workspace_size = 0;
         void * set_to_zero_start = NULL;
-        size_t set_to_zero_size = 0;
+        uint64_t set_to_zero_size = 0;
         ret = set_flash2_bwd_workspace(params, num_sm, total_k, workspace, &used_workspace_size, &set_to_zero_start, &set_to_zero_size);
         if (ret){
             fprintf(stderr, "Error: setting flash2 bwd workspace failed...\n");
