@@ -3,11 +3,11 @@
 
 // toggle to print out before submitting any ops...
 // verbose printing of each op
-#define TO_PRINT 0
+#define TO_PRINT 1
 
 // meta-toggle required to be set to 1 to save any data
 // when set to 0, nothing will be saved
-#define TO_SAVE_DATA 0
+#define TO_SAVE_DATA 1
 
 
 // DETERMINES WHAT DATA TO SAVE...
@@ -324,6 +324,19 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
 		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_attn_norm", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save attention nor file...\n");
+			return -1;
+		}
+	}
+
+	if (layer_id == 0){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_attn_norm", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save attention nor file...\n");
+			return -1;
+		}
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "w_attn_norm", transformer_block -> w_attn_norm, 1, model_dim, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save attention nor file...\n");
 			return -1;
