@@ -634,8 +634,6 @@ extern "C" {
         }
 
         CUresult res;
-        printf("used_workspace_size: %lu\n", used_workspace_size);
-        printf("set_to_zero_start: %p\n", set_to_zero_start);
         if (set_to_zero_size > 0){
             res = cuMemsetD8Async((CUdeviceptr) set_to_zero_start, 0, set_to_zero_size, stream);
             if (res != CUDA_SUCCESS){
