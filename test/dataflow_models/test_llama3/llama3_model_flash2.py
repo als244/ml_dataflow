@@ -157,7 +157,10 @@ class Attention(nn.Module):
             causal=True
         )
 
-        torch.save(output.cpu(), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_out.pt")
+        torch.save(xq.cpu(), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_q.pt")
+        torch.save(xk.cpu(), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_k.pt")
+        torch.save(xv.cpu(), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_v.pt")
+        torch.save(output.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_out.pt")
 
         output = output.view(bsz, seqlen, -1)
 
