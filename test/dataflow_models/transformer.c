@@ -12,7 +12,7 @@
 
 
 	#define HOST_MEM_GB 110
-	#define DEV_MEM_GB 29
+	#define DEV_MEM_GB 21
 
 	#define MODEL_CONFIG_SIZE_B 8
 	#define MODEL_PATH "../data/8B"
@@ -65,7 +65,7 @@
 	#define NUM_ROUNDS_PER_STEP 10
 
 
-	#define NUM_STEPS 10
+	#define NUM_STEPS 3
 
 
 
@@ -3719,6 +3719,9 @@
 			}
 			dataflow_handle.profiler.range_pop();
 
+			// embedding opt step done...
+			dataflow_handle.profiler.range_pop();
+
 
 
 
@@ -3772,6 +3775,9 @@
 
 			dataflow_handle.profiler.range_pop();
 
+			// head opt step done...
+			dataflow_handle.profiler.range_pop();
+
 
 			// at this point the early layers (params and grads) should be on device
 			// go in forwards direction loading in the opt value from sys while using the space not
@@ -3803,6 +3809,9 @@
 
 
 			for (int k = 0; k < n_layers; k++){
+
+				sprintf(profile_msg, "Opt Step %d: Block %d", t, k);
+				dataflow_handle.profiler.range_push(profile_msg);
 
 				// ensure we have the layer, grad, and opt state state ready...
 
@@ -3855,7 +3864,7 @@
 
 				// now we can submit the opt step...
 
-				sprintf(profile_msg, "Opt Step %d: Block #%d", t, k);
+				sprintf(profile_msg, "Performing Adam: Block %d", k);
 				dataflow_handle.profiler.range_push(profile_msg);
 
 			
@@ -4023,6 +4032,9 @@
 						dataflow_handle.profiler.range_pop();
 					}
 				}
+
+				// done with opt step for block %d...
+				dataflow_handle.profiler.range_pop();
 
 				// now we can move on to the next layer...
 
