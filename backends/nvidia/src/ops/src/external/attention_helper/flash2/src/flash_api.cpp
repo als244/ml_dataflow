@@ -296,10 +296,10 @@ extern "C" {
 
         const int nsplits = (num_sms + num_seqs * num_q_heads - 1) / (num_seqs * num_q_heads);
 
-        uint64_t per_split_size = (uint64_t)(total_q + 128 * num_seqs) * (uint64_t)num_q_heads * (uint64_t)head_dim_rounded * sizeof(float);
-        uint64_t dq_accum_size = (uint64_t) nsplits * per_split_size;
+        uint64_t per_split_els = (uint64_t)(total_q + 128 * num_seqs) * (uint64_t)num_q_heads * (uint64_t)head_dim_rounded;
+        uint64_t dq_accum_size = (uint64_t) nsplits * per_split_els * sizeof(float);
 
-        params.dq_accum_split_stride = per_split_size;
+        params.dq_accum_split_stride = per_split_els;
 
         params.dq_accum_ptr = cur_attn_workspace;
         cur_attn_workspace += dq_accum_size;
