@@ -342,7 +342,7 @@ extern "C" __global__ void default_rms_norm_bwd_x_bf16_bf16_kernel(int n_rows, i
 	// load in squared sums and then divide by n_cols and take sqrt
 	__nv_bfloat16 * inp_row = (__nv_bfloat16 *) sdata;
 	// length equal to the number of columns
-	float * weights = (float *) (inp_row + n_cols);
+	__nv_bfloat16 * weights = (__nv_bfloat16 *) (inp_row + n_cols);
 
 	// length equal to rows_per_block
 	float * shared_recip_avgs = (float *) (weights + n_cols);
@@ -387,7 +387,7 @@ extern "C" __global__ void default_rms_norm_bwd_x_bf16_bf16_kernel(int n_rows, i
 	int lane_id = thread_id % 32;
 
 	for (uint64_t i = thread_id; i < n_cols; i+=blockDim.x){
-		weights[i] = __bfloat162float(rms_weight[i]);
+		weights[i] = rms_weight[i];
 	}
 
 	// retrieve back the recip squared avgs
@@ -406,7 +406,8 @@ extern "C" __global__ void default_rms_norm_bwd_x_bf16_bf16_kernel(int n_rows, i
 	float inp_val;
 	float out_val;
 	float out_val_scaled;
-	float cur_weight;
+	float out_val_bf16;
+	__nv_bfloat16 cur_weight;
 
 	unsigned warp_mask = 0xFFFFFFFFU;
 
@@ -429,12 +430,13 @@ extern "C" __global__ void default_rms_norm_bwd_x_bf16_bf16_kernel(int n_rows, i
 		for (int i = thread_id; i < n_cols; i+=blockDim.x){
 			cur_weight = weights[i];
 			inp_val = __bfloat162float(inp_row[i]);
-			out_val = cur_weight * (inp_val * cur_recip_avg);
+			out_val_bf16 = cur_weight * __float2bfloat16(inp_val * cur_recip_avg);
+			out_val = __bfloat162float(out_val_bf16);
 
 			// if we want to recompute the forward pass, we already have done all the work
 			// and can save it down here...
 			if (X_out){
-				X_out[row_id * n_cols + i] = __float2bfloat16(out_val);
+				X_out[row_id * n_cols + i] = out_val_bf16;
 			}
 
 			cur_upstream_sum += __bfloat162float(upstream_dX[row_ind_start + i]) * out_val;
@@ -485,7 +487,7 @@ extern "C" __global__ void default_rms_norm_bwd_x_bf16_bf16_kernel(int n_rows, i
 			cur_weight = weights[i];
 			inp_val = __bfloat162float(inp_row[i]);
 			out_val_scaled = cur_upstream_sum * ((inp_val * cur_recip_avg) / n_cols);
-			deriv = (cur_recip_avg * ((cur_weight * __bfloat162float(upstream_dX[row_ind_start + i])) - out_val_scaled));
+			deriv = (cur_recip_avg * (__bfloat162float(cur_weight * upstream_dX[row_ind_start + i]) - out_val_scaled));
 
 			// now update dX
 			dX[row_id * n_cols + i] += __float2bfloat16(deriv);
