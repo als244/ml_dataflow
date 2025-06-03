@@ -137,6 +137,8 @@ class Attention(nn.Module):
         
         bsz, seqlen, _ = x.shape
 
+        torch.save(x.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_x.pt")
+
         xq, xk, xv = self.wq(x), self.wk(x), self.wv(x)
 
         xq = xq.view(bsz, seqlen, self.n_local_heads, self.head_dim)
