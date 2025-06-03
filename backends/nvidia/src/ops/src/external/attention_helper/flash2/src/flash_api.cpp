@@ -304,7 +304,6 @@ extern "C" {
         params.dq_accum_ptr = cur_attn_workspace;
         cur_attn_workspace += dq_accum_size;
         used_workspace_size += dq_accum_size;
-
         set_to_zero_size += dq_accum_size;
 
         if (ret_used_workspace_size){
@@ -635,6 +634,8 @@ extern "C" {
         }
 
         CUresult res;
+        printf("used_workspace_size: %lu\n", used_workspace_size);
+        printf("set_to_zero_start: %p\n", set_to_zero_start);
         if (set_to_zero_size > 0){
             res = cuMemsetD8Async((CUdeviceptr) set_to_zero_start, 0, set_to_zero_size, stream);
             if (res != CUDA_SUCCESS){
