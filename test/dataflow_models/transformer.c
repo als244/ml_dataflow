@@ -14,14 +14,14 @@
 #define HOST_MEM_GB 110
 #define DEV_MEM_GB 21
 
-#define MODEL_CONFIG_SIZE_B 1
-#define MODEL_PATH "../data/1B"
+#define MODEL_CONFIG_SIZE_B 8
+#define MODEL_PATH "../data/8B"
 
 // these shoudl be auto-cofigured, testing manually for now...
 // could also take in as command line argument...
-#define NUM_DEV_BLOCKS 16
-#define NUM_DEV_GRAD_BLOCKS 16
-#define NUM_DEV_ACTIVATION_SLOTS 16
+#define NUM_DEV_BLOCKS 4
+#define NUM_DEV_GRAD_BLOCKS 4
+#define NUM_DEV_ACTIVATION_SLOTS 32
 
 
 
@@ -65,7 +65,7 @@
 #define NUM_ROUNDS_PER_STEP 1
 
 
-#define NUM_STEPS 10
+#define NUM_STEPS 5
 
 
 
@@ -75,7 +75,7 @@
 
 // config for what to print...
 
-#define TO_PRINT_THROUGHPUT_METRICS 0
+#define TO_PRINT_THROUGHPUT_METRICS 1
 #define TO_PRINT_THROUGHPUT_METRICS_VERBOSE 0
 
 #define TO_PRINT_ROUND_LOSS 1
@@ -1773,7 +1773,7 @@ int main(int argc, char * argv[]){
 	// SAME KERNEL WORKSPACE ACROSS ALL COMPUTATIONS!
 
 	// attention kernel bwd needs good amount of workspace...
-	uint64_t kernelWorkspaceBytes = 1UL << 28;
+	uint64_t kernelWorkspaceBytes = 1UL << 30;
 	void * kernelWorkspace = cur_dev_mem;
 	cur_dev_mem += kernelWorkspaceBytes;
 	used_dev_mem += kernelWorkspaceBytes;
