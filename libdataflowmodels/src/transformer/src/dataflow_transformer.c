@@ -330,21 +330,6 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 		}
 	}
 
-	if (layer_id == 0){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_attn_norm", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
-		if (ret){
-			fprintf(stderr, "Error: failed to save attention nor file...\n");
-			return -1;
-		}
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "w_attn_norm", transformer_block -> w_attn_norm, 1, model_dim, fwd_dt);
-		if (ret){
-			fprintf(stderr, "Error: failed to save attention nor file...\n");
-			return -1;
-		}
-	}
-
-
-
 	if (TO_PRINT){
 		printf("Submitting Q, K, V matmuls...!\n");
 	}
