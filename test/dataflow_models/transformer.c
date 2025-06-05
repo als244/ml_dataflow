@@ -3289,6 +3289,7 @@
 						dataflow_handle.profiler.range_pop();
 
 						// this buffer is now
+						// because don't need to do inbound transfer (but need to wait for it to be sent back...)
 						if (r == 0){
 							if (next_grad_block_id >= 0){
 								ret = dataflow_handle.submit_host_op(&dataflow_handle, post_sem_callback, (void *) &(is_grad_block_ready[next_grad_block_id]), outbound_stream_id);
