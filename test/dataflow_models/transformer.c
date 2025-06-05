@@ -2887,6 +2887,7 @@
 
 
 				cur_global_token_replacement_ind = 0;
+				int submitted_outbound_grad = 0;
 
 				sprintf(profile_msg, "Bwd");
 				dataflow_handle.profiler.range_push(profile_msg);
@@ -3264,7 +3265,8 @@
 
 					// if we are about to do opt step and can hold onto this grad block...
 					// then we don't need to send it back to host...
-					if ((r < num_rounds_per_step - 1) || (k >= num_dev_grad_blocks)){
+					submitted_outbound_grad = 0;
+					if (((r == num_rounds_per_step - 1) && (k >= num_dev_grad_blocks)) || (r < num_rounds_per_step - 1)){
 						// send back gradient to host, and run optimizer if needed
 
 						ret = dataflow_handle.submit_dependency(&dataflow_handle, outbound_stream_id, cur_stream_state);
@@ -3281,6 +3283,8 @@
 							fprintf(stderr, "Error: failed to submit outbound transfer to send grad block #%d to host...\n", k);
 							return -1;
 						}
+						
+						submitted_outbound_grad = 1;
 
 						dataflow_handle.profiler.range_pop();
 
@@ -3392,20 +3396,22 @@
 							}
 
 
-							// here cur stream state is either done with computation (if replacement ind is different than working ind, 
-							// or it is waiting for the grad block to have finished making its way home if replacement ind is same as working ind)
-							// need to set dependency for the outbound stream to ensure this grad block has finished making its way home..
-							cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
-							if (!cur_stream_state){
-								fprintf(stderr, "Error: failed to get stream state for grad block #%d...\n", k);
-								return -1;
-							}
+							if (submitted_outbound_grad){
+								// here cur stream state is either done with computation (if replacement ind is different than working ind, 
+								// or it is waiting for the grad block to have finished making its way home if replacement ind is same as working ind)
+								// need to set dependency for the outbound stream to ensure this grad block has finished making its way home..
+								cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
+								if (!cur_stream_state){
+									fprintf(stderr, "Error: failed to get stream state for grad block #%d...\n", k);
+									return -1;
+								}
 
-							// prefetch next grad block...
-							ret = dataflow_handle.submit_dependency(&dataflow_handle, inbound_stream_id, cur_stream_state);
-							if (ret){
-								fprintf(stderr, "Error: failed to submit dependency to prefetch next grad block...\n");
-								return -1;
+								// prefetch next grad block...
+								ret = dataflow_handle.submit_dependency(&dataflow_handle, inbound_stream_id, cur_stream_state);
+								if (ret){
+									fprintf(stderr, "Error: failed to submit dependency to prefetch next grad block...\n");
+									return -1;
+								}
 							}
 
 							sprintf(profile_msg, "Prefetching next grad block id #%d...", next_grad_block_id);
@@ -3480,21 +3486,25 @@
 								printf("\n\nPrefetching next grad block id #%d (replacing grad block at index %d)...\n\n", next_grad_block_id, replacement_grad_layer_ind);
 							}
 
-							// need to set dependency for the outbound stream to ensure this grad block has finished making its way home..
-							cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
-							if (!cur_stream_state){
-								fprintf(stderr, "Error: failed to get stream state for grad block #%d...\n", k);
-								return -1;
-							}	
 
-							// here cur stream state is either done with computation (if replacement ind is different than working ind, 
-							// or it is waiting for the grad block to have finished making its way home if replacement ind is same as working ind)
+							if (submitted_outbound_grad){
+								// need to set dependency for the outbound stream to ensure this grad block has finished making its way home..
+								cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
+								if (!cur_stream_state){
+									fprintf(stderr, "Error: failed to get stream state for grad block #%d...\n", k);
+									return -1;
+								}	
+							
 
-							// prefetch next grad block...
-							ret = dataflow_handle.submit_dependency(&dataflow_handle, inbound_stream_id, cur_stream_state);
-							if (ret){
-								fprintf(stderr, "Error: failed to submit dependency to prefetch next grad block...\n");
-								return -1;
+								// here cur stream state is either done with computation (if replacement ind is different than working ind, 
+								// or it is waiting for the grad block to have finished making its way home if replacement ind is same as working ind)
+
+								// prefetch next grad block...
+								ret = dataflow_handle.submit_dependency(&dataflow_handle, inbound_stream_id, cur_stream_state);
+								if (ret){
+									fprintf(stderr, "Error: failed to submit dependency to prefetch next grad block...\n");
+									return -1;
+								}
 							}
 
 							sprintf(profile_msg, "Prefetching next grad block id #%d...", next_grad_block_id);
