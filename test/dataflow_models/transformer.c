@@ -19,9 +19,9 @@
 
 	// these shoudl be auto-cofigured, testing manually for now...
 	// could also take in as command line argument...
-	#define NUM_DEV_BLOCKS 32
-	#define NUM_DEV_GRAD_BLOCKS 32
-	#define NUM_DEV_ACTIVATION_SLOTS 32
+	#define NUM_DEV_BLOCKS 2
+	#define NUM_DEV_GRAD_BLOCKS 16
+	#define NUM_DEV_ACTIVATION_SLOTS 16
 
 
 
@@ -56,7 +56,7 @@
 	// 		chunk_size % seqlen == 0
 
 	// up to num_chunks (per round for now, because just repeating) to save...
-	#define NUM_RAW_CHUNK_IDS_LABELS_TO_SAVE 0
+	#define NUM_RAW_CHUNK_IDS_LABELS_TO_SAVE 1
 
 
 
@@ -2678,11 +2678,13 @@
 
 							dataflow_handle.profiler.range_pop();
 
-							if (replacement_grad_layer_ind > 0){
-								replacement_grad_layer_ind--;
-							}
-							else{
-								replacement_grad_layer_ind = num_dev_grad_blocks - 1;
+							if (next_grad_block_id > 0){
+								if (replacement_grad_layer_ind > 0){
+									replacement_grad_layer_ind--;
+								}
+								else{
+									replacement_grad_layer_ind = num_dev_grad_blocks - 1;
+								}
 							}
 							next_grad_block_id--;
 						}
@@ -2722,11 +2724,13 @@
 								return -1;
 							}
 
-							if (replacement_grad_layer_ind > 0){
-								replacement_grad_layer_ind--;
-							}
-							else{
-								replacement_grad_layer_ind = num_dev_grad_blocks - 1;
+							if (next_grad_block_id > 0){
+								if (replacement_grad_layer_ind > 0){
+									replacement_grad_layer_ind--;
+								}
+								else{
+									replacement_grad_layer_ind = num_dev_grad_blocks - 1;
+								}
 							}
 							next_grad_block_id--;
 						}
@@ -4093,9 +4097,6 @@
 				if (final_min_block_id < num_dev_blocks){
 					int num_overlap = num_dev_blocks - final_min_block_id;
 
-					printf("num_overlap: %d\n", num_overlap);
-					printf("final_min_block_id: %d\n", final_min_block_id);
-
 					if (final_min_block_id != final_min_layer_working_ind){
 						// then we need to reshuffle the blocks currently on device to live at the proper locations
 						// that align with workling_layer_ind starting at 0 every step...
@@ -4107,7 +4108,6 @@
 
 						// now we need to move the blocks that we need to keep on device to the proper locations...
 						for (int i = 0; i < num_overlap; i++){
-							printf("Getting block %d from previous index: %d\n", final_min_block_id + i, (final_min_layer_working_ind + i) % num_dev_blocks);
 							blocks[final_min_block_id + i] = temp_blocks[(final_min_layer_working_ind + i) % num_dev_blocks];
 						}
 					}
