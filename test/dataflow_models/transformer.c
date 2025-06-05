@@ -19,7 +19,7 @@
 
 	// these shoudl be auto-cofigured, testing manually for now...
 	// could also take in as command line argument...
-	#define NUM_DEV_BLOCKS 2
+	#define NUM_DEV_BLOCKS 8
 	#define NUM_DEV_GRAD_BLOCKS 16
 	#define NUM_DEV_ACTIVATION_SLOTS 16
 
@@ -104,7 +104,78 @@
 	#define TO_PRINT_GRAD_TRANSFERRING 0
 
 
+	#define TO_SAVE_UPDATED_PARAMS 0
+	#define TO_SAVE_UPDATED_PARAMS_PATH "updated_params"
 
+	int save_updated_params(Dataflow_Handle * dataflow_handle, int stream_id, int step_num, int layer_num, void * updated_layer_host, size_t updated_layer_size){
+
+		int ret;
+
+		ret = dataflow_handle->sync_stream(dataflow_handle, stream_id);
+		if (ret){
+			fprintf(stderr, "Error: failed to sync stream: %d...\n", stream_id);
+			return -1;
+		}
+
+		char filename[100];
+		sprintf(filename, "%s/step_%d_layer_%d.dat", TO_SAVE_UPDATED_PARAMS_PATH, step_num, layer_num);
+
+		FILE * f = fopen(filename, "w");
+		if (!f){
+			fprintf(stderr, "Error: failed to open file: %s...\n", filename);
+			return -1;
+		}
+
+		fwrite(updated_layer_host, updated_layer_size, 1, f);
+		fclose(f);
+
+		return 0;
+	}
+
+	#define TO_SAVE_GRAD_BLOCKS_PRE_STEP 0
+	#define TO_SAVE_GRAD_BLOCKS_PRE_STEP_PATH "grad_blocks_pre_step"
+
+	int save_grad_blocks_pre_step(Dataflow_Handle * dataflow_handle, int stream_id, int step_num, int layer_num, void * grad_block_dev, size_t grad_block_size){
+
+		int ret;
+
+		
+		char * host_grad_block = malloc(grad_block_size);
+		if (!host_grad_block){
+			fprintf(stderr, "Error: failed to allocate host grad block...\n");
+			return -1;
+		}
+
+		ret = (dataflow_handle -> submit_outbound_transfer)(dataflow_handle, stream_id, host_grad_block, grad_block_dev, grad_block_size);
+		if (ret){
+			fprintf(stderr, "Error: failed to submit outbound transfer...\n");
+			return -1;
+		}
+
+		ret = dataflow_handle->sync_stream(dataflow_handle, stream_id);
+		if (ret){
+			fprintf(stderr, "Error: failed to sync stream: %d...\n", stream_id);
+			return -1;
+		}
+
+		
+		
+
+		char filename[100];
+		sprintf(filename, "%s/step_%d_layer_%d.dat", TO_SAVE_GRAD_BLOCKS_PRE_STEP_PATH, step_num, layer_num);
+
+		FILE * f = fopen(filename, "w");
+		if (!f){
+			fprintf(stderr, "Error: failed to open file: %s...\n", filename);
+			return -1;
+		}
+
+		fwrite(host_grad_block, grad_block_size, 1, f);
+		fclose(f);
+
+		return 0;
+	}
+	
 
 
 	int main(int argc, char * argv[]){
@@ -2647,6 +2718,13 @@
 					}
 					// otherwise see if we need to prefetch a grad block...
 					else{
+						// post that this block is ready for bwd...
+						ret = dataflow_handle.submit_host_op(&dataflow_handle, post_sem_callback, (void *) &(is_block_ready[k]), compute_stream_id);
+						if (ret){
+							fprintf(stderr, "Error: failed to submit host op to enqueue is_grad_block_ready for grad block #%d...\n", k);
+							return -1;
+						}
+
 						// the first round all gradients will be 0, so no need to prefetch...
 						if ((r > 0) && (next_grad_block_id >= (n_layers - num_dev_grad_blocks))){
 
@@ -2882,14 +2960,6 @@
 
 				// working_layer_ind and replacement_layer_ind should be properly set correctly poniting at last block, now working opposite direction...
 
-				// ensure that we set the correct layers to be ready (that are already sitting from the fwd pass)
-
-				for (int k = n_layers - 1; k > n_layers - 1 - num_dev_blocks; k--){
-					sem_post(&(is_block_ready[k]));
-				}
-
-
-
 				cur_global_token_replacement_ind = 0;
 				int submitted_outbound_grad = 0;
 
@@ -2940,13 +3010,6 @@
 
 					int grad_block_ready_val;
 					sem_getvalue(&(is_grad_block_ready[k]), &grad_block_ready_val);
-
-					assert(grad_block_ready_val == 0);
-
-					// if we are less than num dev blocks we will in the step following if last round...
-					if ((r == num_rounds_per_step - 1) && (k < num_dev_grad_blocks)){
-						sem_post(&(is_grad_block_ready[k]));
-					}
 
 					dataflow_handle.profiler.range_pop();
 
@@ -3305,8 +3368,14 @@
 							}
 						}					
 					}
-					
 					// otherwise we can leave this grad block on device to be ready for opt step...
+					else{
+						ret = dataflow_handle.submit_host_op(&dataflow_handle, post_sem_callback, (void *) &(is_grad_block_ready[k]), compute_stream_id);
+						if (ret){
+							fprintf(stderr, "Error: failed to submit host op to enqueue is_grad_block_ready for grad block #%d...\n", k);
+							return -1;
+						}
+					}
 					
 
 					// PREFETCHING NEXT NEEDED (which is) <= PREVIOUS LAYER ID) FORWARD BLOCK and GRADIENT BLOCK...
@@ -3688,6 +3757,7 @@
 
 			sprintf(profile_msg, "Embedding Opt Step %d", t);
 			dataflow_handle.profiler.range_push(profile_msg);
+			
 
 			ret = dataflow_submit_default_adamw_step(&dataflow_handle, compute_stream_id,
 																block_dt, block_bwd_dt, opt_mean_dt, opt_var_dt,
@@ -3822,11 +3892,11 @@
 
 			// working_opt_layer_ind always starts at 0 and moves upwards...
 
-
 			for (int k = 0; k < n_layers; k++){
 
 				sprintf(profile_msg, "Opt Step %d: Block %d", t, k);
-				dataflow_handle.profiler.range_push(profile_msg);
+				dataflow_handle.profiler.range_push(profile_msg);				
+
 
 				// ensure we have the layer, grad, and opt state state ready...
 
@@ -3846,6 +3916,12 @@
 				sprintf(profile_msg, "Opt Step %d: Waiting for grad block #%d to be ready (at index %d)...", t, k, working_grad_block_ind);
 				dataflow_handle.profiler.range_push(profile_msg);
 				sem_wait(&(is_grad_block_ready[k]));
+
+				int is_grad_block_ready_val = 0;
+				sem_getvalue(&(is_grad_block_ready[k]), &is_grad_block_ready_val);
+
+				assert(is_grad_block_ready_val == 0);
+
 				dataflow_handle.profiler.range_pop();
 
 				working_grad_block = grad_blocks[working_grad_block_ind];
@@ -3881,6 +3957,14 @@
 
 				sprintf(profile_msg, "Performing Adam: Block %d", k);
 				dataflow_handle.profiler.range_push(profile_msg);
+
+				if (TO_SAVE_GRAD_BLOCKS_PRE_STEP){
+					ret = save_grad_blocks_pre_step(&dataflow_handle, compute_stream_id, t, k, working_grad_block -> buffer, aligned_block_bwd_size);
+					if (ret){
+						fprintf(stderr, "Error: failed to save grad blocks for step #%d, layer #%d...\n", t, k);
+						return -1;
+					}
+				}
 
 			
 				ret = dataflow_submit_default_adamw_step(&dataflow_handle, compute_stream_id,
@@ -3951,9 +4035,6 @@
 						next_opt_layer_id++;
 					}
 				}
-				
-				
-				
 
 				// now prefetch the next layer, grad, and/or opt state...
 				if ((next_layer_id < n_layers) || (next_grad_block_id < n_layers) || ((t > 1) && (next_opt_layer_id < n_layers))){
@@ -4045,8 +4126,31 @@
 						next_opt_layer_id++;
 
 						dataflow_handle.profiler.range_pop();
-					}
+					}			
 				}
+
+
+
+
+				// Trying to figure out why this is needed...
+
+				// makes sense for case of t == 1
+				// where we reset opt_layer to 0 using compute stream and it might be set to ready from init
+				// but unclear why this is needed every time...
+				// however, incorrect without it...
+
+				cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, outbound_stream_id);
+				if (!cur_stream_state){
+					fprintf(stderr, "Error: failed to get stream state for compute stream...\n");
+					return -1;
+				}
+
+				ret = dataflow_handle.submit_dependency(&dataflow_handle, compute_stream_id, cur_stream_state);
+				if (ret){
+					fprintf(stderr, "Error: failed to submit dependency to send params and opt state to host...\n");
+					return -1;
+				}
+
 
 				// done with opt step for block %d...
 				dataflow_handle.profiler.range_pop();
@@ -4064,7 +4168,6 @@
 
 
 			// refetch all of the updated blocks that we need for the next forward pass...
-
 			
 			
 			
@@ -4207,6 +4310,16 @@
 			}
 			
 			// now we can submit the next forward pass...
+			// first save down the updated params...
+			if (TO_SAVE_UPDATED_PARAMS){
+				for (int k = 0; k < n_layers; k++){
+					ret = save_updated_params(&dataflow_handle, inbound_stream_id, t, k, sys_blocks[k] -> buffer, aligned_block_size);
+					if (ret){
+						fprintf(stderr, "Error: failed to save updated params for step #%d, layer #%d...\n", t, k);
+						return -1;
+					}
+				}
+			}
 
 			// pop from "Optimizer Step %d"
 			dataflow_handle.profiler.range_pop();	
