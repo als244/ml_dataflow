@@ -141,11 +141,34 @@ lib/native/${NATIVE_OP_CONFIG_LIB}: ${NATIVE_OP_CONFIG_LIB_SRC}
 lib/external/${EXTERNAL_OP_ATTENTION_LIB}: build_flash2_lib build_flash3_lib ${EXTERNAL_OP_ATTENTION_LIB_OBJS}
 	${CC} ${CFLAGS} ${EXTERNAL_OP_ATTENTION_LIB_ALL_INCLUDES} -shared ${EXTERNAL_OP_ATTENTION_LIB_OBJS} -o $@ ${EXTERNAL_OP_ATTENTION_LIB_OTHER_LIB_DEPENDS}
 
+
+# Retry loops for flash libs because nvcc sometimes has errors...
 build_flash3_lib:
-	${MAKE} -C ${FLASH3_DIR}
+	-for i in 1 2 3 4 5 6 7 8 9 10; do \
+		if ${MAKE} -C ${FLASH3_DIR}; then \
+			echo "Successfully built flash3 lib."; \
+			break; \
+		elif [ $$i -lt 10 ]; then \
+			echo "make -C ${FLASH3_DIR} failed. Retrying (attempt $$i/10)..."; \
+			sleep 2; \
+		else \
+			echo "Error: Failed to build flash3 lib after 10 attempts."; \
+		fi; \
+	done
 
 build_flash2_lib:
-	${MAKE} -C ${FLASH2_DIR}
+	-for i in 1 2 3 4 5 6 7 8 9 10; do \
+		if ${MAKE} -C ${FLASH2_DIR}; then \
+			echo "Successfully built flash2 lib."; \
+			break; \
+		elif [ $$i -lt 10 ]; then \
+			echo "make -C ${FLASH2_DIR} failed. Retrying (attempt $$i/10)..."; \
+			sleep 2; \
+		else \
+			echo "Error: Failed to build flash2 lib after 10 attempts."; \
+		fi; \
+	done
+
 
 ${EXTERNAL_OP_PATH}/attention_helper/objs/attention_helper.o: ${EXTERNAL_OP_PATH}/attention_helper/src/attention_helper.c
 	${CC} ${CFLAGS} ${EXTERNAL_OP_ATTENTION_LIB_ALL_INCLUDES} -c $< -o $@
