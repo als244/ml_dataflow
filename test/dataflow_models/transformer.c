@@ -11,7 +11,7 @@
 	#define PEAK_BF16_TFLOPS H100_PEAK_BF16_TFLOPS
 
 
-	#define HOST_MEM_GB 188
+	#define HOST_MEM_GB 192
 	#define DEV_MEM_GB 78
 
 	#define MODEL_CONFIG_SIZE_B 8
@@ -21,7 +21,7 @@
 	// could also take in as command line argument...
 	#define NUM_DEV_BLOCKS 6
 	#define NUM_DEV_GRAD_BLOCKS 6
-	#define NUM_DEV_ACTIVATION_SLOTS 80
+	#define NUM_DEV_ACTIVATION_SLOTS 36
 
 
 
@@ -32,7 +32,7 @@
 
 	// this is just for testing,.. in 
 	// reality determined dynamically...
-	#define CHUNK_SIZE 8192
+	#define CHUNK_SIZE 16384
 
 	#define TOKEN_IDS_PATH "../data/65536_token_ids_uint32.dat"
 	#define TOKEN_LABELS_PATH "../data/65536_labels_uint32.dat"
@@ -62,7 +62,7 @@
 
 	// this (along with num seqs per round)modulates how frequently we will step 
 	// the optimizer...
-	#define NUM_ROUNDS_PER_STEP 1
+	#define NUM_ROUNDS_PER_STEP 5
 
 
 	#define NUM_STEPS 10
