@@ -3819,7 +3819,7 @@
 			}
 
 			if (TO_SAVE_UPDATED_PARAMS){
-				ret = save_updated_params(&dataflow_handle, compute_stream_id, t, 0, embedding_table -> embedding_table, embedding_table -> embedding_table_size);
+				ret = save_updated_params(&dataflow_handle, compute_stream_id, t, 0, false, true, embedding_table -> embedding_table, embedding_table -> embedding_table_size);
 				if (ret){
 					fprintf(stderr, "Error: failed to save updated embedding table...\n");
 					return -1;
@@ -3883,7 +3883,7 @@
 			}
 
 			if (TO_SAVE_UPDATED_PARAMS){
-				ret = save_updated_params(&dataflow_handle, compute_stream_id, t, 0, head -> buffer, combined_head_size);
+				ret = save_updated_params(&dataflow_handle, compute_stream_id, t, 0, true, false, head -> buffer, combined_head_size);
 				if (ret){
 					fprintf(stderr, "Error: failed to save updated head...\n");
 					return -1;
@@ -3991,7 +3991,7 @@
 				dataflow_handle.profiler.range_push(profile_msg);
 
 				if (TO_SAVE_GRAD_BLOCKS_PRE_STEP){
-					ret = save_grad_blocks_pre_step(&dataflow_handle, compute_stream_id, t, k, working_grad_block -> buffer, aligned_block_bwd_size);
+					ret = save_grad_blocks_pre_step(&dataflow_handle, compute_stream_id, t, k, false, false, working_grad_block -> buffer, aligned_block_bwd_size);
 					if (ret){
 						fprintf(stderr, "Error: failed to save grad blocks for step #%d, layer #%d...\n", t, k);
 						return -1;
@@ -4345,7 +4345,7 @@
 			// first save down the updated params...
 			if (TO_SAVE_UPDATED_PARAMS){
 				for (int k = 0; k < n_layers; k++){
-					ret = save_updated_params(&dataflow_handle, inbound_stream_id, t, k, sys_blocks[k] -> buffer, aligned_block_size);
+					ret = save_updated_params(&dataflow_handle, inbound_stream_id, t, k, false, false, sys_blocks[k] -> buffer, aligned_block_size);
 					if (ret){
 						fprintf(stderr, "Error: failed to save updated params for step #%d, layer #%d...\n", t, k);
 						return -1;
