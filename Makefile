@@ -1,19 +1,24 @@
 
 backend_name=nvidia
 
-all: backends libdataflow libdataflowops libdataflowmodels dataflow_models_test
+# Declare targets that are not files as .PHONY.
+# This prevents make from getting confused by directories with the same name
+# and ensures the recipes are always run in the correct order.
+.PHONY: all libdataflow backends libdataflowops libdataflowmodels dataflow_models_test
 
-backends:
-	${MAKE} -C backends/host && ${MAKE} -C backends/${backend_name}
+all: libdataflow backends libdataflowops libdataflowmodels dataflow_models_test
 
 libdataflow:
 	${MAKE} -C libdataflow
 
-libdataflowops:
+backends: libdataflow
+	${MAKE} -C backends/host && ${MAKE} -C backends/${backend_name}
+
+libdataflowops: libdataflow
 	${MAKE} -C libdataflowops
 
-libdataflowmodels:
+libdataflowmodels: libdataflowops
 	${MAKE} -C libdataflowmodels
 
-dataflow_models_test:
+dataflow_models_test: libdataflowmodels backends
 	${MAKE} -C test/dataflow_models
