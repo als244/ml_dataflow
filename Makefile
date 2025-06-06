@@ -23,6 +23,5 @@ libdataflowmodels: libdataflowops
 dataflow_models_test: libdataflowmodels backends
 	${MAKE} -C test/dataflow_models
 
-
-copy_artificacts_to_root: dataflow_models_test:
+copy_artificacts_to_root: dataflow_models_test
 	cp test/dataflow_models/transformer . && cp test/dataflow_models/do_transformer_profile.sh .
