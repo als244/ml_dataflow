@@ -8,25 +8,25 @@
 	#define RTX_5090_PEAK_BF16_TFLOPS 2.095e14
 	#define H100_PEAK_BF16_TFLOPS 9.89e14
 
-	#define PEAK_BF16_TFLOPS RTX_5090_PEAK_BF16_TFLOPS
+	#define PEAK_BF16_TFLOPS H100_PEAK_BF16_TFLOPS
 
 
-	#define HOST_MEM_GB 110
-	#define DEV_MEM_GB 21
+	#define HOST_MEM_GB 188
+	#define DEV_MEM_GB 78
 
 	#define MODEL_CONFIG_SIZE_B 8
 	#define MODEL_PATH "../data/8B"
 
 	// these shoudl be auto-cofigured, testing manually for now...
 	// could also take in as command line argument...
-	#define NUM_DEV_BLOCKS 2
-	#define NUM_DEV_GRAD_BLOCKS 2
-	#define NUM_DEV_ACTIVATION_SLOTS 5
+	#define NUM_DEV_BLOCKS 6
+	#define NUM_DEV_GRAD_BLOCKS 6
+	#define NUM_DEV_ACTIVATION_SLOTS 80
 
 
 
 	// this is just for testing...
-	#define NUM_TOKENS_EXAMPLE_SEQ 8192
+	#define NUM_TOKENS_EXAMPLE_SEQ 65536
 
 	#define MAX_SEQLEN NUM_TOKENS_EXAMPLE_SEQ
 
@@ -34,8 +34,8 @@
 	// reality determined dynamically...
 	#define CHUNK_SIZE 8192
 
-	#define TOKEN_IDS_PATH "../data/8192_token_ids_uint32.dat"
-	#define TOKEN_LABELS_PATH "../data/8192_labels_uint32.dat"
+	#define TOKEN_IDS_PATH "../data/65536_token_ids_uint32.dat"
+	#define TOKEN_LABELS_PATH "../data/65536_labels_uint32.dat"
 
 
 	// this determines total number of chunks / activations we need to store in 
@@ -44,7 +44,7 @@
 	// the role of this is to be largest possible while still fitting in memory...
 	// because it means more shared data can utilize the parameters and update
 	// gradients on device without incorruring I/O overhead or gradient accumulation overhead
-	#define NUM_SEQ_GROUPS_PER_ROUND 2
+	#define NUM_SEQ_GROUPS_PER_ROUND 1
 
 
 	// num_chunks = num_chunks_per_seq * num_seq_groups_per_round
@@ -62,7 +62,7 @@
 
 	// this (along with num seqs per round)modulates how frequently we will step 
 	// the optimizer...
-	#define NUM_ROUNDS_PER_STEP 16
+	#define NUM_ROUNDS_PER_STEP 1
 
 
 	#define NUM_STEPS 10
@@ -2355,7 +2355,7 @@
 		// JUST FOR DEMO we are using the same sequence distribution for every round and eveyr step...
 
 		// seqs per chunk = 1 if seq uses >= 1 chunks, otherwise packing multiple seqs per chunk...
-		int seqs_per_round = (num_seq_groups_per_round * num_chunks_per_seq) * num_seqs_per_chunk;
+		int seqs_per_round = num_seq_groups_per_round * num_seqs_per_chunk;
 		int seqs_per_step = seqs_per_round * num_rounds_per_step;
 		printf("Chunk size: %d\n", chunk_size);
 		printf("Chunks per round: %d\n", num_chunks);
