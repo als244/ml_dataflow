@@ -8,34 +8,34 @@
 	#define RTX_5090_PEAK_BF16_TFLOPS 2.095e14
 	#define H100_PEAK_BF16_TFLOPS 9.89e14
 
-	#define PEAK_BF16_TFLOPS RTX_5090_PEAK_BF16_TFLOPS
+	#define PEAK_BF16_TFLOPS H100_PEAK_BF16_TFLOPS
 
 
 	#define HOST_MEM_GB 110
-	#define DEV_MEM_GB 21
+	#define DEV_MEM_GB 29
 
-	#define MODEL_CONFIG_SIZE_B 1
-	#define MODEL_PATH "../data/1B"
+	#define MODEL_CONFIG_SIZE_B 8
+	#define MODEL_PATH "../data/8B"
 
 	// these shoudl be auto-cofigured, testing manually for now...
 	// could also take in as command line argument...
-	#define NUM_DEV_BLOCKS 8
+	#define NUM_DEV_BLOCKS 16
 	#define NUM_DEV_GRAD_BLOCKS 16
-	#define NUM_DEV_ACTIVATION_SLOTS 16
+	#define NUM_DEV_ACTIVATION_SLOTS 32
 
 
 
 	// this is just for testing...
-	#define NUM_TOKENS_EXAMPLE_SEQ 2048
+	#define NUM_TOKENS_EXAMPLE_SEQ 1024
 
 	#define MAX_SEQLEN NUM_TOKENS_EXAMPLE_SEQ
 
 	// this is just for testing,.. in 
 	// reality determined dynamically...
-	#define CHUNK_SIZE 2048
+	#define CHUNK_SIZE 1024
 
-	#define TOKEN_IDS_PATH "../data/2048_token_ids_uint32.dat"
-	#define TOKEN_LABELS_PATH "../data/2048_labels_uint32.dat"
+	#define TOKEN_IDS_PATH "../data/8192_token_ids_uint32.dat"
+	#define TOKEN_LABELS_PATH "../data/8192_labels_uint32.dat"
 
 
 	// this determines total number of chunks / activations we need to store in 
@@ -65,7 +65,7 @@
 	#define NUM_ROUNDS_PER_STEP 1
 
 
-	#define NUM_STEPS 10
+	#define NUM_STEPS 3
 
 
 
@@ -104,7 +104,7 @@
 	#define TO_PRINT_GRAD_TRANSFERRING 0
 
 
-	#define TO_SAVE_UPDATED_PARAMS 0
+	#define TO_SAVE_UPDATED_PARAMS 1
 	#define TO_SAVE_UPDATED_PARAMS_PATH "updated_params"
 
 	int save_updated_params(Dataflow_Handle * dataflow_handle, int stream_id, int step_num, int layer_num, bool is_head, bool is_embed, void * updated_layer_host, size_t updated_layer_size){
@@ -3819,7 +3819,7 @@
 			}
 
 			if (TO_SAVE_UPDATED_PARAMS){
-				ret = save_updated_params(&dataflow_handle, compute_stream_id, t, 0, false, true, embedding_table -> embedding_table, embedding_table -> embedding_table_size);
+				ret = save_updated_params(&dataflow_handle, outbound_stream_id, t, 0, false, true, sys_embedding_table -> embedding_table, sys_embedding_table -> embedding_table_size);
 				if (ret){
 					fprintf(stderr, "Error: failed to save updated embedding table...\n");
 					return -1;
@@ -3883,7 +3883,7 @@
 			}
 
 			if (TO_SAVE_UPDATED_PARAMS){
-				ret = save_updated_params(&dataflow_handle, compute_stream_id, t, 0, true, false, head -> buffer, combined_head_size);
+				ret = save_updated_params(&dataflow_handle, outbound_stream_id, t, 0, true, false, sys_head -> buffer, combined_head_size);
 				if (ret){
 					fprintf(stderr, "Error: failed to save updated head...\n");
 					return -1;
