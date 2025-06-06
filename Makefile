@@ -4,16 +4,16 @@ backend_name=nvidia
 all: backends libdataflow libdataflowops libdataflowmodels dataflow_models_test
 
 backends:
-	${MAKE} -c backends/host && ${MAKE} -c backends/${backend_name}
+	${MAKE} -C backends/host && ${MAKE} -C backends/${backend_name}
 
 libdataflow:
-	${MAKE} -c libdataflow
+	${MAKE} -C libdataflow
 
 libdataflowops:
-	${MAKE} -c libdataflowops
+	${MAKE} -C libdataflowops
 
 libdataflowmodels:
-	${MAKE} -c libdataflowmodels
+	${MAKE} -C libdataflowmodels
 
 dataflow_models_test:
-	${MAKE} -c test/dataflow_models
+	${MAKE} -C test/dataflow_models
