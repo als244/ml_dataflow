@@ -107,7 +107,7 @@
 	#define TO_SAVE_UPDATED_PARAMS 0
 	#define TO_SAVE_UPDATED_PARAMS_PATH "updated_params"
 
-	int save_updated_params(Dataflow_Handle * dataflow_handle, int stream_id, int step_num, int layer_num, void * updated_layer_host, size_t updated_layer_size){
+	int save_updated_params(Dataflow_Handle * dataflow_handle, int stream_id, int step_num, int layer_num, bool is_head, bool is_embed, void * updated_layer_host, size_t updated_layer_size){
 
 		int ret;
 
@@ -118,7 +118,15 @@
 		}
 
 		char filename[100];
-		sprintf(filename, "%s/step_%d_layer_%d.dat", TO_SAVE_UPDATED_PARAMS_PATH, step_num, layer_num);
+		if (is_head){
+			sprintf(filename, "%s/step_%d_head.dat", TO_SAVE_UPDATED_PARAMS_PATH, step_num);
+		}
+		else if (is_embed){
+			sprintf(filename, "%s/step_%d_embed.dat", TO_SAVE_UPDATED_PARAMS_PATH, step_num);
+		}
+		else{
+			sprintf(filename, "%s/step_%d_layer_%d.dat", TO_SAVE_UPDATED_PARAMS_PATH, step_num, layer_num);
+		}
 
 		FILE * f = fopen(filename, "w");
 		if (!f){
@@ -135,7 +143,7 @@
 	#define TO_SAVE_GRAD_BLOCKS_PRE_STEP 0
 	#define TO_SAVE_GRAD_BLOCKS_PRE_STEP_PATH "grad_blocks_pre_step"
 
-	int save_grad_blocks_pre_step(Dataflow_Handle * dataflow_handle, int stream_id, int step_num, int layer_num, void * grad_block_dev, size_t grad_block_size){
+	int save_grad_blocks_pre_step(Dataflow_Handle * dataflow_handle, int stream_id, int step_num, int layer_num, bool is_head, bool is_embed, void * grad_block_dev, size_t grad_block_size){
 
 		int ret;
 
@@ -162,8 +170,15 @@
 		
 
 		char filename[100];
-		sprintf(filename, "%s/step_%d_layer_%d.dat", TO_SAVE_GRAD_BLOCKS_PRE_STEP_PATH, step_num, layer_num);
-
+		if (is_head){
+			sprintf(filename, "%s/step_%d_head.dat", TO_SAVE_GRAD_BLOCKS_PRE_STEP_PATH, step_num);
+		}
+		else if (is_embed){
+			sprintf(filename, "%s/step_%d_embed.dat", TO_SAVE_GRAD_BLOCKS_PRE_STEP_PATH, step_num);
+		}
+		else{
+			sprintf(filename, "%s/step_%d_layer_%d.dat", TO_SAVE_GRAD_BLOCKS_PRE_STEP_PATH, step_num, layer_num);
+		}
 		FILE * f = fopen(filename, "w");
 		if (!f){
 			fprintf(stderr, "Error: failed to open file: %s...\n", filename);
@@ -3802,6 +3817,15 @@
 				fprintf(stderr, "Error: failed to submit outbound transfer to send embedding table to host...\n");
 				return -1;
 			}
+
+			if (TO_SAVE_UPDATED_PARAMS){
+				ret = save_updated_params(&dataflow_handle, compute_stream_id, t, 0, embedding_table -> embedding_table, embedding_table -> embedding_table_size);
+				if (ret){
+					fprintf(stderr, "Error: failed to save updated embedding table...\n");
+					return -1;
+				}
+			}
+
 			dataflow_handle.profiler.range_pop();
 
 			// embedding opt step done...
@@ -3856,6 +3880,14 @@
 			if (ret){
 				fprintf(stderr, "Error: failed to submit outbound transfer to send head to host...\n");
 				return -1;
+			}
+
+			if (TO_SAVE_UPDATED_PARAMS){
+				ret = save_updated_params(&dataflow_handle, compute_stream_id, t, 0, head -> buffer, combined_head_size);
+				if (ret){
+					fprintf(stderr, "Error: failed to save updated head...\n");
+					return -1;
+				}
 			}
 
 			dataflow_handle.profiler.range_pop();
