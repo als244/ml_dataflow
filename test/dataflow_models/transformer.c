@@ -8,31 +8,31 @@
 	#define RTX_5090_PEAK_BF16_TFLOPS 2.095e14
 	#define H100_PEAK_BF16_TFLOPS 9.89e14
 
-	#define PEAK_BF16_TFLOPS H100_PEAK_BF16_TFLOPS
+	#define PEAK_BF16_TFLOPS RTX_5090_PEAK_BF16_TFLOPS
 
 
 	#define HOST_MEM_GB 110
-	#define DEV_MEM_GB 29
+	#define DEV_MEM_GB 21
 
 	#define MODEL_CONFIG_SIZE_B 8
 	#define MODEL_PATH "../data/8B"
 
 	// these shoudl be auto-cofigured, testing manually for now...
 	// could also take in as command line argument...
-	#define NUM_DEV_BLOCKS 16
-	#define NUM_DEV_GRAD_BLOCKS 16
-	#define NUM_DEV_ACTIVATION_SLOTS 32
+	#define NUM_DEV_BLOCKS 2
+	#define NUM_DEV_GRAD_BLOCKS 2
+	#define NUM_DEV_ACTIVATION_SLOTS 5
 
 
 
 	// this is just for testing...
-	#define NUM_TOKENS_EXAMPLE_SEQ 1024
+	#define NUM_TOKENS_EXAMPLE_SEQ 8192
 
 	#define MAX_SEQLEN NUM_TOKENS_EXAMPLE_SEQ
 
 	// this is just for testing,.. in 
 	// reality determined dynamically...
-	#define CHUNK_SIZE 1024
+	#define CHUNK_SIZE 8192
 
 	#define TOKEN_IDS_PATH "../data/8192_token_ids_uint32.dat"
 	#define TOKEN_LABELS_PATH "../data/8192_labels_uint32.dat"
@@ -44,7 +44,7 @@
 	// the role of this is to be largest possible while still fitting in memory...
 	// because it means more shared data can utilize the parameters and update
 	// gradients on device without incorruring I/O overhead or gradient accumulation overhead
-	#define NUM_SEQ_GROUPS_PER_ROUND 1
+	#define NUM_SEQ_GROUPS_PER_ROUND 2
 
 
 	// num_chunks = num_chunks_per_seq * num_seq_groups_per_round
@@ -56,16 +56,16 @@
 	// 		chunk_size % seqlen == 0
 
 	// up to num_chunks (per round for now, because just repeating) to save...
-	#define NUM_RAW_CHUNK_IDS_LABELS_TO_SAVE 1
+	#define NUM_RAW_CHUNK_IDS_LABELS_TO_SAVE 0
 
 
 
 	// this (along with num seqs per round)modulates how frequently we will step 
 	// the optimizer...
-	#define NUM_ROUNDS_PER_STEP 1
+	#define NUM_ROUNDS_PER_STEP 16
 
 
-	#define NUM_STEPS 3
+	#define NUM_STEPS 10
 
 
 
@@ -104,7 +104,7 @@
 	#define TO_PRINT_GRAD_TRANSFERRING 0
 
 
-	#define TO_SAVE_UPDATED_PARAMS 1
+	#define TO_SAVE_UPDATED_PARAMS 0
 	#define TO_SAVE_UPDATED_PARAMS_PATH "updated_params"
 
 	int save_updated_params(Dataflow_Handle * dataflow_handle, int stream_id, int step_num, int layer_num, bool is_head, bool is_embed, void * updated_layer_host, size_t updated_layer_size){
@@ -2229,10 +2229,10 @@
 		// ADAM OPTIMIZER PARAMS...
 
 		// learning rate should have a set schedule...
-		float lr = 1e-4;
+		float lr = 2e-5;
 		float beta1 = 0.9;
 		float beta2 = 0.999;
-		float weight_decay = 1e-3;
+		float weight_decay = 1e-4;
 		float epsilon = 1e-8;
 
 
