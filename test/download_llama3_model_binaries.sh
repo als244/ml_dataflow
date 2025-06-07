@@ -28,8 +28,7 @@ for file_base in "${FILES_TO_PROCESS[@]}"; do
     
     # Create the destination directory name by removing "_ref" from the file base.
     # e.g., "1B_ref" becomes "1B"
-    DESTINATION_DIR_NAME="${file_base%_ref}"
-    FULL_DEST_PATH="${DESTINATION_PARENT}/${DESTINATION_DIR_NAME}"
+    FULL_DEST_PATH="${DESTINATION_PARENT}"
 
     echo "--- Processing ${ZIP_FILE} ---"
 
