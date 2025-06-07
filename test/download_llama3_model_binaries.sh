@@ -14,7 +14,7 @@ FILES_TO_PROCESS=("1B_ref" "8B_ref")
 BASE_URL="https://dataflowsim.sunshein.net/static/data"
 
 # The parent directory for the extracted data.
-DESTINATION_PARENT="test/data"
+DESTINATION_PARENT="data"
 
 # --- Main Logic ---
 echo "Starting data download and extraction process..."
