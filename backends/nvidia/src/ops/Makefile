@@ -144,28 +144,28 @@ lib/external/${EXTERNAL_OP_ATTENTION_LIB}: build_flash2_lib build_flash3_lib ${E
 
 # Retry loops for flash libs because nvcc sometimes has errors...
 build_flash3_lib:
-	for i in $$(seq 1 10); do \
+	for i in $$(seq 1 20); do \
 		if ${MAKE} -C ${FLASH3_DIR}; then \
 			echo "Successfully built flash3 lib."; \
 			exit 0; \
 		fi; \
-		if [ $$i -lt 10 ]; then \
-			echo "make -C ${FLASH3_DIR} failed. Retrying (attempt $$i/10)..."; \
-			sleep 2; \
+		if [ $$i -lt 20 ]; then \
+			echo "make -C ${FLASH3_DIR} failed. Retrying (attempt $$i/20)..."; \
+			sleep 10; \
 		fi; \
 	done; \
 	echo "Error: Failed to build flash3 lib after 10 attempts. Something is likely wrong..."; \
 	exit 1;
 
 build_flash2_lib:
-	for i in $$(seq 1 10); do \
+	for i in $$(seq 1 20); do \
 		if ${MAKE} -C ${FLASH2_DIR}; then \
 			echo "Successfully built flash2 lib."; \
 			exit 0; \
 		fi; \
-		if [ $$i -lt 10 ]; then \
-			echo "make -C ${FLASH2_DIR} failed. Retrying (attempt $$i/10)..."; \
-			sleep 2; \
+		if [ $$i -lt 20 ]; then \
+			echo "make -C ${FLASH2_DIR} failed. Retrying (attempt $$i/20)..."; \
+			sleep 10; \
 		fi; \
 	done; \
 	echo "Error: Failed to build flash2 lib after 10 attempts. Something is likely wrong..."; \
