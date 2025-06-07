@@ -12,30 +12,30 @@
 
 
 #define HOST_MEM_GB 110
-#define DEV_MEM_GB 21
+#define DEV_MEM_GB 28
 
-#define MODEL_CONFIG_SIZE_B 1
-#define MODEL_PATH "../data/1B"
+#define MODEL_CONFIG_SIZE_B 8
+#define MODEL_PATH "../data/8B"
 
 // these shoudl be auto-cofigured, testing manually for now...
 // could also take in as command line argument...
-#define NUM_DEV_BLOCKS 16
-#define NUM_DEV_GRAD_BLOCKS 16
-#define NUM_DEV_ACTIVATION_SLOTS 24
+#define NUM_DEV_BLOCKS 32
+#define NUM_DEV_GRAD_BLOCKS 2
+#define NUM_DEV_ACTIVATION_SLOTS 4 
 
 
 
 // this is just for testing...
-#define NUM_TOKENS_EXAMPLE_SEQ 2048
+#define NUM_TOKENS_EXAMPLE_SEQ 1024
 
 #define MAX_SEQLEN NUM_TOKENS_EXAMPLE_SEQ
 
 // this is just for testing,.. in 
 // reality determined dynamically...
-#define CHUNK_SIZE 2048
+#define CHUNK_SIZE 1024
 
-#define TOKEN_IDS_PATH "../data/2048_token_ids_uint32.dat"
-#define TOKEN_LABELS_PATH "../data/2048_labels_uint32.dat"
+#define TOKEN_IDS_PATH "../data/8192_token_ids_uint32.dat"
+#define TOKEN_LABELS_PATH "../data/8192_labels_uint32.dat"
 
 
 // this determines total number of chunks / activations we need to store in 
@@ -56,7 +56,7 @@
 // 		chunk_size % seqlen == 0
 
 // up to num_chunks (per round for now, because just repeating) to save...
-#define NUM_RAW_CHUNK_IDS_LABELS_TO_SAVE 1
+#define NUM_RAW_CHUNK_IDS_LABELS_TO_SAVE 0
 
 
 
@@ -65,7 +65,7 @@
 #define NUM_ROUNDS_PER_STEP 1
 
 
-#define NUM_STEPS 1
+#define NUM_STEPS 40
 
 #define NUM_ADAM_THREADS 12	
 
@@ -77,7 +77,7 @@
 // config for what to print...
 
 #define TO_PRINT_THROUGHPUT_METRICS 1
-#define TO_PRINT_THROUGHPUT_METRICS_VERBOSE 1
+#define TO_PRINT_THROUGHPUT_METRICS_VERBOSE 0
 
 #define TO_PRINT_ROUND_LOSS 1
 #define TO_PRINT_CHUNK_LOSS 0
@@ -1518,7 +1518,7 @@ int main(int argc, char * argv[]){
 	// SAME KERNEL WORKSPACE ACROSS ALL COMPUTATIONS!
 
 	// attention kernel bwd needs good amount of workspace...
-	uint64_t kernelWorkspaceBytes = 1UL << 29;
+	uint64_t kernelWorkspaceBytes = 1UL << 30;
 	void * kernelWorkspace = cur_dev_mem;
 	cur_dev_mem += kernelWorkspaceBytes;
 	used_dev_mem += kernelWorkspaceBytes;
@@ -2026,7 +2026,7 @@ int main(int argc, char * argv[]){
 	// JUST FOR DEMO we are using the same sequence distribution for every round and eveyr step...
 
 	// seqs per chunk = 1 if seq uses >= 1 chunks, otherwise packing multiple seqs per chunk...
-	int seqs_per_round = (num_seq_groups_per_round * num_chunks_per_seq) * num_seqs_per_chunk;
+	int seqs_per_round = num_seq_groups_per_round * num_seqs_per_chunk;
 	int seqs_per_step = seqs_per_round * num_rounds_per_step;
 	printf("Chunk size: %d\n", chunk_size);
 	printf("Chunks per round: %d\n", num_chunks);

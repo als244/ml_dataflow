@@ -16,23 +16,23 @@
 #define NUM_ADAM_THREADS 12	
 
 #define HOST_MEM_GB 110
-#define DEV_MEM_GB 21
+#define DEV_MEM_GB 28
 
 #define MODEL_CONFIG_SIZE_B 8
 #define MODEL_PATH "../data/8B"
 
 
 // this is just for testing...
-#define NUM_TOKENS_EXAMPLE_SEQ 2048
+#define NUM_TOKENS_EXAMPLE_SEQ 1024
 
 #define MAX_SEQLEN NUM_TOKENS_EXAMPLE_SEQ
 
 // this is just for testing,.. in 
 // reality determined dynamically...
-#define CHUNK_SIZE 2048
+#define CHUNK_SIZE 1024
 
-#define TOKEN_IDS_PATH "../data/2048_token_ids_uint32.dat"
-#define TOKEN_LABELS_PATH "../data/2048_labels_uint32.dat"
+#define TOKEN_IDS_PATH "../data/8192_token_ids_uint32.dat"
+#define TOKEN_LABELS_PATH "../data/8192_labels_uint32.dat"
 
 
 // this determines total number of chunks / activations we need to store in 
@@ -1993,7 +1993,7 @@ int main(int argc, char * argv[]){
 	// JUST FOR DEMO we are using the same sequence distribution for every round and eveyr step...
 
 	// seqs per chunk = 1 if seq uses >= 1 chunks, otherwise packing multiple seqs per chunk...
-	int seqs_per_round = (num_seq_groups_per_round * num_chunks_per_seq) * num_seqs_per_chunk;
+	int seqs_per_round = num_seq_groups_per_round * num_seqs_per_chunk;
 	int seqs_per_step = seqs_per_round * num_rounds_per_step;
 	printf("Chunk size: %d\n", chunk_size);
 	printf("Chunks per round: %d\n", num_chunks);
