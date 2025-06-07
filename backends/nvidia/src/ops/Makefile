@@ -144,31 +144,32 @@ lib/external/${EXTERNAL_OP_ATTENTION_LIB}: build_flash2_lib build_flash3_lib ${E
 
 # Retry loops for flash libs because nvcc sometimes has errors...
 build_flash3_lib:
-	-for i in 1 2 3 4 5 6 7 8 9 10; do \
+	for i in $$(seq 1 10); do \
 		if ${MAKE} -C ${FLASH3_DIR}; then \
 			echo "Successfully built flash3 lib."; \
-			break; \
-		elif [ $$i -lt 10 ]; then \
+			exit 0; \
+		fi; \
+		if [ $$i -lt 10 ]; then \
 			echo "make -C ${FLASH3_DIR} failed. Retrying (attempt $$i/10)..."; \
 			sleep 2; \
-		else \
-			echo "Error: Failed to build flash3 lib after 10 attempts."; \
 		fi; \
-	done
+	done; \
+	echo "Error: Failed to build flash3 lib after 10 attempts. Continuing build process regardless."; \
+	exit 1;
 
 build_flash2_lib:
-	-for i in 1 2 3 4 5 6 7 8 9 10; do \
+	for i in $$(seq 1 10); do \
 		if ${MAKE} -C ${FLASH2_DIR}; then \
 			echo "Successfully built flash2 lib."; \
-			break; \
-		elif [ $$i -lt 10 ]; then \
+			exit 0; \
+		fi; \
+		if [ $$i -lt 10 ]; then \
 			echo "make -C ${FLASH2_DIR} failed. Retrying (attempt $$i/10)..."; \
 			sleep 2; \
-		else \
-			echo "Error: Failed to build flash2 lib after 10 attempts."; \
 		fi; \
-	done
-
+	done; \
+	echo "Error: Failed to build flash2 lib after 10 attempts. Continuing build process regardless."; \
+	exit 1;
 
 ${EXTERNAL_OP_PATH}/attention_helper/objs/attention_helper.o: ${EXTERNAL_OP_PATH}/attention_helper/src/attention_helper.c
 	${CC} ${CFLAGS} ${EXTERNAL_OP_ATTENTION_LIB_ALL_INCLUDES} -c $< -o $@
