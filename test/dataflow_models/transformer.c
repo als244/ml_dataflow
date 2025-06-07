@@ -6,6 +6,7 @@
 
 	#define RTX_3090_PEAK_BF16_TFLOPS 7.1e13
 	#define RTX_5090_PEAK_BF16_TFLOPS 2.095e14
+	#define A100_PEAK_BF16_TFLOPS 3.12e14
 	#define H100_PEAK_BF16_TFLOPS 9.89e14
 
 	#define PEAK_BF16_TFLOPS H100_PEAK_BF16_TFLOPS
@@ -541,7 +542,7 @@
 		sprintf(layer_path, "%s/embed/tok_embeddings.weight", MODEL_PATH);
 		FILE * fp = fopen(layer_path, "rb");
 		if (!fp){
-			fprintf(stderr, "Error: failed to open data/embed/tok_embedding.weight...\n");
+			fprintf(stderr, "Error: failed to open %s...\n", layer_path);
 			return -1;
 		}
 
@@ -581,7 +582,7 @@
 
 		fp = fopen(layer_path, "rb");
 		if (!fp){
-			fprintf(stderr, "Error: failed to open data/head/combined_head.weight...\n");
+			fprintf(stderr, "Error: failed to open %s...\n", layer_path);
 			return -1;
 		}
 
