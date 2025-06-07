@@ -154,7 +154,7 @@ build_flash3_lib:
 			sleep 2; \
 		fi; \
 	done; \
-	echo "Error: Failed to build flash3 lib after 10 attempts. Continuing build process regardless."; \
+	echo "Error: Failed to build flash3 lib after 10 attempts. Something is likely wrong..."; \
 	exit 1;
 
 build_flash2_lib:
@@ -168,7 +168,7 @@ build_flash2_lib:
 			sleep 2; \
 		fi; \
 	done; \
-	echo "Error: Failed to build flash2 lib after 10 attempts. Continuing build process regardless."; \
+	echo "Error: Failed to build flash2 lib after 10 attempts. Something is likely wrong..."; \
 	exit 1;
 
 ${EXTERNAL_OP_PATH}/attention_helper/objs/attention_helper.o: ${EXTERNAL_OP_PATH}/attention_helper/src/attention_helper.c
