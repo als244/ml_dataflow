@@ -144,7 +144,7 @@ lib/external/${EXTERNAL_OP_ATTENTION_LIB}: build_flash2_lib build_flash3_lib ${E
 
 # Retry loops for flash libs because nvcc sometimes has errors...
 build_flash3_lib:
-    @for i in $$(seq 1 20); do \
+	@for i in $$(seq 1 20); do \
         if ${MAKE} -C ${FLASH3_DIR}; then \
             echo "Successfully built flash3 lib."; \
             break; \
@@ -158,7 +158,7 @@ build_flash3_lib:
     done
 
 build_flash2_lib:
-    @for i in $$(seq 1 20); do \
+	@for i in $$(seq 1 20); do \
         if ${MAKE} -C ${FLASH2_DIR}; then \
             echo "Successfully built flash2 lib."; \
             break; \
