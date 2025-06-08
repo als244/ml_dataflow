@@ -70,15 +70,6 @@ Plan is to build a robust core of C libraries and create user-friendly Python bi
 
 The intial emphasis is for training; after this is working properly, focus will shift to inference. 
 
-----
-
-- ***The goal is for streams/command queues to be a first-class citizen***. This is the major distinction between this 'scaffolding' and others. 
-    - While streams can be employed through PyTorch, the actual mechanism for doing so is via a non-intuitive Python context (`with stream(): ...`); expressing desired behavior is challenging, and it is even unclear if the program is actually behaving in inteded manner (especially when employing addtional frameworks on top of base framework). 
-    - Instead of treating streams as an add-on feature, the bottom level library (`libdataflow`) explicity requires stream identifiers for every operation and data-transfer.
-        - Particularly relevant for managing compute & communication overlap along with fine-grained synchronization
-
-- There will be an initial collection of default functionality (backend implementions, operation interfaces, backend operation implementations, model definitions, & orchestration management). 
-    - However, the design allows for plug-and-play customizations to the base set of functionality (additions or replacement). Any new research innovations (whether it be new operations or compositions, improved backend kernels, novel hardware backends, different communication schemes, etc.) can be integrated at its corresponding level of the stack while keeping the other components fixed. 
 
 
 ## API
@@ -99,6 +90,17 @@ The intial emphasis is for training; after this is working properly, focus will 
 | Set of Default Operations (interfaces): **libdataflowops** |
 | &#11015;                 |
 | Hardware Abstraction: **libdataflow** |
+
+----
+
+- ***The goal is for streams/command queues to be a first-class citizen***. This is the major distinction between this 'scaffolding' and others. 
+    - While streams can be employed through PyTorch, the actual mechanism for doing so is via a non-intuitive Python context (`with stream(): ...`); expressing desired behavior is challenging, and it is even unclear if the program is actually behaving in inteded manner (especially when employing addtional frameworks on top of base framework). 
+    - Instead of treating streams as an add-on feature, the bottom level library (`libdataflow`) explicity requires stream identifiers for every operation and data-transfer.
+        - Particularly relevant for managing compute & communication overlap along with fine-grained synchronization
+
+- There will be an initial collection of default functionality (backend implementions, operation interfaces, backend operation implementations, model definitions, & orchestration management). 
+    - However, the design allows for plug-and-play customizations to the base set of functionality (additions or replacement). Any new research innovations (whether it be new operations or compositions, improved backend kernels, novel hardware backends, different communication schemes, etc.) can be integrated at its corresponding level of the stack while keeping the other components fixed. 
+
 
 
 You can see more details about each of the components [here](docs/library_details.md)
