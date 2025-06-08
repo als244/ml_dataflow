@@ -32,7 +32,7 @@ The objective is to offer the best of both worlds.
 
 Currently has support for: 
 - Nvidia GPUs
-    - >= sm80 (Ampere, Ada, Hopper, Blackwell)
+    - sm80+ (Ampere, Ada, Hopper, Blackwell)
 
 1. *Download this repo*: 
 
