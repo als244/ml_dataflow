@@ -60,7 +60,7 @@ cd test/dataflow_models
 ./transformer
 ```
 
-**The example training program does finetuning of llama3 8B model with data as 64k sequence length** (the first 65536 tokens of harry potter, where this one sequence is repeated); *the program expects 1 device with 80 GB of device memory and 200 GB of host memory* -- ***it should achieve ~45-47% MFU on a Nvidia H100***. More general support for dataset ingestion, sequence lengths, hardware/memory flexibility, and other model checkpoints/sizes is coming soon.
+**The example training program does finetuning of llama3 8B model with data as 64k sequence length** (the first 65536 tokens of harry potter, where this one sequence is repeated); ***the program expects 1 device with 80 GB of device memory and 200 GB of host memory --- it should achieve ~45-47% MFU on a Nvidia H100***. More general support for dataset ingestion, sequence lengths, hardware/memory flexibility, and other model checkpoints/sizes is coming soon.
 
 ----
 
