@@ -44,7 +44,7 @@ git clone git@github.com:als244/ml_dataflow.git
 make -j <NUM_PROCS>
 ```
 
-####### Note that building the flash2 and flash3 wrapper libraries may take some time (a few hours)...using more processors will help. 
+###### Note that building the flash2 and flash3 wrapper libraries may take some time (a few hours)...using more processors will help. 
 
 3. *Download model checkpoints (llama3 1B and 8B instruct models in raw binary format)*:
 
