@@ -30,7 +30,7 @@ The objective is to offer the best of both worlds.
 
 #### Supported hardware
 
-Currently has support for: Nvidia sm80, sm86, sm89, sm90, sm120. 
+Currently has support for: Nvidia GPUs >= sm80 (Ampere and newer)
 
 1. *Download this repo*: 
 
