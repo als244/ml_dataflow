@@ -32,39 +32,37 @@ The objective is to offer the best of both worlds.
 
 Currently has support for: Nvidia sm80, sm86, sm89, sm90, sm120. 
 
-1. Download this repo: 
+1. *Download this repo*: 
 
 ```console
 git clone git@github.com:als244/ml_dataflow.git
 ```
 
-2. Build from source:
+2. *Build from source*:
 
 ```console
 make -j <NUM_PROCS>
 ```
 
-*Note that building the flash2 and flash3 repos may take some time. 
+####### Note that building the flash2 and flash3 wrapper libraries may take some time (a few hours)...using more processors will help. 
 
-3. Download model checkpoints (llama3 1B and 8B instruct models in raw binary format):
+3. *Download model checkpoints (llama3 1B and 8B instruct models in raw binary format)*:
 
 ```console
 cd test
 ./download_llama3_model_binaries.sh
 ```
 
-4. Test out training on an example sequence:
+4. *Test out training*:
 
 ```console
 cd test/dataflow_models
 ./transformer
 ```
 
-(The example program does finetuning llama3 8B model with data as the first 65536 tokens of harry potter and repeats this 64k sequence. 
-***The example training program expects 80 GB of device memory and 200GB of host memory -- it should achieve ~45-47% MFU on Nvidia H100***. More general support for dataset ingestion, sequence lengths, hardware/memory flexibility, and other model checkpoints/sizes is coming soon.)
+***The example training program does finetuning llama3 8B model with data as 64k sequence length (the first 65536 tokens of harry potter, repeated); the program expects 80 GB of device memory and 200GB of host memory -- it should achieve ~45-47% MFU on Nvidia H100***. More general support for dataset ingestion, sequence lengths, hardware/memory flexibility, and other model checkpoints/sizes is coming soon.
 
-
-***
+----
 
 You can try out a [simulator](https://dataflowsim.sunshein.net) for what this repo aims to accomplish.
 
