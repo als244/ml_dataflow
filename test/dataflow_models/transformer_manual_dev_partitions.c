@@ -20,6 +20,10 @@
 
 	// these shoudl be auto-cofigured, testing manually for now...
 	// could also take in as command line argument...
+	#define NUM_DEV_BLOCKS 4
+	#define NUM_DEV_GRAD_BLOCKS 4
+	#define NUM_DEV_ACTIVATION_SLOTS 4 
+
 
 
 	// this is just for testing...
@@ -188,36 +192,6 @@
 		return 0;
 	}
 	
-
-	uint64_t get_chunk_activations_size(uint64_t chunk_num_tokens, uint64_t model_dim, uint64_t kv_dim, uint64_t num_active_experts, uint64_t expert_dim, DataflowDatatype fwd_dt){
-
-		uint64_t chunk_act_els = 0;
-
-		// input
-		chunk_act_els += chunk_num_tokens * model_dim;
-
-		// q proj
-		chunk_act_els += chunk_num_tokens * model_dim;
-
-		// k, v projs
-		chunk_act_els += 2 * chunk_num_tokens * kv_dim;
-
-		// attn output
-		chunk_act_els += chunk_num_tokens * model_dim;
-
-		// attn proj
-		chunk_act_els += chunk_num_tokens * model_dim;
-
-		// saved x1 and x3 ffn activations
-		chunk_act_els += num_active_experts * 2 * chunk_num_tokens * expert_dim;
-
-		// multiply by dtype size (for now assuming all same dtype, but in reality the ffn dtype might be 8 bit, and attn 16-bit)
-
-		uint64_t dtype_size = dataflow_sizeof_element(fwd_dt);
-
-		return chunk_act_els * dtype_size; 
-
-	}
 
 
 	int main(int argc, char * argv[]){
@@ -417,10 +391,8 @@
 		int num_shared_experts = 1;
 		int num_total_routed_experts = 0;
 		int num_active_routed_experts = 0;
-		int num_total_active_experts = num_shared_experts + num_active_routed_experts;
 		int expert_dim = ffn_dim;
-
-
+		
 
 		MoE_Config * moe_config = NULL;
 
@@ -623,47 +595,6 @@
 		fclose(fp);
 
 
-		// SYS GRADIENTS!
-
-		uint64_t aligned_block_bwd_size;
-
-		Transformer_Block ** sys_grad_blocks = malloc(n_layers * sizeof(Transformer_Block *));
-		if (!sys_grad_blocks){
-			fprintf(stderr, "Error: failed to allocate sys_grad_blocks...\n");
-			return -1;
-		}
-
-		for (int i = 0; i < n_layers; i++){
-			sys_grad_blocks[i] = init_transformer_block(i, block_bwd_dt, compute_bwd_dt,
-															norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
-															eps, theta,
-															num_q_heads, num_kv_heads, head_dim,
-															ffn_dim,
-															moe_config,
-															pointer_alignment);
-
-			if (!sys_grad_blocks[i]){
-				fprintf(stderr, "Error: failed to init transformer block grad #%d...\n", i);
-				return -1;
-			}
-
-			if (i == 0){
-				aligned_block_bwd_size = get_transformer_block_aligned_size(sys_grad_blocks[i]);
-			}
-
-			ret = bind_transformer_block(cur_host_mem, sys_grad_blocks[i]);
-			if (ret){
-				fprintf(stderr, "Error: failed to bind transformer block grad #%d...\n", i);
-				return -1;
-			}
-
-			memset(sys_grad_blocks[i] -> buffer, 0, aligned_block_bwd_size);
-
-			cur_host_mem += aligned_block_bwd_size;
-			used_host_mem += aligned_block_bwd_size;
-		}
-
-
 		// HANDLING OPTIMIZER (assuming same dtype as block for now)...
 
 
@@ -808,176 +739,8 @@
 		*/
 		
 
-		// SAME KERNEL WORKSPACE ACROSS ALL COMPUTATIONS!
-
-		// attention kernel bwd needs good amount of workspace...
-		uint64_t kernelWorkspaceBytes = 1UL << 30;
-		void * kernelWorkspace = cur_dev_mem;
-		cur_dev_mem += kernelWorkspaceBytes;
-		used_dev_mem += kernelWorkspaceBytes;
-		// ensure alignment for matmuls..	
-		used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
-		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 
-
-		// DETERMINE NUM DEV BLOCKS, NUM GRAD BLOCKS, and NUM DEV ACTIVATIONS
-
-		uint64_t fwd_block_size = aligned_block_size;
-		uint64_t bwd_block_size = aligned_block_bwd_size;
-
-
-		// CONTEXT AND GRAD CONTEXTS!
-
-		int seq_len = NUM_TOKENS_EXAMPLE_SEQ;
-
-		// for now just repeating the same sequence for perf testing...
-
-		int num_seq_groups_per_round = NUM_SEQ_GROUPS_PER_ROUND;
-
-		int chunk_size = CHUNK_SIZE;
-
-		int max_tokens_per_chunk = chunk_size;
-
-
-		int num_tokens_example_seq = NUM_TOKENS_EXAMPLE_SEQ;
-
-		int num_chunks_per_seq;
-		int num_seqs_per_chunk;
-
-		if (seq_len <= chunk_size){
-			num_chunks_per_seq = 1;
-			num_seqs_per_chunk = chunk_size / seq_len;
-		} else {
-			num_chunks_per_seq = MY_CEIL(seq_len, chunk_size);
-			num_seqs_per_chunk = 1;
-		}
-
-		int num_chunks = num_chunks_per_seq * num_seq_groups_per_round;
-
-
-		int max_seqlen = MAX_SEQLEN;
-
-		uint64_t context_tokens = MY_MAX(max_tokens_per_chunk, max_seqlen);
-
-		uint64_t context_buffer_size = 2 * (uint64_t) context_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_size;
-
-		uint64_t context_buffer_bwd_size = 2 * (uint64_t) context_tokens * (uint64_t) kv_dim * (uint64_t) block_bwd_dt_size;
-
-		uint64_t total_sticky_context_size = context_buffer_size + context_buffer_bwd_size;
-
-		uint64_t sticky_embedding_size = embedding_num_els * block_dt_size;
-		uint64_t sticky_embedding_grad_size = embedding_num_els * block_bwd_dt_size;
-		uint64_t sticky_embedding_opt_size = embedding_num_els * (opt_mean_dt_size + opt_var_dt_size);
-		uint64_t total_sticky_embedding_size = sticky_embedding_size + sticky_embedding_grad_size + sticky_embedding_opt_size;
-
-		uint64_t sticky_head_size = head_num_els * block_dt_size;
-		uint64_t sticky_head_grad_size = head_num_els * block_bwd_dt_size;
-		uint64_t sticky_head_opt_size = head_num_els * (opt_mean_dt_size + opt_var_dt_size);
-		uint64_t total_sticky_head_size = sticky_head_size + sticky_head_grad_size + sticky_head_opt_size;
-
-		uint64_t total_base_dev_mem = kernelWorkspaceBytes + total_sticky_context_size + total_sticky_embedding_size + total_sticky_head_size;
-
-		uint64_t sticky_transitions_size = 2 * (uint64_t) num_chunks * chunk_size * (uint64_t) model_dim * block_dt_size;
-		uint64_t sticky_dev_logits_size = chunk_size * (uint64_t) vocab_size * block_bwd_dt_size;
-		uint64_t sticky_dev_recomputed_buffer_size = 2 * chunk_size * (uint64_t) model_dim * block_dt_size;
-		uint64_t sticky_dev_working_grad_act_size = get_chunk_activations_size(chunk_size, model_dim, kv_dim, num_total_active_experts, expert_dim, block_bwd_dt);
-		uint64_t sticky_dev_head_act_size = chunk_size * ((uint64_t) model_dim + sizeof(float) + (uint64_t) vocab_size) * block_dt_size; 
-		// now also incoporate the other sicy buffers...
-		total_base_dev_mem += (sticky_transitions_size + sticky_dev_logits_size + sticky_dev_recomputed_buffer_size + sticky_dev_working_grad_act_size + sticky_dev_head_act_size);
-
-		
-
-		printf("Total Base Dev Mem: %lu\n", total_base_dev_mem);
-		
-		uint64_t remain_dev_mem = dev_size_bytes - total_base_dev_mem;
-
-		if (remain_dev_mem <= 0){
-			fprintf(stderr, "Error: not enough memory to hold embeddding (& grad + opt) + head (& grad + op) + context fwd + bwd + kernel workspace size. Requires %lu bytes, but only have %lu bytes", total_base_dev_mem, dev_size_bytes);
-			return -1;
-		}
-
-		uint64_t chunk_act_size = get_chunk_activations_size(chunk_size, model_dim, kv_dim, num_total_active_experts, expert_dim, block_dt);
-
-		uint64_t per_layer_act_size = chunk_act_size * (uint64_t) num_chunks;
-
-		uint64_t required_mem = fwd_block_size + bwd_block_size + 2 * chunk_act_size;
-
-		if (remain_dev_mem < required_mem){
-			fprintf(stderr, "Error: not enough device memory to run training. Requires 1 fwd block 1 bwd block and 2 chunk activations = %lu bytes, but after sticky buffers only have: %lu...\n", required_mem, remain_dev_mem);
-			return -1;
-		}
-
-		// TODO: fix this below, for now just assuming even ratio of fwd and bwd...
-		// we want it such that we properly ratio the number of saved activations and layers
-		// Probably is be better to have more fwd blocks vs. bwd blocks if the model doens't fully fit..
-		// so by default making it a 2:1 ratio unless the model fits...
-		
-		//uint64_t per_layer_full_size = fwd_block_size + per_layer_act_size + 0.5 * bwd_block_size;
-
-		uint64_t per_layer_full_size = fwd_block_size + per_layer_act_size + bwd_block_size;
-
-		int num_full_layers_on_dev = MY_MIN(remain_dev_mem / per_layer_full_size, n_layers);
-
-		int NUM_DEV_BLOCKS;
-		int NUM_DEV_GRAD_BLOCKS;
-		int NUM_DEV_ACTIVATION_SLOTS;
-
-		// we already passed check to ensure enough memory for 1 fwd, 1 bwd, 2 chunks, so this means
-		// that we don't have enough memory for all chunks...
-		if (num_full_layers_on_dev == 0){
-			
-		
-
-			NUM_DEV_BLOCKS = 1;
-			NUM_DEV_GRAD_BLOCKS = 1;
-			NUM_DEV_ACTIVATION_SLOTS = (remain_dev_mem - fwd_block_size - bwd_block_size) / chunk_act_size;
-			// should never get here because already checked...
-			if (NUM_DEV_ACTIVATION_SLOTS < 2){
-				fprintf(stderr, "Error: not enough device memory to run training. Requires 1 fwd block 1 bwd block and 2 chunk activations = %lu bytes, but after sticky buffers only have: %lu...\n", required_mem, remain_dev_mem);
-				return -1;
-			}
-			
-		}
-		else{
-			NUM_DEV_BLOCKS = num_full_layers_on_dev;
-			NUM_DEV_ACTIVATION_SLOTS = num_full_layers_on_dev * num_chunks;
-			NUM_DEV_GRAD_BLOCKS = num_full_layers_on_dev;
-
-			if (NUM_DEV_GRAD_BLOCKS == 0){
-				fprintf(stderr, "Error: not enough dev memory to store at least 1 grad block, cannot run training...\n");
-				return -1;
-			}
-
-			if (num_full_layers_on_dev < n_layers){
-				uint64_t base_fwd_space = (uint64_t) NUM_DEV_BLOCKS * fwd_block_size + (uint64_t) NUM_DEV_ACTIVATION_SLOTS * chunk_act_size;
-				uint64_t base_bwd_space = ((uint64_t) NUM_DEV_GRAD_BLOCKS * bwd_block_size);
-				uint64_t base_space = base_fwd_space + base_bwd_space;
-
-
-				uint64_t leftover_space = remain_dev_mem - base_space;
-				
-				if (leftover_space > fwd_block_size){
-					NUM_DEV_BLOCKS++;
-					leftover_space -= fwd_block_size;
-				}
-
-				uint64_t remaining_slots = n_layers * num_chunks - NUM_DEV_ACTIVATION_SLOTS;
-
-				// for a given a layer there is at most num_chunks corresponding slots...
-				uint64_t leftover_act_slots = MY_MIN(remaining_slots, leftover_space / chunk_act_size);
-
-				NUM_DEV_ACTIVATION_SLOTS += leftover_act_slots;
-
-			}
-		}
-
-		if (NUM_DEV_BLOCKS == 1){
-			fprintf(stderr, "Warning: not enough memory to store mulitple layers on device only holding 1 block and 1 gradient at a time...; performance may be severely impacted...\n");
-		}
-
-		
-		printf("\n\n\n\nMEMORY PARTITION CONFIGURATION:\n\tNum Dev Blocks: %d\n\tNum Dev Grad Blocks: %d\n\tNum Dev Activation Slots: %d\n\n\n\n", NUM_DEV_BLOCKS, NUM_DEV_GRAD_BLOCKS, NUM_DEV_ACTIVATION_SLOTS);
 
 		// PARTIONING DEVICE MEMORY...!!!
 
@@ -1107,7 +870,45 @@
 
 
 
-		// DEV GRADIENTS!
+		// GRADIENTS!
+
+		uint64_t aligned_block_bwd_size;
+
+		Transformer_Block ** sys_grad_blocks = malloc(n_layers * sizeof(Transformer_Block *));
+		if (!sys_grad_blocks){
+			fprintf(stderr, "Error: failed to allocate sys_grad_blocks...\n");
+			return -1;
+		}
+
+		for (int i = 0; i < n_layers; i++){
+			sys_grad_blocks[i] = init_transformer_block(i, block_bwd_dt, compute_bwd_dt,
+															norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
+															eps, theta,
+															num_q_heads, num_kv_heads, head_dim,
+															ffn_dim,
+															moe_config,
+															pointer_alignment);
+
+			if (!sys_grad_blocks[i]){
+				fprintf(stderr, "Error: failed to init transformer block grad #%d...\n", i);
+				return -1;
+			}
+
+			if (i == 0){
+				aligned_block_bwd_size = get_transformer_block_aligned_size(sys_grad_blocks[i]);
+			}
+
+			ret = bind_transformer_block(cur_host_mem, sys_grad_blocks[i]);
+			if (ret){
+				fprintf(stderr, "Error: failed to bind transformer block grad #%d...\n", i);
+				return -1;
+			}
+
+			memset(sys_grad_blocks[i] -> buffer, 0, aligned_block_bwd_size);
+
+			cur_host_mem += aligned_block_bwd_size;
+			used_host_mem += aligned_block_bwd_size;
+		}
 		
 
 
@@ -1384,7 +1185,33 @@
 
 
 
-	
+		// CONTEXT AND GRAD CONTEXTS!
+
+		int seq_len = NUM_TOKENS_EXAMPLE_SEQ;
+
+		// for now just repeating the same sequence for perf testing...
+
+		int num_seq_groups_per_round = NUM_SEQ_GROUPS_PER_ROUND;
+
+		int chunk_size = CHUNK_SIZE;
+
+		int max_tokens_per_chunk = chunk_size;
+
+
+		int num_tokens_example_seq = NUM_TOKENS_EXAMPLE_SEQ;
+
+		int num_chunks_per_seq;
+		int num_seqs_per_chunk;
+
+		if (seq_len <= chunk_size){
+			num_chunks_per_seq = 1;
+			num_seqs_per_chunk = chunk_size / seq_len;
+		} else {
+			num_chunks_per_seq = MY_CEIL(seq_len, chunk_size);
+			num_seqs_per_chunk = 1;
+		}
+
+		int num_chunks = num_chunks_per_seq * num_seq_groups_per_round;
 		
 		
 		char inp_file_path[PATH_MAX];
@@ -1704,7 +1531,17 @@
 
 		}
 
-		
+		// SAME KERNEL WORKSPACE ACROSS ALL COMPUTATIONS!
+
+		// attention kernel bwd needs good amount of workspace...
+		uint64_t kernelWorkspaceBytes = 1UL << 30;
+		void * kernelWorkspace = cur_dev_mem;
+		cur_dev_mem += kernelWorkspaceBytes;
+		used_dev_mem += kernelWorkspaceBytes;
+		// ensure alignment for matmuls..	
+		used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
+		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
+
 
 
 
@@ -1720,6 +1557,9 @@
 
 		// CREATE DEVICE CONTEXT THAT ALL CHUNKS WILL REFERENCE...
 
+		int max_seqlen = MAX_SEQLEN;
+
+		uint32_t context_tokens = MY_MAX(max_tokens_per_chunk, max_seqlen);
 
 
 		// FOR SINGLE DEVICE CASE WE ONLY NEED TWO, 
@@ -1752,7 +1592,7 @@
 		}
 
 
-		
+		uint64_t context_buffer_size = 2 * (uint64_t) context_tokens * (uint64_t) kv_dim * (uint64_t) block_dt_size;
 
 
 		fwd_context -> contextBuffer = cur_dev_mem;
@@ -1788,6 +1628,7 @@
 		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 		*/
 
+		uint64_t context_buffer_bwd_size = 2 * (uint64_t) context_tokens * (uint64_t) kv_dim * (uint64_t) block_bwd_dt_size;
 		
 		(bwd_context) -> contextBuffer = cur_dev_mem;
 		(bwd_context) -> contextBufferBytes = context_buffer_bwd_size;
