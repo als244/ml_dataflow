@@ -1466,8 +1466,8 @@ class SimulationRunner:
         safe_attn_fwd_eff = self.attn_fwd_efficiency if self.attn_fwd_efficiency > 0 else 1.0
         safe_attn_bwd_eff = self.attn_bwd_efficiency if self.attn_bwd_efficiency > 0 else 1.0
         safe_head_eff = self.head_efficiency if self.head_efficiency > 0 else 1.0
-          # Head FLOPS: fwd + bwd (assuming bwd similar to fwd)
-        head_flops = 2 * (2 * self.chunk_size * self.model_dim * self.vocab_size)
+          # Head FLOPS: fwd + bwd x + bwd w (assuming bwd similar to fwd)
+        head_flops = 3 * (2 * self.chunk_size * self.model_dim * self.vocab_size)
 
         self.headTimeSec = head_flops / (safe_flops * safe_head_eff)
         
