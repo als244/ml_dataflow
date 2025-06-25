@@ -74,8 +74,8 @@ float get_seq_flops(int seq_len, int vocab_size, int model_dim, int kv_dim, int 
 	// forwards head
 	seq_flops_head += 2 * seq_len_f * model_dim_f * vocab_size_f;
 
-	// backwards head
-	seq_flops_head += 2 * seq_len_f * model_dim_f * vocab_size_f;
+	// backwards head (bwd x + bwd w)
+	seq_flops_head += 2 * (2 * seq_len_f * model_dim_f * vocab_size_f);
 	
 	// 3.) BACKWARD FLOPS
 
