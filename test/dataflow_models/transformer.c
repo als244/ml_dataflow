@@ -52,10 +52,10 @@
 
 	// this (along with num seqs per round)modulates how frequently we will step 
 	// the optimizer...
-	#define NUM_ROUNDS_PER_STEP 5
+	#define NUM_ROUNDS_PER_STEP 2
 
 
-	#define NUM_STEPS 10
+	#define NUM_STEPS 2
 
 	// num_chunks = num_chunks_per_seq * num_seq_groups_per_round
 	// num_chunks_per_seq = seqlen / chunk_size
@@ -75,6 +75,13 @@
 
 
 	// config for what to print...
+
+	#define TO_PRINT_SETUP_CONFIG_SUMMARY 1
+	#define TO_PRINT_MEMORY_PARTITION_CONFIG 0
+	#define TO_PRINT_MEMORY_BREAKDOWN_VERBOSE 0
+	#define TO_PRINT_MODEL_SIZING 0
+	#define TO_PRINT_BATCH_CONFIG 0
+	
 
 	#define TO_PRINT_THROUGHPUT_METRICS 1
 	#define TO_PRINT_THROUGHPUT_METRICS_VERBOSE 1
@@ -339,6 +346,7 @@
 		size_t used_host_mem = 0;
 		size_t used_dev_mem = 0;
 
+		printf("\n\nInput Parameters:\n\tHost Mem: %d GB\n\tDevice Mem: %d GB\n\tSeqlen (Tokens): %d\n\tModel Size (B): %d\n\nPREPARING DEMO RUN...\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_CONFIG_SIZE_B);
 
 		// Preparing model...
 
@@ -462,7 +470,7 @@
 		int pointer_alignment = 256;
 
 
-		printf("Loading embedding table...\n");
+		// printf("Loading embedding table...\n");
 
 		Embedding_Config * embedding_config = malloc(sizeof(Embedding_Config));
 		if (!embedding_config){
@@ -494,7 +502,7 @@
 		
 		
 
-		printf("Preparing all sys transformer blocks...\n");
+		// printf("Preparing all sys transformer blocks...\n");
 
 		
 
@@ -527,7 +535,7 @@
 				aligned_block_size = get_transformer_block_aligned_size(sys_blocks[i]);
 			}
 
-			printf("Binding sys transformer block #%d...\n", i);
+			// printf("Binding sys transformer block #%d...\n", i);
 			ret = bind_transformer_block(cur_host_mem, sys_blocks[i]);
 			if (ret){
 				fprintf(stderr, "Error: failed to bind transformer block #%d...\n", i);
@@ -565,12 +573,6 @@
 
 		uint64_t all_blocks_size = aligned_block_size * n_layers;
 		uint64_t all_model_size = sys_embedding_table -> embedding_table_size + all_blocks_size + combined_head_size;
-
-		printf("\nTransformer Block Size (bytes):\n\tRaw: %lu\n\tSize With Matrix Alignment (%d): %lu\n\n", raw_block_size, pointer_alignment, aligned_block_size);
-
-		printf("\n\n\nModel Sizing (bytes):\n\tEmbedding: %lu\n\tBlock: %lu\n\t\tTotal: %lu\n\tHead: %lu\nTOTAL MODEL SIZE: %lu\n\n\n", sys_embedding_table -> embedding_table_size, aligned_block_size, all_blocks_size, combined_head_size, all_model_size);
-
-
 		
 
 		// number of elements to pass into optimizer...
@@ -583,17 +585,33 @@
 
 		uint64_t all_model_num_els = embedding_num_els + all_blocks_num_els + head_num_els;
 
-		printf("\n\n\nModel Parameter Counts:\n\tEmbedding: %lu\n\tBlock: %lu\n\t\tTotal: %lu\n\tBlock Aligned: %lu\n\tHead: %lu\nTOTAL MODEL PARAMETERS: %lu\n\n\n", embedding_num_els, block_num_els, all_blocks_num_els, block_aligned_num_els, head_num_els, all_model_num_els);
+
+		if (TO_PRINT_MODEL_SIZING){
+
+			printf("\nTransformer Block Size (bytes):\n\tRaw: %lu\n\tSize With Matrix Alignment (%d): %lu\n\n", raw_block_size, pointer_alignment, aligned_block_size);
+
+			printf("\n\n\nModel Sizing (bytes):\n\tEmbedding: %lu\n\tBlock: %lu\n\t\tTotal: %lu\n\tHead: %lu\nTOTAL MODEL SIZE: %lu\n\n\n", sys_embedding_table -> embedding_table_size, aligned_block_size, all_blocks_size, combined_head_size, all_model_size);
+
+			printf("\n\n\nModel Parameter Counts:\n\tEmbedding: %lu\n\tBlock: %lu\n\t\tTotal: %lu\n\tBlock Aligned: %lu\n\tHead: %lu\nTOTAL MODEL PARAMETERS: %lu\n\n\n", embedding_num_els, block_num_els, all_blocks_num_els, block_aligned_num_els, head_num_els, all_model_num_els);
+			
+		}
+
+
+
+
+
 
 
 		// Loading in from checkpoint...
 
-		printf("\n\nLOADING MODEL FROM CHECKPOINT: %s...\n", MODEL_PATH);
+		printf("\nLoading model from checkpoint: %s\n\n", MODEL_PATH);	
 
 		char layer_path[PATH_MAX];
 
+		
 
-		printf("Loading embedding table...\n");
+
+		//printf("Loading embedding table...\n");
 
 		sprintf(layer_path, "%s/embed/tok_embeddings.weight", MODEL_PATH);
 		FILE * fp = fopen(layer_path, "rb");
@@ -614,7 +632,7 @@
 
 		
 
-		printf("Loading all sys transformer blocks...\n");
+		//printf("Loading all sys transformer blocks...\n");
 
 		
 		for (int i = 0; i < n_layers; i++){
@@ -622,7 +640,7 @@
 
 			sprintf(layer_path, "%s/layers/%d/combined_layer.weight", MODEL_PATH, i);
 
-			printf("Loading transformer block from: %s...\n", layer_path);
+			//printf("Loading transformer block from: %s...\n", layer_path);
 			ret = load_transformer_block(layer_path, sys_blocks[i]);
 			if (ret){
 				fprintf(stderr, "Error: failed to load transformer block #%d from: %s...\n", i, layer_path);
@@ -632,7 +650,7 @@
 
 
 
-		printf("Loading head...\n");
+		//printf("Loading head...\n");
 
 		sprintf(layer_path, "%s/head/combined_head.weight", MODEL_PATH);
 
@@ -917,7 +935,11 @@
 
 		float num_chunks_equal_data_weights = (float) fwd_block_size / (float) chunk_act_size;
 
-		printf("Num Chunks (with activations of size %lu) to equal size of layer: %f\n\n", chunk_act_size, num_chunks_equal_data_weights);
+		/*
+		if (TO_PRINT_SETUP_CONFIG_SUMMARY){
+			printf("Num Chunks (with activations of size %lu MB) to equal size of layer: %f\n\n", chunk_act_size / (1UL << 20), num_chunks_equal_data_weights);
+		}
+		*/
 
 		int num_seq_groups_per_round = MY_MAX(1, round(num_chunks_equal_data_weights / num_chunks_per_seq));
 
@@ -963,7 +985,7 @@
 		uint64_t extra_padding = 200 * (1UL << 20);
 		total_base_dev_mem += extra_padding;
 
-		printf("Total Base Dev Mem: %lu\n", total_base_dev_mem);
+		// printf("Total Base Dev Mem: %lu\n", total_base_dev_mem);
 		
 		uint64_t remain_dev_mem = dev_size_bytes - total_base_dev_mem;
 
@@ -1048,11 +1070,12 @@
 		}
 
 		if (NUM_DEV_BLOCKS == 1){
-			fprintf(stderr, "Warning: not enough memory to store mulitple layers on device only holding 1 block and 1 gradient at a time...; performance may be severely impacted...\n");
+			fprintf(stderr, "!!! WARNING !!!: not enough memory to store mulitple layers on device only holding 1 block and 1 gradient at a time...; performance may be severely impacted...\n");
 		}
 
-		
-		printf("\n\n\n\nMEMORY PARTITION CONFIGURATION:\n\tNum Dev Blocks: %d\n\tNum Dev Grad Blocks: %d\n\tNum Dev Activation Slots: %d\n\n\n\n", NUM_DEV_BLOCKS, NUM_DEV_GRAD_BLOCKS, NUM_DEV_ACTIVATION_SLOTS);
+		if (TO_PRINT_MEMORY_PARTITION_CONFIG){
+			printf("\nMEMORY PARTITION CONFIGURATION:\n\tNum Dev Blocks: %d\n\tNum Dev Grad Blocks: %d\n\tNum Dev Activation Slots: %d\n\n", NUM_DEV_BLOCKS, NUM_DEV_GRAD_BLOCKS, NUM_DEV_ACTIVATION_SLOTS);
+		}
 
 		// PARTIONING DEVICE MEMORY...!!!
 
@@ -1073,7 +1096,7 @@
 		used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
-		printf("Copying embedding table to device...\n");
+		// printf("Copying embedding table to device...\n");
 
 		ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, embedding_table -> embedding_table, sys_embedding_table -> embedding_table, embedding_table -> embedding_table_size);
 		if (ret){
@@ -1120,7 +1143,7 @@
 
 			// copy sys block to dev block
 
-			printf("Submitting inbound transfer for dev transformer block #%d...\n", i);
+			// printf("Submitting inbound transfer for dev transformer block #%d...\n", i);
 
 			ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, blocks[i] -> buffer, sys_blocks[i] -> buffer, aligned_block_size);
 			if (ret){
@@ -1171,13 +1194,21 @@
 		used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
-		printf("Submitting inbound transfer for dev head...\n");
+		// printf("Submitting inbound transfer for dev head...\n");
 
 		ret = dataflow_handle.submit_inbound_transfer(&dataflow_handle, inbound_stream_id, head -> buffer, sys_head -> buffer, combined_head_size);
 		if (ret){
 			fprintf(stderr, "Error: failed to submit inbound transfer for dev head...\n");
 			return -1;
 		}
+
+		ret = dataflow_handle.sync_stream(&dataflow_handle, inbound_stream_id);
+		if (ret){
+			fprintf(stderr, "Error: failed to sync inbound stream...\n");
+			return -1;
+		}
+
+		printf("Finished loading model...\n\n");
 
 
 
@@ -1434,7 +1465,10 @@
 
 
 		uint64_t dev_embed_head_opt_state_size = used_dev_mem - model_used_dev_mem;
-		printf("Dev Embed Head Opt State Size: %.3f GB\n", (float) dev_embed_head_opt_state_size / (1024.0 * 1024.0 * 1024.0));
+
+		if (TO_PRINT_MEMORY_BREAKDOWN_VERBOSE){
+			printf("Dev Embed Head Opt State Size: %.3f GB\n", (float) dev_embed_head_opt_state_size / (1024.0 * 1024.0 * 1024.0));
+		}
 
 
 
@@ -1567,17 +1601,16 @@
 
 		// Now we can prepare seq batch...
 
-		printf("\n\n\nPreparing seq batch...\n");
-
-
-		
-		
+		//printf("\n\n\nPreparing seq batch...\n");
 
 		
 
 		uint64_t metadata_buffer_size = get_seq_batch_metadata_buffer_size(num_seqs_per_chunk, max_tokens_per_chunk);
 
-		printf("Batch Config:\n\tTotal Tokens: %d\n\tNum Seqs Per Chunk: %d\n\n\n", max_tokens_per_chunk, num_seqs_per_chunk);
+
+		if (TO_PRINT_BATCH_CONFIG){
+			printf("Batch Config:\n\tTotal Tokens: %d\n\tNum Seqs Per Chunk: %d\n\n\n", max_tokens_per_chunk, num_seqs_per_chunk);
+		}
 
 		Seq_Batch ** seq_batches = malloc(num_chunks * sizeof(Seq_Batch *));
 		if (!seq_batches){
@@ -1587,11 +1620,13 @@
 
 		int max_total_local_expert_tokens = max_tokens_per_chunk;
 
-		printf("MEMORY BREAKDOWN...\n\n");
+
+		if (TO_PRINT_MEMORY_BREAKDOWN_VERBOSE){
+			printf("MEMORY BREAKDOWN...\n\n");
 
 
-		printf("Model:\n\tUsed Host Mem: %.3f GB\n\tUsed Dev Mem: %.3f GB\n", (float) model_used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) model_used_dev_mem / (1024.0 * 1024.0 * 1024.0));
-
+			printf("Model:\n\tUsed Host Mem: %.3f GB\n\tUsed Dev Mem: %.3f GB\n", (float) model_used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) model_used_dev_mem / (1024.0 * 1024.0 * 1024.0));
+		}
 
 
 		uint32_t ** chunk_sys_token_ids = malloc(num_chunks * sizeof(uint32_t *));
@@ -1784,7 +1819,10 @@
 		uint64_t metadata_used_dev_mem = used_dev_mem - model_used_dev_mem;
 		uint64_t metadata_used_host_mem = used_host_mem - model_used_host_mem;
 
-		printf("Metadata:\n\tUsed Host Mem: %.3f GB\n\tUsed Dev Mem: %.3f GB\n", (float) metadata_used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) metadata_used_dev_mem / (1024.0 * 1024.0 * 1024.0));
+
+		if (TO_PRINT_MEMORY_BREAKDOWN_VERBOSE){
+			printf("Metadata:\n\tUsed Host Mem: %.3f GB\n\tUsed Dev Mem: %.3f GB\n", (float) metadata_used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) metadata_used_dev_mem / (1024.0 * 1024.0 * 1024.0));
+		}
 
 		
 		char file_path[PATH_MAX];
@@ -1940,7 +1978,9 @@
 		uint64_t context_used_dev_mem = used_dev_mem - model_used_dev_mem - metadata_used_dev_mem;
 		uint64_t context_used_host_mem = used_host_mem - model_used_host_mem - metadata_used_host_mem;
 
-		printf("Context:\n\tUsed Host Mem: %.3f GB\n\tUsed Dev Mem: %.3f GB\n", (float) context_used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) context_used_dev_mem / (1024.0 * 1024.0 * 1024.0));
+		if (TO_PRINT_MEMORY_BREAKDOWN_VERBOSE){
+			printf("Context:\n\tUsed Host Mem: %.3f GB\n\tUsed Dev Mem: %.3f GB\n", (float) context_used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) context_used_dev_mem / (1024.0 * 1024.0 * 1024.0));
+		}
 		
 
 		
@@ -2006,7 +2046,9 @@
 		uint64_t block_transition_used_dev_mem = used_dev_mem - model_used_dev_mem - metadata_used_dev_mem - context_used_dev_mem;
 		uint64_t block_transition_used_host_mem = used_host_mem - model_used_host_mem - metadata_used_host_mem - context_used_host_mem;
 		
-		printf("Block Transition:\n\tUsed Host Mem: %.3f GB\n\tUsed Dev Mem: %.3f GB\n", (float) block_transition_used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) block_transition_used_dev_mem / (1024.0 * 1024.0 * 1024.0));
+		if (TO_PRINT_MEMORY_BREAKDOWN_VERBOSE){
+			printf("Block Transition:\n\tUsed Host Mem: %.3f GB\n\tUsed Dev Mem: %.3f GB\n", (float) block_transition_used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) block_transition_used_dev_mem / (1024.0 * 1024.0 * 1024.0));
+		}
 		
 		
 		// each block transition needs to fill in:
@@ -2106,7 +2148,9 @@
 
 		num_dev_opt_blocks = MY_MIN(n_layers, num_dev_opt_blocks);
 
-		printf("Num Dev Opt Blocks (Aliasing into Activation Buffers no longer needed at end of step...): %d\n", num_dev_opt_blocks);
+		if (TO_PRINT_MEMORY_BREAKDOWN_VERBOSE){
+			printf("Num Dev Opt Blocks (Aliasing into Activation Buffers no longer needed at end of step...): %d\n", num_dev_opt_blocks);
+		}
 
 		Transformer_Block ** opt_mean_blocks = malloc(num_dev_opt_blocks * sizeof(Transformer_Block *));
 		if (!opt_mean_blocks){
@@ -2173,8 +2217,9 @@
 			cur_opt_state_loc = (void *) ((uint64_t)(cur_opt_state_loc + 255) & ~255UL);
 		}
 
-
-		printf("Opt State Alias Used Size: %.3f GB\n", (float) opt_state_alias_used_size / (1024.0 * 1024.0 * 1024.0));
+		if (TO_PRINT_MEMORY_BREAKDOWN_VERBOSE){
+			printf("Opt State Alias Used Size: %.3f GB\n", (float) opt_state_alias_used_size / (1024.0 * 1024.0 * 1024.0));
+		}
 
 		sem_t * is_opt_layer_ready = malloc(n_layers * sizeof(sem_t));
 		if (!is_opt_layer_ready){
@@ -2465,15 +2510,19 @@
 		uint64_t activations_used_dev_mem = used_dev_mem - model_used_dev_mem - metadata_used_dev_mem - context_used_dev_mem - block_transition_used_dev_mem;
 		uint64_t activations_used_host_mem = used_host_mem - model_used_host_mem - metadata_used_host_mem - context_used_host_mem - block_transition_used_host_mem;
 
-		printf("Activations (+ additional workspace):\n\t(Chunk, Layer) Activation Size: %.3f GB\n\tHost # Acts: %d\n\tDev # Acts: %d\n\tUsed Host Mem: %.3f GB\n\tUsed Dev Mem: %.3f GB\n\n\n", saved_activations_buffer_size / (1024.0 * 1024.0 * 1024.0), total_home_acts, total_dev_acts, (float) activations_used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) activations_used_dev_mem / (1024.0 * 1024.0 * 1024.0));
+		if (TO_PRINT_MEMORY_BREAKDOWN_VERBOSE){
+			printf("Activations (+ additional workspace):\n\t(Chunk, Layer) Activation Size: %.3f GB\n\tHost # Acts: %d\n\tDev # Acts: %d\n\tUsed Host Mem: %.3f GB\n\tUsed Dev Mem: %.3f GB\n\n\n", saved_activations_buffer_size / (1024.0 * 1024.0 * 1024.0), total_home_acts, total_dev_acts, (float) activations_used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) activations_used_dev_mem / (1024.0 * 1024.0 * 1024.0));
+		}
 
 
 
 
 
-		printf("Setup Complete!\n\n");
+		if (TO_PRINT_SETUP_CONFIG_SUMMARY){
+			printf("Setup Complete!\n\n");
 
-		printf("\nMEMORY USAGE (GB):\n\tHost: %.3f\n\tDevice: %.3f\n\n\n\n", (float) used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) used_dev_mem / (1024.0 * 1024.0 * 1024.0));
+			printf("\nMEMORY USAGE (GB):\n\tHost: %.3f\n\tDevice: %.3f\n\n", (float) used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) used_dev_mem / (1024.0 * 1024.0 * 1024.0));
+		}
 
 		if ((used_host_mem > host_size_bytes) || (used_dev_mem > dev_size_bytes)) {
 			fprintf(stderr, "ERROR. Cannot run with current configuration of %d dev parameter blocks,%d dev activation slots, %d dev block grads, %d min chunk size (=> xhunk size %lu), and %d seq groups per round => %d chunks per round...\n", NUM_DEV_BLOCKS, NUM_DEV_ACTIVATION_SLOTS, NUM_DEV_GRAD_BLOCKS, MIN_CHUNK_SIZE, chunk_size, NUM_SEQ_GROUPS_PER_ROUND, num_chunks);
@@ -2603,12 +2652,12 @@
 
 		float * dev_loss_vec;
 		int total_pred_tokens_in_step = num_rounds_per_step * num_seq_groups_per_round * num_chunks_per_seq * chunk_size;
-		printf("\nTotal tokens per step: %d\n", total_pred_tokens_in_step);
+	
 		int round_tokens = num_seq_groups_per_round * num_chunks_per_seq * chunk_size;
-		printf("Round tokens: %d\n", round_tokens);
+		
 		int total_train_tokens = num_steps * total_pred_tokens_in_step;
-		printf("Total train tokens: %d\n\n", total_train_tokens);
-
+		
+		
 
 		// Prepare to save down metrics...
 		Step_Throughput_Host_Op_Args * step_throughput_op_buffers = calloc(num_steps, sizeof(Step_Throughput_Host_Op_Args));
@@ -2638,14 +2687,22 @@
 		// seqs per chunk = 1 if seq uses >= 1 chunks, otherwise packing multiple seqs per chunk...
 		int seqs_per_round = num_seq_groups_per_round * num_seqs_per_chunk;
 		int seqs_per_step = seqs_per_round * num_rounds_per_step;
-		printf("Chunk size: %lu\n", chunk_size);
-		printf("Chunks per round: %d\n", num_chunks);
-		printf("Num rounds per step: %d\n\n", num_rounds_per_step);
-		printf("Seqlen: %d\n", MAX_SEQLEN);
-		printf("Seqs per round: %d\n", seqs_per_round);
-		printf("Seqs per step: %d\n\n", seqs_per_step);
 
-		printf("# Model Params: %.2fB\n\n", all_model_num_els / 1e9);
+		if (TO_PRINT_SETUP_CONFIG_SUMMARY){
+			printf("SETUP CONFIG OVERVIEW:\n");
+			printf("\tChunk size: %lu\n", chunk_size);
+			printf("\tChunks per round: %d\n", num_chunks);
+			printf("\tRound tokens: %d\n", round_tokens);
+			printf("\tNum rounds per step: %d\n", num_rounds_per_step);
+			printf("\tTotal tokens per step: %d\n", total_pred_tokens_in_step);
+			printf("\tTotal train tokens: %d\n\n", total_train_tokens);
+
+			printf("\tSeqlen: %d\n", MAX_SEQLEN);
+			printf("\tSeqs per round: %d\n", seqs_per_round);
+			printf("\tSeqs per step: %d\n\n", seqs_per_step);
+
+			printf("# Model Params: %.2fB\n\n", all_model_num_els / 1e9);
+		}
 		
 
 		int * seqlens = calloc(seqs_per_step, sizeof(int));
