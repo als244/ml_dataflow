@@ -32,7 +32,7 @@
 
 	// this is just for testing,.. in 
 	// reality determined dynamically...
-	#define MIN_CHUNK_SIZE 16384
+	#define MIN_CHUNK_SIZE 8192
 
 	#define NUM_TOKENS_EXAMPLE_SEQ 65536
 	#define TOKEN_IDS_PATH "../data/65536_token_ids_uint32.dat"
@@ -604,7 +604,7 @@
 
 		// Loading in from checkpoint...
 
-		printf("\nLoading model from checkpoint: %s\n\n", MODEL_PATH);	
+		printf("\nConfiguring Dataflow & Loading model from checkpoint: %s\n\n", MODEL_PATH);	
 
 		char layer_path[PATH_MAX];
 
@@ -1208,7 +1208,7 @@
 			return -1;
 		}
 
-		printf("Finished loading model...\n\n");
+		// printf("Finished loading model...\n\n");
 
 
 
