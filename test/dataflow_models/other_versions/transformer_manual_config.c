@@ -4,8 +4,6 @@
 	#include "register_ops.h"
 	#include "host_ops.h"
 
-	#include <math.h>
-
 	#define RTX_3090_PEAK_BF16_TFLOPS 7.1e13
 	#define RTX_5090_PEAK_BF16_TFLOPS 2.095e14
 	#define A100_PEAK_BF16_TFLOPS 3.12e14
@@ -38,7 +36,6 @@
 	#define TOKEN_LABELS_PATH "../data/65536_labels_uint32.dat"
 
 
-	/*
 	// this determines total number of chunks / activations we need to store in 
 	// memory at once...
 
@@ -46,15 +43,7 @@
 	// because it means more shared data can utilize the parameters and update
 	// gradients on device without incorruring I/O overhead or gradient accumulation overhead
 	#define NUM_SEQ_GROUPS_PER_ROUND 1
-	*/
 
-
-	// this (along with num seqs per round)modulates how frequently we will step 
-	// the optimizer...
-	#define NUM_ROUNDS_PER_STEP 5
-
-
-	#define NUM_STEPS 10
 
 	// num_chunks = num_chunks_per_seq * num_seq_groups_per_round
 	// num_chunks_per_seq = seqlen / chunk_size
@@ -66,6 +55,15 @@
 
 	// up to num_chunks (per round for now, because just repeating) to save...
 	#define NUM_RAW_CHUNK_IDS_LABELS_TO_SAVE 0
+
+
+
+	// this (along with num seqs per round)modulates how frequently we will step 
+	// the optimizer...
+	#define NUM_ROUNDS_PER_STEP 5
+
+
+	#define NUM_STEPS 10
 
 
 
@@ -860,7 +858,7 @@
 
 		// for now just repeating the same sequence for perf testing...
 
-		
+		int num_seq_groups_per_round = NUM_SEQ_GROUPS_PER_ROUND;
 
 		int chunk_size = CHUNK_SIZE;
 
@@ -879,25 +877,6 @@
 			num_chunks_per_seq = MY_CEIL(seq_len, chunk_size);
 			num_seqs_per_chunk = 1;
 		}
-
-
-		uint64_t chunk_act_size = get_chunk_activations_size(chunk_size, model_dim, kv_dim, num_total_active_experts, expert_dim, block_dt);
-
-
-		// int num_chunks = num_chunks_per_seq * seq_groups_per_round;
-
-		// Backing out how many seq grops per round based on equating 
-		// the layer size and the amount of activations sent back (if no recomputation)...
-
-		float num_chunks_equal_data_weights = (float) fwd_block_size / (float) chunk_act_size;
-
-		printf("Num Chunks (with activations of size %lu) to equal size of layer: %f\n\n", chunk_act_size, num_chunks_equal_data_weights);
-
-		int num_seq_groups_per_round = MY_MAX(1, round(num_chunks_equal_data_weights / num_chunks_per_seq));
-
-		// the old #define still laying around even though auto-cofig'ed
-		int NUM_SEQ_GROUPS_PER_ROUND = num_seq_groups_per_round;
-
 
 		int num_chunks = num_chunks_per_seq * num_seq_groups_per_round;
 
@@ -946,7 +925,7 @@
 			return -1;
 		}
 
-		
+		uint64_t chunk_act_size = get_chunk_activations_size(chunk_size, model_dim, kv_dim, num_total_active_experts, expert_dim, block_dt);
 
 		uint64_t per_layer_act_size = chunk_act_size * (uint64_t) num_chunks;
 
