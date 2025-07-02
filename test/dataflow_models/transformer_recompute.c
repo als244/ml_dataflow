@@ -52,7 +52,7 @@
 
 	// this (along with num seqs per round)modulates how frequently we will step 
 	// the optimizer...
-	#define NUM_ROUNDS_PER_STEP 4
+	#define NUM_ROUNDS_PER_STEP 6
 
 
 	#define NUM_STEPS 10
