@@ -13,7 +13,7 @@ You can demo training performance of canonical causal transformer under differen
 - Sequence Length
 - Model Size (llama3 arch for now, either 1B or 8B)
 
-*Pratical note: Critical upstream APIs (data ingestion, model saving/loading, model/loss/optimizer customization, multi-worker training) are underway*
+**Pratical note**: Critical upstream APIs (*data ingestion*, *model/loss/optimizer customization*, *model saving/loading*, & *multi-worker training*) are underway.
 
 #### Installation & Usage
 
