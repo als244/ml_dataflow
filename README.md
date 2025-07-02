@@ -13,7 +13,7 @@ You can demo to gauge causal transformer training performance under different co
 - Sequence Length
 - Model Size (llama3 arch for now, either 1B or 8B)
 
-*Pratical note: Critical upstream APIs (data ingestion, model saving/loading, model customization, multi-worker training) are underway*
+*Pratical note: Critical upstream APIs (data ingestion, model saving/loading, model/loss/optimizer customization, multi-worker training) are underway*
 
 #### Installation & Usage
 
@@ -53,7 +53,7 @@ cd test/dataflow_models
 
 For example:
 
-`./transformerDemo 80 20 2048 1` will simulate training of llama3 1B model architecture with samples having sequence length of 2048. The memory capacities are set to enforce <= 80 GB (defined as 80 * 2^30 bytes) of host memory and <= 20 GB of device memory.
+`./transformerDemo 80 20 2048 1` will simulate training of llama3 1B model architecture (causal attention, next token prediction) with samples having sequence length of 2048. The memory capacities are set to enforce <= 80 GB (defined as 80 * 2^30 bytes) of host memory and <= 20 GB of device memory.
 
 ----
 
