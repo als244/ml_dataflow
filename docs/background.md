@@ -1,4 +1,4 @@
-# Project Backgroun
+# Project Background
 
 ## Purpose
 
@@ -47,7 +47,7 @@ The objective is to offer the best of both worlds.
 
 
 
-You can see more details about each of the components [here](docs/library_details.md)
+To see more details about each of the components [click here](docs/library_details.md)
 
 ###### Food for Thought
 
