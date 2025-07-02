@@ -11,7 +11,7 @@
 
 	#define PEAK_BF16_TFLOPS RTX_5090_PEAK_BF16_TFLOPS
 
-
+	/*
 	#define HOST_MEM_GB 110
 	#define DEV_MEM_GB 29
 
@@ -26,6 +26,7 @@
 	#define NUM_TOKENS_EXAMPLE_SEQ 4096
 
 	#define MAX_SEQLEN NUM_TOKENS_EXAMPLE_SEQ
+	*/	
 
 	// this is just for testing,.. in 
 	// reality determined dynamically...
@@ -223,6 +224,30 @@
 	int main(int argc, char * argv[]){
 
 		int ret;
+
+		if (argc != 5){
+			fprintf(stderr, "Error. Usage: ./transformer <host_mem_gb> <dev_mem_gb> <seq_len_tokens> <model size B, one of: 1 | 8 | 70>\n");
+			return -1;
+		}
+
+		int HOST_MEM_GB = atoi(argv[1]);
+		int DEV_MEM_GB = atoi(argv[2]);
+
+		int NUM_TOKENS_EXAMPLE_SEQ = atoi(argv[3]);
+
+		int MAX_SEQLEN = NUM_TOKENS_EXAMPLE_SEQ;
+
+		int MODEL_CONFIG_SIZE_B = atoi(argv[4]);
+		if (MODEL_CONFIG_SIZE_B != 1 && MODEL_CONFIG_SIZE_B != 8 && MODEL_CONFIG_SIZE_B != 70){
+			fprintf(stderr, "Error. Invalid model config size: %d. Choose from (1 or 8)\n", MODEL_CONFIG_SIZE_B);
+			return -1;
+		}
+
+		
+
+		char MODEL_PATH[100];
+		sprintf(MODEL_PATH, "../data/%dB", MODEL_CONFIG_SIZE_B);
+
 
 
 		// Initialize dataflow handle...
@@ -882,11 +907,14 @@
 		uint64_t sticky_dev_logits_size = chunk_size * (uint64_t) vocab_size * block_bwd_dt_size;
 		uint64_t sticky_dev_recomputed_buffer_size = 2 * chunk_size * (uint64_t) model_dim * block_dt_size;
 		uint64_t sticky_dev_working_grad_act_size = get_chunk_activations_size(chunk_size, model_dim, kv_dim, num_total_active_experts, expert_dim, block_bwd_dt);
-		uint64_t sticky_dev_head_act_size = chunk_size * ((uint64_t) model_dim + sizeof(float) + (uint64_t) vocab_size) * block_dt_size; 
+		uint64_t sticky_dev_head_act_size = chunk_size * (((uint64_t) model_dim + (uint64_t) vocab_size) * block_dt_size + sizeof(float)); 
+		uint64_t sticky_act_workspace_size = chunk_size * ((uint64_t) model_dim + (uint64_t) ffn_dim) * block_dt_size;
 		// now also incoporate the other sicy buffers...
-		total_base_dev_mem += (sticky_transitions_size + sticky_dev_logits_size + sticky_dev_recomputed_buffer_size + sticky_dev_working_grad_act_size + sticky_dev_head_act_size);
-
+		total_base_dev_mem += sticky_transitions_size + sticky_dev_logits_size + sticky_dev_recomputed_buffer_size + sticky_dev_working_grad_act_size + sticky_dev_head_act_size + sticky_act_workspace_size;
 		
+		// save 200 MB just in case...
+		uint64_t extra_padding = 200 * (1UL << 20);
+		total_base_dev_mem += extra_padding;
 
 		printf("Total Base Dev Mem: %lu\n", total_base_dev_mem);
 		
