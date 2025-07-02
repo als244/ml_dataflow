@@ -42,15 +42,13 @@ make -j <NUM_PROCS>
 3. *Download model checkpoints (llama3 1B and 8B instruct models in raw binary format)*:
 
 ```shell
-cd test
-./download_llama3_model_binaries.sh
+test/download_llama3_model_binaries.sh
 ```
 
 4. *Test out training*:
 
 ```shell
-cd test/dataflow_models
-./transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model size billions: [1 | 8]>
+test/transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model size billions: [1 | 8]>
 ```
 
 For example:
