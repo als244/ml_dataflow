@@ -53,7 +53,7 @@ test/transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model si
 
 For example:
 
-Running `test/transformerDemo 80 20 2048 1` will train the 1B model architecture (causal attention, next token prediction). The sequence length is set to 2048 tokens. The memory capacities are set to enforce <= 80 GB of host memory and <= 20 GB of device memory (where <X> GB is defined as <X> * 2^30 bytes).
+`test/transformerDemo 80 20 2048 1` will train the 1B model architecture (causal attention, next token prediction). The sequence length is set to 2048 tokens. The memory capacities are set to enforce <= 80 GB of host memory and <= 20 GB of device memory (where <X> GB is defined as <X> * 2^30 bytes).
 
 ----
 
