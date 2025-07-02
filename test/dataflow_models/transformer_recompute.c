@@ -52,10 +52,10 @@
 
 	// this (along with num seqs per round)modulates how frequently we will step 
 	// the optimizer...
-	#define NUM_ROUNDS_PER_STEP 2
+	#define NUM_ROUNDS_PER_STEP 4
 
 
-	#define NUM_STEPS 2
+	#define NUM_STEPS 10
 
 	// num_chunks = num_chunks_per_seq * num_seq_groups_per_round
 	// num_chunks_per_seq = seqlen / chunk_size
