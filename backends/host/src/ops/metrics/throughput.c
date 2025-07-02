@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include "host_ops.h"
 
 int get_human_readable_time(struct timespec * ts, char * time_buf){
@@ -185,7 +186,7 @@ int end_step_metrics(void * _step_throughput_op_args){
 	step_throughput_op_args->tokens_per_second = tokens_per_second;
 
 	if (step_throughput_op_args->to_print_metrics){
-		printf("\n\n[THROUGHPUT: Completed Step %d. Num Seqs: %d, Total Tokens: %d]: %.2f TFLOPS\n\n\tTokens/sec: %.2f\n\tMFU: %.2f%%\n\n", step_throughput_op_args->step_num, step_throughput_op_args->num_seqs, step_throughput_op_args->total_tokens, (achieved_flop_rate / 1e12), tokens_per_second, mfu * 100);
+		printf("\n\n[THROUGHPUT: Completed Step %d. Num Seqs: %d, Total Tokens: %d]:\n\n\tEffective Throughput: %.2f TFLOPS\n\tTokens/sec: %.2f\n\tMFU: %.2f%%\n\n", step_throughput_op_args->step_num, step_throughput_op_args->num_seqs, step_throughput_op_args->total_tokens, (achieved_flop_rate / 1e12), tokens_per_second, mfu * 100);
 	}
 	
 	char start_time_buf[100];
