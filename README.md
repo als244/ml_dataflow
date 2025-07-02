@@ -5,7 +5,7 @@
 
 -----
 
-## Demo
+## Training Performance Demo
 
 You can demo training performance of canonical causal transformer under different memory environments, sequence lengths, or model sizes:
 - Host Memory Capacity
