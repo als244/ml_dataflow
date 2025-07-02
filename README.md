@@ -5,9 +5,19 @@
 
 -----
 
-## Installation & Usage
+**Note for practical usage: Not ready yet. Critical upstream APIs (data ingestion, model customization, multi-worker training) are in-progress...**
 
-#### Supported hardware
+## Demo
+
+You can demo to gauge causal transformer training performance under different computing environments, data sizes, or model sizes:
+- Host Memory Capacity
+- Device Memory Capacity
+- Sequence Length
+- Model Size (llama3 arch for now, either 1B or 8B)
+
+#### Installation & Usage
+
+##### Supported hardware
 
 Currently has support for: 
 - Nvidia GPUs
@@ -15,13 +25,13 @@ Currently has support for:
 
 1. *Download this repo*: 
 
-```console
+```shell
 git clone git@github.com:als244/ml_dataflow.git
 ```
 
 2. *Build from source*:
 
-```console
+```shell
 make -j <NUM_PROCS>
 ```
 
@@ -29,19 +39,21 @@ make -j <NUM_PROCS>
 
 3. *Download model checkpoints (llama3 1B and 8B instruct models in raw binary format)*:
 
-```console
+```shell
 cd test
 ./download_llama3_model_binaries.sh
 ```
 
 4. *Test out training*:
 
-```console
+```shell
 cd test/dataflow_models
-./transformer
+./transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen (tokens)> <model size (B): either 1 or 8>
 ```
 
-**The example training program does finetuning of llama3 8B model with data as 64k sequence length** (the first 65536 tokens of harry potter, where this one sequence is repeated); ***the program expects 1 device with 80 GB of device memory and 200 GB of host memory --- it should achieve ~45-47% MFU on a Nvidia H100***. More general support for dataset ingestion, sequence lengths, hardware/memory flexibility, and other model checkpoints/sizes is coming soon.
+For example
+
+The line: `./transformerDemo 80 20 2048 1` will simulate training of llama3 1B model with sequence lengths of 2048. The memory capacities are set to use <= 80 GB (defined as 80 * 2^30 bytes) of host memory and <= 20 GB of device memory.
 
 ----
 
