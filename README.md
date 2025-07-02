@@ -13,9 +13,13 @@ You can demo training performance of canonical causal transformer under differen
 - Sequence Length
 - Model Size (llama3 arch for now, either 1B or 8B)
 
-**Practical note**: Critical upstream functionality (*data ingestion*, *model/loss/optimizer customization*, *model saving/loading*, *multi-worker training*, & *a wider set of common kernels such as convolutions and MoE selecting/routing/combining*) is underway. 
+**Practical note**: Critical upstream functionality (*data ingestion*, *model/loss/optimizer customization*, *model saving/loading*, *multi-worker training*, & *a wider set of common kernels such as convolutions and MoE selecting/routing/combining*) is underway. You can try out a [simulator](https://dataflowsim.sunshein.net) for what this repo aims to accomplish in its final multi-worker form.
+
+The plan is to build a robust core of C libraries and create user-friendly Python bindings (at the various layers of stack) for convenient interfacing. Typical usage will have a similar API to most other training frameworks and only need to use the top-level bindings. 
 
 A true interface will be released when the basic dataloading functionality is ready. 
+
+The intial emphasis is for training; after this is working properly, focus will shift to inference. 
 
 #### Installation & Usage
 
@@ -57,11 +61,17 @@ For example:
 
 ----
 
-You can try out a [simulator](https://dataflowsim.sunshein.net) for what this repo aims to accomplish in its final multi-worker form.
+## Benchmarked Results
 
-The plan is to build a robust core of C libraries and create user-friendly Python bindings (at the various layers of stack) for convenient interfacing. Typical usage will have a similar API to most other training frameworks and only need to use the top-level bindings. 
+TODO: Heatmaps showing throughput vs. system_build + combinations of host_mem/dev_mem/seq_len/model_size
 
-The intial emphasis is for training; after this is working properly, focus will shift to inference. 
+#### 1B
+
+
+
+#### 8B
+
+
 
 -----
 
