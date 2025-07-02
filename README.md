@@ -17,9 +17,7 @@ You can demo training performance of canonical causal transformer under differen
 
 #### Installation & Usage
 
-##### Supported hardware
-
-Currently has support for: 
+##### Current hardware support 
 - Nvidia GPUs
     - sm80+ (Ampere/Ada, Hopper, Blackwell)
 
@@ -53,17 +51,7 @@ For example:
 
 `test/transformerDemo 80 20 2048 1` will train the 1B model architecture (causal attention, next token prediction). The sequence length is set to 2048 tokens. The memory capacities are set to enforce <= 80 GB of host memory and <= 20 GB of device memory (where XXX GB is defined as XXX * 2^30 bytes).
 
-----
-
-**Practical note**: Critical upstream functionality (*data ingestion*, *model/loss/optimizer customization*, *model saving/loading*, *multi-worker training*, & *a wider set of common kernels such as convolutions and MoE selecting/routing/combining*) is underway. You can try out a [simulator](https://dataflowsim.sunshein.net) for what this repo aims to accomplish in its final multi-worker form.
-
-The plan is to build a robust core of C libraries and create user-friendly Python bindings (at the various layers of stack) for convenient interfacing. Typical usage will have a similar API to most other training frameworks and only need to use the top-level bindings. 
-
-A true interface will be released when the basic dataloading functionality is ready. 
-
-The intial emphasis is for training; after this is working properly, focus will shift to inference. 
-
-----
+-----
 
 ## Benchmarked Results
 
@@ -79,7 +67,13 @@ TODO: Heatmaps showing throughput vs. system_build + combinations of host_mem/de
 
 -----
 
+**Practical note**: Critical upstream functionality (*data ingestion*, *model/loss/optimizer customization*, *model saving/loading*, *multi-worker training*, & *a wider set of common kernels such as convolutions and MoE selecting/routing/combining*) is underway. You can try out a [simulator](https://dataflowsim.sunshein.net) for what this repo aims to accomplish in its final multi-worker form.
 
+The plan is to build a robust core of C libraries and create user-friendly Python bindings (at the various layers of stack) for convenient interfacing. Typical usage will have a similar API to most other training frameworks and only need to use the top-level bindings. 
+
+A true interface will be released when the basic dataloading functionality is ready. 
+
+The intial emphasis is for training; after this is working properly, focus will shift to inference. 
 
 -----
 
