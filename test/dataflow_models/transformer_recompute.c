@@ -32,8 +32,9 @@
 
 	// this is just for testing,.. in 
 	// reality determined dynamically...
-	#define CHUNK_SIZE 16384
+	#define MIN_CHUNK_SIZE 16384
 
+	#define NUM_TOKENS_EXAMPLE_SEQ 65536
 	#define TOKEN_IDS_PATH "../data/65536_token_ids_uint32.dat"
 	#define TOKEN_LABELS_PATH "../data/65536_labels_uint32.dat"
 
@@ -235,9 +236,9 @@
 		int HOST_MEM_GB = atoi(argv[1]);
 		int DEV_MEM_GB = atoi(argv[2]);
 
-		int NUM_TOKENS_EXAMPLE_SEQ = atoi(argv[3]);
+		int DEMO_SEQ_LEN = atoi(argv[3]);
 
-		int MAX_SEQLEN = NUM_TOKENS_EXAMPLE_SEQ;
+		int MAX_SEQLEN = DEMO_SEQ_LEN;
 
 		int MODEL_CONFIG_SIZE_B = atoi(argv[4]);
 		if (MODEL_CONFIG_SIZE_B != 1 && MODEL_CONFIG_SIZE_B != 8 && MODEL_CONFIG_SIZE_B != 70){
@@ -838,7 +839,9 @@
 		// SAME KERNEL WORKSPACE ACROSS ALL COMPUTATIONS!
 
 		// attention kernel bwd needs good amount of workspace...
-		uint64_t kernelWorkspaceBytes = 1UL << 30;
+
+		// 2 GB
+		uint64_t kernelWorkspaceBytes = 2 * (1UL << 30);
 		void * kernelWorkspace = cur_dev_mem;
 		cur_dev_mem += kernelWorkspaceBytes;
 		used_dev_mem += kernelWorkspaceBytes;
@@ -856,18 +859,41 @@
 
 		// CONTEXT AND GRAD CONTEXTS!
 
-		int seq_len = NUM_TOKENS_EXAMPLE_SEQ;
+		int seq_len = DEMO_SEQ_LEN;
+		uint64_t min_chunk_size = MIN_CHUNK_SIZE;
 
-		// for now just repeating the same sequence for perf testing...
+		// FILL IN CODE HERE!
 
-		
+		uint64_t chunk_size;
 
-		int chunk_size = CHUNK_SIZE;
+		// If seq_len is greater than min_chunk_size, find the smallest
+		// divisor of seq_len that is at least min_chunk_size.
+		if (seq_len > min_chunk_size) {
+			// Start checking from min_chunk_size upwards.
+			for (int chunk_candidate = min_chunk_size; chunk_candidate <= seq_len; chunk_candidate++) {
+				if (seq_len % chunk_candidate == 0) {
+					chunk_size = chunk_candidate;
+					break; // Found the smallest divisor, so we can exit the loop.
+				}
+			}
+		} 
+		// Otherwise, find the smallest multiple of seq_len that is
+		// at least min_chunk_size.
+		else {
+			if (min_chunk_size % seq_len == 0) {
+				// min_chunk_size is already a multiple of seq_len.
+				chunk_size = min_chunk_size;
+			} else {
+				// Calculate the next multiple of seq_len greater than min_chunk_size.
+				// C's integer division automatically handles the floor operation.
+				chunk_size = (min_chunk_size / seq_len + 1) * seq_len;
+			}
+		}
+
 
 		int max_tokens_per_chunk = chunk_size;
 
 
-		int num_tokens_example_seq = NUM_TOKENS_EXAMPLE_SEQ;
 
 		int num_chunks_per_seq;
 		int num_seqs_per_chunk;
@@ -1439,6 +1465,9 @@
 		char inp_file_path[PATH_MAX];
 		sprintf(inp_file_path, "%s", TOKEN_IDS_PATH);
 
+
+		int num_tokens_example_seq = NUM_TOKENS_EXAMPLE_SEQ;
+
 		uint32_t * sys_token_ids = malloc(num_tokens_example_seq * sizeof(uint32_t));
 
 		fp = fopen(inp_file_path, "rb");
@@ -1473,12 +1502,46 @@
 		}
 		fclose(fp);
 
+		if (num_tokens_example_seq < seq_len){
+			sys_token_ids = realloc(sys_token_ids, seq_len * sizeof(uint32_t));
+			if (!sys_token_ids){
+				fprintf(stderr, "Error: failed to realloc sys_token_ids...\n");
+				return -1;
+			}
 
+			sys_labels = realloc(sys_labels, seq_len * sizeof(uint32_t));
+			if (!sys_labels){
+				fprintf(stderr, "Error: failed to realloc sys_labels...\n");
+				return -1;
+			}
 
-		// Now we can prepare seq batch...
+			int remain_tokens = seq_len;
 
-		printf("\n\n\nPreparing seq batch...\n");
+			uint32_t * cur_loc_sys_token_ids = sys_token_ids;
+			uint32_t * cur_loc_sys_labels = sys_labels;
 
+			int new_tokens;
+
+			while (remain_tokens > 0){
+
+				if (remain_tokens < num_tokens_example_seq){
+					new_tokens = remain_tokens;
+					
+				}
+				else{
+					new_tokens = num_tokens_example_seq;
+				}
+
+				memcpy(cur_loc_sys_token_ids, sys_token_ids, new_tokens * sizeof(uint32_t));
+				memcpy(cur_loc_sys_labels, sys_labels, new_tokens * sizeof(uint32_t));
+
+				cur_loc_sys_token_ids += new_tokens;
+				cur_loc_sys_labels += new_tokens;
+
+				remain_tokens -= new_tokens;
+			}
+			
+		}
 
 		// ensuring we can populate the seq batch/chunk with correct amount of tokens...
 		if (num_seqs_per_chunk > 1){
@@ -1499,6 +1562,15 @@
 				memcpy(sys_labels + i * num_tokens_example_seq, sys_labels, num_tokens_example_seq * sizeof(uint32_t));
 			}
 		}
+
+
+
+		// Now we can prepare seq batch...
+
+		printf("\n\n\nPreparing seq batch...\n");
+
+
+		
 		
 
 		
@@ -2404,7 +2476,7 @@
 		printf("\nMEMORY USAGE (GB):\n\tHost: %.3f\n\tDevice: %.3f\n\n\n\n", (float) used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) used_dev_mem / (1024.0 * 1024.0 * 1024.0));
 
 		if ((used_host_mem > host_size_bytes) || (used_dev_mem > dev_size_bytes)) {
-			fprintf(stderr, "ERROR. Cannot run with current configuration of %d dev parameter blocks,%d dev activation slots, %d dev block grads, %d chunk size, and %d seq groups per round => %d chunks per round...\n", NUM_DEV_BLOCKS, NUM_DEV_ACTIVATION_SLOTS, NUM_DEV_GRAD_BLOCKS, CHUNK_SIZE, NUM_SEQ_GROUPS_PER_ROUND, num_chunks);
+			fprintf(stderr, "ERROR. Cannot run with current configuration of %d dev parameter blocks,%d dev activation slots, %d dev block grads, %d min chunk size (=> xhunk size %lu), and %d seq groups per round => %d chunks per round...\n", NUM_DEV_BLOCKS, NUM_DEV_ACTIVATION_SLOTS, NUM_DEV_GRAD_BLOCKS, MIN_CHUNK_SIZE, chunk_size, NUM_SEQ_GROUPS_PER_ROUND, num_chunks);
 			
 			if (used_host_mem > host_size_bytes){
 				fprintf(stderr, "\nHost Memory Overflow: Have %.3f GB allocated, but requires %.3f GB with current setting...\n", (float) host_size_bytes / (1024.0 * 1024.0 * 1024.0), (float) used_host_mem / (1024.0 * 1024.0 * 1024.0));
@@ -2566,7 +2638,7 @@
 		// seqs per chunk = 1 if seq uses >= 1 chunks, otherwise packing multiple seqs per chunk...
 		int seqs_per_round = num_seq_groups_per_round * num_seqs_per_chunk;
 		int seqs_per_step = seqs_per_round * num_rounds_per_step;
-		printf("Chunk size: %d\n", chunk_size);
+		printf("Chunk size: %lu\n", chunk_size);
 		printf("Chunks per round: %d\n", num_chunks);
 		printf("Num rounds per step: %d\n\n", num_rounds_per_step);
 		printf("Seqlen: %d\n", MAX_SEQLEN);
