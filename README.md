@@ -7,13 +7,13 @@
 
 ## Training Performance Demo
 
-You can demo training performance of canonical causal transformer under different memory environments, sequence lengths, or model sizes:
+You can demo training performance of canonical causal transformer under different memory environments, sequence lengths, or model sizes. The demo program expects users to specify:
 - Host Memory Capacity
 - Device Memory Capacity
 - Sequence Length
 - Model Size (llama3 arch for now, either 1B or 8B)
 
-**Practical note**: Critical upstream functionality (*data ingestion*, *model/loss/optimizer customization*, *model saving/loading*, *multi-worker training*, & *a wider set of common kernels (e.g. convolutions, MoE stuff, etc.)*) are underway. A true interface will be released when the basic functionality is ready. 
+**Practical note**: Critical upstream functionality (*data ingestion*, *model/loss/optimizer customization*, *model saving/loading*, *multi-worker training*, & *a wider set of common kernels such as convolutions and MoE selecting/routing/combining*) are underway. A true interface will be released when the basic functionality is ready. 
 
 #### Installation & Usage
 
