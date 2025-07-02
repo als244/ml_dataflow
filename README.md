@@ -48,7 +48,7 @@ cd test
 
 ```shell
 cd test/dataflow_models
-./transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen (tokens)> <model size billions: [1 | 8]>
+./transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen: [# tokens]> <model size billions: [1 | 8]>
 ```
 
 For example:
