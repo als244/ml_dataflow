@@ -53,7 +53,7 @@ test/transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model si
 
 For example:
 
-`./transformerDemo 80 20 2048 1` will simulate training of llama3 1B model architecture (causal attention, next token prediction). The sequence length is set 2048 tokens (tokens per step is left up to autoconfig to ensure high utilization). The memory capacities are set to enforce <= 80 GB (defined as 80 * 2^30 bytes) of host memory and <= 20 GB of device memory.
+Running `test/transformerDemo 80 20 2048 1` will train the 1B model architecture (causal attention, next token prediction). The sequence length is set 2048 tokens. The memory capacities are set to enforce <= 80 GB of host memory and <= 20 GB of device memory (where XX GB is defined as XX * 2^30 bytes).
 
 ----
 
