@@ -256,7 +256,7 @@
 		
 
 		char MODEL_PATH[100];
-		sprintf(MODEL_PATH, "../data/%dB", MODEL_CONFIG_SIZE_B);
+		sprintf(MODEL_PATH, "../models/%dB", MODEL_CONFIG_SIZE_B);
 
 
 
