@@ -6,7 +6,7 @@ backend_name=nvidia
 # and ensures the recipes are always run in the correct order.
 .PHONY: all libdataflow backends libdataflowops libdataflowmodels dataflow_models_test
 
-all: libdataflow backends libdataflowops libdataflowmodels dataflow_models_test
+all: libdataflow backends libdataflowops libdataflowmodels dataflow_models_test bench_dir
 
 libdataflow:
 	${MAKE} -C libdataflow
@@ -23,3 +23,5 @@ libdataflowmodels: libdataflowops
 dataflow_models_test: libdataflowmodels backends
 	${MAKE} -C test/dataflow_models
 
+bench_dir:
+	${MAKE} -C bench
