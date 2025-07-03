@@ -38,18 +38,20 @@ make -j <NUM_PROCS>
 3. *Download model checkpoints (llama3 1B and 8B instruct models in raw binary format)*:
 
 ```shell
-data/download_llama3_model_binaries.sh
+cd data
+./download_llama3_model_binaries.sh
 ```
 
 4. *Test out training*:
 
 ```shell
-bench/transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model size billions: [1 | 8]>
+cd ../bench
+./transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model size billions: [1 | 8]>
 ```
 
 For example:
 
-`bench/transformerDemo 80 20 16384 1` will train the 1B model architecture (full bf16, causal attention, next token prediction, AdamW). The sequence length is set to 16384 tokens. The memory capacities are set to enforce <= 80 GB of host memory and <= 20 GB of device memory (where XXX GB is defined as XXX * 2^30 bytes).
+`./transformerDemo 80 20 16384 1` will train the 1B model architecture (full bf16, causal attention, next token prediction, AdamW). The sequence length is set to 16384 tokens. The memory capacities are set to enforce <= 80 GB of host memory and <= 20 GB of device memory (where XXX GB is defined as XXX * 2^30 bytes).
 
 4b. *Profile the training*
 
