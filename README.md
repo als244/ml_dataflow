@@ -38,26 +38,26 @@ make -j <NUM_PROCS>
 3. *Download model checkpoints (llama3 1B and 8B instruct models in raw binary format)*:
 
 ```shell
-test/download_llama3_model_binaries.sh
+data/download_llama3_model_binaries.sh
 ```
 
 4. *Test out training*:
 
 ```shell
-test/dataflow_models/transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model size billions: [1 | 8]>
+bench/transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model size billions: [1 | 8]>
 ```
 
 For example:
 
-`test/transformerDemo 80 20 2048 1` will train the 1B model architecture (full bf16, causal attention, next token prediction, AdamW). The sequence length is set to 2048 tokens. The memory capacities are set to enforce <= 80 GB of host memory and <= 20 GB of device memory (where XXX GB is defined as XXX * 2^30 bytes).
+`bench/transformerDemo 80 20 16384 1` will train the 1B model architecture (full bf16, causal attention, next token prediction, AdamW). The sequence length is set to 16384 tokens. The memory capacities are set to enforce <= 80 GB of host memory and <= 20 GB of device memory (where XXX GB is defined as XXX * 2^30 bytes).
 
 4b. *Profile the training*
 
 ```shell
-test/dataflow_models/do_transformer_proifle.sh <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model size billions: [1 | 8]>
+bench/do_transformer_proifle.sh <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model size billions: [1 | 8]>
 ```
 
-This will create a `.nsys-rep` file within `test/dataflow_models/profile` prthat be can loaded into the `Nvidia Sight Systems` GUI. There are nvtx markings that should have intuitive meanings when inspecting the report. 
+This will create a `.nsys-rep` file within `bench/profile` prthat be can loaded into the `Nvidia Sight Systems` GUI. There are nvtx markings that should have intuitive meanings when inspecting the report. 
 
 -----
 
