@@ -44,12 +44,20 @@ test/download_llama3_model_binaries.sh
 4. *Test out training*:
 
 ```shell
-test/transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model size billions: [1 | 8]>
+test/dataflow_models/transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model size billions: [1 | 8]>
 ```
 
 For example:
 
-`test/transformerDemo 80 20 2048 1` will train the 1B model architecture (causal attention, next token prediction). The sequence length is set to 2048 tokens. The memory capacities are set to enforce <= 80 GB of host memory and <= 20 GB of device memory (where XXX GB is defined as XXX * 2^30 bytes).
+`test/transformerDemo 80 20 2048 1` will train the 1B model architecture (full bf16, causal attention, next token prediction, AdamW). The sequence length is set to 2048 tokens. The memory capacities are set to enforce <= 80 GB of host memory and <= 20 GB of device memory (where XXX GB is defined as XXX * 2^30 bytes).
+
+4b. *Profile the training*
+
+```shell
+test/dataflow_models/do_transformer_proifle.sh <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model size billions: [1 | 8]>
+```
+
+This will create a `.nsys-rep` file within `test/dataflow_models/profile` prthat be can loaded into the `Nvidia Sight Systems` GUI. There are nvtx markings that should have intuitive meanings when inspecting the report. 
 
 -----
 
