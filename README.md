@@ -38,7 +38,7 @@ make -j <NUM_PROCS>
 3. *Download model checkpoints (llama3 1B and 8B instruct models in raw binary format)*:
 
 ```shell
-cd data
+cd models
 ./download_llama3_model_binaries.sh
 ```
 
