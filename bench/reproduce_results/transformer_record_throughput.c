@@ -6,12 +6,16 @@
 
 	#include <math.h>
 
-	#define RTX_3090_PEAK_BF16_TFLOPS 7.1e13
-	#define RTX_5090_PEAK_BF16_TFLOPS 2.095e14
+	// peak flops found in:
+	// https://images.nvidia.com/aem-dam/Solutions/geforce/blackwell/nvidia-rtx-blackwell-gpu-architecture.pdf
 	#define A100_PEAK_BF16_TFLOPS 3.12e14
 	#define H100_PEAK_BF16_TFLOPS 9.89e14
+	#define RTX_3090_PEAK_BF16_TFLOPS 7.1e13
+	#define RTX_4090_PEAK_BF16_TFLOPS 1.65e14
+	#define RTX_5090_PEAK_BF16_TFLOPS 2.095e14
+	
 
-	#define PEAK_BF16_TFLOPS RTX_5090_PEAK_BF16_TFLOPS
+	//#define PEAK_BF16_TFLOPS RTX_5090_PEAK_BF16_TFLOPS
 
 	/*
 	#define HOST_MEM_GB 110
@@ -32,7 +36,7 @@
 
 	// this is just for testing,.. in 
 	// reality determined dynamically...
-	#define MIN_CHUNK_SIZE 16384
+	#define MIN_CHUNK_SIZE 8192
 
 	#define NUM_TOKENS_EXAMPLE_SEQ 65536
 	#define TOKEN_IDS_PATH "../data/65536_token_ids_uint32.dat"
@@ -256,7 +260,7 @@
 		
 
 		char MODEL_PATH[100];
-		sprintf(MODEL_PATH, "../data/%dB", MODEL_CONFIG_SIZE_B);
+		sprintf(MODEL_PATH, "../models/%dB", MODEL_CONFIG_SIZE_B);
 
 
 
@@ -293,6 +297,31 @@
 		if (ret){
 			fprintf(stderr, "Error: failed to init cuda dataflow handle...\n");
 			return -1;
+		}
+
+		HardwareArchType hardware_arch_type = dataflow_handle.hardware_arch_type;
+
+		float PEAK_BF16_TFLOPS;
+
+		switch (hardware_arch_type){
+			case BACKEND_ARCH_A100:
+				PEAK_BF16_TFLOPS = A100_PEAK_BF16_TFLOPS;
+			case BACKEND_ARCH_H100:
+				PEAK_BF16_TFLOPS = H100_PEAK_BF16_TFLOPS;
+				break;
+			case BACKEND_ARCH_RTX_3090:
+				PEAK_BF16_TFLOPS = RTX_3090_PEAK_BF16_TFLOPS;
+				break;
+			case BACKEND_ARCH_RTX_4090:
+				PEAK_BF16_TFLOPS = RTX_4090_PEAK_BF16_TFLOPS;
+				break;
+			case BACKEND_ARCH_RTX_5090:
+				PEAK_BF16_TFLOPS = RTX_5090_PEAK_BF16_TFLOPS;
+				break;
+			default:
+				fprintf(stderr, "Error: unknown hardware architecture, cannot set peak bf16 tflops and record MFU...\n");
+				PEAK_BF16_TFLOPS = 0;
+				break;
 		}
 
 		// from backend/nvidia/src/ops/src/register_ops/register_ops.c	
@@ -924,9 +953,11 @@
 			num_seqs_per_chunk = 1;
 		}
 
+		
 
 		uint64_t chunk_act_size = get_chunk_activations_size(chunk_size, model_dim, kv_dim, num_total_active_experts, expert_dim, block_dt);
 
+		printf("Chunk Act Size: %lu\n", chunk_act_size);
 
 		// int num_chunks = num_chunks_per_seq * seq_groups_per_round;
 
@@ -986,6 +1017,11 @@
 		total_base_dev_mem += extra_padding;
 
 		// printf("Total Base Dev Mem: %lu\n", total_base_dev_mem);
+
+		if (total_base_dev_mem > dev_size_bytes){
+			fprintf(stderr, "Error: not enough memory to hold sticky buffers. Requires %lu bytes, but only have %lu bytes", total_base_dev_mem, dev_size_bytes);
+			return -1;
+		}
 		
 		uint64_t remain_dev_mem = dev_size_bytes - total_base_dev_mem;
 
@@ -1014,7 +1050,13 @@
 
 		uint64_t per_layer_full_size = fwd_block_size + per_layer_act_size + bwd_block_size;
 
+		printf("Per Layer Full Size: %lu\n", per_layer_full_size);
+
+		printf("Remain Dev Mem: %lu\n", remain_dev_mem);
+
 		int num_full_layers_on_dev = MY_MIN(remain_dev_mem / per_layer_full_size, n_layers);
+
+		printf("Num Full Layers on Dev: %d\n", num_full_layers_on_dev);
 
 		int NUM_DEV_BLOCKS;
 		int NUM_DEV_GRAD_BLOCKS;

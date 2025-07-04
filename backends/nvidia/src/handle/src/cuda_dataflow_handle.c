@@ -101,11 +101,42 @@ int cuda_profiler_range_pop(){
 
 // FUFILLING ALL FUNCTION POINTERS WIHTIN COMPUTE_HANDLE INTERFACE...
 
-// arch id
+// CUDA arch id
 int cuda_get_arch_id(Dataflow_Handle * dataflow_handle){
 	Cuda_Device_Info * device_info = dataflow_handle -> device_info;
 	return device_info -> arch_num;
 }
+
+// CUDA hardware model id
+int cuda_get_hardware_model_id(Dataflow_Handle * dataflow_handle){
+	Cuda_Device_Info * device_info = dataflow_handle -> device_info;
+	char * device_name = device_info -> device_name;	
+	return device_info -> sm_count;
+}
+
+HardwareArchType cuda_get_hardware_arch_type(Dataflow_Handle * dataflow_handle){
+	Cuda_Device_Info * device_info = dataflow_handle -> device_info;
+	char * device_name = device_info -> device_name;
+
+	if (strcmp(device_name, "NVIDIA A100") == 0){
+		return BACKEND_ARCH_A100;
+	}
+	else if (strcmp(device_name, "NVIDIA H100") == 0){
+		return BACKEND_ARCH_H100;
+	}
+	else if (strcmp(device_name, "NVIDIA GeForce RTX 3090") == 0){
+		return BACKEND_ARCH_RTX_3090;
+	}
+	else if (strcmp(device_name, "NVIDIA GeForce RTX 4090") == 0){
+		return BACKEND_ARCH_RTX_4090;
+	}
+	else if (strcmp(device_name, "NVIDIA GeForce RTX 5090") == 0){
+		return BACKEND_ARCH_RTX_5090;
+	}
+	
+	return UNKNOWN_HARDWARE_ARCH;
+}
+
 
 // num procs
 int cuda_get_num_procs(Dataflow_Handle * dataflow_handle){
@@ -782,6 +813,12 @@ int cuda_set_device_info(Cuda_Device_Info * device_info, CUdevice dev){
 		return -1;
 	}
 
+	ret = cu_get_dev_name(device_info -> device_name, 256, dev);
+	if (ret){
+		fprintf(stderr, "Error: failed to get device name when setting device info...\n");
+		return -1;
+	}
+
 	return 0;
 }
 
@@ -951,9 +988,7 @@ int dataflow_init_handle(Dataflow_Handle * dataflow_handle, ComputeType compute_
 
 	// Accessible Device Info
 	// Arch ID
-	dataflow_handle -> get_arch_id = cuda_get_arch_id;
-	// Num Procs
-	dataflow_handle -> get_num_procs = cuda_get_num_procs;
+	dataflow_handle -> hardware_arch_type = cuda_get_hardware_arch_type(dataflow_handle);
 
 	// Ops Functionality
 	dataflow_handle -> register_native_code = cuda_register_native_code;

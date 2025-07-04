@@ -18,6 +18,8 @@ int cu_initialize_ctx(CUcontext * ctx, CUdevice dev, unsigned int ctx_flags);
 
 int cu_get_dev_total_mem(size_t * ret_val, CUdevice dev);
 
+int cu_get_dev_name(char * dev_name, int max_name_len, CUdevice dev);
+
 int cu_get_dev_attribute(int * ret_val, CUdevice dev, CUdevice_attribute attrib);
 
 int cu_load_module(CUmodule * module, char * module_filename);

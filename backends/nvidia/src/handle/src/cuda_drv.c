@@ -65,6 +65,21 @@ int cu_get_dev_total_mem(size_t * ret_val, CUdevice dev) {
 	return 0;
 }
 
+int cu_get_dev_name(char * dev_name, int max_name_len,CUdevice dev){
+
+	CUresult result;
+	const char * err;
+
+	result = cuDeviceGetName(dev_name, max_name_len, dev);
+	if (result != CUDA_SUCCESS){
+		cuGetErrorString(result, &err);
+		fprintf(stderr, "Error: Could not get device name: %s\n", err);
+		return -1;
+	}
+
+	return 0;
+}
+
 int cu_get_dev_attribute(int * ret_val, CUdevice dev, CUdevice_attribute attrib) {
 
 	CUresult result;

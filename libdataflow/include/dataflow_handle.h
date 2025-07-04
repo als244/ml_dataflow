@@ -23,6 +23,15 @@ typedef enum compute_type {
 	COMPUTE_LEVEL_ZERO
 } ComputeType;
 
+typedef enum hardware_arch_type {
+	BACKEND_ARCH_A100,
+	BACKEND_ARCH_RTX_3090,
+	BACKEND_ARCH_RTX_4090,
+	BACKEND_ARCH_RTX_5090,
+	BACKEND_ARCH_H100,
+	UNKNOWN_HARDWARE_ARCH
+} HardwareArchType;
+
 
 typedef struct dataflow_handle Dataflow_Handle;
 
@@ -49,6 +58,10 @@ struct dataflow_handle {
 	void * device_handle;
 	// backend specific device info maybe needed by attribute setting and launch config...
 	void * device_info;
+
+	// gets populated by backend specific code
+	HardwareArchType hardware_arch_type;
+
 	// user defined id in case multiple handles are created on same device
 	int ctx_id;
 	// backend specific context handle
@@ -75,13 +88,6 @@ struct dataflow_handle {
 	Dataflow_Table op_table;
 	
 	// Backend Required Functions...
-
-	// returns device id (purpose is to have each arch on each backend have a unique id)
-	// and make this accessible without knowning the backend device info struct
-	int (*get_arch_id)(Dataflow_Handle * dataflow_handle);
-
-	// this is the number of multiprocessors (SMs/compute units) on the device
-	int (*get_num_procs)(Dataflow_Handle * dataflow_handle);
 
 	// 0.) OPS Functionality
 

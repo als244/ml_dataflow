@@ -55,7 +55,9 @@ For example:
 
 **Training Overview & Terminology**:
 
-The training is set up so that there are multiple *rounds* of forward+bwd before an optimizer step (i.e. gradient accumulation). The number of rounds per-step is set to be the minumum (lowest global batch size) that ensures the step overhead will be below a threshold. Within a round, there are multiple *chunks*. A minimum chunk size is set to ensure high arithmetic intensity. Each chunk is either packed with multiple sequences (if they are short) or a portion of a longer sequence. The number of chunks within a round is determined such that for a given layer, the total bytes of activations saved from the foward pass is approximately the total bytes of the layer weights (or is the total number of chunks for a single sequnce in case of long-context). Every chunk is proccesed for a layer, before the first chunk starts upon the next layer. During backwards pass, the chunks are processed in reverse order.
+The training is set up so that there are multiple *rounds* of forward+bwd before an optimizer step (i.e. gradient accumulation). The demo trains for 10 steps. The number of rounds per-step is set to be the minumum (lowest global batch size) that ensures the step overhead will be below a threshold. Within a round, there are multiple *chunks*. A minimum chunk size is set to ensure high arithmetic intensity. Each chunk is either packed with multiple sequences (if they are short) or a portion of a longer sequence. The number of chunks within a round is determined such that for a given layer, the total bytes of activations saved from the foward pass is approximately the total bytes of the layer weights (or is the total number of chunks for a single sequnce in case of long-context). Every chunk is proccesed for a layer, before the first chunk starts upon the next layer. During backwards pass, the chunks are processed in reverse order.
+
+The input data is the first 65536 tokens of Harry Potter. If you select a sequence length longer than this than the original sequence will wrap around an repeat until your set seqlen is reached. 
 
 4b. *Profile the training*
 
@@ -69,6 +71,12 @@ This will create a `.nsys-rep` file within `bench/profiling` that be can loaded 
 -----
 
 ## Benchmarked Results
+
+These results were recorded by running
+
+```shell
+python bench/reproduce_results/sweep_training_environments.py <output_filename>
+```
 
 TODO: Heatmaps showing throughput vs. system_build + combinations of host_mem/dev_mem/seq_len/model_size
 

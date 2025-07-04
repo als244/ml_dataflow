@@ -6,12 +6,16 @@
 
 	#include <math.h>
 
-	#define RTX_3090_PEAK_BF16_TFLOPS 7.1e13
-	#define RTX_5090_PEAK_BF16_TFLOPS 2.095e14
+	// peak flops found in:
+	// https://images.nvidia.com/aem-dam/Solutions/geforce/blackwell/nvidia-rtx-blackwell-gpu-architecture.pdf
 	#define A100_PEAK_BF16_TFLOPS 3.12e14
 	#define H100_PEAK_BF16_TFLOPS 9.89e14
+	#define RTX_3090_PEAK_BF16_TFLOPS 7.1e13
+	#define RTX_4090_PEAK_BF16_TFLOPS 1.65e14
+	#define RTX_5090_PEAK_BF16_TFLOPS 2.095e14
+	
 
-	#define PEAK_BF16_TFLOPS RTX_5090_PEAK_BF16_TFLOPS
+	//#define PEAK_BF16_TFLOPS RTX_5090_PEAK_BF16_TFLOPS
 
 	/*
 	#define HOST_MEM_GB 110
@@ -293,6 +297,31 @@
 		if (ret){
 			fprintf(stderr, "Error: failed to init cuda dataflow handle...\n");
 			return -1;
+		}
+
+		HardwareArchType hardware_arch_type = dataflow_handle.hardware_arch_type;
+
+		float PEAK_BF16_TFLOPS;
+
+		switch (hardware_arch_type){
+			case BACKEND_ARCH_A100:
+				PEAK_BF16_TFLOPS = A100_PEAK_BF16_TFLOPS;
+			case BACKEND_ARCH_H100:
+				PEAK_BF16_TFLOPS = H100_PEAK_BF16_TFLOPS;
+				break;
+			case BACKEND_ARCH_RTX_3090:
+				PEAK_BF16_TFLOPS = RTX_3090_PEAK_BF16_TFLOPS;
+				break;
+			case BACKEND_ARCH_RTX_4090:
+				PEAK_BF16_TFLOPS = RTX_4090_PEAK_BF16_TFLOPS;
+				break;
+			case BACKEND_ARCH_RTX_5090:
+				PEAK_BF16_TFLOPS = RTX_5090_PEAK_BF16_TFLOPS;
+				break;
+			default:
+				fprintf(stderr, "Error: unknown hardware architecture, cannot set peak bf16 tflops and record MFU...\n");
+				PEAK_BF16_TFLOPS = 0;
+				break;
 		}
 
 		// from backend/nvidia/src/ops/src/register_ops/register_ops.c	

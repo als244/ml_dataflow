@@ -20,6 +20,7 @@ typedef struct cuda_device_info {
 	int max_smem_per_block;
 	int optin_max_smem_per_block;
 	int host_numa_id;
+	char device_name[256];
 } Cuda_Device_Info;
 
 typedef struct cuda_function_config {
