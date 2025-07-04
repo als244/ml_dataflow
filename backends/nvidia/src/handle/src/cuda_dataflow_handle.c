@@ -101,6 +101,20 @@ int cuda_profiler_range_pop(){
 
 // FUFILLING ALL FUNCTION POINTERS WIHTIN COMPUTE_HANDLE INTERFACE...
 
+// arch id
+int cuda_get_arch_id(Dataflow_Handle * dataflow_handle){
+	Cuda_Device_Info * device_info = dataflow_handle -> device_info;
+	return device_info -> arch_num;
+}
+
+// num procs
+int cuda_get_num_procs(Dataflow_Handle * dataflow_handle){
+	Cuda_Device_Info * device_info = dataflow_handle -> device_info;
+	return device_info -> sm_count;
+}
+
+
+
 /* 0. OPS FUNCTIONALITY */
 
 int cuda_register_native_code(Dataflow_Handle * dataflow_handle, char * native_code_filename, char * native_code_config_lib_filename, 
@@ -934,6 +948,12 @@ int dataflow_init_handle(Dataflow_Handle * dataflow_handle, ComputeType compute_
 	}
 
 	// SET FUNCTION POINTERS SO COMPUTE HANDLE CAN BE USEFUL...!
+
+	// Accessible Device Info
+	// Arch ID
+	dataflow_handle -> get_arch_id = cuda_get_arch_id;
+	// Num Procs
+	dataflow_handle -> get_num_procs = cuda_get_num_procs;
 
 	// Ops Functionality
 	dataflow_handle -> register_native_code = cuda_register_native_code;

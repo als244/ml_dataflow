@@ -76,6 +76,13 @@ struct dataflow_handle {
 	
 	// Backend Required Functions...
 
+	// returns device id (purpose is to have each arch on each backend have a unique id)
+	// and make this accessible without knowning the backend device info struct
+	int (*get_arch_id)(Dataflow_Handle * dataflow_handle);
+
+	// this is the number of multiprocessors (SMs/compute units) on the device
+	int (*get_num_procs)(Dataflow_Handle * dataflow_handle);
+
 	// 0.) OPS Functionality
 
 	// returns number of functions added to op table
