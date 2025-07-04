@@ -17,7 +17,7 @@ def run_sweep(sweep_config_filepath, output_filepath):
     seq_lens = sweep_config["seq_len"]
     model_sizes = sweep_config["model_size"]
 
-    cur_run_num = 0
+    cur_run_num = 1
     total_runs = len(host_mem_sizes) * len(device_mem_sizes) * len(seq_lens) * len(model_sizes)
     
     for host_mem_size in host_mem_sizes:
