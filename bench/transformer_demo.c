@@ -32,7 +32,7 @@
 
 	// this is just for testing,.. in 
 	// reality determined dynamically...
-	#define MIN_CHUNK_SIZE 16384
+	#define MIN_CHUNK_SIZE 8192
 
 	#define NUM_TOKENS_EXAMPLE_SEQ 65536
 	#define TOKEN_IDS_PATH "../data/65536_token_ids_uint32.dat"
@@ -924,9 +924,11 @@
 			num_seqs_per_chunk = 1;
 		}
 
+		
 
 		uint64_t chunk_act_size = get_chunk_activations_size(chunk_size, model_dim, kv_dim, num_total_active_experts, expert_dim, block_dt);
 
+		printf("Chunk Act Size: %lu\n", chunk_act_size);
 
 		// int num_chunks = num_chunks_per_seq * seq_groups_per_round;
 
@@ -986,6 +988,11 @@
 		total_base_dev_mem += extra_padding;
 
 		// printf("Total Base Dev Mem: %lu\n", total_base_dev_mem);
+
+		if (total_base_dev_mem > dev_size_bytes){
+			fprintf(stderr, "Error: not enough memory to hold sticky buffers. Requires %lu bytes, but only have %lu bytes", total_base_dev_mem, dev_size_bytes);
+			return -1;
+		}
 		
 		uint64_t remain_dev_mem = dev_size_bytes - total_base_dev_mem;
 
@@ -1014,7 +1021,13 @@
 
 		uint64_t per_layer_full_size = fwd_block_size + per_layer_act_size + bwd_block_size;
 
+		printf("Per Layer Full Size: %lu\n", per_layer_full_size);
+
+		printf("Remain Dev Mem: %lu\n", remain_dev_mem);
+
 		int num_full_layers_on_dev = MY_MIN(remain_dev_mem / per_layer_full_size, n_layers);
+
+		printf("Num Full Layers on Dev: %d\n", num_full_layers_on_dev);
 
 		int NUM_DEV_BLOCKS;
 		int NUM_DEV_GRAD_BLOCKS;
