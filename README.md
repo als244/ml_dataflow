@@ -53,13 +53,16 @@ For example:
 
 `./transformerDemo 80 20 16384 1` will train the 1B model architecture (full bf16, causal attention, next token prediction, AdamW). The sequence length is set to 16384 tokens. The memory capacities are set to enforce <= 80 GB of host memory and <= 20 GB of device memory (where XXX GB is defined as XXX * 2^30 bytes).
 
+The training is set up so that there are multiple "rounds" of forward+bwd before an optimizer step (i.e. gradient accumulation). The number of rounds per-step is set to be the minumum (lowest global batch size) that ensures the step overhead will be below a threshold. Within a round, there are multiple chunks. A minimum chunk size is set to ensure high arithmetic intensity. Each chunk is either packed with multiple sequences (if they are short) or a portion of a longer sequence. The number of chunks within a round is determined such that for a given layer, the total bytes of activations saved from the foward pass is approximately the total bytes of the layer weights (or is the total number of chunks for a single sequnce in case of long-context). Every chunk is proccesed for a layer, before the first chunk starts upon the next layer.
+
 4b. *Profile the training*
 
 ```shell
 ./do_transformer_proifle.sh <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model size billions: [1 | 8]>
 ```
 
-This will create a `.nsys-rep` file within `bench/profiling` prthat be can loaded into the `Nvidia Sight Systems` GUI. There are nvtx markings that should have intuitive meanings when inspecting the report. 
+This will create a `.nsys-rep` file within `bench/profiling` prthat be can loaded into the `Nvidia Sight Systems` GUI. There are nvtx markings that should have intuitive meanings when inspecting the report (see training terminology above).
+
 
 -----
 
