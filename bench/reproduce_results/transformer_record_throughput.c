@@ -39,8 +39,8 @@
 	#define MIN_CHUNK_SIZE 8192
 
 	#define NUM_TOKENS_EXAMPLE_SEQ 65536
-	#define TOKEN_IDS_PATH "../data/65536_token_ids_uint32.dat"
-	#define TOKEN_LABELS_PATH "../data/65536_labels_uint32.dat"
+	#define TOKEN_IDS_PATH "../../data/65536_token_ids_uint32.dat"
+	#define TOKEN_LABELS_PATH "../../data/65536_labels_uint32.dat"
 
 
 	/*
@@ -80,17 +80,17 @@
 
 	// config for what to print...
 
-	#define TO_PRINT_SETUP_CONFIG_SUMMARY 1
+	#define TO_PRINT_SETUP_CONFIG_SUMMARY 0
 	#define TO_PRINT_MEMORY_PARTITION_CONFIG 0
 	#define TO_PRINT_MEMORY_BREAKDOWN_VERBOSE 0
 	#define TO_PRINT_MODEL_SIZING 0
 	#define TO_PRINT_BATCH_CONFIG 0
 	
 
-	#define TO_PRINT_THROUGHPUT_METRICS 1
-	#define TO_PRINT_THROUGHPUT_METRICS_VERBOSE 1
+	#define TO_PRINT_THROUGHPUT_METRICS 0
+	#define TO_PRINT_THROUGHPUT_METRICS_VERBOSE 0
 
-	#define TO_PRINT_ROUND_LOSS 1
+	#define TO_PRINT_ROUND_LOSS 0
 	#define TO_PRINT_CHUNK_LOSS 0
 
 
@@ -239,8 +239,8 @@
 
 		int ret;
 
-		if (argc != 5){
-			fprintf(stderr, "Error. Usage: ./transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model size billions: [1 | 8]>\n");
+		if (argc != 6){
+			fprintf(stderr, "Error. Usage: ./transformerRecordThroughput <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model size billions: [1 | 8]> <output_filepath>\n");
 			return -1;
 		}
 
@@ -257,10 +257,10 @@
 			return -1;
 		}
 
-		
+		char * output_filepath = argv[5];
 
 		char MODEL_PATH[100];
-		sprintf(MODEL_PATH, "../models/%dB", MODEL_CONFIG_SIZE_B);
+		sprintf(MODEL_PATH, "../../models/%dB", MODEL_CONFIG_SIZE_B);
 
 
 
@@ -327,7 +327,7 @@
 		// from backend/nvidia/src/ops/src/register_ops/register_ops.c	
 		// handles registering external and native ops within cuda_dataflow_ops...
 		int added_funcs = dataflow_register_default_ops(&dataflow_handle);
-		printf("Registered %d default ops...\n\n", added_funcs);
+		//printf("Registered %d default ops...\n\n", added_funcs);
 
 
 
@@ -337,7 +337,7 @@
 		int host_alignment = 4096;
 		size_t host_size_bytes = HOST_MEM_GB * (1UL << 30);
 
-		printf("Allocating host memory of size: %lu...\n", host_size_bytes);
+		//printf("Allocating host memory of size: %lu...\n", host_size_bytes);
 
 		ret = posix_memalign(&host_mem, host_alignment, host_size_bytes);
 		if (ret){
@@ -347,7 +347,7 @@
 		memset(host_mem, 0, host_size_bytes);
 
 
-		printf("Registering host memory...\n\n");
+		//printf("Registering host memory...\n\n");
 
 		ret = dataflow_handle.enable_access_to_host_mem(&dataflow_handle, host_mem, host_size_bytes, 0);
 		if (ret){
@@ -360,7 +360,7 @@
 
 		int dev_alignment = 256;
 
-		printf("Allocating device memory of size: %lu...\n\n", dev_size_bytes);
+		//printf("Allocating device memory of size: %lu...\n\n", dev_size_bytes);
 
 
 		void * dev_mem = dataflow_handle.alloc_mem(&dataflow_handle, dev_size_bytes);
@@ -375,7 +375,7 @@
 		size_t used_host_mem = 0;
 		size_t used_dev_mem = 0;
 
-		printf("\n\nInput Parameters:\n\tHost Mem: %d GB\n\tDevice Mem: %d GB\n\tSeqlen (Tokens): %d\n\tModel Size (B): %d\n\nPREPARING DEMO RUN...\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_CONFIG_SIZE_B);
+		//printf("\n\nInput Parameters:\n\tHost Mem: %d GB\n\tDevice Mem: %d GB\n\tSeqlen (Tokens): %d\n\tModel Size (B): %d\n\nPREPARING DEMO RUN...\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_CONFIG_SIZE_B);
 
 		// Preparing model...
 
@@ -633,7 +633,7 @@
 
 		// Loading in from checkpoint...
 
-		printf("\nConfiguring Dataflow & Loading model from checkpoint: %s\n\n", MODEL_PATH);	
+		//printf("\nConfiguring Dataflow & Loading model from checkpoint: %s\n\n", MODEL_PATH);	
 
 		char layer_path[PATH_MAX];
 
@@ -957,7 +957,7 @@
 
 		uint64_t chunk_act_size = get_chunk_activations_size(chunk_size, model_dim, kv_dim, num_total_active_experts, expert_dim, block_dt);
 
-		printf("Chunk Act Size: %lu\n", chunk_act_size);
+		//printf("Chunk Act Size: %lu\n", chunk_act_size);
 
 		// int num_chunks = num_chunks_per_seq * seq_groups_per_round;
 
@@ -1050,13 +1050,7 @@
 
 		uint64_t per_layer_full_size = fwd_block_size + per_layer_act_size + bwd_block_size;
 
-		printf("Per Layer Full Size: %lu\n", per_layer_full_size);
-
-		printf("Remain Dev Mem: %lu\n", remain_dev_mem);
-
 		int num_full_layers_on_dev = MY_MIN(remain_dev_mem / per_layer_full_size, n_layers);
-
-		printf("Num Full Layers on Dev: %d\n", num_full_layers_on_dev);
 
 		int NUM_DEV_BLOCKS;
 		int NUM_DEV_GRAD_BLOCKS;
@@ -2763,7 +2757,7 @@
 		
 		
 
-		printf("------ STARTING TRAINING ------\n\n");
+		//printf("------ STARTING TRAINING ------\n\n");
 
 		int cur_round_num_seqs;
 		int cur_round_num_chunks;
@@ -4744,7 +4738,7 @@
 		
 
 
-		printf("\n\n\nFinished enqueueing all dataflow operations!\nWaiting to sync...\n\n");
+		//printf("\n\n\nFinished enqueueing all dataflow operations!\nWaiting to sync...\n\n");
 
 
 		ret = dataflow_handle.sync_stream(&dataflow_handle, outbound_stream_id);
@@ -4760,7 +4754,32 @@
 		}
 
 
-		printf("All operations complete! Exiting...\n\n");
+		//printf("All operations complete! Exiting...\n\n");
+
+		float total_steps_time = 0;
+		float total_steps_tok_per_sec = 0;
+		float total_steps_flops = 0;
+		float total_steps_mfu = 0;
+		for (int t = 0; t < num_steps; t++){
+			total_steps_time += step_throughput_op_buffers[t].duration_s;
+			total_steps_tok_per_sec += step_throughput_op_buffers[t].tokens_per_second;
+			total_steps_flops += step_throughput_op_buffers[t].achieved_flop_rate;
+			total_steps_mfu += step_throughput_op_buffers[t].mfu;
+		}
+
+		float avg_step_time = total_steps_time / num_steps;
+		float avg_tok_per_sec = total_steps_tok_per_sec / num_steps;
+		float avg_tflops = total_steps_flops / num_steps / 1e12;
+		float avg_mfu = total_steps_mfu / num_steps;
+
+		FILE * f = fopen(output_filepath, "a");
+		if (!f){
+			fprintf(stderr, "Error: failed to open file: %s...\n", output_filepath);
+			return -1;
+		}
+
+		fprintf(f, "%d,%d,%d,%d,%d,%f,%f,%f,%f\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_CONFIG_SIZE_B, seqs_per_step, avg_step_time, avg_tok_per_sec, avg_tflops, avg_mfu);
+		fclose(f);
 
 		return 0;
 	}
