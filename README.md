@@ -63,7 +63,7 @@ The training is set up so that there are multiple *rounds* of forward+bwd before
 ./do_transformer_proifle.sh <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model size billions: [1 | 8]>
 ```
 
-This will create a `.nsys-rep` file within `bench/profiling` prthat be can loaded into the `Nvidia Sight Systems` GUI. There are nvtx markings that should have intuitive meanings when inspecting the report (see training terminology above).
+This will create a `.nsys-rep` file within `bench/profiling` that be can loaded into the Nvidia Sight Systems GUI. There are nvtx markings that should have intuitive meanings when inspecting the report (see training terminology above).
 
 
 -----
