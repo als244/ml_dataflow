@@ -118,21 +118,21 @@ HardwareArchType cuda_get_hardware_arch_type(Dataflow_Handle * dataflow_handle){
 	Cuda_Device_Info * device_info = dataflow_handle -> device_info;
 	char * device_name = device_info -> device_name;
 
-	if (strcmp(device_name, "NVIDIA A100") == 0){
-		return BACKEND_ARCH_A100;
-	}
-	else if (strcmp(device_name, "NVIDIA H100") == 0){
-		return BACKEND_ARCH_H100;
-	}
-	else if (strcmp(device_name, "NVIDIA GeForce RTX 3090") == 0){
-		return BACKEND_ARCH_RTX_3090;
-	}
-	else if (strcmp(device_name, "NVIDIA GeForce RTX 4090") == 0){
-		return BACKEND_ARCH_RTX_4090;
-	}
-	else if (strcmp(device_name, "NVIDIA GeForce RTX 5090") == 0){
-		return BACKEND_ARCH_RTX_5090;
-	}
+	if (strncmp(device_name, "NVIDIA A100", strlen("NVIDIA A100")) == 0) {
+    return BACKEND_ARCH_A100;
+}
+else if (strncmp(device_name, "NVIDIA H100", strlen("NVIDIA H100")) == 0) {
+    return BACKEND_ARCH_H100;
+}
+else if (strncmp(device_name, "NVIDIA GeForce RTX 3090", strlen("NVIDIA GeForce RTX 3090")) == 0) {
+    return BACKEND_ARCH_RTX_3090;
+}
+else if (strncmp(device_name, "NVIDIA GeForce RTX 4090", strlen("NVIDIA GeForce RTX 4090")) == 0) {
+    return BACKEND_ARCH_RTX_4090;
+}
+else if (strncmp(device_name, "NVIDIA GeForce RTX 5090", strlen("NVIDIA GeForce RTX 5090")) == 0) {
+    return BACKEND_ARCH_RTX_5090;
+}
 	
 	return UNKNOWN_HARDWARE_ARCH;
 }
