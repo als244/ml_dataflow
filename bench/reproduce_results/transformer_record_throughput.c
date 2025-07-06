@@ -306,6 +306,7 @@
 		switch (hardware_arch_type){
 			case BACKEND_ARCH_A100:
 				PEAK_BF16_TFLOPS = A100_PEAK_BF16_TFLOPS;
+				break;
 			case BACKEND_ARCH_H100:
 				PEAK_BF16_TFLOPS = H100_PEAK_BF16_TFLOPS;
 				break;
