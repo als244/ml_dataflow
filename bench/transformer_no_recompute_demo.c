@@ -2644,8 +2644,9 @@
 		// seqs per chunk = 1 if seq uses >= 1 chunks, otherwise packing multiple seqs per chunk...
 		int seqs_per_round = num_seq_groups_per_round * num_seqs_per_chunk;
 
+		int is_causal = 1;
 
-		float per_seq_flops = get_seq_flops(MAX_SEQLEN, vocab_size, model_dim, kv_dim, num_shared_experts, num_total_routed_experts, num_active_routed_experts, expert_dim, n_layers, 
+		float per_seq_flops = get_seq_flops(MAX_SEQLEN, vocab_size, model_dim, kv_dim, is_causal, num_shared_experts, num_total_routed_experts, num_active_routed_experts, expert_dim, n_layers, 
 											NULL, NULL, NULL, NULL, NULL, NULL);
 
 		float flops_per_round = per_seq_flops * seqs_per_round;
@@ -2700,9 +2701,11 @@
 
 		// Populate with static model info...
 
+
 		for (int t = 0; t < num_steps; t++){
 			step_throughput_op_buffers[t].model_dim = model_dim;
 			step_throughput_op_buffers[t].kv_dim = kv_dim;
+			step_throughput_op_buffers[t].is_causal = is_causal;
 			step_throughput_op_buffers[t].num_shared_experts = num_shared_experts;
 			step_throughput_op_buffers[t].num_total_routed_experts = num_total_routed_experts;
 			step_throughput_op_buffers[t].num_active_routed_experts = num_active_routed_experts;

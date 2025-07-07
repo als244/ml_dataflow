@@ -21,7 +21,7 @@
 	#define TOKEN_IDS_PATH "../../data/65536_token_ids_uint32.dat"
 	#define TOKEN_LABELS_PATH "../../data/65536_labels_uint32.dat"
 
-	// this (along with num seqs per round)modulates how frequently we will step 
+	// this (along with num seqs per round) modulates how frequently we will step 
 	// the optimizer...
 	#define TARGET_DURATION_PER_STEP_S 6.0f
 	// to help determien how many rounds per step
@@ -2846,8 +2846,9 @@
 
 		int seqs_per_round = num_seq_groups_per_round * num_seqs_per_chunk;
 
+		int is_causal = 1;
 
-		float per_seq_flops = get_seq_flops(MAX_SEQLEN, vocab_size, model_dim, kv_dim, num_shared_experts, num_total_routed_experts, num_active_routed_experts, expert_dim, n_layers, 
+		float per_seq_flops = get_seq_flops(MAX_SEQLEN, vocab_size, model_dim, kv_dim, is_causal, num_shared_experts, num_total_routed_experts, num_active_routed_experts, expert_dim, n_layers, 
 											NULL, NULL, NULL, NULL, NULL, NULL);
 
 		float flops_per_round = per_seq_flops * seqs_per_round;
@@ -2908,6 +2909,7 @@
 		for (int t = 0; t < num_steps; t++){
 			step_throughput_op_buffers[t].model_dim = model_dim;
 			step_throughput_op_buffers[t].kv_dim = kv_dim;
+			step_throughput_op_buffers[t].is_causal = is_causal;
 			step_throughput_op_buffers[t].num_shared_experts = num_shared_experts;
 			step_throughput_op_buffers[t].num_total_routed_experts = num_total_routed_experts;
 			step_throughput_op_buffers[t].num_active_routed_experts = num_active_routed_experts;
@@ -2917,6 +2919,7 @@
 			step_throughput_op_buffers[t].peak_hardware_flop_rate = PEAK_BF16_TFLOPS;
 			step_throughput_op_buffers[t].to_print_metrics = TO_PRINT_THROUGHPUT_METRICS;
 			step_throughput_op_buffers[t].to_print_verbose = TO_PRINT_THROUGHPUT_METRICS_VERBOSE;
+			
 
 			// To determine recomputation flops...
 			step_throughput_op_buffers[t].num_rounds_per_step = num_rounds_per_step;
@@ -5025,7 +5028,7 @@
 			return -1;
 		}
 
-		fprintf(f, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%f,%f,%f,%f,%f\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_CONFIG_SIZE_B, (int) chunk_size, total_home_acts, num_inp_only_saved, num_inp_attn_saved, num_full_saved, total_dev_acts, seqs_per_step, avg_step_time, avg_tok_per_sec, avg_tflops, avg_mfu, avg_hfu, avg_recompute_pct, avg_attn_flop_pct);
+		fprintf(f, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%f,%f,%f,%f,%f\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_CONFIG_SIZE_B, (int) chunk_size, total_home_acts, num_inp_only_saved, num_inp_attn_saved, num_full_saved, total_dev_acts, num_rounds_per_step, seqs_per_step, avg_recompute_pct, avg_attn_flop_pct,avg_step_time, avg_tok_per_sec, avg_tflops, avg_mfu, avg_hfu);
 		fclose(f);
 
 		return 0;

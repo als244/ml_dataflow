@@ -29,8 +29,8 @@ def run_sweep(sweep_config_filepath, output_filepath):
                     if exit_status != 0:
                         print(f"\tFailed to run...")
                         out_file = open(output_filepath, "a")
-                        # chunk_size, total_home_acts, num_inp_only_saved, num_inp_attn_saved, num_full_saved, total_dev_acts, seqs per step, avg. step time, tok/sec, TFLOPS, MFU, HFU, recompute pct, attn flop pct
-                        out_file.write(f"{host_mem_size},{device_mem_size},{seq_len},{model_size},0,0,0,0,0,0,0,0,0,0,0,0,0,0\n")
+                        # chunk_size, total_home_acts, num_inp_only_saved, num_inp_attn_saved, num_full_saved, total_dev_acts, num_rounds_per_step, seqs per step, recompute pct, attn flop pct,avg. step time, tok/sec, TFLOPS, MFU, HFU
+                        out_file.write(f"{host_mem_size},{device_mem_size},{seq_len},{model_size},0,0,0,0,0,0,0,0,0,0,0,0,0,0,0\n")
                         out_file.close()
                     ## wait two seconds for gpu to cool down
                     time.sleep(2)

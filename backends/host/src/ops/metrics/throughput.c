@@ -25,7 +25,7 @@ int get_human_readable_time(struct timespec * ts, char * time_buf){
 	return 0;
 }
 
-float get_seq_flops(int seq_len, int vocab_size, int model_dim, int kv_dim, int num_shared_experts, int num_total_routed_experts, int num_active_routed_experts, int expert_dim, int num_layers, 
+float get_seq_flops(int seq_len, int vocab_size, int model_dim, int kv_dim, int is_causal, int num_shared_experts, int num_total_routed_experts, int num_active_routed_experts, int expert_dim, int num_layers, 
 							float * ret_seq_flops_fwd, float * ret_seq_flops_head, float * ret_seq_flops_bwd_x, float * ret_seq_flops_bwd_w, float * ret_seq_attn_flops, float * ret_seq_matmul_flops){
 
 	float seq_flops_fwd = 0;
@@ -53,10 +53,19 @@ float get_seq_flops(int seq_len, int vocab_size, int model_dim, int kv_dim, int 
 
 	// attention flops
 
-	// assume causal attention, otherwise should be 4 * instead of 2 *
-	seq_flops_fwd += 2 * seq_len_f * seq_len_f * model_dim_f;
 
-	seq_attn_flops += 2 * seq_len_f * seq_len_f * model_dim_f;
+	// 2 matmuls
+	// S = Q @ K^T ➡️ A = softmax(S) ➡️ O = A @ V
+
+	float attn_flop_ratio = 1;
+	if (is_causal){
+		attn_flop_ratio = 0.5;
+	}
+
+	float fwd_attn_flops = attn_flop_ratio * 2 * 2 * seq_len_f * seq_len_f * model_dim_f;
+
+	seq_flops_fwd += fwd_attn_flops;
+	seq_attn_flops += fwd_attn_flops;
 
 	// attention out projection
 	seq_flops_fwd += 2 * seq_len_f * model_dim_f * model_dim_f;
@@ -86,17 +95,27 @@ float get_seq_flops(int seq_len, int vocab_size, int model_dim, int kv_dim, int 
 
 	// a.) BWD X (same as forward, but 2.5 for attention)
 	seq_flops_bwd_x = seq_flops_fwd;
-	seq_flops_bwd_x -= (2 * seq_len_f * seq_len_f * model_dim_f);
-	seq_flops_bwd_x += (2.5 * seq_len_f * seq_len_f * model_dim_f);
 
-	seq_attn_flops += (2.5 * seq_len_f * seq_len_f * model_dim_f);
+	// same matmuls but now doing fwd
+	seq_flops_bwd_x -= fwd_attn_flops;
+
+	// There are 4 matmuls in backwards attention
+
+	// dS = dO @ V^T
+	// dV = A^T @ dO
+	// dK = dS^T @ Q
+	// dQ = dS @ K
+	
+	float bwd_attn_flops = attn_flop_ratio * 4 * (2 * seq_len_f * seq_len_f * model_dim_f);
+	seq_flops_bwd_x += bwd_attn_flops;
+	seq_attn_flops += bwd_attn_flops;
 
 
 	// b.) BWD W
 
 	// no attention computation needed for bwd w, otherwise same as forward
 	seq_flops_bwd_w = seq_flops_fwd;
-	seq_flops_bwd_w -= (2 * seq_len_f * seq_len_f * model_dim_f);
+	seq_flops_bwd_w -= fwd_attn_flops;
 
 
 	// Multiply by num_layers (besides head)
@@ -132,7 +151,7 @@ float get_seq_flops(int seq_len, int vocab_size, int model_dim, int kv_dim, int 
 	return total_seq_flops;
 }
 
-float get_recompute_flops(int model_dim, int num_shared_experts, int num_active_routed_experts, int expert_dim,
+float get_recompute_flops(int model_dim, int is_causal, int num_shared_experts, int num_active_routed_experts, int expert_dim,
 								int chunk_size, int num_inp_attn_saved, int num_inp_only_saved, int * inp_only_seq_lens, 
 								float * ret_recompute_attn_flops, float * ret_recompute_matmul_flops){
 
@@ -163,17 +182,22 @@ float get_recompute_flops(int model_dim, int num_shared_experts, int num_active_
 
 	float recompute_attn_flops = 0;
 
+	float attn_flop_ratio = 1;
+	if (is_causal){
+		attn_flop_ratio = 0.5;
+	}
+
 	for (int chunk_loc = 0; chunk_loc < num_inp_only_saved; chunk_loc++){
 		chunk_seq_len = (float) inp_only_seq_lens[chunk_loc];
 
 		if (chunk_size > chunk_seq_len){
 			seqs_per_chunk = chunk_size / chunk_seq_len;
-			recompute_flops += seqs_per_chunk * 2 * chunk_seq_len * chunk_seq_len * model_dim_f;
-			recompute_attn_flops += seqs_per_chunk * 2 * chunk_seq_len * chunk_seq_len * model_dim_f;
+			recompute_flops += seqs_per_chunk * attn_flop_ratio * 2 * 2 * chunk_seq_len * chunk_seq_len * model_dim_f;
+			recompute_attn_flops += seqs_per_chunk * attn_flop_ratio * 2 * 2 * chunk_seq_len * chunk_seq_len * model_dim_f;
 		}
 		else{
-			recompute_flops += 2 * chunk_size_f * chunk_seq_len * model_dim_f;
-			recompute_attn_flops += 2 * chunk_size_f * chunk_seq_len * model_dim_f;
+			recompute_flops += attn_flop_ratio * 2 * 2 * chunk_size_f * chunk_seq_len * model_dim_f;
+			recompute_attn_flops += attn_flop_ratio * 2 * 2 * chunk_size_f * chunk_seq_len * model_dim_f;
 		}
 	}
 
@@ -208,7 +232,7 @@ int start_step_metrics(void * _step_throughput_op_args){
 	for (int i = 0; i < num_seqs; i++){
 		seq_len = seqlens[i];
 
-		float total_seq_flops = get_seq_flops(seq_len, step_throughput_op_args->vocab_size, step_throughput_op_args->model_dim, step_throughput_op_args->kv_dim, 
+		float total_seq_flops = get_seq_flops(seq_len, step_throughput_op_args->vocab_size, step_throughput_op_args->model_dim, step_throughput_op_args->kv_dim, step_throughput_op_args->is_causal,
 														step_throughput_op_args->num_shared_experts, step_throughput_op_args->num_total_routed_experts, step_throughput_op_args->num_active_routed_experts, step_throughput_op_args->expert_dim, step_throughput_op_args->num_layers, 
 														&seq_flops_fwd, &seq_flops_head, &seq_flops_bwd_x, &seq_flops_bwd_w, &seq_attn_flops, &seq_matmul_flops);
 
@@ -224,7 +248,7 @@ int start_step_metrics(void * _step_throughput_op_args){
 
 	float recompute_attn_flops;
 	float recompute_matmul_flops;
-	float recompute_flops = get_recompute_flops(step_throughput_op_args->model_dim, step_throughput_op_args->num_shared_experts, step_throughput_op_args->num_active_routed_experts, step_throughput_op_args->expert_dim,
+	float recompute_flops = get_recompute_flops(step_throughput_op_args->model_dim, step_throughput_op_args->is_causal, step_throughput_op_args->num_shared_experts, step_throughput_op_args->num_active_routed_experts, step_throughput_op_args->expert_dim,
 													step_throughput_op_args->chunk_size, step_throughput_op_args->num_inp_attn_saved, step_throughput_op_args->num_inp_only_saved, step_throughput_op_args->inp_only_seq_lens,
 													&recompute_attn_flops, &recompute_matmul_flops);
 
