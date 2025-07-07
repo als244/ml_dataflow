@@ -47,7 +47,7 @@ The objective is to offer the best of both worlds.
 
 
 
-To see more details about each of the components [click here](docs/library_details.md)
+To see more details about each of the components [click here](library_details.md)
 
 ###### Food for Thought
 
