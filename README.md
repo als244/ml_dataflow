@@ -1,4 +1,4 @@
-# *Portable* & *Efficient* Machine Learning
+# ML Dataflow: *Efficient* & *Portable* Machine Learning
 
 <sup><em>Currently a work in-progress... </em></sup>
 
