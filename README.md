@@ -55,7 +55,7 @@ For example:
 
 **Training Overview & Terminology**:
 
-The training is set up so that there are multiple *rounds* of forward+bwd before an optimizer step (i.e. gradient accumulation). The demo trains for 10 steps. The number of rounds per-step is set to be the minumum (lowest global batch size) that ensures the step overhead will be below a threshold. Within a round, there are multiple *chunks*. A minimum chunk size is set to ensure high arithmetic intensity. Each chunk is either packed with multiple sequences (if they are short) or a portion of a longer sequence. The number of chunks within a round is determined such that for a given layer, the total bytes of activations saved from the foward pass is approximately the total bytes of the layer weights (or is the total number of chunks for a single sequnce in case of long-context). Every chunk is proccesed for a layer, before the first chunk starts upon the next layer. During backwards pass, the chunks are processed in reverse order.
+The training is set up so that there are multiple *rounds* of forward+bwd before an optimizer step (i.e. gradient accumulation). The demo trains for 10 steps. The number of rounds per-step is set to be the minumum (lowest global batch size) that ensures the step overhead will be below a target overhead. This is achieved by setting a target duration for computation during each step (6 seconds for 1B and 48 seconds for 8B). Within a round, there are multiple *chunks*. A minimum chunk size is set to ensure high arithmetic intensity (16k for H100, 8k for others). Each chunk is either packed with multiple sequences (if they are short) or a portion of a longer sequence. The number of chunks within a round is determined such that for a given layer, the total bytes of activations saved from the foward pass is approximately the total bytes of the layer weights (or is the total number of chunks for a single sequnce in case of long-context). Every chunk is proccesed for a layer, before the first chunk starts upon the next layer. During backwards pass, the chunks are processed in reverse order.
 
 The input data is the first 65536 tokens of Harry Potter. If you select a sequence length longer than this than the original sequence will wrap around an repeat until your set seqlen is reached. 
 
@@ -75,8 +75,40 @@ This will create a `.nsys-rep` file within `bench/profiling` that be can loaded 
 These results were recorded by running
 
 ```shell
-python bench/reproduce_results/sweep_training_environments.py <output_filename>
+python bench/reproduce_results/sweep_training_environments.py <sweep config json file> <output csv filename>
 ```
+
+### Throughput Metrics
+
+The details of these calculations within `backends/host/src/ops/metrics/throughput.c`.
+
+Let:
+$L$ = seqlen
+$T$ = step runtime
+$D$ = model dim
+$K$ = kv dim
+$F$ = feed forward dimension
+$N$ = seqs per step
+
+- Tokens/sec: Unambigous -- the training throughput:
+$$
+(N * S) / T
+$$
+- TFLOPS/s: Effective throughput of processing (model flops / runtime). There is ambiguity among different frameworks about the proper "cost" of the model, so this number is hard to compare apples-to-apples if formulas are not given. Agreeing with the [Flash Attention 2 Paper (page 10)](https://arxiv.org/pdf/2307.08691) and comments online:
+$$
+matmul flops = 2 * S * D * (D + 2 * K + D + 3 * F)
+attn fwd flops = .5 * 2 * (2 * S * S * D)
+attn bwd flops = .5 * 4 * (2 * S * S * D)
+per seq flops = 3 * matmul flops + attn fwd flops + attn bwd flops
+model step cost = N * per seq flops
+TFLOPS = model step cost / T
+$$
+- MFU (Model Flops Utilization): A measure of effective throughput relative to hardware capabilities (where TFLOPS is calculated above)
+$$
+MFU = TFLOPS / peak hardware TFLOPS
+$$
+- HFU (Hardware Flops Utilization): A measure of processing throughput (including recomputations in numerator) relative to hardware capabilities. There are various levels are recomputation that occur depending on memory capacities and the system automatically configures this and calculates the metric. See the `throughput.c` file for more details.
+
 
 TODO: Heatmaps showing throughput vs. system_build + combinations of host_mem/dev_mem/seq_len/model_size
 
@@ -86,11 +118,17 @@ TODO: Heatmaps showing throughput vs. system_build + combinations of host_mem/de
 
 #### 8B
 
+-----
 
+## Comparison to other Training Frameworks
+
+[Nvidia Benchmarking of Llama3 8B full BF16, 8k seqlen](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/dgxc-benchmarking/resources/llama3-dgxc-benchmarking): Achieves 72,216 Tok/s on 8xH100 => ***9,027 Token/s*** normalized
+
+TODO!
 
 -----
 
-**Practical note**: Critical upstream functionality (*data ingestion*, *model/loss/optimizer customization*, *model saving/loading*, *multi-worker training*, & *a wider set of common kernels such as attention variants, optimizers, convolutions, and MoE selecting/routing/combining*) is underway. You can try out a [simulator](https://dataflowsim.sunshein.net) for what this repo aims to accomplish in its final multi-worker form.
+**Practical note**: The training demo source code is quite messy! This is not the intended usage, there are some missing pieces... Critical upstream functionality (*data ingestion*, *model/loss/optimizer customization*, *model saving/loading*, *multi-worker training*, & *a wider set of common kernels such as attention variants, optimizers, convolutions, and MoE selecting/routing/combining*) is underway. You can try out a [simulator](https://dataflowsim.sunshein.net) for what this repo aims to accomplish in its final multi-worker form.
 
 The plan is to build a robust core of C libraries and create user-friendly Python bindings (at the various layers of stack) for convenient interfacing. Typical usage will have a similar API to most other training frameworks and only need to use the top-level bindings. 
 
