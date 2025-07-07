@@ -2889,7 +2889,7 @@
 
 		int num_rounds_per_step = MY_MAX(1, round(target_duration_per_step_s / per_round_duration_s_est));
 
-		printf("NUM ROUNDS PER STEP: %d\n", num_rounds_per_step);
+		//printf("NUM ROUNDS PER STEP: %d\n", num_rounds_per_step);
 
 
 		uint64_t loss_tracker_size = num_steps * num_rounds_per_step * num_chunks * sizeof(float);
