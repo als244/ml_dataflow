@@ -5001,7 +5001,7 @@
 		
 
 
-		printf("\n\n\nFinished enqueueing all dataflow operations!\nWaiting to sync...\n\n");
+		// printf("\n\n\nFinished enqueueing all dataflow operations!\nWaiting to sync...\n\n");
 
 
 		ret = dataflow_handle.sync_stream(&dataflow_handle, outbound_stream_id);
