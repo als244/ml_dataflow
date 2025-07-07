@@ -112,17 +112,11 @@ Tested across 4 different machines:
 
 *The H100 is on a 2 node NUMA system so host memory BW refers to local numa node with 6 channel, 4800 MT/s.
 
-### Figures
-
-Click on a GPU type to expand the table of performance reports for different model sizes and sequence lengths.
-
-The definitions of throughput metrics are below.
-
 ---
 
 ### Performance Reports
 
-Click on a GPU type to expand the table of performance reports for different model sizes and sequence lengths. Each cell contains links to reports for Tokens per second (**Tok/s**), TFLOPs per second (**TFLOPS/s**), Model FLOPs Utilization (**MFU**), and Hardware FLOPs Utilization (**HFU**).
+Click on a GPU type to expand the table of performance reports for different model sizes and sequence lengths. Each cell contains links to reports for Tokens per second (**Tok/s**), TFLOPs per second (**TFLOPS/s**), Model FLOPs Utilization (**MFU**), and Hardware FLOPs Utilization (**HFU**). Metric definitions are below.
 
 ---
 
@@ -196,6 +190,7 @@ Click on a GPU type to expand the table of performance reports for different mod
 
 </details>
 
+---
 
 ### Throughput Metrics
 
