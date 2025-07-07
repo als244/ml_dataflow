@@ -70,8 +70,12 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
     // Align offset to 256 bytes
     cur_offset = (cur_offset + 255) & ~255UL;
 
-    saved_activations_offsets -> x_q = cur_offset;
-    cur_offset += total_tokens * model_dim * dt_size;
+    saved_activations_offsets -> ffn_norm_rms_vals = cur_offset;
+    cur_offset += total_tokens * sizeof(float);
+
+
+    // CUTOFF FOR SAVING INP ONLY...
+
 
     // Align offset to 256 bytes
     cur_offset = (cur_offset + 255) & ~255UL;
@@ -85,6 +89,10 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
     saved_activations_offsets -> x_v_local = cur_offset;
     cur_offset += total_tokens * kv_dim * dt_size;
 
+
+    saved_activations_offsets -> inp_only_cutoff = cur_offset;
+
+
     // Align offset to 256 bytes
     cur_offset = (cur_offset + 255) & ~255UL;
 
@@ -97,6 +105,14 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
     cur_offset = (cur_offset + 255) & ~255UL;
 
     saved_activations_offsets -> x_attn_out = cur_offset;
+    cur_offset += total_tokens * model_dim * dt_size;
+    
+    saved_activations_offsets -> inp_attn_only_cutoff = cur_offset;
+
+    // Align offset to 256 bytes
+    cur_offset = (cur_offset + 255) & ~255UL;
+
+    saved_activations_offsets -> x_q = cur_offset;
     cur_offset += total_tokens * model_dim * dt_size;
 
     // Align offset to 256 bytes
@@ -470,18 +486,39 @@ int populate_seq_batch_metadata_buffer(Dataflow_Handle * dataflow_handle, int in
 }
 
 
-uint64_t get_seq_batch_saved_activations_buffer_size(Seq_Batch * seq_batch) {
-    return seq_batch -> saved_activations_offsets.total_size;
+uint64_t get_seq_batch_saved_activations_buffer_size(Seq_Batch * seq_batch, SavedActivationLevel saved_activation_level) {
+
+    if (saved_activation_level == SAVED_ACTIVATION_LEVEL_INP_ONLY){
+        return seq_batch -> saved_activations_offsets.inp_only_cutoff;
+    }
+    else if (saved_activation_level == SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY){
+        return seq_batch -> saved_activations_offsets.inp_attn_only_cutoff;
+    }
+    else {
+        return seq_batch -> saved_activations_offsets.total_size;
+    }
 }
 
-int bind_seq_batch_saved_activations_buffer(Seq_Batch * seq_batch, Seq_Batch_Saved_Activations * saved_activations, void * saved_activations_buffer, uint64_t saved_activations_buffer_size,
+int bind_seq_batch_saved_activations_buffer(Seq_Batch * seq_batch, Seq_Batch_Saved_Activations * saved_activations, void * saved_activations_buffer, SavedActivationLevel saved_activation_level, uint64_t saved_activations_buffer_size,
                                             int layer_id) {
     
     Seq_Batch_Saved_Activations_Offsets * saved_activations_offsets = &(seq_batch -> saved_activations_offsets);
-    if (saved_activations_buffer_size < saved_activations_offsets -> total_size){
+
+    if (saved_activation_level == SAVED_ACTIVATION_LEVEL_INP_ONLY && saved_activations_buffer_size < saved_activations_offsets -> inp_only_cutoff){
+        fprintf(stderr, "Error: saved activations buffer size is less than the required size. Tried to bind with size %lu, but required size is %lu...\n", saved_activations_buffer_size, saved_activations_offsets -> inp_only_cutoff);
+        return -1;
+    }
+    else if (saved_activation_level == SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY && saved_activations_buffer_size < saved_activations_offsets -> inp_attn_only_cutoff){
+        fprintf(stderr, "Error: saved activations buffer size is less than the required size. Tried to bind with size %lu, but required size is %lu...\n", saved_activations_buffer_size, saved_activations_offsets -> inp_attn_only_cutoff);
+        return -1;
+    }
+    else if (saved_activation_level == SAVED_ACTIVATION_LEVEL_FULL && saved_activations_buffer_size < saved_activations_offsets -> total_size){
         fprintf(stderr, "Error: saved activations buffer size is less than the required size. Tried to bind with size %lu, but required size is %lu...\n", saved_activations_buffer_size, saved_activations_offsets -> total_size);
         return -1;
     }
+    
+
+    // SAVE THESE INPS NO MATTER WHAT...!
 
     saved_activations -> seq_batch = seq_batch;
     saved_activations -> layer_id = layer_id;
@@ -489,15 +526,34 @@ int bind_seq_batch_saved_activations_buffer(Seq_Batch * seq_batch, Seq_Batch_Sav
     saved_activations -> savedActivationsBuffer = saved_activations_buffer;
     saved_activations -> savedActivationsBufferBytes = saved_activations_buffer_size;
 
+    
     saved_activations -> x_inp = (void *) (saved_activations_buffer + saved_activations_offsets -> x_inp);
     saved_activations -> attn_norm_rms_vals = (float *) (saved_activations_buffer + saved_activations_offsets -> attn_norm_rms_vals);
-    saved_activations -> x_q = (void *) (saved_activations_buffer + saved_activations_offsets -> x_q);
+    saved_activations -> ffn_norm_rms_vals = (float *) (saved_activations_buffer + saved_activations_offsets -> ffn_norm_rms_vals);
     saved_activations -> x_k_local = (void *) (saved_activations_buffer + saved_activations_offsets -> x_k_local);
     saved_activations -> x_v_local = (void *) (saved_activations_buffer + saved_activations_offsets -> x_v_local);
-    saved_activations -> softmax_lse = (float *) (saved_activations_buffer + saved_activations_offsets -> softmax_lse);
-    saved_activations -> x_attn_out = (void *) (saved_activations_buffer + saved_activations_offsets -> x_attn_out);
-    saved_activations -> x_o = (void *) (saved_activations_buffer + saved_activations_offsets -> x_o);
-    saved_activations -> ffn_norm_rms_vals = (float *) (saved_activations_buffer + saved_activations_offsets -> ffn_norm_rms_vals);
+    
+    // Only save if higher saved level...
+    if ((saved_activation_level == SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY) || (saved_activation_level == SAVED_ACTIVATION_LEVEL_FULL)){
+        // Cutoff for inp only...
+        saved_activations -> softmax_lse = (float *) (saved_activations_buffer + saved_activations_offsets -> softmax_lse);
+        saved_activations -> x_attn_out = (void *) (saved_activations_buffer + saved_activations_offsets -> x_attn_out);
+    }
+    else{
+        saved_activations -> softmax_lse = NULL;
+        saved_activations -> x_attn_out = NULL;
+    }
+    
+    // only save if full...
+    if (saved_activation_level == SAVED_ACTIVATION_LEVEL_FULL){
+        saved_activations -> x_q = (void *) (saved_activations_buffer + saved_activations_offsets -> x_q);
+        saved_activations -> x_o = (void *) (saved_activations_buffer + saved_activations_offsets -> x_o);
+    }
+    else{
+        saved_activations -> x_q = NULL;
+        saved_activations -> x_o = NULL;
+    }
+    
 
 
     // for non-MoE, num_local_experts should be 1 
@@ -526,14 +582,24 @@ int bind_seq_batch_saved_activations_buffer(Seq_Batch * seq_batch, Seq_Batch_Sav
     saved_activations -> token_to_experts_mapping = NULL;
     saved_activations -> experts_to_tokens_mapping = NULL;
 
-    
+    // only save if full...
+    if (saved_activation_level == SAVED_ACTIVATION_LEVEL_FULL) {
+        for (int i = 0; i < num_local_experts; i++){
+            (saved_activations -> x_1)[i] = (void *) (saved_activations_buffer + (saved_activations_offsets -> x_1)[i]);
+        }
 
-     for (int i = 0; i < num_local_experts; i++){
-        (saved_activations -> x_1)[i] = (void *) (saved_activations_buffer + (saved_activations_offsets -> x_1)[i]);
+        for (int i = 0; i < num_local_experts; i++){
+            (saved_activations -> x_3)[i] = (void *) (saved_activations_buffer + (saved_activations_offsets -> x_3)[i]);
+        }
     }
+    else{
+        for (int i = 0; i < num_local_experts; i++){
+            (saved_activations -> x_1)[i] = NULL;
+        }
 
-    for (int i = 0; i < num_local_experts; i++){
-        (saved_activations -> x_3)[i] = (void *) (saved_activations_buffer + (saved_activations_offsets -> x_3)[i]);
+        for (int i = 0; i < num_local_experts; i++){
+            (saved_activations -> x_3)[i] = NULL;
+        }
     }
 
     return 0;

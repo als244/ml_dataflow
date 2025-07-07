@@ -32,6 +32,35 @@ int dataflow_submit_default_rms_norm(Dataflow_Handle * handle, int stream_id,
 	return 0;
 }
 
+int dataflow_submit_default_rms_norm_recompute(Dataflow_Handle * handle, int stream_id, 
+						DataflowDatatype fwd_dt, 
+						int n_rows, int n_cols,
+						void * rms_weight, float * rms_vals, void * X, void * out){
+
+	int ret;
+
+	Op rms_norm_recompute_op;
+
+	dataflow_set_default_rms_norm_recompute_skeleton(&rms_norm_recompute_op.op_skeleton, fwd_dt);
+
+	void ** op_args = rms_norm_recompute_op.op_args;
+
+	op_args[0] = &n_rows;
+	op_args[1] = &n_cols;
+	op_args[2] = &rms_weight;
+	op_args[3] = &rms_vals;
+	op_args[4] = &X;
+	op_args[5] = &out;
+
+	ret = (handle -> submit_op)(handle, &rms_norm_recompute_op, stream_id);
+	if (ret){
+		fprintf(stderr, "Error: failed to rms norm recompute...\n");
+		return -1;
+	}
+
+	return 0;
+}
+
 int dataflow_submit_default_rms_norm_bwd_x(Dataflow_Handle * handle, int stream_id, 
 								DataflowDatatype fwd_dt, DataflowDatatype bwd_dt, 
 								int n_rows, int n_cols, float eps, 

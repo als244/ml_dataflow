@@ -958,7 +958,7 @@
 
 		uint64_t chunk_act_size = get_chunk_activations_size(chunk_size, model_dim, kv_dim, num_total_active_experts, expert_dim, block_dt);
 
-		printf("Chunk Act Size: %lu\n", chunk_act_size);
+		//printf("Chunk Act Size: %lu\n", chunk_act_size);
 
 		// int num_chunks = num_chunks_per_seq * seq_groups_per_round;
 
@@ -1051,13 +1051,13 @@
 
 		uint64_t per_layer_full_size = fwd_block_size + per_layer_act_size + bwd_block_size;
 
-		printf("Per Layer Full Size: %lu\n", per_layer_full_size);
+		//printf("Per Layer Full Size: %lu\n", per_layer_full_size);
 
-		printf("Remain Dev Mem: %lu\n", remain_dev_mem);
+		//printf("Remain Dev Mem: %lu\n", remain_dev_mem);
 
 		int num_full_layers_on_dev = MY_MIN(remain_dev_mem / per_layer_full_size, n_layers);
 
-		printf("Num Full Layers on Dev: %d\n", num_full_layers_on_dev);
+		//printf("Num Full Layers on Dev: %d\n", num_full_layers_on_dev);
 
 		int NUM_DEV_BLOCKS;
 		int NUM_DEV_GRAD_BLOCKS;
@@ -2150,8 +2150,8 @@
 
 		for (int i = 0; i < num_sys_saved_activations; i++){
 
-			saved_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batches[(i % num_chunks)]);
-			ret = bind_seq_batch_saved_activations_buffer(seq_batches[(i % num_chunks)], &(sys_saved_activations[i]), cur_host_mem, saved_activations_buffer_size, i);
+			saved_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batches[(i % num_chunks)], SAVED_ACTIVATION_LEVEL_FULL);
+			ret = bind_seq_batch_saved_activations_buffer(seq_batches[(i % num_chunks)], &(sys_saved_activations[i]), cur_host_mem, SAVED_ACTIVATION_LEVEL_FULL, saved_activations_buffer_size, i);
 			if (ret){
 				fprintf(stderr, "Error: failed to bind seq_batch saved_activations buffer...\n");
 				return -1;
@@ -2311,9 +2311,9 @@
 		
 		for (int i = 0; i < num_saved_activation_buffers; i++){
 
-			saved_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batches[(i % num_chunks)]);
+			saved_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batches[(i % num_chunks)], SAVED_ACTIVATION_LEVEL_FULL);
 
-			ret = bind_seq_batch_saved_activations_buffer(seq_batches[(i % num_chunks)], &(saved_activations[i]), cur_dev_mem, saved_activations_buffer_size, i);
+			ret = bind_seq_batch_saved_activations_buffer(seq_batches[(i % num_chunks)], &(saved_activations[i]), cur_dev_mem, SAVED_ACTIVATION_LEVEL_FULL, saved_activations_buffer_size, i);
 			if (ret){
 				fprintf(stderr, "Error: failed to bind seq_batch saved_activations buffer...\n");
 				return -1;
@@ -2418,10 +2418,10 @@
 		}
 
 		// seq batch 0 is the largest, so won't need more space than this...
-		uint64_t grad_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batches[0]);
+		uint64_t grad_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batches[0], SAVED_ACTIVATION_LEVEL_FULL);
 
 		// using seq batch 0 offsets is safe because all seq batches are either the same or smaller (in terms of total tokens, thus saved activations offsets...)
-		ret = bind_seq_batch_saved_activations_buffer(seq_batches[0], grad_saved_activations, cur_dev_mem, grad_activations_buffer_size, 0);
+		ret = bind_seq_batch_saved_activations_buffer(seq_batches[0], grad_saved_activations, cur_dev_mem, SAVED_ACTIVATION_LEVEL_FULL, grad_activations_buffer_size, 0);
 		if (ret){
 			fprintf(stderr, "Error: failed to bind seq_batch grad_saved_activations buffer...\n");
 			return -1;
@@ -2723,6 +2723,14 @@
 			step_throughput_op_buffers[t].peak_hardware_flop_rate = PEAK_BF16_TFLOPS;
 			step_throughput_op_buffers[t].to_print_metrics = TO_PRINT_THROUGHPUT_METRICS;
 			step_throughput_op_buffers[t].to_print_verbose = TO_PRINT_THROUGHPUT_METRICS_VERBOSE;
+
+			// To determine recomputation flops...
+
+			// This version of the code does not have recomputation...
+			step_throughput_op_buffers[t].chunk_size = chunk_size;
+			step_throughput_op_buffers[t].num_inp_attn_saved = 0;
+			step_throughput_op_buffers[t].num_inp_only_saved = 0;
+			memset(step_throughput_op_buffers[t].inp_only_seq_lens, 0, MAX_INP_ONLY_CHUNKS * sizeof(int));
 		}
 
 		// JUST FOR DEMO we are using the same sequence distribution for every round and eveyr step...
@@ -2743,6 +2751,13 @@
 			printf("\tSeqlen: %d\n", MAX_SEQLEN);
 			printf("\tSeqs per round: %d\n", seqs_per_round);
 			printf("\tSeqs per step: %d\n\n", seqs_per_step);
+
+			// this version doesn't have recomputation...
+			printf("\tHost Activations: %d\n", total_home_acts);
+			printf("\t\tNum Full Saved Activations: %d\n", total_home_acts);
+			printf("\t\tNum Inp + Attn Saved Activations: %d\n", 0);
+			printf("\t\tNum Inp Only Saved Activations: %d\n", 0);
+			printf("\tDevice Activations: %d\n\n", total_dev_acts);
 
 			printf("# Model Params: %.2fB\n\n", all_model_num_els / 1e9);
 		}

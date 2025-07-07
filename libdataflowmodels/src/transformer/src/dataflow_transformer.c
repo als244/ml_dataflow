@@ -1007,6 +1007,211 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
     return 0;
 }
 
+
+
+
+// Assumse that working_activations has been already populated in device memory with the appropriate
+// saved activation level amount of data alreay ready to go (prefix of the this chunk). Assumes that
+// there is enough memory to save the forward activations for the entire block (repeating the forward pass)
+// and that the bwd_x function will be called next!
+int dataflow_submit_transformer_block_recompute(Dataflow_Handle * dataflow_handle, int compute_stream_id, 
+												Transformer_Block * transformer_block,
+												Seq_Batch * seq_batch,
+												SavedActivationLevel saved_activation_level,
+												Seq_Batch_Saved_Activations * working_activations, Seq_Batch_Context * fwd_context,
+												Seq_Batch_Activation_Workspace * activation_workspace) {
+	
+	int ret;
+
+	if (saved_activation_level == SAVED_ACTIVATION_LEVEL_FULL){
+		return 0;
+	}
+
+	if (saved_activation_level == SAVED_ACTIVATION_LEVEL_NONE){
+		fprintf(stderr, "Error: cannot recompute with no block input...\n");
+	}
+
+	Transformer_Block_Config * fwd_block_config = &(transformer_block -> config);
+    DataflowDatatype fwd_dt = fwd_block_config -> block_dt;
+	DataflowDatatype compute_dt = fwd_block_config -> compute_dt;
+
+	int model_dim = fwd_block_config -> model_dim;
+	int ffn_dim = fwd_block_config -> ffn_dim;
+	int theta = fwd_block_config -> theta;
+
+
+    uint64_t kernelWorkspaceBytes = activation_workspace -> kernelWorkspaceBytes;
+    void * kernelWorkspace = activation_workspace -> kernelWorkspace;
+
+	int num_q_heads = (transformer_block -> config).num_q_heads;
+	int num_kv_heads = (transformer_block -> config).num_kv_heads;
+	int head_dim = (transformer_block -> config).head_dim;
+
+	Seq_Batch_Attention_Config * batch_attention_config = &(seq_batch -> attention_config);
+    int num_seqs = batch_attention_config -> num_seqs;
+    int total_q = batch_attention_config -> total_q;
+    int total_k = batch_attention_config -> total_k;
+
+	int is_causal = 1;
+
+	void * q_seq_offsets = batch_attention_config -> q_seq_offsets;
+	void * q_seq_lens = batch_attention_config -> q_seq_lens;
+	int max_seqlen_q = batch_attention_config -> max_seqlen_q;
+
+	void * k_seq_offsets = batch_attention_config -> k_seq_offsets;
+	void * k_seq_lens = batch_attention_config -> k_seq_lens;
+	int max_seqlen_k = batch_attention_config -> max_seqlen_k;
+
+	int total_tokens = total_q;
+
+	// In forward pass mode!
+	int to_transa = 1;
+	int to_transb = 0;
+
+	// recompute the queries regardless
+	if ((saved_activation_level == SAVED_ACTIVATION_LEVEL_INP_ONLY) || (saved_activation_level == SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY)){
+		// need to recompute queries
+
+		ret = dataflow_submit_default_rms_norm_recompute(dataflow_handle, compute_stream_id, 
+						fwd_dt, 
+						total_q, model_dim,
+						transformer_block -> w_attn_norm, 
+						working_activations -> attn_norm_rms_vals,
+						working_activations -> x_inp,
+						activation_workspace -> x_temp);
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit rms norm recompute for input of attention norm...\n");
+			return ret;
+		}
+
+		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+					fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
+					compute_dt,
+					to_transa, to_transb,
+					model_dim, model_dim, total_q, 
+					1.0, 0.0,
+					transformer_block -> w_q, activation_workspace -> x_temp, NULL, working_activations -> x_q,
+					kernelWorkspaceBytes, kernelWorkspace);
+		
+		if (ret){
+			fprintf(stderr, "Error: failed to submit matmul for q proj during recompute...\n");
+			return ret;
+		}
+
+		// now do rope, (only for x_q)
+		ret = dataflow_submit_default_rope(dataflow_handle, compute_stream_id, 
+						fwd_dt, 
+						total_q, model_dim, head_dim, num_kv_heads, theta,
+						batch_attention_config -> seq_positions, working_activations -> x_q, NULL);
+		if (ret){
+			fprintf(stderr, "Error: failed to submit rope for q during recompute...\n");
+			return ret;
+		}
+	}
+
+	// recompoute attention if needed
+	if (saved_activation_level == SAVED_ACTIVATION_LEVEL_INP_ONLY){
+		// need to recompute attention
+
+		// forward context already has the correct x_k_rope and x_v for this chunk already populated...
+		ret = dataflow_submit_attention(dataflow_handle, compute_stream_id,
+						 fwd_dt, 
+						 num_seqs, total_q, total_k,
+						 q_seq_offsets, q_seq_lens, max_seqlen_q,
+						 k_seq_offsets, k_seq_lens, max_seqlen_k,
+						 num_q_heads, num_kv_heads, head_dim,
+						 working_activations -> x_q, fwd_context -> x_k, fwd_context -> x_v,
+						 working_activations -> x_attn_out, working_activations -> softmax_lse, 
+						 is_causal,
+						 kernelWorkspaceBytes, kernelWorkspace);
+		if (ret){
+			fprintf(stderr, "Error: failed to submit attention during recompute...\n");
+			return -1;
+		}
+	}
+
+	// now do the output projection and ffn no matter what...
+	if ((saved_activation_level == SAVED_ACTIVATION_LEVEL_INP_ONLY) || (saved_activation_level == SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY)){
+	
+		// add result to the block input..
+		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+					fwd_dt, fwd_dt, fwd_dt, fwd_dt,
+					compute_dt,
+					to_transa, to_transb,
+					model_dim, model_dim, total_q, 
+					1.0, 1.0,
+					transformer_block -> w_o, working_activations -> x_attn_out, working_activations -> x_inp, working_activations -> x_o,
+					kernelWorkspaceBytes, kernelWorkspace);
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit o matmul proj during recompute...\n");
+			return -1;
+		}
+
+		ret = dataflow_submit_default_rms_norm_recompute(dataflow_handle, compute_stream_id, 
+						fwd_dt, 
+						total_q, model_dim,
+						transformer_block -> w_ffn_norm, 
+						working_activations -> ffn_norm_rms_vals,
+						working_activations -> x_o,
+						activation_workspace -> x_temp);
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit rms norm recompute for input of ffn norm...\n");
+			return ret;
+		}
+
+		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+					fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
+					compute_dt,
+					to_transa, to_transb,
+					ffn_dim, model_dim, total_q, 
+					1.0, 0.0,
+					(transformer_block -> w_1)[0], activation_workspace -> x_temp, NULL, (working_activations -> x_1)[0],
+					kernelWorkspaceBytes, kernelWorkspace);
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit w1 matmul proj during recompute...\n");
+			return -1;
+		}
+
+		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+						fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
+						compute_dt,
+						to_transa, to_transb,
+						ffn_dim, model_dim, total_q, 
+						1.0, 0.0,
+						(transformer_block -> w_3)[0], activation_workspace -> x_temp, NULL, (working_activations -> x_3)[0],
+						kernelWorkspaceBytes, kernelWorkspace);
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit w3 matmul proj during recompute...\n");
+			return -1;
+		}
+
+		// only fill up to x_1 and x_3, don't need to recompute swiglu or 2nd matmul...
+	}
+
+	return 0;
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // dX_out is upstream gradient
 // it is in col-major orientation
 
@@ -1023,10 +1228,6 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 // and B = dX_Out in col-major,
 // If we pass in M = w_in, K = w_out, N = x_in, which yields
 // a (w_in, x_in) matrix which we interpret as col major dX
-
-
-
-
 int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int compute_stream_id,
 								Transformer_Block * transformer_block, 
 								Transformer_Block_Transition * inp_grad_stream, 
@@ -1035,7 +1236,6 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 								Transformer_Block * grad_weights,
 								Transformer_Block_Transition * next_grad_stream) {
 
-	
 	int ret;
 
 	int layer_id = transformer_block -> layer_id;

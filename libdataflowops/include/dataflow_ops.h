@@ -162,6 +162,12 @@ int dataflow_submit_default_rms_norm(Dataflow_Handle * handle, int stream_id,
 						int n_rows, int n_cols, float eps, 
 						void * rms_weight, void * X, void * out, float * rms_vals);
 
+// computes correct output along with saving rms_vals
+int dataflow_submit_default_rms_norm_recompute(Dataflow_Handle * handle, int stream_id, 
+						DataflowDatatype fwd_dt, 
+						int n_rows, int n_cols,
+						void * rms_weight, float * rms_vals, void * X, void * out);
+
 
 // if X_out is not NULL, then it gets populated the the recomputed value from fwd pass
 // accumulates result into dX
@@ -371,6 +377,8 @@ int dataflow_submit_print_round_loss_host(Dataflow_Handle * handle, int stream_i
 // METRICS
 
 #define MAX_SEQS_PER_STEP 65536
+#define MAX_INP_ONLY_CHUNKS 8192
+
 typedef struct Step_Throughput_Host_Op_Args{
 	// populated at beginning of training for all steps
 	int model_dim;
@@ -389,6 +397,11 @@ typedef struct Step_Throughput_Host_Op_Args{
 	int step_num;
 	int num_seqs;
 	int seqlens[MAX_SEQS_PER_STEP];
+	// to determine recomputation flops...
+	int chunk_size;
+	int num_inp_attn_saved;
+	int num_inp_only_saved;
+	int inp_only_seq_lens[MAX_INP_ONLY_CHUNKS];
 
 	// populated during start_step_metrics()
 	struct timespec start_time;
@@ -397,8 +410,13 @@ typedef struct Step_Throughput_Host_Op_Args{
 	float total_head_flops;
 	float total_bwd_x_flops;
 	float total_bwd_w_flops;
-	// sum of above 3
+	// sum of above 4
 	float total_computation_flops;
+	float total_recompute_flops;
+	// sum of total_computation_flops and total_recompute_flops
+	float total_flops;
+	float total_attn_flops;
+	float total_matmul_flops;
 	// these get populated during end_step_metrics()
 	struct timespec end_time;
 	uint64_t duration_ns;
@@ -407,6 +425,10 @@ typedef struct Step_Throughput_Host_Op_Args{
 	float achieved_flop_rate;
 	// duration_s / (total_computation_flops / peak_hardware_flop_rate)
 	float mfu;
+
+	// having the denomicator include recompute flops...
+	float achieved_hardware_flop_rate;
+	float hfu;
 	// total_tokens / duration_s
 	float tokens_per_second;
 } Step_Throughput_Host_Op_Args;

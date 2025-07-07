@@ -56,7 +56,7 @@
 
 	// this (along with num seqs per round)modulates how frequently we will step 
 	// the optimizer...
-	#define NUM_ROUNDS_PER_STEP 6
+	#define NUM_ROUNDS_PER_STEP 1
 
 
 	#define NUM_STEPS 10
@@ -888,8 +888,8 @@
 
 		// attention kernel bwd needs good amount of workspace...
 
-		// 2 GB
-		uint64_t kernelWorkspaceBytes = 2 * (1UL << 30);
+		// 3 GB
+		uint64_t kernelWorkspaceBytes = 3 * (1UL << 30);
 		void * kernelWorkspace = cur_dev_mem;
 		cur_dev_mem += kernelWorkspaceBytes;
 		used_dev_mem += kernelWorkspaceBytes;
@@ -958,7 +958,7 @@
 
 		uint64_t chunk_act_size = get_chunk_activations_size(chunk_size, model_dim, kv_dim, num_total_active_experts, expert_dim, block_dt);
 
-		printf("Chunk Act Size: %lu\n", chunk_act_size);
+		//printf("Chunk Act Size: %lu\n", chunk_act_size);
 
 		// int num_chunks = num_chunks_per_seq * seq_groups_per_round;
 
@@ -1051,13 +1051,13 @@
 
 		uint64_t per_layer_full_size = fwd_block_size + per_layer_act_size + bwd_block_size;
 
-		printf("Per Layer Full Size: %lu\n", per_layer_full_size);
+		//printf("Per Layer Full Size: %lu\n", per_layer_full_size);
 
-		printf("Remain Dev Mem: %lu\n", remain_dev_mem);
+		//printf("Remain Dev Mem: %lu\n", remain_dev_mem);
 
 		int num_full_layers_on_dev = MY_MIN(remain_dev_mem / per_layer_full_size, n_layers);
 
-		printf("Num Full Layers on Dev: %d\n", num_full_layers_on_dev);
+		//printf("Num Full Layers on Dev: %d\n", num_full_layers_on_dev);
 
 		int NUM_DEV_BLOCKS;
 		int NUM_DEV_GRAD_BLOCKS;
@@ -2136,6 +2136,196 @@
 		int total_dev_acts = num_saved_activation_buffers;
 
 
+		// DETERMINE THE savedActivationLevel's based on host mem!
+
+
+
+		if (used_host_mem > host_size_bytes){
+			fprintf(stderr, "Error: not enough host memory to fit any activations. Already used %.3f GB of %.3f GB...\n", (float) used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) host_size_bytes / (1024.0 * 1024.0 * 1024.0));
+			return -1;
+		}
+
+		uint64_t remaining_host_mem = host_size_bytes - used_host_mem;
+
+		uint64_t full_saved_size = get_seq_batch_saved_activations_buffer_size(seq_batches[0], SAVED_ACTIVATION_LEVEL_FULL);
+		uint64_t inp_attn_saved_size = get_seq_batch_saved_activations_buffer_size(seq_batches[0], SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY);
+		uint64_t inp_only_saved_size = get_seq_batch_saved_activations_buffer_size(seq_batches[0], SAVED_ACTIVATION_LEVEL_INP_ONLY);
+
+		// First ensure that we can fit all using inp only...
+		uint64_t all_inp_only_size = inp_only_saved_size * total_acts;
+		if (all_inp_only_size > remaining_host_mem){
+			fprintf(stderr, "Error: not enough host memory to fit all activations using inp only. Needed %.3f GB, remaining: %.3f GB...\n", (float) all_inp_only_size / (1024.0 * 1024.0 * 1024.0), (float) remaining_host_mem / (1024.0 * 1024.0 * 1024.0));
+			return -1;
+		}
+
+		// Given "total_home_acts" = #, "remaining_host_mem" = #
+		// Given inp_only_saved_size < inp_attn_saved_size < full_saved_size
+		// Objective:
+		// 1.) ensure that sum of num_inp_only_saved, num_inp_attn_saved, num_full_saved == total_home_acts
+		// 2.) Ensure that all total_home_acts can at least fit if they are inp_only
+		// 3.) Before using full_saved ensure that all total_home_acts can use inp_attn_saved
+		// 4.) If not all can use inp_attn_saved then use as many as can
+		// 5.) If all can use inp_attn_saved but not enough for all to use full_saved, then use as many full_saved as can...
+		
+		
+		// First, see how many activations can be upgraded from inp_only to inp_attn_saved
+        uint64_t mem_for_attn_upgrades = remaining_host_mem - all_inp_only_size;
+        uint64_t inp_attn_upgrade_cost = inp_attn_saved_size - inp_only_saved_size;
+        uint64_t num_upgraded_to_attn = 0;
+        if (inp_attn_upgrade_cost > 0) {
+            num_upgraded_to_attn = mem_for_attn_upgrades / inp_attn_upgrade_cost;
+        }
+
+        // We can't upgrade more than the total number of activations
+        if (num_upgraded_to_attn > total_acts) {
+            num_upgraded_to_attn = total_acts;
+        }
+
+        int num_inp_attn_saved = num_upgraded_to_attn;
+        int num_inp_only_saved = total_acts - num_inp_attn_saved;
+
+        // Now, from the ones upgraded to inp_attn, see how many can be further upgraded to full_saved
+        uint64_t current_mem_usage = (num_inp_attn_saved * inp_attn_saved_size) + (num_inp_only_saved * inp_only_saved_size);
+        uint64_t mem_for_full_upgrades = remaining_host_mem - current_mem_usage;
+        uint64_t full_upgrade_cost = full_saved_size - inp_attn_saved_size;
+        uint64_t num_upgraded_to_full = 0;
+        if (full_upgrade_cost > 0) {
+            num_upgraded_to_full = mem_for_full_upgrades / full_upgrade_cost;
+        }
+        
+        // We can't upgrade more than what we've already allocated for inp_attn
+        if (num_upgraded_to_full > num_inp_attn_saved) {
+            num_upgraded_to_full = num_inp_attn_saved;
+        }
+
+        int num_full_saved = num_upgraded_to_full;
+
+		// Assign the saved activation levels based on remaining memory...
+
+		// Do a round robin assignment to balance the I/O load...
+
+		// Given: num_inp_only_saved > 0 => num_full_saved = 0; if num_full_saved > 0 => num_inp_only_saved = 0;
+		// num_inp_only_saved + num_inp_attn_saved + num_full_saved = total_home_acts
+
+		SavedActivationLevel * saved_activation_levels = malloc(total_acts * sizeof(SavedActivationLevel));
+		if (!saved_activation_levels){
+			fprintf(stderr, "Error: failed to allocate saved_activation_level...\n");
+			return -1;
+		}
+
+		for (int i = 0; i < total_acts; i++){
+			saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_NONE;
+		}
+
+		// Now bound by the total number of home acts...
+
+		int remain_home_acts = total_home_acts;
+		num_full_saved  = MY_MIN(num_full_saved, remain_home_acts);
+		remain_home_acts -= num_full_saved;
+		num_inp_attn_saved = MY_MIN(num_inp_attn_saved, remain_home_acts);
+		remain_home_acts -= num_inp_attn_saved;
+		assert(num_inp_only_saved >= remain_home_acts);
+		num_inp_only_saved = remain_home_acts;
+
+		int full_to_assign = num_full_saved;
+		int attn_to_assign = num_inp_attn_saved;
+		int only_to_assign = num_inp_only_saved;
+
+		int inp_only_seq_lens[MAX_INP_ONLY_CHUNKS];
+		for (int i = 0; i < MAX_INP_ONLY_CHUNKS; i++){
+			inp_only_seq_lens[i] = 0;
+		}
+		
+		int cur_inp_only_seq_len = 0;
+
+		int cur_inp_only_assigned = 0;
+
+		// make sure to recompute attention on the short seq portions...
+
+		if (only_to_assign > 0){
+
+			int only_chunks_per_layer = only_to_assign / n_layers;
+			int only_remain = only_to_assign % n_layers;
+
+			for (int k = 0; k < n_layers; k++){
+
+				for (int chunk_id = 0; chunk_id < only_chunks_per_layer; chunk_id++){
+					saved_activation_levels[k*num_chunks + chunk_id] = SAVED_ACTIVATION_LEVEL_INP_ONLY;
+					if (chunk_id == 0){
+						cur_inp_only_seq_len = MY_MIN(chunk_size, DEMO_SEQ_LEN);
+					}
+					else{
+						cur_inp_only_seq_len = (chunk_id + 1) * chunk_size;
+					}
+
+					inp_only_seq_lens[cur_inp_only_assigned] = cur_inp_only_seq_len;
+					cur_inp_only_assigned++;
+				}
+
+				if (only_remain > 0){
+					int chunk_id = only_chunks_per_layer;
+					for (int k = 0; k < only_remain; k++){
+						saved_activation_levels[k*num_chunks + chunk_id] = SAVED_ACTIVATION_LEVEL_INP_ONLY;
+
+					}
+					if (chunk_id == 0){
+						cur_inp_only_seq_len = MY_MIN(chunk_size, DEMO_SEQ_LEN);
+					}
+					else{
+						cur_inp_only_seq_len = (chunk_id + 1) * chunk_size;
+					}
+
+					inp_only_seq_lens[cur_inp_only_assigned] = cur_inp_only_seq_len;
+					cur_inp_only_assigned++;
+				}
+			}
+
+			// assign the rest to inp_attn...
+			for (int i = 0; i < total_home_acts; i++){
+				if (saved_activation_levels[i] == SAVED_ACTIVATION_LEVEL_NONE){
+					saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY;
+				}
+			}
+		}
+		// only distributing between full and inp+attn, so it doesn't really matter
+		// which chunk saves/recomputes besides for load balancing I/O.. (thus can alternate).
+		else{
+
+			for (int i = 0; i < total_home_acts; i++){
+
+				if ((i % 2 == 0) && (full_to_assign > 0)){
+					saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_FULL;
+					full_to_assign--;
+				}
+				else if ((i % 2 == 1) && (attn_to_assign > 0)){
+					saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY;
+					attn_to_assign--;
+				}
+				else{
+					if (full_to_assign > 0){
+						saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_FULL;
+						full_to_assign--;
+					}
+					else{
+						saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY;
+						attn_to_assign--;
+					}
+				}
+			}
+		}
+
+		// Don't save any of the activations that are at end of orderining
+		// as these will stay on device...
+		for (int i = total_home_acts; i < total_acts; i++){
+			saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_NONE;
+		}
+		
+		
+
+		// If we have enough remaining host mem to fit the full activations buffer for any of the chunks, then do so...
+		
+
+
 		// Saved Actviations will live on device and might be transferred back to host and retrieved prior to bwd pass...
 
 		int num_sys_saved_activations = total_home_acts;
@@ -2148,10 +2338,14 @@
 
 		uint64_t saved_activations_buffer_size;
 
+		SavedActivationLevel cur_saved_activation_level;
+
 		for (int i = 0; i < num_sys_saved_activations; i++){
 
-			saved_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batches[(i % num_chunks)]);
-			ret = bind_seq_batch_saved_activations_buffer(seq_batches[(i % num_chunks)], &(sys_saved_activations[i]), cur_host_mem, saved_activations_buffer_size, i);
+			cur_saved_activation_level = saved_activation_levels[i];
+
+			saved_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batches[(i % num_chunks)], cur_saved_activation_level);
+			ret = bind_seq_batch_saved_activations_buffer(seq_batches[(i % num_chunks)], &(sys_saved_activations[i]), cur_host_mem, cur_saved_activation_level, saved_activations_buffer_size, i);
 			if (ret){
 				fprintf(stderr, "Error: failed to bind seq_batch saved_activations buffer...\n");
 				return -1;
@@ -2307,13 +2501,14 @@
 			return -1;
 		}
 
-		
+
+		// HAVE THE DEVICE SAVED ACTIVATIONS BUFFERS BE FULL SO THEY CAN BE POPULATED DURING FWD PASS...
 		
 		for (int i = 0; i < num_saved_activation_buffers; i++){
 
-			saved_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batches[(i % num_chunks)]);
+			saved_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batches[(i % num_chunks)], SAVED_ACTIVATION_LEVEL_FULL);
 
-			ret = bind_seq_batch_saved_activations_buffer(seq_batches[(i % num_chunks)], &(saved_activations[i]), cur_dev_mem, saved_activations_buffer_size, i);
+			ret = bind_seq_batch_saved_activations_buffer(seq_batches[(i % num_chunks)], &(saved_activations[i]), cur_dev_mem, SAVED_ACTIVATION_LEVEL_FULL, saved_activations_buffer_size, i);
 			if (ret){
 				fprintf(stderr, "Error: failed to bind seq_batch saved_activations buffer...\n");
 				return -1;
@@ -2418,10 +2613,10 @@
 		}
 
 		// seq batch 0 is the largest, so won't need more space than this...
-		uint64_t grad_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batches[0]);
+		uint64_t grad_activations_buffer_size = get_seq_batch_saved_activations_buffer_size(seq_batches[0], SAVED_ACTIVATION_LEVEL_FULL);
 
 		// using seq batch 0 offsets is safe because all seq batches are either the same or smaller (in terms of total tokens, thus saved activations offsets...)
-		ret = bind_seq_batch_saved_activations_buffer(seq_batches[0], grad_saved_activations, cur_dev_mem, grad_activations_buffer_size, 0);
+		ret = bind_seq_batch_saved_activations_buffer(seq_batches[0], grad_saved_activations, cur_dev_mem, SAVED_ACTIVATION_LEVEL_FULL, grad_activations_buffer_size, 0);
 		if (ret){
 			fprintf(stderr, "Error: failed to bind seq_batch grad_saved_activations buffer...\n");
 			return -1;
@@ -2521,9 +2716,12 @@
 
 		// in case we want to save the logits...
 		uint64_t logits_size = (uint64_t) max_tokens_per_chunk * (uint64_t) vocab_size * block_bwd_dt_size;
+
+		/*
 		void * sys_logits = cur_host_mem;
 		cur_host_mem += logits_size;
 		used_host_mem += logits_size;
+		*/
 
 		
 
@@ -2723,6 +2921,12 @@
 			step_throughput_op_buffers[t].peak_hardware_flop_rate = PEAK_BF16_TFLOPS;
 			step_throughput_op_buffers[t].to_print_metrics = TO_PRINT_THROUGHPUT_METRICS;
 			step_throughput_op_buffers[t].to_print_verbose = TO_PRINT_THROUGHPUT_METRICS_VERBOSE;
+
+			// To determine recomputation flops...
+			step_throughput_op_buffers[t].chunk_size = chunk_size;
+			step_throughput_op_buffers[t].num_inp_attn_saved = num_inp_attn_saved;
+			step_throughput_op_buffers[t].num_inp_only_saved = num_inp_only_saved;
+			memcpy(step_throughput_op_buffers[t].inp_only_seq_lens, inp_only_seq_lens, MAX_INP_ONLY_CHUNKS * sizeof(int));
 		}
 
 		// JUST FOR DEMO we are using the same sequence distribution for every round and eveyr step...
@@ -2743,6 +2947,12 @@
 			printf("\tSeqlen: %d\n", MAX_SEQLEN);
 			printf("\tSeqs per round: %d\n", seqs_per_round);
 			printf("\tSeqs per step: %d\n\n", seqs_per_step);
+
+			printf("\tHost Activations: %d\n", total_home_acts);
+			printf("\t\tNum Full Saved Activations: %d\n", num_full_saved);
+			printf("\t\tNum Inp + Attn Saved Activations: %d\n", num_inp_attn_saved);
+			printf("\t\tNum Inp Only Saved Activations: %d\n", num_inp_only_saved);
+			printf("\tDevice Activations: %d\n\n", total_dev_acts);
 
 			printf("# Model Params: %.2fB\n\n", all_model_num_els / 1e9);
 		}
@@ -3476,8 +3686,33 @@
 							cur_fwd_activations -> layer_id = k;
 							cur_fwd_activations -> seq_batch = seq_batches[chunk_id];
 
+							cur_saved_activation_level = saved_activation_levels[num_chunks * k + chunk_id];
+							cur_fwd_activations -> saved_activation_level = cur_saved_activation_level;
+
 							grad_activations -> working_activations -> layer_id = k;
 							grad_activations -> working_activations -> seq_batch = seq_batches[chunk_id];
+
+							
+							if ((cur_saved_activation_level != SAVED_ACTIVATION_LEVEL_NONE) && (cur_saved_activation_level != SAVED_ACTIVATION_LEVEL_FULL)){
+								
+								if (TO_PRINT_SUBMITTING){
+									printf("\n\nSubmitting recompute for seq group #%d, chunk #%d, block #%d...\n\n", seq_group, chunk_id, k);
+								}
+
+								sprintf(profile_msg, "Recompute X: seq group #%d, chunk #%d, block #%d", seq_group, chunk_id, k);
+								dataflow_handle.profiler.range_push(profile_msg);
+								ret = dataflow_submit_transformer_block_recompute(&dataflow_handle, compute_stream_id, 
+												working_block,
+												seq_batches[chunk_id],
+												cur_saved_activation_level,
+												cur_fwd_activations, fwd_context,
+												activation_workspace);
+								if (ret){
+									fprintf(stderr, "Error: failed to submit transformer block recompute for seq group #%d, chunk #%d, block #%d...\n", seq_group, chunk_id, k);
+									return -1;
+								}
+								dataflow_handle.profiler.range_pop();
+							}
 
 						
 							if (TO_PRINT_SUBMITTING){

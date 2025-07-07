@@ -79,20 +79,20 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 	DataflowDatatype fwd_datatypes[] = {DATAFLOW_FP32, DATAFLOW_FP16, DATAFLOW_BF16, DATAFLOW_FP8E4M3, DATAFLOW_FP8E5M2};
 	DataflowDatatype bwd_datatypes[] = {DATAFLOW_FP32, DATAFLOW_FP16, DATAFLOW_BF16};
 
-	int num_base_ops = 8;
-	char * op_base_names[8] = {"default_embedding_table", "default_rms_norm", "default_rms_norm_noscale", "default_rope", "default_select_experts", "default_swiglu", "default_softmax", "default_cross_entropy_loss"};
+	int num_base_ops = 9;
+	char * op_base_names[9] = {"default_embedding_table", "default_rms_norm", "default_rms_norm_recompute", "default_rms_norm_noscale", "default_rope", "default_select_experts", "default_swiglu", "default_softmax", "default_cross_entropy_loss"};
 
-	char * op_init_symbols[8] = {"default_embedding_table_set_attribute_config", "default_rms_norm_set_attribute_config", "default_rms_norm_set_attribute_config", NULL, "default_select_experts_set_attribute_config", NULL, NULL, NULL};
+	char * op_init_symbols[9] = {"default_embedding_table_set_attribute_config", "default_rms_norm_set_attribute_config", "default_rms_norm_set_attribute_config", "default_rms_norm_set_attribute_config", NULL, "default_select_experts_set_attribute_config", NULL, NULL, NULL};
 	
 	
 	// cross entropy loss doesn't have function for fp8 yet...
-	bool num_fwd_ops[8] = {5, 5, 5, 5, 5, 5, 7, 3};
-	bool num_bwd_ops[8] = {3, 17, 7, 3, 0, 7, 0, 0};
+	bool num_fwd_ops[9] = {5, 5, 5, 5, 5, 5, 5, 7, 3};
+	bool num_bwd_ops[9] = {3, 17, 0, 7, 3, 0, 7, 0, 0};
 
-	int num_base_funcs = 77;
+	int num_base_funcs = 82;
 
-	bool has_bwd_x[8] = {false, true, true, true, false, true, false, false};
-	bool has_bwd_w[8] = {true, true, false, false, false, false, false, false};
+	bool has_bwd_x[9] = {false, true, false, true, true, false, true, false, false};
+	bool has_bwd_w[9] = {true, true, false, false, false, false, false, false, false};
 
 	int bwd_combos = 7;
 

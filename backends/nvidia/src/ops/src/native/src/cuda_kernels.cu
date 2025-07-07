@@ -5,6 +5,7 @@
 #include "preprocess/embedding_table_bwd_w.cu"
 
 #include "norm/rms_norm.cu"
+#include "norm/rms_norm_recompute.cu"
 #include "norm/rms_norm_bwd_x.cu"
 #include "norm/rms_norm_bwd_w.cu"
 #include "norm/rms_norm_bwd_w_combine.cu"

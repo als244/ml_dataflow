@@ -32,13 +32,16 @@ typedef struct seq_batch_metadata_offsets {
 typedef struct seq_batch_saved_activations_offsets {
 	uint64_t x_inp;
 	uint64_t attn_norm_rms_vals;
-	uint64_t x_q;
+	uint64_t ffn_norm_rms_vals;
 	uint64_t x_k_local;
 	uint64_t x_v_local;
+	uint64_t inp_only_cutoff;
 	uint64_t softmax_lse;
 	uint64_t x_attn_out;
+	uint64_t inp_attn_only_cutoff;
+	uint64_t x_q;
 	uint64_t x_o;
-	uint64_t ffn_norm_rms_vals;
+	
 
 
 	// MoE specific stuff
@@ -71,6 +74,9 @@ typedef struct seq_batch_saved_activations_offsets {
 
 	uint64_t total_size;
 } Seq_Batch_Saved_Activations_Offsets;
+
+
+
 
 typedef struct seq_batch_recomputed_activations_offsets {
 	uint64_t recomputed_attn_norm;
@@ -180,10 +186,23 @@ typedef struct seq_batch_recomputed_activations {
 	uint64_t total_size;
 } Seq_Batch_Recomputed_Activations;
 
+
+typedef enum SavedActivationLevel {
+	SAVED_ACTIVATION_LEVEL_NONE,
+	SAVED_ACTIVATION_LEVEL_INP_ONLY,
+	SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY,
+	SAVED_ACTIVATION_LEVEL_FULL
+} SavedActivationLevel;
+
 typedef struct seq_batch_saved_activations {
 
 	// the seq_batch this belongs to
 	Seq_Batch * seq_batch;
+
+	// the current saved activation level
+	// this is set during populate_seq_batch_metadata_buffer
+	// and used to determine what needs to be recomputed....
+	SavedActivationLevel saved_activation_level;
 
 	// the layer id
 	int layer_id;
@@ -201,7 +220,8 @@ typedef struct seq_batch_saved_activations {
 
 	// used during backprop
 	float * attn_norm_rms_vals;
-	void * x_q;
+	// used during backprop
+	float * ffn_norm_rms_vals;
 
 	// These are the outputs of passing
 	// normalized input through K and V weight
@@ -210,12 +230,19 @@ typedef struct seq_batch_saved_activations {
 	void * x_k_local;
 	void * x_v_local;
 
+	// If saved_activation_level is SAVED_ACTIVATION_LEVEL_INP_ONLY, then
+	// need to recompute fwd for attn
+
 	// softmax_lse
 	float * softmax_lse;
     void * x_attn_out;
+
+	// If saved_activation_level is SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY, then
+	// need to recompute fwd for x_q, x_o, and ffn
+
+	void * x_q;
 	void * x_o;
-	// used during backprop
-	float * ffn_norm_rms_vals;
+	
 
 
 	// MoE specific stuff
@@ -345,4 +372,4 @@ typedef struct seq_batch_activation_workspace {
 } Seq_Batch_Activation_Workspace;
 
 
-#endif
+#endif // SEQ_BATCH_STRUCTS_H

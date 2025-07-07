@@ -26,7 +26,7 @@ int get_human_readable_time(struct timespec * ts, char * time_buf){
 }
 
 float get_seq_flops(int seq_len, int vocab_size, int model_dim, int kv_dim, int num_shared_experts, int num_total_routed_experts, int num_active_routed_experts, int expert_dim, int num_layers, 
-							float * ret_seq_flops_fwd, float * ret_seq_flops_head, float * ret_seq_flops_bwd_x, float * ret_seq_flops_bwd_w){
+							float * ret_seq_flops_fwd, float * ret_seq_flops_head, float * ret_seq_flops_bwd_x, float * ret_seq_flops_bwd_w, float * ret_seq_attn_flops, float * ret_seq_matmul_flops){
 
 	float seq_flops_fwd = 0;
 	float seq_flops_head = 0;
@@ -41,6 +41,8 @@ float get_seq_flops(int seq_len, int vocab_size, int model_dim, int kv_dim, int 
 	float vocab_size_f = (float) vocab_size;
 
 
+	float seq_attn_flops = 0;
+
 	// 1.) FORWARD FLOPS
 
 	// attention inp projection
@@ -53,6 +55,8 @@ float get_seq_flops(int seq_len, int vocab_size, int model_dim, int kv_dim, int 
 
 	// assume causal attention, otherwise should be 4 * instead of 2 *
 	seq_flops_fwd += 2 * seq_len_f * seq_len_f * model_dim_f;
+
+	seq_attn_flops += 2 * seq_len_f * seq_len_f * model_dim_f;
 
 	// attention out projection
 	seq_flops_fwd += 2 * seq_len_f * model_dim_f * model_dim_f;
@@ -85,6 +89,8 @@ float get_seq_flops(int seq_len, int vocab_size, int model_dim, int kv_dim, int 
 	seq_flops_bwd_x -= (2 * seq_len_f * seq_len_f * model_dim_f);
 	seq_flops_bwd_x += (2.5 * seq_len_f * seq_len_f * model_dim_f);
 
+	seq_attn_flops += (2.5 * seq_len_f * seq_len_f * model_dim_f);
+
 
 	// b.) BWD W
 
@@ -97,6 +103,7 @@ float get_seq_flops(int seq_len, int vocab_size, int model_dim, int kv_dim, int 
 	seq_flops_fwd *= num_layers;
 	seq_flops_bwd_x *= num_layers;
 	seq_flops_bwd_w *= num_layers;
+	seq_attn_flops *= num_layers;
 
 
 	float total_seq_flops = seq_flops_fwd + seq_flops_head + seq_flops_bwd_x + seq_flops_bwd_w;
@@ -113,8 +120,72 @@ float get_seq_flops(int seq_len, int vocab_size, int model_dim, int kv_dim, int 
 	if (ret_seq_flops_bwd_w){
 		*ret_seq_flops_bwd_w = seq_flops_bwd_w;
 	}
+
+	if (ret_seq_attn_flops){
+		*ret_seq_attn_flops = seq_attn_flops;
+	}
+
+	if (ret_seq_matmul_flops){
+		*ret_seq_matmul_flops = total_seq_flops - seq_attn_flops;
+	}
 	
 	return total_seq_flops;
+}
+
+float get_recompute_flops(int model_dim, int num_shared_experts, int num_active_routed_experts, int expert_dim,
+								int chunk_size, int num_inp_attn_saved, int num_inp_only_saved, int * inp_only_seq_lens, 
+								float * ret_recompute_attn_flops, float * ret_recompute_matmul_flops){
+
+	float recompute_flops = 0;
+
+	float total_recompute_chunks = num_inp_attn_saved + num_inp_only_saved;
+
+	float chunk_size_f = (float) chunk_size;
+	float model_dim_f = (float) model_dim;
+	float expert_dim_f = (float) expert_dim;
+	
+	
+	// each of these recompute chunks does q proj, attn out proj, and ffn (only first two matrices)
+
+	// q proj
+	recompute_flops += total_recompute_chunks * (2 * chunk_size_f * model_dim_f * model_dim_f);
+
+	// attn out proj
+	recompute_flops += total_recompute_chunks * (2 * chunk_size_f * model_dim_f * model_dim_f);
+
+	// ffn
+	int total_experts_computed = num_shared_experts + num_active_routed_experts;
+	recompute_flops += total_recompute_chunks * total_experts_computed * (2 * (2 * chunk_size_f * model_dim_f * expert_dim_f));
+
+	// now do inp only chunks...
+	float chunk_seq_len;
+	float seqs_per_chunk;
+
+	float recompute_attn_flops = 0;
+
+	for (int chunk_loc = 0; chunk_loc < num_inp_only_saved; chunk_loc++){
+		chunk_seq_len = (float) inp_only_seq_lens[chunk_loc];
+
+		if (chunk_size > chunk_seq_len){
+			seqs_per_chunk = chunk_size / chunk_seq_len;
+			recompute_flops += seqs_per_chunk * 2 * chunk_seq_len * chunk_seq_len * model_dim_f;
+			recompute_attn_flops += seqs_per_chunk * 2 * chunk_seq_len * chunk_seq_len * model_dim_f;
+		}
+		else{
+			recompute_flops += 2 * chunk_size_f * chunk_seq_len * model_dim_f;
+			recompute_attn_flops += 2 * chunk_size_f * chunk_seq_len * model_dim_f;
+		}
+	}
+
+	if (ret_recompute_attn_flops){
+		*ret_recompute_attn_flops = recompute_attn_flops;
+	}
+
+	if (ret_recompute_matmul_flops){
+		*ret_recompute_matmul_flops = recompute_flops - recompute_attn_flops;
+	}
+
+	return recompute_flops;
 }
 
 int start_step_metrics(void * _step_throughput_op_args){
@@ -131,13 +202,15 @@ int start_step_metrics(void * _step_throughput_op_args){
 	float seq_flops_head;
 	float seq_flops_bwd_x;
 	float seq_flops_bwd_w;
+	float seq_attn_flops;
+	float seq_matmul_flops;
 
 	for (int i = 0; i < num_seqs; i++){
 		seq_len = seqlens[i];
 
 		float total_seq_flops = get_seq_flops(seq_len, step_throughput_op_args->vocab_size, step_throughput_op_args->model_dim, step_throughput_op_args->kv_dim, 
 														step_throughput_op_args->num_shared_experts, step_throughput_op_args->num_total_routed_experts, step_throughput_op_args->num_active_routed_experts, step_throughput_op_args->expert_dim, step_throughput_op_args->num_layers, 
-														&seq_flops_fwd, &seq_flops_head, &seq_flops_bwd_x, &seq_flops_bwd_w);
+														&seq_flops_fwd, &seq_flops_head, &seq_flops_bwd_x, &seq_flops_bwd_w, &seq_attn_flops, &seq_matmul_flops);
 
 		step_throughput_op_args->total_tokens += seq_len;
 		step_throughput_op_args->total_fwd_flops += seq_flops_fwd;
@@ -145,8 +218,20 @@ int start_step_metrics(void * _step_throughput_op_args){
 		step_throughput_op_args->total_bwd_x_flops += seq_flops_bwd_x;
 		step_throughput_op_args->total_bwd_w_flops += seq_flops_bwd_w;
 		step_throughput_op_args->total_computation_flops += total_seq_flops;
+		step_throughput_op_args->total_attn_flops += seq_attn_flops;
+		step_throughput_op_args->total_matmul_flops += seq_matmul_flops;
 	}
 
+	float recompute_attn_flops;
+	float recompute_matmul_flops;
+	float recompute_flops = get_recompute_flops(step_throughput_op_args->model_dim, step_throughput_op_args->num_shared_experts, step_throughput_op_args->num_active_routed_experts, step_throughput_op_args->expert_dim,
+													step_throughput_op_args->chunk_size, step_throughput_op_args->num_inp_attn_saved, step_throughput_op_args->num_inp_only_saved, step_throughput_op_args->inp_only_seq_lens,
+													&recompute_attn_flops, &recompute_matmul_flops);
+
+	step_throughput_op_args->total_recompute_flops += recompute_flops;
+	step_throughput_op_args->total_flops = step_throughput_op_args->total_computation_flops + step_throughput_op_args->total_recompute_flops;
+	step_throughput_op_args->total_attn_flops += recompute_attn_flops;
+	step_throughput_op_args->total_matmul_flops += recompute_matmul_flops;
 	// set start time	
 	clock_gettime(CLOCK_REALTIME, &(step_throughput_op_args->start_time));
 
@@ -178,15 +263,20 @@ int end_step_metrics(void * _step_throughput_op_args){
 	float achieved_flop_rate = step_throughput_op_args->total_computation_flops / duration_s;
 	step_throughput_op_args->achieved_flop_rate = achieved_flop_rate;
 
+	float achieved_hardware_flop_rate = step_throughput_op_args->total_flops / duration_s;
+	step_throughput_op_args->achieved_hardware_flop_rate = achieved_hardware_flop_rate;
 
 	float mfu = achieved_flop_rate / step_throughput_op_args->peak_hardware_flop_rate;
 	step_throughput_op_args->mfu = mfu;
+
+	float hfu = achieved_hardware_flop_rate / step_throughput_op_args->peak_hardware_flop_rate;
+	step_throughput_op_args->hfu = hfu;
 
 	float tokens_per_second = step_throughput_op_args->total_tokens / duration_s;
 	step_throughput_op_args->tokens_per_second = tokens_per_second;
 
 	if (step_throughput_op_args->to_print_metrics){
-		printf("\n\n[THROUGHPUT: Completed Step %d. Num Seqs: %d, Total Tokens: %d]:\n\n\tEffective Throughput: %.2f TFLOPS\n\tTokens/sec: %.2f\n\tMFU: %.2f%%\n\n", step_throughput_op_args->step_num, step_throughput_op_args->num_seqs, step_throughput_op_args->total_tokens, (achieved_flop_rate / 1e12), tokens_per_second, mfu * 100);
+		printf("\n\n[THROUGHPUT: Completed Step %d. Num Seqs: %d, Total Tokens: %d]:\n\n\tEffective Throughput: %.2f TFLOPS\n\tTokens/sec: %.2f\n\tMFU: %.2f%%\n\tHFU: %.2f%%\n\n", step_throughput_op_args->step_num, step_throughput_op_args->num_seqs, step_throughput_op_args->total_tokens, (achieved_flop_rate / 1e12), tokens_per_second, mfu * 100, hfu * 100);
 	}
 	
 	char start_time_buf[100];
@@ -204,12 +294,15 @@ int end_step_metrics(void * _step_throughput_op_args){
 	if ((step_throughput_op_args->to_print_metrics) && (step_throughput_op_args->to_print_verbose)){
 		printf("\tTime Info:\n\t\tStart Time: %s\n\t\tEnd Time: %s\n\t\tDuration: %.4f seconds\n", start_time_buf, end_time_buf, duration_s);
 
-		float fwd_pct = (step_throughput_op_args->total_fwd_flops / step_throughput_op_args->total_computation_flops) * 100;
-		float head_pct = (step_throughput_op_args->total_head_flops / step_throughput_op_args->total_computation_flops) * 100;
-		float bwd_x_pct = (step_throughput_op_args->total_bwd_x_flops / step_throughput_op_args->total_computation_flops) * 100;
-		float bwd_w_pct = (step_throughput_op_args->total_bwd_w_flops / step_throughput_op_args->total_computation_flops) * 100;
+		float fwd_pct = (step_throughput_op_args->total_fwd_flops / step_throughput_op_args->total_flops) * 100;
+		float head_pct = (step_throughput_op_args->total_head_flops / step_throughput_op_args->total_flops) * 100;
+		float bwd_x_pct = (step_throughput_op_args->total_bwd_x_flops / step_throughput_op_args->total_flops) * 100;
+		float bwd_w_pct = (step_throughput_op_args->total_bwd_w_flops / step_throughput_op_args->total_flops) * 100;
+		float recompute_pct = (step_throughput_op_args->total_recompute_flops / step_throughput_op_args->total_flops) * 100;
 
-		printf("\tFLOP Info:\n\t\tTotal FLOPS: %.3e\n\t\t\tFwd Flops: %.2f%%\n\t\t\tHead Flops: %.2f%%\n\t\t\tBwd X Flops: %.2f%%\n\t\t\tBwd W Flops: %.2f%%\n\n\n", step_throughput_op_args->total_computation_flops, fwd_pct, head_pct, bwd_x_pct, bwd_w_pct);
+		float attn_pct = (step_throughput_op_args->total_attn_flops / step_throughput_op_args->total_flops) * 100;
+		float matmul_pct = (step_throughput_op_args->total_matmul_flops / step_throughput_op_args->total_flops) * 100;
+		printf("\tFLOP Info:\n\t\tTotal FLOPS: %.3e\n\t\t\tFwd Flops: %.2f%%\n\t\t\tHead Flops: %.2f%%\n\t\t\tBwd X Flops: %.2f%%\n\t\t\tBwd W Flops: %.2f%%\n\t\t\tRecompute Flops: %.2f%%\n\n\t\tAttn Flop Pct: %.2f%%\n\t\tMatmul Flop Pct: %.2f%%\n\n\n", step_throughput_op_args->total_flops, fwd_pct, head_pct, bwd_x_pct, bwd_w_pct, recompute_pct, attn_pct, matmul_pct);
 	}
 
 	return 0;

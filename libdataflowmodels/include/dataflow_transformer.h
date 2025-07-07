@@ -57,6 +57,18 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 						// during interference these would be NULL
 						Transformer_Head * grad_transformer_head,
 						Transformer_Block_Transition * grad_stream);
+						
+
+// Assumse that working_activations has been already populated in device memory with the appropriate
+// saved activation level amount of data alreay ready to go (prefix of the this chunk). Assumes that
+// there is enough memory to save the forward activations for the entire block (repeating the forward pass)
+// and that the bwd_x function will be called next!
+int dataflow_submit_transformer_block_recompute(Dataflow_Handle * dataflow_handle, int compute_stream_id, 
+												Transformer_Block * transformer_block,
+												Seq_Batch * seq_batch,
+												SavedActivationLevel saved_activation_level,
+												Seq_Batch_Saved_Activations * working_activations, Seq_Batch_Context * fwd_context,
+												Seq_Batch_Activation_Workspace * activation_workspace);
 
 
 int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, int compute_stream_id,

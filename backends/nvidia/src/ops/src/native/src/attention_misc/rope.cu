@@ -46,6 +46,11 @@ extern "C" __global__ void default_rope_fp32_kernel(int num_tokens, int model_di
         X_q_row[cur_dim + 1] = rope_odd;
     }
 
+    // during recompute X_k is NULL
+    if (!X_k){
+        return;
+    }
+
     
     int kv_dim = num_kv_heads * head_dim;
     float * X_k_row = X_k + ((uint64_t)row_ind * (uint64_t)kv_dim);
@@ -107,6 +112,11 @@ extern "C" __global__ void default_rope_fp16_kernel(int num_tokens, int model_di
         rope_odd = cos_val * x_odd + sin_val * x_even;
         X_q_row[cur_dim] = rope_even;
         X_q_row[cur_dim + 1] = rope_odd;
+    }
+
+    // during recompute X_k is NULL
+    if (!X_k){
+        return;
     }
 
     
@@ -171,6 +181,10 @@ extern "C" __global__ void default_rope_bf16_kernel(int num_tokens, int model_di
         X_q_row[cur_dim + 1] = rope_odd;
     }
 
+    // during recompute X_k is NULL
+    if (!X_k){
+        return;
+    }
     
     int kv_dim = num_kv_heads * head_dim;
     __nv_bfloat16 * X_k_row = X_k + ((uint64_t)row_ind * (uint64_t)kv_dim);
@@ -234,6 +248,10 @@ extern "C" __global__ void default_rope_fp8e4m3_kernel(int num_tokens, int model
         X_q_row[cur_dim + 1] = __nv_fp8_e4m3(rope_odd);
     }
 
+    // during recompute X_k is NULL
+    if (!X_k){
+        return;
+    }
     
     int kv_dim = num_kv_heads * head_dim;
     __nv_fp8_e4m3 * X_k_row = X_k + ((uint64_t)row_ind * (uint64_t)kv_dim);
@@ -296,6 +314,10 @@ extern "C" __global__ void default_rope_fp8e5m2_kernel(int num_tokens, int model
         X_q_row[cur_dim + 1] = __nv_fp8_e5m2(rope_odd);
     }
 
+    // during recompute X_k is NULL
+    if (!X_k){
+        return;
+    }
     
     int kv_dim = num_kv_heads * head_dim;
     __nv_fp8_e5m2 * X_k_row = X_k + ((uint64_t)row_ind * (uint64_t)kv_dim);

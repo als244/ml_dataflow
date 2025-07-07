@@ -84,6 +84,63 @@ int default_rms_norm_set_launch_config(Cuda_Launch_Config * cuda_launch_config, 
 	return 0;
 }
 
+int default_rms_norm_recompute_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Dataflow_Handle * dataflow_handle, Cuda_Function * cuda_function, Op * op) {
+
+	Op_Skeleton * op_skeleton = &(cuda_function -> op_skeleton);
+
+	Op_Skeleton_Header * op_skeleton_header = &(op_skeleton -> header);
+
+	DataflowDatatype * arg_dtypes = op_skeleton_header -> arg_dtypes;
+
+	// weight dt type
+	DataflowDatatype weight_dt = arg_dtypes[2];
+
+	size_t dtype_size = dataflow_sizeof_element(weight_dt);
+
+	if (dtype_size == 0){
+		fprintf(stderr, "Error: rms norm recompute not available for weight dtype %s...\n", dataflow_datatype_as_string(weight_dt));
+		return -1;
+	}
+
+
+	cuda_launch_config -> gridDimY = 1;
+	cuda_launch_config -> gridDimZ = 1;
+	cuda_launch_config -> blockDimY = 1;
+	cuda_launch_config -> blockDimZ = 1;
+
+	Cuda_Device_Info * device_info = (Cuda_Device_Info *) dataflow_handle -> device_info;
+
+	int rms_recompute_max_threads_per_block = (cuda_function -> function_config).func_max_threads_per_block;
+	cuda_launch_config -> blockDimX = rms_recompute_max_threads_per_block;
+
+	int sm_count = device_info -> sm_count;
+
+	void ** op_args = op -> op_args;
+
+	int num_rows = *((int *) op_args[0]);
+
+	int num_blocks = MY_MIN(num_rows, sm_count);
+
+	cuda_launch_config -> gridDimX = num_blocks;
+
+	int model_dim = *((int *) op_args[1]);
+
+	// just saving model weights
+	int rms_recompute_smem = (dtype_size * model_dim);
+
+	int rms_recompute_max_smem = (cuda_function -> function_config).func_max_smem;
+
+	if (rms_recompute_smem > rms_recompute_max_smem){
+		fprintf(stderr, "Error: rms norm will fail. Unable to support model dim of %d and weight dtype %s. Not enough smem on device, max for this func is %d bytes, but requires %d...\n", model_dim, dataflow_datatype_as_string(weight_dt), rms_recompute_max_smem, rms_recompute_smem);
+		return -1;
+	}
+
+	cuda_launch_config -> sharedMemBytes = rms_recompute_smem;
+
+	return 0;
+}
+
+
 int default_rms_norm_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Dataflow_Handle * dataflow_handle, Cuda_Function * cuda_function, Op * op) {
 
 	Op_Skeleton * op_skeleton = &(cuda_function -> op_skeleton);

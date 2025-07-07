@@ -29,6 +29,7 @@ void dataflow_set_default_embedding_table_skeleton(Op_Skeleton * skeleton, Dataf
 void dataflow_set_default_embedding_table_bwd_w_skeleton(Op_Skeleton * skeleton, DataflowDatatype bwd_datatype);
 
 void dataflow_set_default_rms_norm_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype);
+void dataflow_set_default_rms_norm_recompute_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype);
 void dataflow_set_default_rms_norm_bwd_x_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype, DataflowDatatype bwd_datatype);
 void dataflow_set_default_rms_norm_bwd_w_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype, DataflowDatatype bwd_datatype);
 void dataflow_set_default_rms_norm_bwd_w_combine_skeleton(Op_Skeleton * skeleton, DataflowDatatype bwd_datatype);
