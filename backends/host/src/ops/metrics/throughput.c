@@ -232,8 +232,8 @@ int start_step_metrics(void * _step_throughput_op_args){
 
 	step_throughput_op_args->total_recompute_flops += recompute_flops;
 	step_throughput_op_args->total_flops = step_throughput_op_args->total_computation_flops + step_throughput_op_args->total_recompute_flops;
-	step_throughput_op_args->total_attn_flops += recompute_attn_flops;
-	step_throughput_op_args->total_matmul_flops += recompute_matmul_flops;
+	step_throughput_op_args->total_attn_flops += (step_throughput_op_args -> num_rounds_per_step * recompute_attn_flops);
+	step_throughput_op_args->total_matmul_flops += (step_throughput_op_args -> num_rounds_per_step * recompute_matmul_flops);
 	// set start time	
 	clock_gettime(CLOCK_REALTIME, &(step_throughput_op_args->start_time));
 
