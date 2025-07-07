@@ -23,9 +23,9 @@
 
 	// this (along with num seqs per round)modulates how frequently we will step 
 	// the optimizer...
-	#define TARGET_DURATION_PER_STEP_S 5.0f
+	#define TARGET_DURATION_PER_STEP_S 6.0f
 	// to help determien how many rounds per step
-	#define FLOP_EFFICIENCY_ESTIMATE 0.4f
+	#define FLOP_EFFICIENCY_ESTIMATE 0.6f
 
 	#define NUM_STEPS 6
 
