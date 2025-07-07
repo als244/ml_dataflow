@@ -103,14 +103,14 @@ python bench/reproduce_results/sweep_training_environments.py <sweep config json
 
 Tested across 4 different machines:
 
-| GPU Model | PCIe Unidirectional BW | Host Memory BW | Host Memory Capacity |
-| :--- | :---: | :---: | :---: |
-| H100 SXM5 | 64 GB/s | 230.4 GB/s<sup>*</sup> | 192 GB |
-| A100 80GB | 32 GB/s | | 192 GB |
-| RTX 5090 | 64 GB/s | 83.2 GB/s | 192 GB |
-| RTX 3090 | 32 GB/s | 51.2 GB/s | 128 GB |
+| GPU Model | PCIe Unidirectional BW | Server Type | Host Memory BW | Host Memory Capacity |
+| :--- | :---: | :---: | :---: | :---: |
+| H100 SXM5 | 64 GB/s | Intel Sapphire Rapids | 307.2 GB/s<sup>*</sup> | 192 GB |
+| A100 80GB | 32 GB/s | | | 192 GB |
+| RTX 5090 | 64 GB/s | Gaming PC (AMD x570) | 83.2 GB/s | 192 GB |
+| RTX 3090 | 32 GB/s | Gaming PC (Intel z790) | 51.2 GB/s | 128 GB |
 
-*The H100 is on a 2 node NUMA system so host memory BW refers to local numa node with 6 channel, 4800 MT/s.
+*The H100 is on a 2 node NUMA system so host memory BW refers to local numa node with 8 channels, 4800 MT/s.
 
 ---
 
