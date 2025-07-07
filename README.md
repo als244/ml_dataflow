@@ -83,7 +83,7 @@ python bench/reproduce_results/sweep_training_environments.py <sweep config json
 The details of these calculations within `backends/host/src/ops/metrics/throughput.c`.
 
 Let:
-$L$ = seqlen, $T$ = step runtime, $D$ = model dim, $K$ = kv dim, $F$ = feed forward dimension, $N$ = seqs per step
+$S$ = seqlen, $N$ = seqs per step, $T$ = step runtime, $D$ = model dim, $K$ = kv dim, $F$ = feed forward dimension, $V$ = vocab size, $L$= number of layers
 
 - Tokens/sec: Unambigous -- the training throughput:
 ```math
@@ -93,15 +93,16 @@ $L$ = seqlen, $T$ = step runtime, $D$ = model dim, $K$ = kv dim, $F$ = feed forw
 - TFLOPS/s: Effective throughput of processing (model flops / runtime). There is ambiguity among different frameworks about the proper "cost" of the model, so this number is hard to compare apples-to-apples if formulas are not given. Agreeing with the [Flash Attention 2 Paper (page 10)](https://arxiv.org/pdf/2307.08691) and comments online. For the llama3 model architecture:
 ```math
 \begin{aligned}
-\text{matmul flops} &= 2 * S * D * (D + 2 * K + D + 3 * F) \\
+\text{block_matmul flops} &= 2 * S * D * (D + 2 * K + D + 3 * F) \\
 \text{attn fwd flops} &= .5 * 2 * (2 * S * S * D) \\
 \text{attn bwd flops} &= .5 * 4 * (2 * S * S * D) \\
-\text{per seq flops} &= 3 * \text{matmul flops} + \text{attn fwd flops} + \text{attn bwd flops} \\
+\text{head_flops} &= 3 * (2 * S * D * V) \\
+\text{per seq flops} &= L * (3 * \text{block_matmul flops} + \text{attn fwd flops} + \text{attn bwd flops}) + \text{head_flops} \\
 \text{model step cost} &= N * \text{per seq flops} \\
 \text{TFLOPS} &= \text{model step cost} / T
 \end{aligned}
 ```
-Where the $(D + 2 * K + D + 3 * F)$ factor is coming from Q, K+V, O, and the 3 FFN matrices. The $.5$ factor in attn flops comes from the causal. There are 2 matmuls in attn fwd and 4 in attn bwd. The per seq flops comes from Fwd + Bwd X + Bwd W. They all share the same matmuls, but Fwd has attn fwd and Bwd X has attn bwd. Bwd W just contains the base matmuls.
+Where the $(D + 2 * K + D + 3 * F)$ factor is coming from Q, K+V, O, and the 3 FFN matrices within each block. The $.5$ factor in attn flops comes from the causal. There are 2 matmuls in attn fwd and 4 in attn bwd. The per seq flops comes from Fwd + Bwd X + Bwd W. They all share the same matmuls, but Fwd has attn fwd and Bwd X has attn bwd. Bwd W just contains the base matmuls. The head does forward proj, bwd x, and bwd w matmuls. Embedding is essentially free as it is simple memcopies (forwrard) or additions (backward).
 
 - MFU (Model Flops Utilization): A measure of effective throughput relative to hardware capabilities (where TFLOPS is calculated above)
 ```math
