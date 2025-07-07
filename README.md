@@ -106,11 +106,11 @@ Tested across 4 different machines:
 | GPU Model | Advertised Peak BF16 Compute | PCIe Unidirectional BW | Server Type | Host Memory BW | Host Memory Capacity |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | H100 SXM5 | 989 TFLOPS/s | 64 GB/s | Intel Sapphire Rapids (Xeon Platinum 8468) | 307.2 GB/s<sup>*</sup> | 192 GB |
-| A100 80GB | 312.5 TFLOPS/s | 32 GB/s | Intel Ice Lake (Xeon Gold 6432) | | 192 GB |
+| A100 80GB | 312.5 TFLOPS/s | 32 GB/s | Intel Ice Lake (Xeon Gold 6432) | 93.8 GB/s<sup>*</sup> | 192 GB |
 | RTX 5090 | 209.5 TFLOPS/s | 64 GB/s | Gaming PC (Intel z790, i9 13000KF) | 83.2 GB/s | 192 GB |
 | RTX 3090 | 71 TFLOPS/s | 32 GB/s | Gaming PC (AMD x570, Ryzen 5950x) | 51.2 GB/s | 128 GB |
 
-*The H100 is on a 2 node NUMA system so host memory BW refers to local numa node with 8 channels, 4800 MT/s.
+*The H100 and A100 are on a 2 node NUMA systems with 8 and 4 memory controllers per NUMA node and with speeds of 4800 MT/s and 2933 MT/s respectively. Host memory BW refers to local numa node.
 
 ---
 
