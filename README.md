@@ -112,6 +112,90 @@ Tested across 4 different machines:
 
 *The H100 is on a 2 node NUMA system so host memory BW refers to local numa node with 6 channel, 4800 MT/s.
 
+### Figures
+
+Click on a GPU type to expand the table of performance reports for different model sizes and sequence lengths.
+
+The definitions of throughput metrics are below.
+
+---
+
+### Performance Reports
+
+Click on a GPU type to expand the table of performance reports for different model sizes and sequence lengths. Each cell contains links to reports for Tokens per second (**Tok/s**), TFLOPs per second (**TFLOPS/s**), Model FLOPs Utilization (**MFU**), and Hardware FLOPs Utilization (**HFU**).
+
+---
+
+<details>
+<summary><strong>NVIDIA H100</strong></summary>
+
+| Sequence Length | 1B Parameter Model | 8B Parameter Model |
+|:---|:---|:---|
+| **512** | [Tok/s](./figures/throughput/H100-1B-512-tok.pdf), [TFLOPS/s](./figures/throughput/H100-1B-512-tflops.pdf), [MFU](./figures/throughput/H100-1B-512-mfu.pdf), [HFU](./figures/throughput/H100-1B-512-hfu.pdf) | [Tok/s](./figures/throughput/H100-8B-512-tok.pdf), [TFLOPS/s](./figures/throughput/H100-8B-512-tflops.pdf), [MFU](./figures/throughput/H100-8B-512-mfu.pdf), [HFU](./figures/throughput/H100-8B-512-hfu.pdf) |
+| **4,096** | [Tok/s](./figures/throughput/H100-1B-4096-tok.pdf), [TFLOPS/s](./figures/throughput/H100-1B-4096-tflops.pdf), [MFU](./figures/throughput/H100-1B-4096-mfu.pdf), [HFU](./figures/throughput/H100-1B-4096-hfu.pdf) | [Tok/s](./figures/throughput/H100-8B-4096-tok.pdf), [TFLOPS/s](./figures/throughput/H100-8B-4096-tflops.pdf), [MFU](./figures/throughput/H100-8B-4096-mfu.pdf), [HFU](./figures/throughput/H100-8B-4096-hfu.pdf) |
+| **8,192** | [Tok/s](./figures/throughput/H100-1B-8192-tok.pdf), [TFLOPS/s](./figures/throughput/H100-1B-8192-tflops.pdf), [MFU](./figures/throughput/H100-1B-8192-mfu.pdf), [HFU](./figures/throughput/H100-1B-8192-hfu.pdf) | [Tok/s](./figures/throughput/H100-8B-8192-tok.pdf), [TFLOPS/s](./figures/throughput/H100-8B-8192-tflops.pdf), [MFU](./figures/throughput/H100-8B-8192-mfu.pdf), [HFU](./figures/throughput/H100-8B-8192-hfu.pdf) |
+| **16,384** | [Tok/s](./figures/throughput/H100-1B-16384-tok.pdf), [TFLOPS/s](./figures/throughput/H100-1B-16384-tflops.pdf), [MFU](./figures/throughput/H100-1B-16384-mfu.pdf), [HFU](./figures/throughput/H100-1B-16384-hfu.pdf) | [Tok/s](./figures/throughput/H100-8B-16384-tok.pdf), [TFLOPS/s](./figures/throughput/H100-8B-16384-tflops.pdf), [MFU](./figures/throughput/H100-8B-16384-mfu.pdf), [HFU](./figures/throughput/H100-8B-16384-hfu.pdf) |
+| **32,768** | [Tok/s](./figures/throughput/H100-1B-32768-tok.pdf), [TFLOPS/s](./figures/throughput/H100-1B-32768-tflops.pdf), [MFU](./figures/throughput/H100-1B-32768-mfu.pdf), [HFU](./figures/throughput/H100-1B-32768-hfu.pdf) | [Tok/s](./figures/throughput/H100-8B-32768-tok.pdf), [TFLOPS/s](./figures/throughput/H100-8B-32768-tflops.pdf), [MFU](./figures/throughput/H100-8B-32768-mfu.pdf), [HFU](./figures/throughput/H100-8B-32768-hfu.pdf) |
+| **65,536** | [Tok/s](./figures/throughput/H100-1B-65536-tok.pdf), [TFLOPS/s](./figures/throughput/H100-1B-65536-tflops.pdf), [MFU](./figures/throughput/H100-1B-65536-mfu.pdf), [HFU](./figures/throughput/H100-1B-65536-hfu.pdf) | [Tok/s](./figures/throughput/H100-8B-65536-tok.pdf), [TFLOPS/s](./figures/throughput/H100-8B-65536-tflops.pdf), [MFU](./figures/throughput/H100-8B-65536-mfu.pdf), [HFU](./figures/throughput/H100-8B-65536-hfu.pdf) |
+| **131,072** | [Tok/s](./figures/throughput/H100-1B-131072-tok.pdf), [TFLOPS/s](./figures/throughput/H100-1B-131072-tflops.pdf), [MFU](./figures/throughput/H100-1B-131072-mfu.pdf), [HFU](./figures/throughput/H100-1B-131072-hfu.pdf) | [Tok/s](./figures/throughput/H100-8B-131072-tok.pdf), [TFLOPS/s](./figures/throughput/H100-8B-131072-tflops.pdf), [MFU](./figures/throughput/H100-8B-131072-mfu.pdf), [HFU](./figures/throughput/H100-8B-131072-hfu.pdf) |
+| **262,144** | [Tok/s](./figures/throughput/H100-1B-262144-tok.pdf), [TFLOPS/s](./figures/throughput/H100-1B-262144-tflops.pdf), [MFU](./figures/throughput/H100-1B-262144-mfu.pdf), [HFU](./figures/throughput/H100-1B-262144-hfu.pdf) | [Tok/s](./figures/throughput/H100-8B-262144-tok.pdf), [TFLOPS/s](./figures/throughput/H100-8B-262144-tflops.pdf), [MFU](./figures/throughput/H100-8B-262144-mfu.pdf), [HFU](./figures/throughput/H100-8B-262144-hfu.pdf) |
+
+</details>
+
+---
+
+<details>
+<summary><strong>NVIDIA A100</strong></summary>
+
+| Sequence Length | 1B Parameter Model | 8B Parameter Model |
+|:---|:---|:---|
+| **512** | [Tok/s](./figures/throughput/A100-1B-512-tok.pdf), [TFLOPS/s](./figures/throughput/A100-1B-512-tflops.pdf), [MFU](./figures/throughput/A100-1B-512-mfu.pdf), [HFU](./figures/throughput/A100-1B-512-hfu.pdf) | [Tok/s](./figures/throughput/A100-8B-512-tok.pdf), [TFLOPS/s](./figures/throughput/A100-8B-512-tflops.pdf), [MFU](./figures/throughput/A100-8B-512-mfu.pdf), [HFU](./figures/throughput/A100-8B-512-hfu.pdf) |
+| **4,096** | [Tok/s](./figures/throughput/A100-1B-4096-tok.pdf), [TFLOPS/s](./figures/throughput/A100-1B-4096-tflops.pdf), [MFU](./figures/throughput/A100-1B-4096-mfu.pdf), [HFU](./figures/throughput/A100-1B-4096-hfu.pdf) | [Tok/s](./figures/throughput/A100-8B-4096-tok.pdf), [TFLOPS/s](./figures/throughput/A100-8B-4096-tflops.pdf), [MFU](./figures/throughput/A100-8B-4096-mfu.pdf), [HFU](./figures/throughput/A100-8B-4096-hfu.pdf) |
+| **8,192** | [Tok/s](./figures/throughput/A100-1B-8192-tok.pdf), [TFLOPS/s](./figures/throughput/A100-1B-8192-tflops.pdf), [MFU](./figures/throughput/A100-1B-8192-mfu.pdf), [HFU](./figures/throughput/A100-1B-8192-hfu.pdf) | [Tok/s](./figures/throughput/A100-8B-8192-tok.pdf), [TFLOPS/s](./figures/throughput/A100-8B-8192-tflops.pdf), [MFU](./figures/throughput/A100-8B-8192-mfu.pdf), [HFU](./figures/throughput/A100-8B-8192-hfu.pdf) |
+| **16,384** | [Tok/s](./figures/throughput/A100-1B-16384-tok.pdf), [TFLOPS/s](./figures/throughput/A100-1B-16384-tflops.pdf), [MFU](./figures/throughput/A100-1B-16384-mfu.pdf), [HFU](./figures/throughput/A100-1B-16384-hfu.pdf) | [Tok/s](./figures/throughput/A100-8B-16384-tok.pdf), [TFLOPS/s](./figures/throughput/A100-8B-16384-tflops.pdf), [MFU](./figures/throughput/A100-8B-16384-mfu.pdf), [HFU](./figures/throughput/A100-8B-16384-hfu.pdf) |
+| **32,768** | [Tok/s](./figures/throughput/A100-1B-32768-tok.pdf), [TFLOPS/s](./figures/throughput/A100-1B-32768-tflops.pdf), [MFU](./figures/throughput/A100-1B-32768-mfu.pdf), [HFU](./figures/throughput/A100-1B-32768-hfu.pdf) | [Tok/s](./figures/throughput/A100-8B-32768-tok.pdf), [TFLOPS/s](./figures/throughput/A100-8B-32768-tflops.pdf), [MFU](./figures/throughput/A100-8B-32768-mfu.pdf), [HFU](./figures/throughput/A100-8B-32768-hfu.pdf) |
+| **65,536** | [Tok/s](./figures/throughput/A100-1B-65536-tok.pdf), [TFLOPS/s](./figures/throughput/A100-1B-65536-tflops.pdf), [MFU](./figures/throughput/A100-1B-65536-mfu.pdf), [HFU](./figures/throughput/A100-1B-65536-hfu.pdf) | [Tok/s](./figures/throughput/A100-8B-65536-tok.pdf), [TFLOPS/s](./figures/throughput/A100-8B-65536-tflops.pdf), [MFU](./figures/throughput/A100-8B-65536-mfu.pdf), [HFU](./figures/throughput/A100-8B-65536-hfu.pdf) |
+| **131,072** | [Tok/s](./figures/throughput/A100-1B-131072-tok.pdf), [TFLOPS/s](./figures/throughput/A100-1B-131072-tflops.pdf), [MFU](./figures/throughput/A100-1B-131072-mfu.pdf), [HFU](./figures/throughput/A100-1B-131072-hfu.pdf) | [Tok/s](./figures/throughput/A100-8B-131072-tok.pdf), [TFLOPS/s](./figures/throughput/A100-8B-131072-tflops.pdf), [MFU](./figures/throughput/A100-8B-131072-mfu.pdf), [HFU](./figures/throughput/A100-8B-131072-hfu.pdf) |
+| **262,144** | [Tok/s](./figures/throughput/A100-1B-262144-tok.pdf), [TFLOPS/s](./figures/throughput/A100-1B-262144-tflops.pdf), [MFU](./figures/throughput/A100-1B-262144-mfu.pdf), [HFU](./figures/throughput/A100-1B-262144-hfu.pdf) | [Tok/s](./figures/throughput/A100-8B-262144-tok.pdf), [TFLOPS/s](./figures/throughput/A100-8B-262144-tflops.pdf), [MFU](./figures/throughput/A100-8B-262144-mfu.pdf), [HFU](./figures/throughput/A100-8B-262144-hfu.pdf) |
+
+</details>
+
+---
+
+<details>
+<summary><strong>NVIDIA RTX 5090</strong></summary>
+
+| Sequence Length | 1B Parameter Model | 8B Parameter Model |
+|:---|:---|:---|
+| **512** | [Tok/s](./figures/throughput/RTX5090-1B-512-tok.pdf), [TFLOPS/s](./figures/throughput/RTX5090-1B-512-tflops.pdf), [MFU](./figures/throughput/RTX5090-1B-512-mfu.pdf), [HFU](./figures/throughput/RTX5090-1B-512-hfu.pdf) | [Tok/s](./figures/throughput/RTX5090-8B-512-tok.pdf), [TFLOPS/s](./figures/throughput/RTX5090-8B-512-tflops.pdf), [MFU](./figures/throughput/RTX5090-8B-512-mfu.pdf), [HFU](./figures/throughput/RTX5090-8B-512-hfu.pdf) |
+| **4,096** | [Tok/s](./figures/throughput/RTX5090-1B-4096-tok.pdf), [TFLOPS/s](./figures/throughput/RTX5090-1B-4096-tflops.pdf), [MFU](./figures/throughput/RTX5090-1B-4096-mfu.pdf), [HFU](./figures/throughput/RTX5090-1B-4096-hfu.pdf) | [Tok/s](./figures/throughput/RTX5090-8B-4096-tok.pdf), [TFLOPS/s](./figures/throughput/RTX5090-8B-4096-tflops.pdf), [MFU](./figures/throughput/RTX5090-8B-4096-mfu.pdf), [HFU](./figures/throughput/RTX5090-8B-4096-hfu.pdf) |
+| **8,192** | [Tok/s](./figures/throughput/RTX5090-1B-8192-tok.pdf), [TFLOPS/s](./figures/throughput/RTX5090-1B-8192-tflops.pdf), [MFU](./figures/throughput/RTX5090-1B-8192-mfu.pdf), [HFU](./figures/throughput/RTX5090-1B-8192-hfu.pdf) | [Tok/s](./figures/throughput/RTX5090-8B-8192-tok.pdf), [TFLOPS/s](./figures/throughput/RTX5090-8B-8192-tflops.pdf), [MFU](./figures/throughput/RTX5090-8B-8192-mfu.pdf), [HFU](./figures/throughput/RTX5090-8B-8192-hfu.pdf) |
+| **16,384** | [Tok/s](./figures/throughput/RTX5090-1B-16384-tok.pdf), [TFLOPS/s](./figures/throughput/RTX5090-1B-16384-tflops.pdf), [MFU](./figures/throughput/RTX5090-1B-16384-mfu.pdf), [HFU](./figures/throughput/RTX5090-1B-16384-hfu.pdf) | [Tok/s](./figures/throughput/RTX5090-8B-16384-tok.pdf), [TFLOPS/s](./figures/throughput/RTX5090-8B-16384-tflops.pdf), [MFU](./figures/throughput/RTX5090-8B-16384-mfu.pdf), [HFU](./figures/throughput/RTX5090-8B-16384-hfu.pdf) |
+| **32,768** | [Tok/s](./figures/throughput/RTX5090-1B-32768-tok.pdf), [TFLOPS/s](./figures/throughput/RTX5090-1B-32768-tflops.pdf), [MFU](./figures/throughput/RTX5090-1B-32768-mfu.pdf), [HFU](./figures/throughput/RTX5090-1B-32768-hfu.pdf) | [Tok/s](./figures/throughput/RTX5090-8B-32768-tok.pdf), [TFLOPS/s](./figures/throughput/RTX5090-8B-32768-tflops.pdf), [MFU](./figures/throughput/RTX5090-8B-32768-mfu.pdf), [HFU](./figures/throughput/RTX5090-8B-32768-hfu.pdf) |
+| **65,536** | [Tok/s](./figures/throughput/RTX5090-1B-65536-tok.pdf), [TFLOPS/s](./figures/throughput/RTX5090-1B-65536-tflops.pdf), [MFU](./figures/throughput/RTX5090-1B-65536-mfu.pdf), [HFU](./figures/throughput/RTX5090-1B-65536-hfu.pdf) | [Tok/s](./figures/throughput/RTX5090-8B-65536-tok.pdf), [TFLOPS/s](./figures/throughput/RTX5090-8B-65536-tflops.pdf), [MFU](./figures/throughput/RTX5090-8B-65536-mfu.pdf), [HFU](./figures/throughput/RTX5090-8B-65536-hfu.pdf) |
+| **131,072** | [Tok/s](./figures/throughput/RTX5090-1B-131072-tok.pdf), [TFLOPS/s](./figures/throughput/RTX5090-1B-131072-tflops.pdf), [MFU](./figures/throughput/RTX5090-1B-131072-mfu.pdf), [HFU](./figures/throughput/RTX5090-1B-131072-hfu.pdf) | [Tok/s](./figures/throughput/RTX5090-8B-131072-tok.pdf), [TFLOPS/s](./figures/throughput/RTX5090-8B-131072-tflops.pdf), [MFU](./figures/throughput/RTX5090-8B-131072-mfu.pdf), [HFU](./figures/throughput/RTX5090-8B-131072-hfu.pdf) |
+| **262,144** | [Tok/s](./figures/throughput/RTX5090-1B-262144-tok.pdf), [TFLOPS/s](./figures/throughput/RTX5090-1B-262144-tflops.pdf), [MFU](./figures/throughput/RTX5090-1B-262144-mfu.pdf), [HFU](./figures/throughput/RTX5090-1B-262144-hfu.pdf) | [Tok/s](./figures/throughput/RTX5090-8B-262144-tok.pdf), [TFLOPS/s](./figures/throughput/RTX5090-8B-262144-tflops.pdf), [MFU](./figures/throughput/RTX5090-8B-262144-mfu.pdf), [HFU](./figures/throughput/RTX5090-8B-262144-hfu.pdf) |
+
+</details>
+
+---
+
+<details>
+<summary><strong>NVIDIA RTX 3090</strong></summary>
+
+| Sequence Length | 1B Parameter Model | 8B Parameter Model |
+|:---|:---|:---|
+| **512** | [Tok/s](./figures/throughput/RTX3090-1B-512-tok.pdf), [TFLOPS/s](./figures/throughput/RTX3090-1B-512-tflops.pdf), [MFU](./figures/throughput/RTX3090-1B-512-mfu.pdf), [HFU](./figures/throughput/RTX3090-1B-512-hfu.pdf) | [Tok/s](./figures/throughput/RTX3090-8B-512-tok.pdf), [TFLOPS/s](./figures/throughput/RTX3090-8B-512-tflops.pdf), [MFU](./figures/throughput/RTX3090-8B-512-mfu.pdf), [HFU](./figures/throughput/RTX3090-8B-512-hfu.pdf) |
+| **4,096** | [Tok/s](./figures/throughput/RTX3090-1B-4096-tok.pdf), [TFLOPS/s](./figures/throughput/RTX3090-1B-4096-tflops.pdf), [MFU](./figures/throughput/RTX3090-1B-4096-mfu.pdf), [HFU](./figures/throughput/RTX3090-1B-4096-hfu.pdf) | [Tok/s](./figures/throughput/RTX3090-8B-4096-tok.pdf), [TFLOPS/s](./figures/throughput/RTX3090-8B-4096-tflops.pdf), [MFU](./figures/throughput/RTX3090-8B-4096-mfu.pdf), [HFU](./figures/throughput/RTX3090-8B-4096-hfu.pdf) |
+| **8,192** | [Tok/s](./figures/throughput/RTX3090-1B-8192-tok.pdf), [TFLOPS/s](./figures/throughput/RTX3090-1B-8192-tflops.pdf), [MFU](./figures/throughput/RTX3090-1B-8192-mfu.pdf), [HFU](./figures/throughput/RTX3090-1B-8192-hfu.pdf) | [Tok/s](./figures/throughput/RTX3090-8B-8192-tok.pdf), [TFLOPS/s](./figures/throughput/RTX3090-8B-8192-tflops.pdf), [MFU](./figures/throughput/RTX3090-8B-8192-mfu.pdf), [HFU](./figures/throughput/RTX3090-8B-8192-hfu.pdf) |
+| **16,384** | [Tok/s](./figures/throughput/RTX3090-1B-16384-tok.pdf), [TFLOPS/s](./figures/throughput/RTX3090-1B-16384-tflops.pdf), [MFU](./figures/throughput/RTX3090-1B-16384-mfu.pdf), [HFU](./figures/throughput/RTX3090-1B-16384-hfu.pdf) | [Tok/s](./figures/throughput/RTX3090-8B-16384-tok.pdf), [TFLOPS/s](./figures/throughput/RTX3090-8B-16384-tflops.pdf), [MFU](./figures/throughput/RTX3090-8B-16384-mfu.pdf), [HFU](./figures/throughput/RTX3090-8B-16384-hfu.pdf) |
+| **32,768** | [Tok/s](./figures/throughput/RTX3090-1B-32768-tok.pdf), [TFLOPS/s](./figures/throughput/RTX3090-1B-32768-tflops.pdf), [MFU](./figures/throughput/RTX3090-1B-32768-mfu.pdf), [HFU](./figures/throughput/RTX3090-1B-32768-hfu.pdf) | [Tok/s](./figures/throughput/RTX3090-8B-32768-tok.pdf), [TFLOPS/s](./figures/throughput/RTX3090-8B-32768-tflops.pdf), [MFU](./figures/throughput/RTX3090-8B-32768-mfu.pdf), [HFU](./figures/throughput/RTX3090-8B-32768-hfu.pdf) |
+| **65,536** | [Tok/s](./figures/throughput/RTX3090-1B-65536-tok.pdf), [TFLOPS/s](./figures/throughput/RTX3090-1B-65536-tflops.pdf), [MFU](./figures/throughput/RTX3090-1B-65536-mfu.pdf), [HFU](./figures/throughput/RTX3090-1B-65536-hfu.pdf) | [Tok/s](./figures/throughput/RTX3090-8B-65536-tok.pdf), [TFLOPS/s](./figures/throughput/RTX3090-8B-65536-tflops.pdf), [MFU](./figures/throughput/RTX3090-8B-65536-mfu.pdf), [HFU](./figures/throughput/RTX3090-8B-65536-hfu.pdf) |
+| **131,072** | [Tok/s](./figures/throughput/RTX3090-1B-131072-tok.pdf), [TFLOPS/s](./figures/throughput/RTX3090-1B-131072-tflops.pdf), [MFU](./figures/throughput/RTX3090-1B-131072-mfu.pdf), [HFU](./figures/throughput/RTX3090-1B-131072-hfu.pdf) | [Tok/s](./figures/throughput/RTX3090-8B-131072-tok.pdf), [TFLOPS/s](./figures/throughput/RTX3090-8B-131072-tflops.pdf), [MFU](./figures/throughput/RTX3090-8B-131072-mfu.pdf), [HFU](./figures/throughput/RTX3090-8B-131072-hfu.pdf) |
+| **262,144** | [Tok/s](./figures/throughput/RTX3090-1B-262144-tok.pdf), [TFLOPS/s](./figures/throughput/RTX3090-1B-262144-tflops.pdf), [MFU](./figures/throughput/RTX3090-1B-262144-mfu.pdf), [HFU](./figures/throughput/RTX3090-1B-262144-hfu.pdf) | [Tok/s](./figures/throughput/RTX3090-8B-262144-tok.pdf), [TFLOPS/s](./figures/throughput/RTX3090-8B-262144-tflops.pdf), [MFU](./figures/throughput/RTX3090-8B-262144-mfu.pdf), [HFU](./figures/throughput/RTX3090-8B-262144-hfu.pdf) |
+
+</details>
+
 
 ### Throughput Metrics
 
