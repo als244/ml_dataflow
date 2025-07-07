@@ -5043,7 +5043,7 @@
 			return -1;
 		}
 
-		fprintf(f, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%f,%f,%f\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_CONFIG_SIZE_B, total_home_acts, num_inp_only_saved, num_inp_attn_saved, num_full_saved, total_dev_acts, seqs_per_step, avg_step_time, avg_tok_per_sec, avg_tflops, avg_mfu, avg_hfu);
+		fprintf(f, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%f,%f,%f\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_CONFIG_SIZE_B, (int) chunk_size, total_home_acts, num_inp_only_saved, num_inp_attn_saved, num_full_saved, total_dev_acts, seqs_per_step, avg_step_time, avg_tok_per_sec, avg_tflops, avg_mfu, avg_hfu);
 		fclose(f);
 
 		return 0;
