@@ -132,13 +132,6 @@ TODO: Heatmaps showing throughput vs. system_build + combinations of host_mem/de
 
 #### 8B
 
------
-
-## Comparison to other Training Frameworks
-
-[Nvidia Benchmarking of Llama3 8B full BF16, 8k seqlen](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/dgxc-benchmarking/resources/llama3-dgxc-benchmarking): Achieves 72,216 Tok/s on 8xH100 => ***9,027 Token/s*** normalized
-
-TODO!
 
 -----
 
