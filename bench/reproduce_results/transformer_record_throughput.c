@@ -5001,6 +5001,7 @@
 		float total_steps_mfu = 0;
 		float total_steps_hfu = 0;
 		float total_steps_recompute_pct = 0;
+		float total_attn_flop_pct = 0;
 		for (int t = 0; t < num_steps; t++){
 			total_steps_time += step_throughput_op_buffers[t].duration_s;
 			total_steps_tok_per_sec += step_throughput_op_buffers[t].tokens_per_second;
@@ -5008,6 +5009,7 @@
 			total_steps_mfu += step_throughput_op_buffers[t].mfu;
 			total_steps_hfu += step_throughput_op_buffers[t].hfu;
 			total_steps_recompute_pct += step_throughput_op_buffers[t].total_recompute_flops / step_throughput_op_buffers[t].total_flops;
+			total_attn_flop_pct += step_throughput_op_buffers[t].total_attn_flops / step_throughput_op_buffers[t].total_flops;
 		}
 
 		float avg_step_time = total_steps_time / num_steps;
@@ -5016,13 +5018,14 @@
 		float avg_mfu = total_steps_mfu / num_steps;
 		float avg_hfu = total_steps_hfu / num_steps;
 		float avg_recompute_pct = total_steps_recompute_pct / num_steps;
+		float avg_attn_flop_pct = total_attn_flop_pct / num_steps;
 		FILE * f = fopen(output_filepath, "a");
 		if (!f){
 			fprintf(stderr, "Error: failed to open file: %s...\n", output_filepath);
 			return -1;
 		}
 
-		fprintf(f, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%f,%f,%f,%f\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_CONFIG_SIZE_B, (int) chunk_size, total_home_acts, num_inp_only_saved, num_inp_attn_saved, num_full_saved, total_dev_acts, seqs_per_step, avg_step_time, avg_tok_per_sec, avg_tflops, avg_mfu, avg_hfu, avg_recompute_pct);
+		fprintf(f, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%f,%f,%f,%f,%f\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_CONFIG_SIZE_B, (int) chunk_size, total_home_acts, num_inp_only_saved, num_inp_attn_saved, num_full_saved, total_dev_acts, seqs_per_step, avg_step_time, avg_tok_per_sec, avg_tflops, avg_mfu, avg_hfu, avg_recompute_pct, avg_attn_flop_pct);
 		fclose(f);
 
 		return 0;
