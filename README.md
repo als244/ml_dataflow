@@ -14,7 +14,7 @@ You can learn more about the project's background/details [here](docs/background
 #### Train long-sequences or large-models on single device or at home
 - Automatically configures offloading & recomputation based on specified memory capacities, seqlen, and model size. Asynchrous dataflow is abundant, but the math remains the same.
 
-### [Go to Full Benchmarking Results](#benchmarked-results)
+### [Try it out yourself](#training-performance-demo) or [Go to Full Benchmarking Results](#benchmarked-results)
 
 ### Future Work
 
