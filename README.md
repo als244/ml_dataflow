@@ -14,7 +14,9 @@ You can learn more about the project's background/details [here](docs/background
 ### Train long-sequences or large-models on single device or at home
 - Automatically configures offloading & recomputation based on specified memory capacities, seqlen, and model size. Asynchrous dataflow is abundant, but the math remains the same.
 ### Ideal Schedule for Extending to Distributed Training
-- Almost all aspects of single-worker algorithm stay the same, except for cyclic sharding of layers across devices.
+- Almost all aspects of single-worker algorithm stay the same, except for cyclic sharding of layers across devices to create a pipelien. [Link to a simulator](https://dataflowsim.sunshein.net)
+- **No collective communication** required! (except for gradient all-reduce among replicas) => minimize noisy-neighbor problems.
+- Ease of resource allocation (set of GPUs+slices of local host mem) can be linked together and maintain high performance => doesn't require node locality. 
 ### Opportunity for Concurrent Training and Inference
 - Now that we have shuffled training-related data to host memory, this leaves room in precious device memory for running memory-bound inference workloads alongside the compute-bound training.
 
