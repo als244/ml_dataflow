@@ -15,25 +15,6 @@
 	#define RTX_5090_PEAK_BF16_TFLOPS 2.095e14
 	
 
-	//#define PEAK_BF16_TFLOPS RTX_5090_PEAK_BF16_TFLOPS
-
-	/*
-	#define HOST_MEM_GB 110
-	#define DEV_MEM_GB 29
-
-	#define MODEL_CONFIG_SIZE_B 8
-	#define MODEL_PATH "../data/8B"
-
-	// these shoudl be auto-cofigured, testing manually for now...
-	// could also take in as command line argument...
-
-
-	// this is just for testing...
-	#define NUM_TOKENS_EXAMPLE_SEQ 4096
-
-	#define MAX_SEQLEN NUM_TOKENS_EXAMPLE_SEQ
-	*/	
-
 	// this is just for testing,.. in 
 	// reality determined dynamically...
 	#define MIN_CHUNK_SIZE 8192
@@ -43,21 +24,11 @@
 	#define TOKEN_LABELS_PATH "../data/65536_labels_uint32.dat"
 
 
-	/*
-	// this determines total number of chunks / activations we need to store in 
-	// memory at once...
-
-	// the role of this is to be largest possible while still fitting in memory...
-	// because it means more shared data can utilize the parameters and update
-	// gradients on device without incorruring I/O overhead or gradient accumulation overhead
-	#define NUM_SEQ_GROUPS_PER_ROUND 1
-	*/
-
-
-	// this (along with num seqs per round)modulates how frequently we will step 
+	// this (along with num seqs per round) modulates how frequently we will step 
 	// the optimizer...
-	#define NUM_ROUNDS_PER_STEP 1
-
+	#define TARGET_DURATION_PER_STEP_S 6.0f
+	// to help determien how many rounds per step
+	#define FLOP_EFFICIENCY_ESTIMATE 0.5f
 
 	#define NUM_STEPS 10
 
@@ -2869,7 +2840,30 @@
 		// this should be set at the beginning of each step...
 
 		int num_steps = NUM_STEPS;
-		int num_rounds_per_step = NUM_ROUNDS_PER_STEP;
+		
+		int num_steps = NUM_STEPS;
+
+		// Determine number of rounds per step to be a target duration...
+
+		int seqs_per_round = num_seq_groups_per_round * num_seqs_per_chunk;
+
+
+		float per_seq_flops = get_seq_flops(MAX_SEQLEN, vocab_size, model_dim, kv_dim, num_shared_experts, num_total_routed_experts, num_active_routed_experts, expert_dim, n_layers, 
+											NULL, NULL, NULL, NULL, NULL, NULL);
+
+		float flops_per_round = per_seq_flops * seqs_per_round;
+
+		float target_duration_per_step_s = TARGET_DURATION_PER_STEP_S;
+		
+		if (MODEL_CONFIG_SIZE_B == 8){
+			target_duration_per_step_s *= 8;
+		}
+
+		float flop_efficiency_estimate = FLOP_EFFICIENCY_ESTIMATE;
+
+		float per_round_duration_s_est = flops_per_round / (flop_efficiency_estimate * PEAK_BF16_TFLOPS);
+
+		int num_rounds_per_step = MY_MAX(1, round(target_duration_per_step_s / per_round_duration_s_est));
 
 		uint64_t loss_tracker_size = num_steps * num_rounds_per_step * num_chunks * sizeof(float);
 		float * sys_loss_tracker = (float *) cur_host_mem;
@@ -2923,6 +2917,7 @@
 			step_throughput_op_buffers[t].to_print_verbose = TO_PRINT_THROUGHPUT_METRICS_VERBOSE;
 
 			// To determine recomputation flops...
+			step_throughput_op_buffers[t].num_rounds_per_step = num_rounds_per_step;
 			step_throughput_op_buffers[t].chunk_size = chunk_size;
 			step_throughput_op_buffers[t].num_inp_attn_saved = num_inp_attn_saved;
 			step_throughput_op_buffers[t].num_inp_only_saved = num_inp_only_saved;
