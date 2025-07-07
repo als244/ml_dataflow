@@ -14,54 +14,20 @@
 	#define RTX_4090_PEAK_BF16_TFLOPS 1.65e14
 	#define RTX_5090_PEAK_BF16_TFLOPS 2.095e14
 	
-
-	//#define PEAK_BF16_TFLOPS RTX_5090_PEAK_BF16_TFLOPS
-
-	/*
-	#define HOST_MEM_GB 110
-	#define DEV_MEM_GB 29
-
-	#define MODEL_CONFIG_SIZE_B 8
-	#define MODEL_PATH "../data/8B"
-
-	// these shoudl be auto-cofigured, testing manually for now...
-	// could also take in as command line argument...
-
-
-	// this is just for testing...
-	#define NUM_TOKENS_EXAMPLE_SEQ 4096
-
-	#define MAX_SEQLEN NUM_TOKENS_EXAMPLE_SEQ
-	*/	
-
 	// this is just for testing,.. in 
 	// reality determined dynamically...
-	#define MIN_CHUNK_SIZE 8192
 
 	#define NUM_TOKENS_EXAMPLE_SEQ 65536
 	#define TOKEN_IDS_PATH "../../data/65536_token_ids_uint32.dat"
 	#define TOKEN_LABELS_PATH "../../data/65536_labels_uint32.dat"
 
-
-	/*
-	// this determines total number of chunks / activations we need to store in 
-	// memory at once...
-
-	// the role of this is to be largest possible while still fitting in memory...
-	// because it means more shared data can utilize the parameters and update
-	// gradients on device without incorruring I/O overhead or gradient accumulation overhead
-	#define NUM_SEQ_GROUPS_PER_ROUND 1
-	*/
-
-
 	// this (along with num seqs per round)modulates how frequently we will step 
 	// the optimizer...
-	#define TARGET_DURATION_PER_STEP_S 5.0f
+	#define TARGET_DURATION_PER_STEP_S 3.0f
 	// to help determien how many rounds per step
-	#define FLOP_EFFICIENCY_ESTIMATE 0.5f
+	#define FLOP_EFFICIENCY_ESTIMATE 0.4f
 
-
-	#define NUM_STEPS 10
+	#define NUM_STEPS 6
 
 	// num_chunks = num_chunks_per_seq * num_seq_groups_per_round
 	// num_chunks_per_seq = seqlen / chunk_size
@@ -302,6 +268,8 @@
 		}
 
 		HardwareArchType hardware_arch_type = dataflow_handle.hardware_arch_type;
+		
+		int MIN_CHUNK_SIZE = 8192;
 
 		float PEAK_BF16_TFLOPS;
 
@@ -311,6 +279,8 @@
 				break;
 			case BACKEND_ARCH_H100:
 				PEAK_BF16_TFLOPS = H100_PEAK_BF16_TFLOPS;
+				// need higher arith intensity to saturate (for 1B model at least)
+				MIN_CHUNK_SIZE = 16384;
 				break;
 			case BACKEND_ARCH_RTX_3090:
 				PEAK_BF16_TFLOPS = RTX_3090_PEAK_BF16_TFLOPS;
@@ -2883,6 +2853,11 @@
 		float flops_per_round = per_seq_flops * seqs_per_round;
 
 		float target_duration_per_step_s = TARGET_DURATION_PER_STEP_S;
+		
+		if (MODEL_CONFIG_SIZE_B == 8){
+			target_duration_per_step_s *= 8;
+		}
+
 		float flop_efficiency_estimate = FLOP_EFFICIENCY_ESTIMATE;
 
 		float per_round_duration_s_est = flops_per_round / (flop_efficiency_estimate * PEAK_BF16_TFLOPS);
