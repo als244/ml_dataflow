@@ -402,7 +402,7 @@ typedef struct Step_Throughput_Host_Op_Args{
 	int num_inp_attn_saved;
 	int num_inp_only_saved;
 	int inp_only_seq_lens[MAX_INP_ONLY_CHUNKS];
-
+	int num_rounds_per_step;
 	// populated during start_step_metrics()
 	struct timespec start_time;
 	int total_tokens;
