@@ -228,6 +228,8 @@ int start_step_metrics(void * _step_throughput_op_args){
 													step_throughput_op_args->chunk_size, step_throughput_op_args->num_inp_attn_saved, step_throughput_op_args->num_inp_only_saved, step_throughput_op_args->inp_only_seq_lens,
 													&recompute_attn_flops, &recompute_matmul_flops);
 
+	recompute_flops *= step_throughput_op_args -> num_rounds_per_step;
+
 	step_throughput_op_args->total_recompute_flops += recompute_flops;
 	step_throughput_op_args->total_flops = step_throughput_op_args->total_computation_flops + step_throughput_op_args->total_recompute_flops;
 	step_throughput_op_args->total_attn_flops += recompute_attn_flops;
