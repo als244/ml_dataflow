@@ -13,7 +13,9 @@ You can learn more about the project's background/details [here](docs/background
 - Requires only 1 H100 and 70GB of host memory to achieve such performance. 
 #### Train long-sequences or large-models on single device or at home
 - Automatically configures offloading & recomputation based on specified memory capacities, seqlen, and model size. Asynchrous dataflow is abundant, but the math remains the same.
-    
+
+### [Go to Full Benchmarking Results](#benchmarked-results)
+
 -----
 
 ## Training Performance Demo
