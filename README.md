@@ -12,7 +12,9 @@ You can learn more about the project's background/details [here](docs/background
 - Trains Llama3 8B (BF16) with 8k sequence length at ~10,800 vs ~9,000 Tok/s per H100
 - Requires only 1 H100 and 70GB of host memory to achieve such performance. 
 #### Train long-sequences or large-models on single device or at home
-- Automatically configures offloading & recomputation based on specified memory capacities, seqlen, and model size. Asynchrous dataflow is abundant, but the math remains the same
+- Automatically configures offloading & recomputation based on specified memory capacities, seqlen, and model size. Asynchrous dataflow is abundant, but the math remains the same.
+
+### [Go to Full Benchmarking Results](#benchmarked-results)
 
 ### Future Work
 
@@ -22,8 +24,6 @@ You can learn more about the project's background/details [here](docs/background
 - Ease of resource allocation (set of GPUs+slices of local host mem) can be linked together and maintain high performance => doesn't require node locality 
 #### Opportunity for Concurrent Training and Inference
 - Now that we have shuffled training-related data to host memory, this leaves room in precious device memory for running memory-bound inference workloads alongside the compute-bound training.
-
-### [Go to Full Benchmarking Results](#benchmarked-results)
 
 -----
 
