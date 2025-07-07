@@ -105,10 +105,10 @@ Tested across 4 different machines:
 
 | GPU Model | PCIe Unidirectional BW | Server Type | Host Memory BW | Host Memory Capacity |
 | :--- | :---: | :---: | :---: | :---: |
-| H100 SXM5 | 64 GB/s | Intel Sapphire Rapids | 307.2 GB/s<sup>*</sup> | 192 GB |
+| H100 SXM5 | 64 GB/s | Intel Sapphire Rapids (Xeon Platinum 8468) | 307.2 GB/s<sup>*</sup> | 192 GB |
 | A100 80GB | 32 GB/s | | | 192 GB |
-| RTX 5090 | 64 GB/s | Gaming PC (AMD x570) | 83.2 GB/s | 192 GB |
-| RTX 3090 | 32 GB/s | Gaming PC (Intel z790) | 51.2 GB/s | 128 GB |
+| RTX 5090 | 64 GB/s | Gaming PC (AMD x570, Ryzen 5950x) | 83.2 GB/s | 192 GB |
+| RTX 3090 | 32 GB/s | Gaming PC (Intel z790, i9 13000KF) | 51.2 GB/s | 128 GB |
 
 *The H100 is on a 2 node NUMA system so host memory BW refers to local numa node with 8 channels, 4800 MT/s.
 
@@ -118,7 +118,7 @@ Tested across 4 different machines:
 
 Click on a GPU type to expand the table of performance reports for different model sizes and sequence lengths. Each cell contains links to reports for Tokens per second (**Tok/s**), TFLOPs per second (**TFLOPS/s**), Model FLOPs Utilization (**MFU**), and Hardware FLOPs Utilization (**HFU**). Metric definitions are below. 
 
-The reports display a heatmap reporting the metric under different device memory and host memory capacities. 
+The reports display a heatmap reporting the metric under different host and device memory capacities. 
 
 ---
 
