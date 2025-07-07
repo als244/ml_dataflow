@@ -89,6 +89,7 @@ $L$ = seqlen, $T$ = step runtime, $D$ = model dim, $K$ = kv dim, $F$ = feed forw
 ```math
 (N * S) / T
 ```
+
 - TFLOPS/s: Effective throughput of processing (model flops / runtime). There is ambiguity among different frameworks about the proper "cost" of the model, so this number is hard to compare apples-to-apples if formulas are not given. Agreeing with the [Flash Attention 2 Paper (page 10)](https://arxiv.org/pdf/2307.08691) and comments online. For the llama3 model architecture:
 ```math
 matmul flops = 2 * S * D * (D + 2 * K + D + 3 * F)
@@ -98,10 +99,13 @@ per seq flops = 3 * matmul flops + attn fwd flops + attn bwd flops
 model step cost = N * per seq flops
 TFLOPS = model step cost / T
 ```
+Where the $(D + 2 * K + D + 3 * F)$ factor is coming from Q, K+V, O, and the 3 FFN matrices. The $.5$ factor in attn flops comes from the causal. The per seq flops comes from Fwd + Bwd X + Bwd W. They all share the same matmuls, but Fwd has attn fwd and Bwd X has attn bwd. Bwd W just contains the base matmuls.
+
 - MFU (Model Flops Utilization): A measure of effective throughput relative to hardware capabilities (where TFLOPS is calculated above)
 ```math
 MFU = TFLOPS / peak hardware TFLOPS
 ```
+
 - HFU (Hardware Flops Utilization): A measure of processing throughput (including recomputations in numerator) relative to hardware capabilities. There are various levels are recomputation that occur depending on memory capacities and the system automatically configures this and calculates the metric. See the `throughput.c` file for more details.
 
 
