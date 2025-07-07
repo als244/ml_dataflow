@@ -90,16 +90,18 @@ These results were recorded by running
 python bench/reproduce_results/sweep_training_environments.py <sweep config json file> <output csv filename>
 ```
 
-The results were collected across 4 different machines
+##### Machine Specs
 
-Datacenter GPUs:
-1. H100 SXM5 (PCIe 5.0), DDR5 with local numa node memory BW of 4 * (4800MT/s * 8) = 153.6GB/s, & host capacity limited to 192GB. 
-2. A100 80GB (PCIe 4.0), DDR4 with memory BW of ~ , & host capacity limited to 192GB. 
+Tested across 4 different machines:
 
-Gaming GPUs:
-3. RTX 5090 (PCIe 5.0), DDR5 with memory BW of 2 * (5200MT/s * 8) = 83.2GB/s, & host capacity of 192GB. 
-4. RTX 3090 (PCIe 4.0), DDR4 with memory BW of 2 * (3200MT/s * 8) = 51.2GB/s, & host capacity of 128GB. 
+| GPU Model | PCIe Unidirectional BW | Host Memory BW | Host Memory Capacity |
+| :--- | :---: | :---: | :---: |
+| H100 SXM5 | 64 GB/s | 153.6 GB/s | 192 GB |
+| A100 80GB | 32 GB/s | | 192 GB |
+| RTX 5090 | 64 GB/s | 83.2 GB/s | 192 GB |
+| RTX 3090 | 32 GB/s | 51.2 GB/s | 128 GB |
 
+(The H100 is on a 2 node NUMA system so host memory BW refers to local numa node).
 
 
 ### Throughput Metrics
