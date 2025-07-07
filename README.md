@@ -15,8 +15,8 @@ You can learn more about the project's background/details [here](docs/background
 - Automatically configures offloading & recomputation based on specified memory capacities, seqlen, and model size. Asynchrous dataflow is abundant, but the math remains the same.
 ### Ideal Schedule for Extending to Distributed Training
 - Almost all aspects of single-worker algorithm stay the same, except for cyclic sharding of layers across devices.
-### Opportunity for concurrent Training and Inference
-- Now that we have shuffled data to host memory, this leaves room in precious device memory for running memory-bound inference workloads alongside the compute-bound training.
+### Opportunity for Concurrent Training and Inference
+- Now that we have shuffled training-related data to host memory, this leaves room in precious device memory for running memory-bound inference workloads alongside the compute-bound training.
 
 ### [Go to Full Benchmarking Results](#benchmarked-results)
 
