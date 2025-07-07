@@ -397,6 +397,7 @@ typedef struct Step_Throughput_Host_Op_Args{
 	int step_num;
 	int num_seqs;
 	int seqlens[MAX_SEQS_PER_STEP];
+	int is_causal;
 	// to determine recomputation flops...
 	int chunk_size;
 	int num_inp_attn_saved;
