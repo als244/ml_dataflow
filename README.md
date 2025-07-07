@@ -93,11 +93,11 @@ $S$ = seqlen, $N$ = seqs per step, $T$ = step runtime, $D$ = model dim, $K$ = kv
 - TFLOPS/s: Effective throughput of processing (model flops / runtime). There is ambiguity among different frameworks about the proper "cost" of the model, so this number is hard to compare apples-to-apples if formulas are not given. Agreeing with the [Flash Attention 2 Paper (page 10)](https://arxiv.org/pdf/2307.08691) and comments online. For the llama3 model architecture:
 ```math
 \begin{aligned}
-\text{block matmul flops} &= 2 * S * D * (D + 2 * K + D + 3 * F) \\
+\text{layer matmul flops} &= 2 * S * D * (D + 2 * K + D + 3 * F) \\
 \text{attn fwd flops} &= .5 * 2 * (2 * S * S * D) \\
 \text{attn bwd flops} &= .5 * 4 * (2 * S * S * D) \\
 \text{head_flops} &= 3 * (2 * S * D * V) \\
-\text{per seq flops} &= L * (3 * \text{block_matmul flops} + \text{attn fwd flops} + \text{attn bwd flops}) + \text{head_flops} \\
+\text{per seq flops} &= L * (3 * \text{layer matmul flops} + \text{attn fwd flops} + \text{attn bwd flops}) + \text{head_flops} \\
 \text{model step cost} &= N * \text{per seq flops} \\
 \text{TFLOPS} &= \text{model step cost} / T
 \end{aligned}
