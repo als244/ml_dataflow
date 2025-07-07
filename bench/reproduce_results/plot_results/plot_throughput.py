@@ -11,22 +11,34 @@ device_name_to_metric_ranges = {
     'RTX 3090': {
         'tok_per_sec': {'vmin': 3000, 'vmax': 23000},
         'tflops':      {'vmin': 80, 'vmax': 209.5},
-        'mfu':         {'vmin': .3, 'vmax': 1.0}
+        'mfu':         {'vmin': .3, 'vmax': 1.0},
+        'hfu':         {'vmin': .3, 'vmax': 1.0},
+        'recompute_pct': {'vmin': 0.0, 'vmax': 1.0},
+        'attn_flop_pct': {'vmin': 0.0, 'vmax': 1.0}
     },
     'RTX 5090': {
         'tok_per_sec': {'vmin': 3000, 'vmax': 23000},
         'tflops':      {'vmin': 80, 'vmax': 209.5},
-        'mfu':         {'vmin': .3, 'vmax': 1.0}
+        'mfu':         {'vmin': .3, 'vmax': 1.0},
+        'hfu':         {'vmin': .3, 'vmax': 1.0},
+        'recompute_pct': {'vmin': 0.0, 'vmax': 1.0},
+        'attn_flop_pct': {'vmin': 0.0, 'vmax': 1.0}
     },
     'A100': {
         'tok_per_sec': {'vmin': 3000, 'vmax': 23000},
         'tflops':      {'vmin': 80, 'vmax': 209.5},
-        'mfu':         {'vmin': .3, 'vmax': 1.0}
+        'mfu':         {'vmin': .3, 'vmax': 1.0},
+        'hfu':         {'vmin': .3, 'vmax': 1.0},
+        'recompute_pct': {'vmin': 0.0, 'vmax': 1.0},
+        'attn_flop_pct': {'vmin': 0.0, 'vmax': 1.0}
     },
     'H100': {
         'tok_per_sec': {'vmin': 3000, 'vmax': 23000},
         'tflops':      {'vmin': 80, 'vmax': 209.5},
-        'mfu':         {'vmin': .3, 'vmax': 1.0}
+        'mfu':         {'vmin': .3, 'vmax': 1.0},
+        'hfu':         {'vmin': .3, 'vmax': 1.0},
+        'recompute_pct': {'vmin': 0.0, 'vmax': 1.0},
+        'attn_flop_pct': {'vmin': 0.0, 'vmax': 1.0}
     }
 }
 
@@ -53,13 +65,16 @@ def plot_throughput(csv_filepath, device_name, output_dir):
     )
     # ---
 
-    df = pd.read_csv(csv_filepath, names=['host_mem_gb', 'dev_mem_gb', 'seq_len', 'model_size', 'seqs_per_step', 'avg_step_time', 'tok_per_sec', 'tflops', 'mfu'])
+    csv_columsn = ["host_mem_gb", "dev_mem_gb", "seq_len", "model_size", "chunk_size", "total_home_acts", "num_inp_only_saved", "num_inp_attn_saved", "num_full_saved", "total_dev_acts", "seqs_per_step", "avg_step_time", "tok_per_sec", "tflops", "mfu", "hfu", "recompute_pct", "attn_flop_pct"]
+    df = pd.read_csv(csv_filepath, names=csv_columsn)
 
-    metrics = ['tok_per_sec', 'tflops', 'mfu']
+    metrics = ['tok_per_sec', 'tflops', 'mfu', 'hfu', 'recompute_pct']
     metric_labels = {
         'tok_per_sec': 'Tokens per Second',
         'tflops': 'TFLOPS',
-        'mfu': 'MFU'
+        'mfu': 'MFU',
+        'hfu': 'HFU',
+        'recompute_pct': 'Recompute %',
     }
 
     seq_lens = df['seq_len'].unique()
