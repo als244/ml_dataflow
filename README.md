@@ -241,16 +241,6 @@ Where the $(D + 2 * K + D + 3 * F)$ factor is coming from Q, K+V, O, and the 3 F
 
 - HFU (Hardware Flops Utilization): A measure of processing throughput (including recomputations in numerator) relative to hardware capabilities. There are various levels are recomputation that occur depending on memory capacities and the system automatically configures this and calculates the metric. See the `throughput.c` file for more details.
 
-
-TODO: Heatmaps showing throughput vs. system_build + combinations of host_mem/dev_mem/seq_len/model_size
-
-#### 1B
-
-
-
-#### 8B
-
-
 -----
 
 **Practical note**: The training demo source code is quite messy! This is not the intended usage, there are some missing pieces... Critical upstream functionality (*data ingestion*, *model/loss/optimizer customization*, *model saving/loading*, *multi-worker training*, & *a wider set of common kernels such as attention variants, optimizers, convolutions, and MoE selecting/routing/combining*) is underway. You can try out a [simulator](https://dataflowsim.sunshein.net) for what this repo aims to accomplish in its final multi-worker form.
