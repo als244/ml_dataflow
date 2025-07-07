@@ -39,8 +39,8 @@
 	#define MIN_CHUNK_SIZE 8192
 
 	#define NUM_TOKENS_EXAMPLE_SEQ 65536
-	#define TOKEN_IDS_PATH "../data/65536_token_ids_uint32.dat"
-	#define TOKEN_LABELS_PATH "../data/65536_labels_uint32.dat"
+	#define TOKEN_IDS_PATH "../../data/65536_token_ids_uint32.dat"
+	#define TOKEN_LABELS_PATH "../../data/65536_labels_uint32.dat"
 
 
 	/*
@@ -56,7 +56,9 @@
 
 	// this (along with num seqs per round)modulates how frequently we will step 
 	// the optimizer...
-	#define NUM_ROUNDS_PER_STEP 1
+	#define TARGET_DURATION_PER_STEP_S 5.0f
+	// to help determien how many rounds per step
+	#define FLOP_EFFICIENCY_ESTIMATE 0.5f
 
 
 	#define NUM_STEPS 10
@@ -2869,7 +2871,26 @@
 		// this should be set at the beginning of each step...
 
 		int num_steps = NUM_STEPS;
-		int num_rounds_per_step = NUM_ROUNDS_PER_STEP;
+
+		// Determine number of rounds per step to be a target duration...
+
+		int seqs_per_round = num_seq_groups_per_round * num_seqs_per_chunk;
+
+
+		float per_seq_flops = get_seq_flops(MAX_SEQLEN, vocab_size, model_dim, kv_dim, num_shared_experts, num_total_routed_experts, num_active_routed_experts, expert_dim, n_layers, 
+											NULL, NULL, NULL, NULL, NULL, NULL);
+
+		float flops_per_round = per_seq_flops * seqs_per_round;
+
+		float target_duration_per_step_s = TARGET_DURATION_PER_STEP_S;
+		float flop_efficiency_estimate = FLOP_EFFICIENCY_ESTIMATE;
+
+		float per_round_duration_s_est = flops_per_round / (flop_efficiency_estimate * PEAK_BF16_TFLOPS);
+
+		int num_rounds_per_step = MY_MAX(1, round(target_duration_per_step_s / per_round_duration_s_est));
+
+		printf("NUM ROUNDS PER STEP: %d\n", num_rounds_per_step);
+
 
 		uint64_t loss_tracker_size = num_steps * num_rounds_per_step * num_chunks * sizeof(float);
 		float * sys_loss_tracker = (float *) cur_host_mem;
@@ -2932,7 +2953,7 @@
 		// JUST FOR DEMO we are using the same sequence distribution for every round and eveyr step...
 
 		// seqs per chunk = 1 if seq uses >= 1 chunks, otherwise packing multiple seqs per chunk...
-		int seqs_per_round = num_seq_groups_per_round * num_seqs_per_chunk;
+		
 		int seqs_per_step = seqs_per_round * num_rounds_per_step;
 
 		if (TO_PRINT_SETUP_CONFIG_SUMMARY){
@@ -5022,7 +5043,7 @@
 			return -1;
 		}
 
-		fprintf(f, "%d,%d,%d,%d,%d,%f,%f,%f,%f,%f\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_CONFIG_SIZE_B, seqs_per_step, avg_step_time, avg_tok_per_sec, avg_tflops, avg_mfu, avg_hfu);
+		fprintf(f, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%f,%f,%f\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_CONFIG_SIZE_B, total_home_acts, num_inp_only_saved, num_inp_attn_saved, num_full_saved, total_dev_acts, seqs_per_step, avg_step_time, avg_tok_per_sec, avg_tflops, avg_mfu, avg_hfu);
 		fclose(f);
 
 		return 0;
