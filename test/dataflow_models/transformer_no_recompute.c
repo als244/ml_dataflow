@@ -2638,11 +2638,10 @@
 		// this should be set at the beginning of each step...
 
 		int num_steps = NUM_STEPS;
-		
-		int num_steps = NUM_STEPS;
 
 		// Determine number of rounds per step to be a target duration...
 
+		// seqs per chunk = 1 if seq uses >= 1 chunks, otherwise packing multiple seqs per chunk...
 		int seqs_per_round = num_seq_groups_per_round * num_seqs_per_chunk;
 
 
@@ -2725,8 +2724,6 @@
 
 		// JUST FOR DEMO we are using the same sequence distribution for every round and eveyr step...
 
-		// seqs per chunk = 1 if seq uses >= 1 chunks, otherwise packing multiple seqs per chunk...
-		int seqs_per_round = num_seq_groups_per_round * num_seqs_per_chunk;
 		int seqs_per_step = seqs_per_round * num_rounds_per_step;
 
 		if (TO_PRINT_SETUP_CONFIG_SUMMARY){
