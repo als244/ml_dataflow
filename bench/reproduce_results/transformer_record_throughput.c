@@ -2919,6 +2919,7 @@
 			step_throughput_op_buffers[t].to_print_verbose = TO_PRINT_THROUGHPUT_METRICS_VERBOSE;
 
 			// To determine recomputation flops...
+			step_throughput_op_buffers[t].num_rounds_per_step = num_rounds_per_step;
 			step_throughput_op_buffers[t].chunk_size = chunk_size;
 			step_throughput_op_buffers[t].num_inp_attn_saved = num_inp_attn_saved;
 			step_throughput_op_buffers[t].num_inp_only_saved = num_inp_only_saved;
@@ -4999,12 +5000,14 @@
 		float total_steps_flops = 0;
 		float total_steps_mfu = 0;
 		float total_steps_hfu = 0;
+		float total_steps_recompute_pct = 0;
 		for (int t = 0; t < num_steps; t++){
 			total_steps_time += step_throughput_op_buffers[t].duration_s;
 			total_steps_tok_per_sec += step_throughput_op_buffers[t].tokens_per_second;
 			total_steps_flops += step_throughput_op_buffers[t].achieved_flop_rate;
 			total_steps_mfu += step_throughput_op_buffers[t].mfu;
 			total_steps_hfu += step_throughput_op_buffers[t].hfu;
+			total_steps_recompute_pct += step_throughput_op_buffers[t].total_recompute_flops / step_throughput_op_buffers[t].total_flops;
 		}
 
 		float avg_step_time = total_steps_time / num_steps;
@@ -5012,13 +5015,14 @@
 		float avg_tflops = total_steps_flops / num_steps / 1e12;
 		float avg_mfu = total_steps_mfu / num_steps;
 		float avg_hfu = total_steps_hfu / num_steps;
+		float avg_recompute_pct = total_steps_recompute_pct / num_steps;
 		FILE * f = fopen(output_filepath, "a");
 		if (!f){
 			fprintf(stderr, "Error: failed to open file: %s...\n", output_filepath);
 			return -1;
 		}
 
-		fprintf(f, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%f,%f,%f\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_CONFIG_SIZE_B, (int) chunk_size, total_home_acts, num_inp_only_saved, num_inp_attn_saved, num_full_saved, total_dev_acts, seqs_per_step, avg_step_time, avg_tok_per_sec, avg_tflops, avg_mfu, avg_hfu);
+		fprintf(f, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%f,%f,%f,%f\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_CONFIG_SIZE_B, (int) chunk_size, total_home_acts, num_inp_only_saved, num_inp_attn_saved, num_full_saved, total_dev_acts, seqs_per_step, avg_step_time, avg_tok_per_sec, avg_tflops, avg_mfu, avg_hfu, avg_recompute_pct);
 		fclose(f);
 
 		return 0;
