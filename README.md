@@ -85,7 +85,7 @@ The details of these calculations within `backends/host/src/ops/metrics/throughp
 Let:
 $S$ = seqlen, $N$ = seqs per step, $T$ = step runtime, $D$ = model dim, $K$ = kv dim, $F$ = feed forward dimension, $V$ = vocab size, $L$= number of layers
 
-- Tokens/sec: Unambigous -- the training throughput:
+- Tokens/sec: Unambigous -- the training throughput. For a fixed model architecture and seqlen this is the cleanest metric to compare against:
 ```math
 \text{Tokens per second} = (N * S) / T
 ```
@@ -102,7 +102,7 @@ $S$ = seqlen, $N$ = seqs per step, $T$ = step runtime, $D$ = model dim, $K$ = kv
 \text{TFLOPS} &= \text{model step cost} / T
 \end{aligned}
 ```
-Where the $(D + 2 * K + D + 3 * F)$ factor is coming from Q, K+V, O, and the 3 FFN matrices within each block. The $.5$ factor in attn flops comes from the causal. There are 2 matmuls in attn fwd and 4 in attn bwd. The per seq flops comes from Fwd + Bwd X + Bwd W. They all share the same matmuls, but Fwd has attn fwd and Bwd X has attn bwd. Bwd W just contains the base matmuls. The head does forward proj, bwd x, and bwd w matmuls. Embedding is essentially free as it is simple memcopies (forwrard) or additions (backward).
+Where the $(D + 2 * K + D + 3 * F)$ factor is coming from Q, K+V, O, and the 3 FFN matrices within each block. The $.5$ factor in attn flops comes from causal variant. There are 2 matmuls in attn fwd and 4 in attn bwd. The per seq flops comes from Fwd + Bwd X + Bwd W. They all share the same matmuls, but Fwd has attn fwd and Bwd X has attn bwd. Bwd W just contains the base matmuls. The head does fwd, bwd x, and bwd w matmuls. Embedding is essentially free as it is simple memcopies (forward) or additions (backward).
 
 - MFU (Model Flops Utilization): A measure of effective throughput relative to hardware capabilities (where TFLOPS is calculated above)
 ```math
