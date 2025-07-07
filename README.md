@@ -23,7 +23,7 @@ You can learn more about the project's background/details [here](docs/background
 - **No collective communication required**<sup>*</sup>! (*except for all-reduce before opt step if DP > 1). The forms of parallelism employed are PP (intra-replica) and DP (inter-replica)
 - Eases resource allocation. A set of GPUs + slices of local host mem can be linked together and maintain high performance => doesn't require high BW GPU-GPU interconnects. This makes job scheduler's life easier and can bolster overall cluster utilization.
 #### Opportunity for Concurrent Training and Inference
-- Now that we have shuffled training-related data to host memory, this leaves room in precious device memory for running memory-bound inference workloads alongside the compute-bound training.
+- Now that we have shuffled training-related data to host memory, this leaves room in precious device memory for running memory-bound inference workloads alongside the compute-bound training. This is particularly relevant for RL training...
 
 -----
 
