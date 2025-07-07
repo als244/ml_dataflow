@@ -105,7 +105,7 @@ Tested across 4 different machines:
 | RTX 5090 | 64 GB/s | 83.2 GB/s | 192 GB |
 | RTX 3090 | 32 GB/s | 51.2 GB/s | 128 GB |
 
-*The H100 is on a 2 node NUMA system so host memory BW refers to local numa node with 4 channel 4800 MT/s.
+*The H100 is on a 2 node NUMA system so host memory BW refers to local numa node with 4 channel, 4800 MT/s.
 
 
 ### Throughput Metrics
