@@ -92,7 +92,7 @@ python bench/reproduce_results/sweep_training_environments.py <sweep config json
 
 ### Throughput Metrics
 
-The details of these calculations within `backends/host/src/ops/metrics/throughput.c`.
+The details of these calculations can be found within `backends/host/src/ops/metrics/throughput.c`.
 
 Let:
 $S$ = seqlen, $N$ = seqs per step, $T$ = step runtime, $D$ = model dim, $K$ = kv dim, $F$ = feed forward dimension, $V$ = vocab size, $L$= number of layers
