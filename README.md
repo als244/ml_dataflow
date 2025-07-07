@@ -101,7 +101,7 @@ $L$ = seqlen, $T$ = step runtime, $D$ = model dim, $K$ = kv dim, $F$ = feed forw
 \text{TFLOPS} &= \text{model step cost} / T
 \end{aligned}
 ```
-Where the $(D + 2 * K + D + 3 * F)$ factor is coming from Q, K+V, O, and the 3 FFN matrices. The $.5$ factor in attn flops comes from the causal. The per seq flops comes from Fwd + Bwd X + Bwd W. They all share the same matmuls, but Fwd has attn fwd and Bwd X has attn bwd. Bwd W just contains the base matmuls.
+Where the $(D + 2 * K + D + 3 * F)$ factor is coming from Q, K+V, O, and the 3 FFN matrices. The $.5$ factor in attn flops comes from the causal. There are 2 matmuls in attn fwd and 4 in attn bwd. The per seq flops comes from Fwd + Bwd X + Bwd W. They all share the same matmuls, but Fwd has attn fwd and Bwd X has attn bwd. Bwd W just contains the base matmuls.
 
 - MFU (Model Flops Utilization): A measure of effective throughput relative to hardware capabilities (where TFLOPS is calculated above)
 ```math
