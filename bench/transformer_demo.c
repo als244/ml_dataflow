@@ -3224,7 +3224,7 @@
 								
 
 								ret = (dataflow_handle.submit_outbound_transfer)(&dataflow_handle, outbound_stream_id, sys_activation_home, cur_activations -> working_activations -> savedActivationsBuffer, 
-																					cur_activations -> working_activations -> savedActivationsBufferBytes);
+																					sys_saved_activations[k * num_chunks + chunk_id].savedActivationsBufferBytes);
 
 								if (ret){
 									fprintf(stderr, "Error: failed to submit outbound transfer to send seq group #%d, chunk #%d, layer id #%d's activations to host...\n", seq_group, chunk_id, k);
