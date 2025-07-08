@@ -15,14 +15,11 @@
 	#define RTX_5090_PEAK_BF16_TFLOPS 2.095e14
 	
 
-	// this is just for testing,.. in 
-	// reality determined dynamically...
-	#define MIN_CHUNK_SIZE 8192
-
 	#define NUM_TOKENS_EXAMPLE_SEQ 65536
 	#define TOKEN_IDS_PATH "../data/65536_token_ids_uint32.dat"
 	#define TOKEN_LABELS_PATH "../data/65536_labels_uint32.dat"
 
+	#define DEFAULT_MIN_CHUNK_SIZE 8192
 
 	// this (along with num seqs per round) modulates how frequently we will step 
 	// the optimizer...
@@ -274,12 +271,17 @@
 
 		float PEAK_BF16_TFLOPS;
 
+		// this is just for testing,.. in 
+		// reality determined dynamically...
+		int MIN_CHUNK_SIZE = DEFAULT_MIN_CHUNK_SIZE;
+
 		switch (hardware_arch_type){
 			case BACKEND_ARCH_A100:
 				PEAK_BF16_TFLOPS = A100_PEAK_BF16_TFLOPS;
 				break;
 			case BACKEND_ARCH_H100:
 				PEAK_BF16_TFLOPS = H100_PEAK_BF16_TFLOPS;
+				MIN_CHUNK_SIZE = 16384;
 				break;
 			case BACKEND_ARCH_RTX_3090:
 				PEAK_BF16_TFLOPS = RTX_3090_PEAK_BF16_TFLOPS;
