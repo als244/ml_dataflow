@@ -8,7 +8,7 @@ You can learn more about the project's background/details [here](docs/background
 
 ## Benefits
 
-#### 20% Training Performance Improvement vs. [Nvidia Baseline](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/dgxc-benchmarking/resources/llama3-dgxc-benchmarking)
+#### 20% Higher Training Throughput vs. [Nvidia Baseline](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/dgxc-benchmarking/resources/llama3-dgxc-benchmarking)
 - Trains Llama3 8B (BF16) with 8k sequence length at ~10,800 vs ~9,000 Tok/s per H100
 - Requires only 1 H100 and 70GB of host memory to achieve such performance. 
 #### Train long-sequences or large-models on single device or at home
@@ -243,7 +243,7 @@ Where the $(D + 2 * K + D + 3 * F)$ factor is coming from Q, K+V, O, and the 3 F
 
 -----
 
-**Practical note**: The training demo source code is quite messy! This is not the intended usage, there are some missing pieces... Critical upstream functionality (*data ingestion*, *model/loss/optimizer customization*, *model saving/loading*, *multi-worker training*, & *a wider set of common kernels such as attention variants, optimizers, convolutions, and MoE selecting/routing/combining*) is underway. You can try out a [simulator](https://dataflowsim.sunshein.net) for what this repo aims to accomplish in its final multi-worker form.
+**Practical note**: The training demo source code is quite messy! This is not the intended usage, there are some missing pieces... Critical upstream functionality (*data ingestion*, *model/loss/optimizer customization*, *model saving/loading*, *multi-worker training*, & *a wider set of common kernels such as attention variants, other normalizations, optimizers, convolutions, and MoE selecting/routing/combining*) is underway. You can try out a [simulator](https://dataflowsim.sunshein.net) for what this repo aims to accomplish in its final multi-worker form.
 
 The plan is to build a robust core of C libraries and create user-friendly Python bindings (at the various layers of stack) for convenient interfacing. Typical usage will have a similar API to most other training frameworks and only need to use the top-level bindings. 
 
