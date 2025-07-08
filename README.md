@@ -11,7 +11,8 @@ You can learn more about the project's background/details [here](docs/background
 #### 6% Higher Training Throughput vs. [Nvidia Baseline](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/dgxc-benchmarking/resources/llama31-8b-dgxc-benchmarking-b)
 - Trains Llama3 8B (BF16) with 8k sequence length at ~10,750 vs ~10,120 Tok/s per H100
     - [Profiling](docs/sample_profiling_trace.md)
-- Requires only 1 H100 to achieve such performance. 
+- Requires only 1 H100 to achieve such performance.
+- 55% higher throughput compared to [Mosaic ML benchmark](https://github.com/mosaicml/llm-foundry/blob/main/scripts/train/benchmarking/README.md) training 7B model with 8k seqlen on 8 H100's (6935 Tok/sec)
 #### Train long-sequences or large-models on single device or at home
 - Automatically configures offloading & recomputation based on specified memory capacities, seqlen, and model size. Asynchrous dataflow is abundant, but the math remains the same.
 
