@@ -11,7 +11,7 @@
 - Global batch size: 917k tokens
 
 
-The top green timeline at the top of each image (corresponding to "SM Instructions") represents the "Tensor Active" ratio (fraction of cycles where a tensor pipe was working). This run achieves 75% tensor active utilization, but the clock rate is throttled as the H100 is power-bound. The "GPC clock" at the top of the first image shows the clock rate (averages 1464 Mhz vs. 1755 Mhz of boost clock).
+The lime green section at the top-ish of each image (corresponding to "SM Instructions") represents the "Tensor Active" ratio (fraction of cycles where a tensor pipe was working). This run achieves 75% tensor active utilization, but the clock rate is throttled as the H100 is power-bound. The "GPC clock" at the top of the first image shows the clock rate (averages 1464 Mhz vs. 1755 Mhz of boost clock).
 
 ---
 
