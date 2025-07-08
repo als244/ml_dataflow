@@ -1,4 +1,10 @@
-# Image Gallery
+# Example Profiling (Max Throughput Run)
+
+## Training of Llama3 8B with 8k sequence length on H100. 
+### Used 80GB of host memory and 78GB of device memory.
+
+
+The top green timeline at the top of each image (corresponding to "SM Instructions") represents the "Tensor Active" ratio (fraction of cycles where a tensor pipe was working). This run achieves 75% tensor active utilization, but the clock rate is throttled as the H100 is power-bound. The "GPC clock" at the top of the first image shows the clock rate (averages 1464 Mhz vs. 1755 Mhz of boost clock).
 
 ---
 
