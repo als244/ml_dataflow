@@ -10,7 +10,7 @@ You can learn more about the project's background/details [here](docs/background
 
 #### 20% Higher Training Throughput vs. [Nvidia Baseline](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/dgxc-benchmarking/resources/llama3-dgxc-benchmarking)
 - Trains Llama3 8B (BF16) with 8k sequence length at ~10,800 vs ~9,000 Tok/s per H100
-- Requires only 1 H100 and 70GB of host memory to achieve such performance. 
+- Requires only 1 H100 to achieve such performance. 
 #### Train long-sequences or large-models on single device or at home
 - Automatically configures offloading & recomputation based on specified memory capacities, seqlen, and model size. Asynchrous dataflow is abundant, but the math remains the same.
 
