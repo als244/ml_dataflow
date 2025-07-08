@@ -5,6 +5,7 @@
 
 - Chunk size: 16384
 - Chunks per round: 1
+- Seqs per round: 2
 - Rounds per step: 56
 - Seqs per step: 112
 - Global batch size: 917k tokens
