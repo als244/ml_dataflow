@@ -19,8 +19,8 @@ def plot_throughput(csv_filepath, device_name, output_dir):
     ## THESE AREN'T REAL PEAK FLOPS,
     ## BUT JUST A PROXY FOR MAX ATTAINABLE FLOPS
     device_name_to_peak_tflops = {
-        "H100": 700,
-        "A100": 250,
+        "H100": 600,
+        "A100": 200,
         "RTX5090": 190,
         "RTX3090": 60
     }
