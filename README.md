@@ -235,7 +235,7 @@ $S$ = seqlen, $N$ = seqs per step, $T$ = step runtime, $D$ = model dim, $K$ = kv
 \text{per seq flops} &= L * (3 * \text{layer matmul flops} + \text{attn fwd flops} + \text{attn bwd flops}) + \text{head flops} \\
 \text{model step cost} &= N * \text{per seq flops} \\
 &= N * (L * (6 * S * D * (2 * D + 2 * K + 3 * F) + 6 * S * S * D) + 6 * S * D * V) \\ 
-\text{TFLOPS} &= \text{model step cost} / T
+\text{TFLOPS/sec} &= \text{model step cost} / T
 \end{aligned}
 ```
 Where the $(2 * D + 2 * K + 3 * F)$ factor is coming from Q, O, K+V and the 3 FFN matrices within each block. The $.5$ factor in attn flops comes from causal variant. There are 2 matmuls in attn fwd and 4 in attn bwd. The per seq flops comes from Fwd + Bwd X + Bwd W. They all share the same matmuls, but Fwd has attn fwd and Bwd X has attn bwd. Bwd W just contains the base matmuls. The head does fwd, bwd x, and bwd w matmuls. Embedding is essentially free as it is simple memcopies (forward) or additions (backward).
