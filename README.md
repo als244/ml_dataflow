@@ -14,7 +14,7 @@ You can learn more about the project's background/details [here](docs/background
 ![Sample Heatmap, RTX 5090, LLama3-8B, Seqlen 32k](bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090-8B-32768-tok.png)
 
 #### 6% Higher Training Throughput vs. [Nvidia Baseline](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/dgxc-benchmarking/resources/llama31-8b-dgxc-benchmarking-b)
-- Trains Llama3 8B (BF16) with 8k sequence length at ~10,750 vs ~10,120 Tok/s per H100
+- Trains Llama3 8B (BF16) with 8k sequence length at ~10,800 vs ~10,120 Tok/s per H100
     - [Profiling](docs/sample_profiling_trace.md)
 - Requires only 1 H100 to achieve such performance.
 - 55% higher throughput compared to [Mosaic ML benchmark](https://github.com/mosaicml/llm-foundry/blob/main/scripts/train/benchmarking/README.md) training 7B model with 8k seqlen on 8 H100's (6935 Tok/sec)
