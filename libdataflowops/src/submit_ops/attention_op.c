@@ -35,7 +35,7 @@ int dataflow_get_attention_workspace_size(Dataflow_Handle * handle, DataflowData
 	op_args[9] = &ret_workspace_size;
 
 	// NO STREAM REQUIRED FOR THIS CPU-ONLY OP!
-	ret = (handle -> submit_op)(handle, &attention_get_workspace_size_op, NULL);
+	ret = (handle -> submit_op)(handle, &attention_get_workspace_size_op, -1);
 	if (ret){
 		fprintf(stderr, "Error: failed to submit attention_get_workspace_size_op...\n");
 		return -1;
