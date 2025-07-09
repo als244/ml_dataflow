@@ -28,6 +28,15 @@
 
 // functions to export
 
+// If !is_training, returns the required workspace size for forward pass
+// If is_training, returns the MAX(fwd_workspace_size, bwd_workspace_size
+
+// Used in order to help autoconfigure memory during dataflow preparation...
+uint64_t flash_attention_get_workspace_size(Dataflow_Handle * dataflow_handle, Dataflow_Datatype dtype, int is_training, 
+                                            int num_q_heads, int num_kv_heads, int head_dim, 
+                                            int max_chunk_size, int max_seq_len, int max_seqs_in_chunk,
+                                            int is_causal);
+
 int flash_attention_fwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * op, void * op_extra);
 
 // ^ Calls function from libflash3.so:

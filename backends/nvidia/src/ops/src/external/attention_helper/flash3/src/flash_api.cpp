@@ -213,12 +213,190 @@ void run_mha_bwd(Flash_bwd_params &params, cudaStream_t stream) {
 }
 
 extern "C" {
-    
+
+    int set_flash3_fwd_params(Flash_fwd_params &params,
+                                int arch, int num_sm,
+                                int flash_dtype_as_int,
+                                int num_seqs, int total_q, int total_k,
+                                int * q_seq_offsets, int * q_seq_lens, int max_seqlen_q,
+                                int * k_seq_offsets, int * k_seq_lens, int max_seqlen_k,
+                                int num_q_heads, int num_kv_heads, int head_dim,
+                                void * x_q, void * x_k, void * x_v,
+                                void * x_attn_out, float * softmax_lse, 
+                                int is_causal) {
+
+        int model_dim = num_q_heads * head_dim;
+        int kv_dim = num_kv_heads * head_dim;
+
+        params.is_fp32 = false;
+        params.is_bf16 = false;
+        params.is_e4m3 = false;
+
+        DataflowDatatype flash_dt = (DataflowDatatype) flash_dtype_as_int;
+
+        if (flash_dt == DATAFLOW_FP32){
+            params.is_fp32 = true;
+        }
+        else if (flash_dt == DATAFLOW_BF16){
+            params.is_bf16 = true;
+        }
+        else if (flash_dt == DATAFLOW_FP8E4M3){
+            params.is_e4m3 = true;
+        }
+        else{
+            if (flash_dt != DATAFLOW_FP16){
+                fprintf(stderr, "Error: dtype of DataflowDatatype enum val of %d not supported in flash3...\n", flash_dtype_as_int);
+            return -1;
+            }
+        }
+
+        params.total_q = total_q;
+        params.total_k = total_k;
+        params.total_knew = 0;
+
+        params.seqlen_q = max_seqlen_q;
+        params.seqlen_q_rounded = ROUND_UP_TO_128(max_seqlen_q); 
+
+        // Think it is ok to set this 0 and not take in max_seqlen_k...
+        params.seqlen_k = max_seqlen_k;
+        params.seqlen_k_rounded = ROUND_UP_TO_128(max_seqlen_k);
+
+        params.seqlen_knew = 0;
+
+        params.q_ptr = x_q;
+        params.k_ptr = x_k;
+        params.v_ptr = x_v;
+        params.o_ptr = x_attn_out;
+
+        params.q_row_stride = model_dim;
+        params.k_row_stride = kv_dim;
+        params.v_row_stride = kv_dim;
+        params.o_row_stride = model_dim;
+
+        params.q_head_stride = head_dim;
+        params.k_head_stride = head_dim;
+        params.v_head_stride = head_dim;
+        params.o_head_stride = head_dim;
+
+        params.v_dim_stride = 1;
+
+        params.cu_seqlens_q = q_seq_offsets;
+        params.cu_seqlens_k = k_seq_offsets;
+        params.cu_seqlens_knew = NULL;
+        params.leftpad_k = NULL;
+
+
+        params.seqused_q = q_seq_lens;
+        params.seqused_k = k_seq_lens;
+
+        params.knew_ptr = NULL;
+        params.vnew_ptr = NULL;
+
+        params.knew_batch_stride = 0;
+        params.knew_row_stride = 0;
+        params.knew_head_stride = 0;
+        params.vnew_row_stride = 0;
+        params.vnew_head_stride = 0;
+        params.vnew_batch_stride = 0;
+
+        params.q_descale_ptr = NULL;
+        params.k_descale_ptr = NULL;
+        params.v_descale_ptr = NULL;
+
+        params.q_descale_batch_stride = 0;
+        params.q_descale_head_stride = 0;
+        params.k_descale_batch_stride = 0;
+        params.k_descale_head_stride = 0;
+        params.v_descale_batch_stride = 0;
+        params.v_descale_head_stride = 0;
+
+        params.q_batch_stride = 0;
+        params.k_batch_stride = 0;
+        params.v_batch_stride = 0;
+        params.o_batch_stride = 0;
+
+
+
+        params.qv_ptr = NULL;
+        params.qv_batch_stride = 0;
+        params.qv_row_stride = 0;
+        params.qv_head_stride = 0;
+
+        params.kv_batch_idx = NULL;
+        params.page_table = NULL;
+        params.page_table_batch_stride = 0;
+        params.page_size = 0;
+        params.num_pages = 0;
+        params.pagedkv_tma = false;
+
+        // Need to determine what to do here
+        // (if dropout is non-zero...)
+        params.rng_state = NULL;    
+
+        // Will over-write if split
+        params.oaccum_batch_stride = 0;
+        params.oaccum_split_stride = 0;
+        params.oaccum_row_stride = 0;
+        params.oaccum_head_stride = 0;
+
+        params.lseaccum_batch_stride = 0;
+        params.lseaccum_split_stride = 0;
+        params.lseaccum_head_stride = 0;
+
+
+        params.softmax_lse_ptr = softmax_lse;
+
+        int head_dim_rounded = round_up_headdim(head_dim);
+
+        params.b = num_seqs;
+        params.b_k = num_seqs;
+        params.h = num_q_heads;
+        params.h_k = num_kv_heads;
+        params.d = head_dim;
+        params.d_rounded = head_dim_rounded;
+        params.dv = head_dim;
+        params.dv_rounded = head_dim_rounded;
+
+        params.scale_softmax = 1.0 / sqrtf((float) head_dim);
+        params.softcap = 0.0f;
+
+        params.p_dropout = 1.0f;
+
+        params.p_dropout_in_uint8_t = (uint8_t) 255;
+
+        params.rp_dropout = 1.0f;
+
+        params.is_causal = is_causal;
+        params.is_local = !is_causal;
+
+        if (is_causal){
+            params.window_size_left = max_seqlen_k - 1;
+            params.window_size_right = 0;
+        }
+        else{
+            // these might have -1...
+            params.window_size_left = max_seqlen_k - 1;
+            params.window_size_right = max_seqlen_q - 1;
+        }
+
+        params.rotary_dim = 0;
+        params.rotary_cos_ptr = NULL;
+        params.rotary_sin_ptr = NULL;
+        params.seqlens_rotary = NULL;
+        params.is_rotary_interleaved = false;
+
+
+        params.arch = arch;
+        params.num_sm = num_sm;
+
+        return 0;
+    }
+
     // Note: must have already called set_flash3_fwd_params()
     //   (or set fully yourself)
     int set_flash3_fwd_workspace(Flash_fwd_params &params,
-                                    void * attn_workspace,
-                                    uint64_t * ret_used_workspace_size, void ** ret_set_to_zero_start, size_t * ret_set_to_zero_size){
+                                void * attn_workspace,
+                                uint64_t * ret_used_workspace_size, void ** ret_set_to_zero_start, size_t * ret_set_to_zero_size){
 
 
         int total_q = params.total_q;
@@ -237,14 +415,14 @@ extern "C" {
 
         int num_splits = get_num_splits(params);
         params.num_splits = num_splits;
-        
+
         if (params.num_splits > 1){
-            
+
             // (num_splits, num_heads, total_q, headdim)
             params.oaccum_ptr = (float *) cur_attn_workspace;
             cur_attn_workspace += (num_splits * num_q_heads * total_q * head_dim * sizeof(float));
             used_workspace_size += (num_splits * num_q_heads * total_q * head_dim * sizeof(float));
-            
+
             params.oaccum_split_stride = params.num_splits;
             params.oaccum_row_stride = model_dim;
             params.oaccum_head_stride = head_dim;
@@ -257,7 +435,7 @@ extern "C" {
             params.lseaccum_head_stride = head_dim;
         }
 
-        
+
         params.pack_gqa = get_pack_gqa(params);
 
         int to_use_dynamic_split = 0;
@@ -274,13 +452,13 @@ extern "C" {
 
 
         params.tile_count_semaphore = NULL;
-        
+
         // reset back to null now
         params.num_splits_dynamic_ptr = NULL;
 
         void * set_to_zero_start = cur_attn_workspace;
         size_t set_to_zero_size = 0;
-        
+
         if ((needs_sem) || (to_use_dynamic_split)) {
             if (needs_sem){
                 if (!to_use_dynamic_split){
@@ -322,6 +500,56 @@ extern "C" {
 
         return 0;
     }
+
+    uint64_t flash3_get_fwd_workspace_size(DataflowDatatype dtype, int arch, int num_sm, 
+                                            int num_q_heads, int num_kv_heads, int head_dim, 
+                                            int max_chunk_size, int max_seq_len, int max_seqs_in_chunk,
+                                            int is_causal){
+
+        int ret;
+
+        // To get the workspace size we need to determine num_splits
+        // so easier to just populate a params struct with the necessary fields...
+        Flash_fwd_params params;
+        memset(&params, 0, sizeof(Flash_fwd_params));
+
+        // Pass in dummy values for pointers, we don't care about assignment, 
+        // just want to set params we can call set workspace to determine the workspace size...
+
+        // Pass in worst-case values for total_q (== max_chunk_size) and total_k (== max_seq_len)
+        
+        int dummy_ptr;
+
+        ret = set_flash3_fwd_params(Flash_fwd_params &params,
+                                    arch, num_sm,
+                                    (int) dtype,
+                                    max_seqs_in_chunk, max_chunk_size, max_seq_len,
+                                    &dummy_ptr, &dummy_ptr, max_chunk_size,
+                                    &dummy_ptr, &dummy_ptr, max_seq_len,
+                                    num_q_heads, num_kv_heads, head_dim,
+                                    (void *) &dummy_ptr, (void *) &dummy_ptr, (void *) &dummy_ptr,
+                                    (void *) &dummy_ptr, (float *) &dummy_ptr,
+                                    is_causal);
+
+        if (ret) {
+            fprintf(stderr, "Error: unable to get flash3_get_fwd_workspace_size\n");
+            return 0;
+        }
+
+        // now call set_workspace to discover what the required workspace size is...
+
+        uint64_t workspace_size;
+
+        ret = set_flash3_fwd_workspace(params, (void *) &dummy_ptr, &workspace_size, NULL, NULL);
+        if (ret) {
+            fprintf(stderr, "Error: unable to get flash3_get_fwd_workspace_size\n");
+            return 0;
+        }
+        
+        return workspace_size;
+    }
+    
+
 
 
     // Note: must have already called set_flash3_fwd_params()
@@ -478,183 +706,55 @@ extern "C" {
         return 0;
     }
 
-    int set_flash3_fwd_params(Flash_fwd_params &params,
-                        int arch, int num_sm,
-                        int flash_dtype_as_int,
-                        int num_seqs, int total_q, int total_k,
-                        int * q_seq_offsets, int * q_seq_lens, int max_seqlen_q,
-                        int * k_seq_offsets, int * k_seq_lens, int max_seqlen_k,
-                        int num_q_heads, int num_kv_heads, int head_dim,
-                        void * x_q, void * x_k, void * x_v,
-                        void * x_attn_out, void * softmax_lse, 
-                        int is_causal) {
 
-        int model_dim = num_q_heads * head_dim;
-        int kv_dim = num_kv_heads * head_dim;
+    uint64_t flash3_get_bwd_workspace_size(DataflowDatatype dtype, int arch, int num_sm, 
+                                            int num_q_heads, int num_kv_heads, int head_dim, 
+                                            int max_chunk_size, int max_seq_len, int max_seqs_in_chunk,
+                                            int is_causal){
 
-        params.is_fp32 = false;
-        params.is_bf16 = false;
-        params.is_e4m3 = false;
+        int ret;
 
-        DataflowDatatype flash_dt = (DataflowDatatype) flash_dtype_as_int;
-
-        if (flash_dt == DATAFLOW_FP32){
-            params.is_fp32 = true;
-        }
-        else if (flash_dt == DATAFLOW_BF16){
-            params.is_bf16 = true;
-        }
-        else if (flash_dt == DATAFLOW_FP8E4M3){
-            params.is_e4m3 = true;
-        }
-        else{
-            if (flash_dt != DATAFLOW_FP16){
-                fprintf(stderr, "Error: dtype of DataflowDatatype enum val of %d not supported in flash3...\n", flash_dtype_as_int);
-                return -1;
-            }
-        }
-
-        params.total_q = total_q;
-        params.total_k = total_k;
-        params.total_knew = 0;
-
-        params.seqlen_q = max_seqlen_q;
-        params.seqlen_q_rounded = ROUND_UP_TO_128(max_seqlen_q); 
-
-        // Think it is ok to set this 0 and not take in max_seqlen_k...
-        params.seqlen_k = max_seqlen_k;
-        params.seqlen_k_rounded = ROUND_UP_TO_128(max_seqlen_k);
-
-        params.seqlen_knew = 0;
-
-        params.q_ptr = x_q;
-        params.k_ptr = x_k;
-        params.v_ptr = x_v;
-        params.o_ptr = x_attn_out;
-
-        params.q_row_stride = model_dim;
-        params.k_row_stride = kv_dim;
-        params.v_row_stride = kv_dim;
-        params.o_row_stride = model_dim;
-
-        params.q_head_stride = head_dim;
-        params.k_head_stride = head_dim;
-        params.v_head_stride = head_dim;
-        params.o_head_stride = head_dim;
-
-        params.v_dim_stride = 1;
-
-        params.cu_seqlens_q = q_seq_offsets;
-        params.cu_seqlens_k = k_seq_offsets;
-        params.cu_seqlens_knew = NULL;
-        params.leftpad_k = NULL;
-
-
-        params.seqused_q = q_seq_lens;
-        params.seqused_k = k_seq_lens;
-
-        params.knew_ptr = NULL;
-        params.vnew_ptr = NULL;
         
-        params.knew_batch_stride = 0;
-        params.knew_row_stride = 0;
-        params.knew_head_stride = 0;
-        params.vnew_row_stride = 0;
-        params.vnew_head_stride = 0;
-        params.vnew_batch_stride = 0;
-
-        params.q_descale_ptr = NULL;
-        params.k_descale_ptr = NULL;
-        params.v_descale_ptr = NULL;
-    
-        params.q_descale_batch_stride = 0;
-        params.q_descale_head_stride = 0;
-        params.k_descale_batch_stride = 0;
-        params.k_descale_head_stride = 0;
-        params.v_descale_batch_stride = 0;
-        params.v_descale_head_stride = 0;
-
-        params.q_batch_stride = 0;
-        params.k_batch_stride = 0;
-        params.v_batch_stride = 0;
-        params.o_batch_stride = 0;
-
-            
-
-        params.qv_ptr = NULL;
-        params.qv_batch_stride = 0;
-        params.qv_row_stride = 0;
-        params.qv_head_stride = 0;
-
-        params.kv_batch_idx = NULL;
-        params.page_table = NULL;
-        params.page_table_batch_stride = 0;
-        params.page_size = 0;
-        params.num_pages = 0;
-        params.pagedkv_tma = false;
-
-        // Need to determine what to do here
-        // (if dropout is non-zero...)
-        params.rng_state = NULL;    
-
-        // Will over-write if split
-        params.oaccum_batch_stride = 0;
-        params.oaccum_split_stride = 0;
-        params.oaccum_row_stride = 0;
-        params.oaccum_head_stride = 0;
-
-        params.lseaccum_batch_stride = 0;
-        params.lseaccum_split_stride = 0;
-        params.lseaccum_head_stride = 0;
-
-
-        params.softmax_lse_ptr = softmax_lse;
-
-        int head_dim_rounded = round_up_headdim(head_dim);
-        
-        params.b = num_seqs;
-        params.b_k = num_seqs;
-        params.h = num_q_heads;
-        params.h_k = num_kv_heads;
-        params.d = head_dim;
-        params.d_rounded = head_dim_rounded;
-        params.dv = head_dim;
-        params.dv_rounded = head_dim_rounded;
-
-        params.scale_softmax = 1.0 / sqrtf((float) head_dim);
-        params.softcap = 0.0f;
-
-        params.p_dropout = 1.0f;
-
-        params.p_dropout_in_uint8_t = (uint8_t) 255;
-
-        params.rp_dropout = 1.0f;
-    
-        params.is_causal = is_causal;
-        params.is_local = !is_causal;
-        
-        if (is_causal){
-            params.window_size_left = max_seqlen_k - 1;
-            params.window_size_right = 0;
+        if ((dtype != DATAFLOW_FP16) && (dtype != DATAFLOW_BF16)){
+            fprintf(stderr, "Error: cannot get flash3 bwd workspace size for dtype (enum value %d), flash3 bwd only supports FP16 or BF16 bwds...\n", dtype);
+            return 0;
         }
-        else{
-            // these might have -1...
-            params.window_size_left = max_seqlen_k - 1;
-            params.window_size_right = max_seqlen_q - 1;
+
+        // To get the workspace size we need to determine num_splits
+        // so easier to just populate a params struct with the necessary fields...
+        Flash_bwd_params params;
+        memset(&params, 0, sizeof(Flash_bwd_params));
+
+        int dummy_ptr;
+
+        ret = set_flash3_fwd_params(params,
+                                    arch, num_sm,
+                                    (int) dtype,
+                                    max_seqs_in_chunk, max_chunk_size, max_seq_len,
+                                    &dummy_ptr, &dummy_ptr, max_chunk_size,
+                                    &dummy_ptr, &dummy_ptr, max_seq_len,
+                                    num_q_heads, num_kv_heads, head_dim,
+                                    (void *) &dummy_ptr, (void *) &dummy_ptr, (void *) &dummy_ptr,
+                                    (void *) &dummy_ptr, (float *) &dummy_ptr,
+                                    is_causal);
+
+        if (ret) {
+            fprintf(stderr, "Error: unable to get flash3_get_bwd_workspace_size\n");
+            return 0;
         }
-        
-        params.rotary_dim = 0;
-        params.rotary_cos_ptr = NULL;
-        params.rotary_sin_ptr = NULL;
-        params.seqlens_rotary = NULL;
-        params.is_rotary_interleaved = false;
-        
 
-        params.arch = arch;
-        params.num_sm = num_sm;
+        uint64_t workspace_size;
 
-        return 0;
+        ret = set_flash3_bwd_workspace(params, (void *) &dummy_ptr, &workspace_size, NULL, NULL);
+        if (ret) {
+            fprintf(stderr, "Error: unable to get flash3_get_bwd_workspace_size\n");
+            return 0;
+        }
+
+        return workspace_size;
     }
+
+    
 
 
 

@@ -237,6 +237,59 @@ extern "C" {
         return 0;
     }
 
+    uint64_t flash2_get_fwd_workspace_size(DataflowDatatype dtype, int arch, int num_sm, 
+                                            int num_q_heads, int num_kv_heads, int head_dim, 
+                                            int max_chunk_size, int max_seq_len, int max_seqs_in_chunk,
+                                            int is_causal) {
+        return 0;
+    }
+
+
+    uint64_t flash2_get_bwd_workspace_size(DataflowDatatype dtype, int arch, int num_sm, 
+                                            int num_q_heads, int num_kv_heads, int head_dim, 
+                                            int max_chunk_size, int max_seq_len, int max_seqs_in_chunk,
+                                            int is_causal) {
+
+        uint64_t workspace_size = 0;
+
+        uint64_t dtype_size;
+        switch (dtype){
+            case DATAFLOW_FP32:
+                dtype_size = 4;
+                break;
+            case DATAFLOW_BF16:
+                dtype_size = 2;
+                break;
+            case DATAFLOW_FP16:
+                dtype_size = 2;
+                break;
+            default:
+                fprintf(stderr, "Unsupported dtype for flash2 bwd: enum value %d\n", dtype);
+                return 0;
+        }
+      
+        // Always stored in fp32
+        uint64_t softmax_size = (uint64_t)num_q_heads * (uint64_t)(max_chunk_size + 128 * max_seqs_in_chunk) * sizeof(float);
+        workspace_size += softmax_size;
+
+        if (num_q_heads != num_kv_heads){
+            uint64_t dkv_expanded_size = (uint64_t)max_seq_len * (uint64_t)num_q_heads * (uint64_t)head_dim * (uint64_t)dtype_size;
+            // 2 for k and v
+            workspace_size += 2 * dkv_expanded_size;
+        }
+
+        const int nsplits = (num_sm + max_seqs_in_chunk * num_q_heads - 1) / (max_seqs_in_chunk * num_q_heads);
+
+        uint64_t per_split_els = (uint64_t)(max_chunk_size + 128 * max_seqs_in_chunk) * (uint64_t)num_q_heads * (uint64_t)head_dim * (uint64_t)dtype_size;
+        
+        // Always stored in fp32
+        uint64_t dq_accum_size = (uint64_t) nsplits * per_split_els * sizeof(float);
+
+        workspace_size += dq_accum_size;
+
+        return workspace_size;
+    }
+
 
     // Note: must have already called set_flash2_fwd_params()
     //   (or set fully yourself)

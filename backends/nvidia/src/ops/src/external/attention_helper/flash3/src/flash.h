@@ -255,6 +255,16 @@ typedef enum {
 
 // C functions
 extern "C" {
+
+    uint64_t flash3_get_fwd_workspace_size(DataflowDatatype dtype, int arch, int num_sm, 
+                                            int num_q_heads, int num_kv_heads, int head_dim, 
+                                            int max_chunk_size, int max_seq_len, int max_seqs_in_chunk,
+                                            int is_causal);
+
+    uint64_t flash3_get_bwd_workspace_size(DataflowDatatype dtype, int arch, int num_sm, 
+                                            int num_q_heads, int num_kv_heads, int head_dim, 
+                                            int max_chunk_size, int max_seq_len, int max_seqs_in_chunk,
+                                            int is_causal);
     
     int flash3_fwd_wrapper(CUstream stream, int arch, int num_sm,
                         int flash_dtype_as_int,
@@ -267,51 +277,7 @@ extern "C" {
                         int is_causal,
                         uint64_t workspaceBytes, void * workspace);
 
-    // attn_bwd_workspace:
-
-    /*
-
-    int const head_size_rounded = round_up_headdim(head_size);
-
-    int const kBlockM_sm90 = head_size_rounded <= 64 ? (is_causal && softcap > 0.0 ? 96 : 128)
-        : (head_size_rounded <= 96 ? 64
-           : (head_size_rounded <= 128 ? (is_causal || is_local || softcap > 0.0 ? 64 : 80)
-              : 64));
-    int const kBlockM_sm80 = head_size_rounded <= 64 ? 128 : 64;
-    int const kBlockM_sm86 = head_size_rounded <= 192 ? 64 : 32;
-    int const kBlockM = arch >= 90 ? kBlockM_sm90 : (arch == 86 || arch == 89 ? kBlockM_sm86 : kBlockM_sm80);
-    int const kBlockN_sm90 = head_size_rounded <= 128
-        ? 128
-        : (head_size_rounded <= 192 ? 96 : 80);
-    int const kBlockN_sm80 = head_size_rounded <= 128
-        ? 128
-        : (head_size_rounded <= 192 ? 80 : 64);
-    int const kBlockN_sm86 = head_size_rounded <= 64 ? 128
-        : (head_size_rounded <= 96 ? 128
-           : (head_size_rounded <= 128 ? 96
-              : (head_size_rounded <= 192 ? 64 : 64)));
-    int const kBlockN = arch >= 90 ? kBlockN_sm90 : (arch == 86 || arch == 89 ? kBlockN_sm86 : kBlockN_sm80);
-    auto round_multiple = [](int x, int m) { return (x + m - 1) / m * m; };
-    int const seqlen_q_rounded = round_multiple(seqlen_q, kBlockM);
-    int const seqlen_k_rounded = round_multiple(seqlen_k, kBlockN);
-    int const total_q_padded_rounded = round_multiple(total_q + batch_size * kBlockM, kBlockM);
-    int const total_k_padded_rounded = round_multiple(total_k + batch_size * kBlockN, kBlockN);
-    */
-
-    // - softmax_d: (num_q_heads, total_q_padded_rounded), dtype=float32
-    // - softmax_lse_log2: (num_q_heads, total_q_padded_rounded), dtype=float32
-
-    // - dq_accum: (num_q_heads, total_q_padded_rounded * head_size_rounded), dtype=float32
-    
-    // if (num_q_heads != num_kv_heads):
-    //      - dk_accum: (num_kv_heads, total_k_padded_rounded, head_size_rounded), dtype=float32
-    //      - dv_accum: (num_kv_heads, total_k_padded_rounded, head_size_rounded), dtype=float32
-    
-
-    // - dq_semaphore: ( (max_seqlen_q + kBlockM - 1) / (kBlockM), num_seqs, num_q_heads), dtype=int32
-    // if (num_q_heads != num_kv_heads) & deterministic:
-    //      - dk_semaphore: (max_seqlen_k + kBlockN - 1) / kBlockN, num_seqs, num_heads_kv), dtype=int32
-    //      - dv_semaphore: (max_seqlen_k + kBlockN - 1) / kBlockN, num_seqs, num_heads_kv), dtype=int32
+   
     int flash3_bwd_wrapper(CUstream stream, int arch, int num_sm,
                             int flash_dtype_as_int, 
                             int num_seqs, int total_q, int total_k, 
