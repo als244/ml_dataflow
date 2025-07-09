@@ -23,6 +23,8 @@
 
 	// this (along with num seqs per round) modulates how frequently we will step 
 	// the optimizer...
+
+	// THIS IS TARGET FOR 1B MODEL, BUT CODE ALREADY MODIFIES IF LARGER...
 	#define TARGET_DURATION_PER_STEP_S 6.0f
 	// to help determien how many rounds per step
 	#define FLOP_EFFICIENCY_ESTIMATE 0.6f
