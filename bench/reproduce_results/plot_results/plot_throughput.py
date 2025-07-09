@@ -6,6 +6,14 @@ import matplotlib.pyplot as plt
 import matplotlib.colors
 import numpy as np
 
+import sys
+import os
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import matplotlib.colors
+import numpy as np
+
 def plot_throughput(csv_filepath, device_name, output_dir):
     """
     Generates heatmaps with metric-specific colormaps and value ranges.
@@ -20,27 +28,13 @@ def plot_throughput(csv_filepath, device_name, output_dir):
     pdf_output_dir = os.path.join(output_dir, "pdf")
     os.makedirs(pdf_output_dir, exist_ok=True)
 
-    ## THESE AREN'T REAL PEAK FLOPS,
-    ## BUT JUST A PROXY FOR MAX ATTAINABLE FLOPS
-    device_name_to_peak_tflops = {
-        "H100": 600,
-        "A100": 200,
-        "RTX5090": 190,
-        "RTX3090": 60
-    }
-
-    if device_name not in device_name_to_peak_tflops:
-        raise ValueError(f"Device name {device_name} not found in device_name_to_peak_tflops")
-
-    peak_tflops = device_name_to_peak_tflops[device_name]
-
     # --- Style Settings ---
     plt.rcParams.update({
         'font.size': 14,
         'axes.titlesize': 18,
         'axes.labelsize': 16,
-        'xtick.labelsize': 14,
-        'ytick.labelsize': 14
+        'xtick.labelsize': 16,
+        'ytick.labelsize': 16
     })
     annot_kws = {"size": 14}
 
@@ -49,6 +43,15 @@ def plot_throughput(csv_filepath, device_name, output_dir):
 
     csv_columns = ["host_mem_gb", "dev_mem_gb", "seq_len", "model_size", "chunk_size", "total_home_acts", "num_inp_only_saved", "num_inp_attn_saved", "num_full_saved", "total_dev_acts", "num_rounds_per_step", "seqs_per_step", "recompute_pct", "attn_flop_pct", "avg_step_time", "tok_per_sec", "tflops", "mfu", "hfu"]
     df = pd.read_csv(csv_filepath, names=csv_columns)
+
+    tflops_vmin = df[df['tflops'] > 0]['tflops'].min()
+    tflops_vmax = df[df['tflops'] > 0]['tflops'].max()
+
+    util_min_val = 0.25
+    util_max_val = 0.85
+
+    tok_sec_vmin = df[df['tok_per_sec'] > 0]['tok_per_sec'].min()
+    tok_sec_vmax = df[df['tok_per_sec'] > 0]['tok_per_sec'].max()
 
     metrics = ['tok_per_sec', 'tflops', 'mfu', 'hfu']
     metric_labels = {
@@ -72,6 +75,15 @@ def plot_throughput(csv_filepath, device_name, output_dir):
         for model_size in model_sizes:
             df_model_size_slice = df_seqlen_slice[df_seqlen_slice['model_size'] == model_size]
 
+            max_mfu = df_model_size_slice[df_model_size_slice['mfu'] > 0]['mfu'].max()
+            max_tok_per_sec = df_model_size_slice[df_model_size_slice['tok_per_sec'] > 0]['tok_per_sec'].max()
+
+            tok_per_sec_at_max_mfu = (util_max_val / max_mfu) * max_tok_per_sec
+            tok_per_sec_at_min_mfu = (util_min_val / util_max_val) * tok_per_sec_at_max_mfu
+            
+            vmin_tok_per_sec = tok_per_sec_at_min_mfu
+            vmax_tok_per_sec = tok_per_sec_at_max_mfu
+
             if df_model_size_slice.empty:
                 continue
 
@@ -91,30 +103,25 @@ def plot_throughput(csv_filepath, device_name, output_dir):
                 if heatmap_data.empty:
                     continue
 
-                # --- Dynamic Colormap and Range Settings ---
                 if metric == 'tflops':
-                    cmap = 'Blues'
-                    vmin = 0
-                    vmax = peak_tflops
+                    cmap = 'viridis'
+                    vmin = tflops_vmin
+                    vmax = tflops_vmax
                 elif metric in ['mfu', 'hfu']:
                     cmap = 'RdYlGn'
-                    vmin = 0
-                    vmax = 1
+                    vmin = util_min_val
+                    vmax = util_max_val
                 elif metric == 'tok_per_sec':
                     cmap = 'YlGn'
                     non_zero_vals = heatmap_data[heatmap_data > 0]
-                    # Set vmin to the smallest non-zero value, or 0 if all are zero
-                    vmin = non_zero_vals.min().min() if not non_zero_vals.empty else 0
-                    vmax = heatmap_data.max().max()
-                # --- End of Dynamic Settings ---
+                    vmin = vmin_tok_per_sec
+                    vmax = vmax_tok_per_sec
 
                 plt.figure(figsize=(10, 8))
 
-                # Create masks for zero and non-zero values to plot them separately
                 hide_zeros = heatmap_data == 0
                 hide_non_zeros = heatmap_data != 0
 
-                # Plot the main heatmap for non-zero values
                 ax = sns.heatmap(
                     heatmap_data,
                     mask=hide_zeros,
@@ -129,7 +136,31 @@ def plot_throughput(csv_filepath, device_name, output_dir):
                     vmax=vmax
                 )
 
-                # Overlay a heatmap for zero values using the dark red color
+                # --- START: Manual Font Color Correction ---
+                # This block fixes the inconsistent font color issue by manually setting
+                # the color based on a custom luminance threshold.
+
+                # A threshold of 0.6 should work well for the 'YlGn' colormap.
+                # You can adjust this value if you use different colormaps.
+                luminance_threshold = 0.6
+                
+                cmap_obj = plt.get_cmap(cmap)
+                norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+                
+                # Get the data values that have annotations
+                annotated_data = heatmap_data.to_numpy()[hide_non_zeros.to_numpy()]
+                
+                for text_artist, value in zip(ax.texts, annotated_data):
+                    # Get the background color of the cell
+                    bg_color = cmap_obj(norm(value))
+                    
+                    # Calculate luminance (YIQ formula)
+                    luminance = (bg_color[0] * 299 + bg_color[1] * 587 + bg_color[2] * 114) / 1000
+                    
+                    # Set the font color
+                    text_artist.set_color('black' if luminance > luminance_threshold else 'white')
+                # --- END: Manual Font Color Correction ---
+
                 sns.heatmap(
                     heatmap_data,
                     mask=hide_non_zeros,
@@ -137,7 +168,7 @@ def plot_throughput(csv_filepath, device_name, output_dir):
                     linewidths=1.0,
                     linecolor='white',
                     cmap=dark_red_cmap,
-                    cbar=False, # No colorbar needed for the zero values
+                    cbar=False,
                     ax=ax
                 )
 
@@ -146,14 +177,9 @@ def plot_throughput(csv_filepath, device_name, output_dir):
                 plt.ylabel("Host Memory (GB)")
                 plt.tight_layout()
 
-                # --- Generate filenames and save plots ---
                 base_filename = f"{device_name}-{model_size}B-{seq_len}-{metric_file_suffix[metric]}"
-
-                # Save PDF to the 'pdf' subdirectory
                 pdf_path = os.path.join(pdf_output_dir, f"{base_filename}.pdf")
                 plt.savefig(pdf_path)
-
-                # Save PNG to the main output directory
                 png_path = os.path.join(output_dir, f"{base_filename}.png")
                 plt.savefig(png_path)
                 
