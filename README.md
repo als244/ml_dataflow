@@ -11,7 +11,9 @@ You can learn more about the project's background/details [here](docs/background
 #### Train long-sequences or large-models on single device or at home
 - Automatically offloads/prefetches (parameters, activations, gradients, & optimizer state) and configures recomputation based on specified memory capacities, seqlen, and model size. Asynchrous dataflow is abundant, but the math remains the same.
 
-![Sample Heatmap, RTX 5090, LLama3-8B, Seqlen 32k](bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090-8B-32768-tok.png)
+![Sample Heatmap, H100, LLama3-8B, Seqlen 8k](bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-8192-tok.png)
+
+![Sample Heatmap, RTX 5090, LLama3-8B, Seqlen 64k](bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090-8B-65536-tok.png)
 
 #### 6% Higher Training Throughput vs. [Nvidia Baseline](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/dgxc-benchmarking/resources/llama31-8b-dgxc-benchmarking-b)
 - Trains Llama3 8B (BF16) with 8k sequence length at ~10,800 vs ~10,120 Tok/s per H100
