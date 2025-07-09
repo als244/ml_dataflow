@@ -9,9 +9,9 @@ import numpy as np
 def plot_throughput(csv_filepath, device_name, output_dir):
     """
     Generates heatmaps with metric-specific colormaps and value ranges.
-    - TFLOPS: PuBu, vmin=0, vmax=peak_tflops
-    - MFU/HFU: RdYlGn, vmin=0, vmax=1
     - Tokens/sec: YlGn, vmin=min_non_zero, vmax=max
+    - TFLOPS: Blues, vmin=0, vmax=peak_tflops
+    - MFU/HFU: RdYlGn, vmin=0, vmax=1
     - Zero values are colored dark red for emphasis across all plots.
     """
     os.makedirs(output_dir, exist_ok=True)
@@ -89,7 +89,7 @@ def plot_throughput(csv_filepath, device_name, output_dir):
 
                 # --- Dynamic Colormap and Range Settings ---
                 if metric == 'tflops':
-                    cmap = 'PuBu'
+                    cmap = 'Blues'
                     vmin = 0
                     vmax = peak_tflops
                 elif metric in ['mfu', 'hfu']:
