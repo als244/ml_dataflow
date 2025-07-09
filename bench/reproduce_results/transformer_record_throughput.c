@@ -913,21 +913,25 @@
 
 		// Hack for now to set workspace in order to run...
 
-        // at least use 1GB
-        uint64_t baseKernelWorkspaceBytes = (1UL << 30);
+        // at least use 200MB
+		uint64_t baseKernelWorkspaceBytes = 200 * (1UL << 20);
+		uint64_t kernelWorkspaceBytes = baseKernelWorkspaceBytes;
+
+		// depending on the chunk size and seqlen, we will multiply this by a factor
+        uint64_t multKernelWorkspaceBytes = (1UL << 30);
+		
          // now if large chunk or long seq then increase
 		int chunk_size_rel = round((float) chunk_size / 8192.0);
         uint64_t chunk_size_factor = 1;
 		if (chunk_size_rel > 0){
-			chunk_size_factor = chunk_size_rel;
+			kernelWorkspaceBytes += chunk_size_factor * multKernelWorkspaceBytes;
 		}
 		int seqlen_rel = round((log2((double) seq_len / 8192.0)));
 		uint64_t seqlen_factor = 1;
 		if (seqlen_rel > 0){
-			seqlen_factor = seqlen_rel;
+			kernelWorkspaceBytes += seqlen_factor * multKernelWorkspaceBytes;
 		}
                 
-		uint64_t kernelWorkspaceBytes = chunk_size_factor * seqlen_factor * baseKernelWorkspaceBytes;
     	void * kernelWorkspace = cur_dev_mem;
         cur_dev_mem += kernelWorkspaceBytes;
         used_dev_mem += kernelWorkspaceBytes;
