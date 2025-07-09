@@ -48,7 +48,7 @@ def plot_throughput(csv_filepath, device_name, output_dir):
     util_max_val = 0.85
 
     device_name_to_peak_bf16_tflops = {
-        "H100": 980,
+        "H100": 989,
         "A100": 312.5,
         "RTX5090": 209.5,
         "RTX3090": 71.2
