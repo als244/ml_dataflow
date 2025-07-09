@@ -151,7 +151,7 @@ float get_seq_flops(int seq_len, int vocab_size, int model_dim, int kv_dim, int 
 	return total_seq_flops;
 }
 
-float get_recompute_flops(int seq_len, int model_dim, int is_causal, int num_shared_experts, int num_active_routed_experts, int expert_dim,
+float get_recompute_flops(int num_seqs, int seq_len, int n_layers, int model_dim, int is_causal, int num_shared_experts, int num_active_routed_experts, int expert_dim,
 								int chunk_size, int num_inp_attn_saved, int num_inp_only_saved, int * inp_only_seq_lens, 
 								float * ret_recompute_attn_flops, float * ret_recompute_matmul_flops){
 
@@ -188,9 +188,10 @@ float get_recompute_flops(int seq_len, int model_dim, int is_causal, int num_sha
 		attn_flop_ratio = 0.5;
 	}
 
-	float recompute_attn_flops = attn_flop_ratio * 2 * seq_len_f * seq_len_f * model_dim;
+	float recompute_attn_flops = num_seqs * n_layers * (attn_flop_ratio * 2 * seq_len_f * seq_len_f * model_dim_f);
 	recompute_flops += recompute_attn_flops;
 
+	// if we need to recompute fwd attention too
 	for (int chunk_loc = 0; chunk_loc < num_inp_only_saved; chunk_loc++){
 		chunk_seq_len = (float) inp_only_seq_lens[chunk_loc];
 
@@ -252,7 +253,7 @@ int start_step_metrics(void * _step_throughput_op_args){
 
 	float recompute_attn_flops;
 	float recompute_matmul_flops;
-	float recompute_flops = get_recompute_flops(seq_len, step_throughput_op_args->model_dim, step_throughput_op_args->is_causal, step_throughput_op_args->num_shared_experts, step_throughput_op_args->num_active_routed_experts, step_throughput_op_args->expert_dim,
+	float recompute_flops = get_recompute_flops(num_seqs, seq_len, step_throughput_op_args->num_layers, step_throughput_op_args->model_dim, step_throughput_op_args->is_causal, step_throughput_op_args->num_shared_experts, step_throughput_op_args->num_active_routed_experts, step_throughput_op_args->expert_dim,
 													step_throughput_op_args->chunk_size, step_throughput_op_args->num_inp_attn_saved, step_throughput_op_args->num_inp_only_saved, step_throughput_op_args->inp_only_seq_lens,
 													&recompute_attn_flops, &recompute_matmul_flops);
 
