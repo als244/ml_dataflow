@@ -7,7 +7,7 @@
 // if TYPE FP8, output must be BF16
 // Softmax LSE is of type FP32 and has length total_q * num_q_heads
 
-int dataflow_get_attention_workspace_size(Dataflow_Handle * handle, DataflowDatatype dtype, int is_training, 
+uint64_t dataflow_get_attention_workspace_size(Dataflow_Handle * handle, DataflowDatatype dtype, int is_training, 
 											int num_q_heads, int num_kv_heads, int head_dim, 
 											int max_chunk_size, int max_seq_len, int max_seqs_in_chunk,
 											int is_causal) {
