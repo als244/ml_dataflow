@@ -16,6 +16,10 @@ def plot_throughput(csv_filepath, device_name, output_dir):
     """
     os.makedirs(output_dir, exist_ok=True)
 
+    # Create the 'pdf' subdirectory for PDF files
+    pdf_output_dir = os.path.join(output_dir, "pdf")
+    os.makedirs(pdf_output_dir, exist_ok=True)
+
     ## THESE AREN'T REAL PEAK FLOPS,
     ## BUT JUST A PROXY FOR MAX ATTAINABLE FLOPS
     device_name_to_peak_tflops = {
@@ -142,10 +146,17 @@ def plot_throughput(csv_filepath, device_name, output_dir):
                 plt.ylabel("Host Memory (GB)")
                 plt.tight_layout()
 
-                output_filename = f"{device_name}-{model_size}B-{seq_len}-{metric_file_suffix[metric]}.pdf"
-                output_path = os.path.join(output_dir, output_filename)
+                # --- Generate filenames and save plots ---
+                base_filename = f"{device_name}-{model_size}B-{seq_len}-{metric_file_suffix[metric]}"
 
-                plt.savefig(output_path)
+                # Save PDF to the 'pdf' subdirectory
+                pdf_path = os.path.join(pdf_output_dir, f"{base_filename}.pdf")
+                plt.savefig(pdf_path)
+
+                # Save PNG to the main output directory
+                png_path = os.path.join(output_dir, f"{base_filename}.png")
+                plt.savefig(png_path)
+                
                 plt.close()
 
 if __name__ == "__main__":
