@@ -412,7 +412,7 @@
 		int model_dim;
 		int kv_dim;
 		int vocab_size;
-		
+		int is_causal = 1;
 
 		if (MODEL_CONFIG_SIZE_B == 70){
 		// llama3 70B config
@@ -864,12 +864,11 @@
 		uint64_t bwd_block_size = aligned_block_bwd_size;
 
 
-		// CONTEXT AND GRAD CONTEXTS!
+		// DETERMINING CHUNK SIZE AND KERNEL WORKSPACE SIZE!
 
 		int seq_len = DEMO_SEQ_LEN;
+		int max_seqlen = seq_len;
 		uint64_t min_chunk_size = MIN_CHUNK_SIZE;
-
-		// FILL IN CODE HERE!
 
 		uint64_t chunk_size;
 
@@ -897,52 +896,7 @@
 			}
 		}
 
-		// SAME KERNEL WORKSPACE ACROSS ALL COMPUTATIONS!
-
-        // attention kernel bwd needs good amount of workspace...
-
-        // REALLY SHOULD QUERY THE ATTN BWD REQUIREMENTS IN ORDER TO KNOW!
-        // e.g. flash2 with chunksize 8k and seqlen 256k requires 5GB
-		// should be an easy API call -- attn bwd most likely the largest consumer...
-
-		// flash2 and flash3 have different requirements though, should should be 
-		// within the libattentionhelper...
-		
-		// in terms of seqlen scaling if n_q_heads != n_kv_heads need
-		// additional memory proportional to seqlen * model_dim * 4
-
-		// Hack for now to set workspace in order to run...
-
-        // at least use 200MB
-		uint64_t baseKernelWorkspaceBytes = 200 * (1UL << 20);
-		uint64_t kernelWorkspaceBytes = baseKernelWorkspaceBytes;
-
-		// depending on the chunk size and seqlen, we will multiply this by a factor
-        uint64_t multKernelWorkspaceBytes = (1UL << 30);
-		
-         // now if large chunk or long seq then increase
-		int chunk_size_rel = round((float) chunk_size / 8192.0);
-        uint64_t chunk_size_factor = 1;
-		if (chunk_size_rel > 0){
-			kernelWorkspaceBytes += chunk_size_factor * multKernelWorkspaceBytes;
-		}
-		int seqlen_rel = round((log2((double) seq_len / 8192.0)));
-		uint64_t seqlen_factor = 1;
-		if (seqlen_rel > 0){
-			kernelWorkspaceBytes += seqlen_factor * multKernelWorkspaceBytes;
-		}
-
-    	void * kernelWorkspace = cur_dev_mem;
-        cur_dev_mem += kernelWorkspaceBytes;
-        used_dev_mem += kernelWorkspaceBytes;
-        // ensure alignment for matmuls..       
-        used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
-        cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
-
-
 		int max_tokens_per_chunk = chunk_size;
-
-
 
 		int num_chunks_per_seq;
 		int num_seqs_per_chunk;
@@ -955,7 +909,48 @@
 			num_seqs_per_chunk = 1;
 		}
 
+		int max_seqs_in_chunk = num_seqs_per_chunk;
+
+
+
+		// SAME KERNEL WORKSPACE ACROSS ALL COMPUTATIONS (serialized by stream)!
+
+        // at least use 200MB (ensure enough for rms bwd w and good matmul perf)
+		// this is more than enough, except for attention...
+		uint64_t baseKernelWorkspaceBytes = 200 * (1UL << 20);
+
+		// attention kernel bwd needs good amount of workspace...
+		 // e.g. flash2 with chunksize 8k and seqlen 256k requires 5GB
+		// should be an easy API call -- attn bwd most likely the largest consumer...
+
+		uint64_t required_attn_workspace;
+
+		int is_training = 1;
+
+		ret = dataflow_get_attention_workspace_size(&dataflow_handle, fwd_dt, is_training,
+													num_q_heads, num_kv_heads, head_dim,
+													max_tokens_per_chunk, max_seqlen, max_seqs_in_chunk,
+													is_causal,
+													&required_attn_workspace);
+		if (ret){
+			fprintf(stderr, "Error: failed to get attention workspace size...\n");
+			return -1;
+		}
+
+		// really could just take the max here, but leaving a little room in case...
+		uint64_t kernelWorkspaceBytes = baseKernelWorkspaceBytes + required_attn_workspace;
+
+    	void * kernelWorkspace = cur_dev_mem;
+        cur_dev_mem += kernelWorkspaceBytes;
+        used_dev_mem += kernelWorkspaceBytes;
+        // ensure alignment for matmuls..       
+        used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
+        cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
+
+
+
 		
+		// DETERMINING DEVICE MEMORY PARTITIONING!
 
 		uint64_t chunk_act_size = get_chunk_activations_size(chunk_size, model_dim, kv_dim, num_total_active_experts, expert_dim, block_dt);
 
@@ -1918,7 +1913,7 @@
 		
 
 
-
+		// CONTEXT AND GRAD CONTEXTS!
 
 
 		// CREATE DEVICE CONTEXT THAT ALL CHUNKS WILL REFERENCE...
@@ -2875,8 +2870,6 @@
 
 		// seqs per chunk = 1 if seq uses >= 1 chunks, otherwise packing multiple seqs per chunk...
 		int seqs_per_round = num_seq_groups_per_round * num_seqs_per_chunk;
-
-		int is_causal = 1;
 
 		float per_seq_flops = get_seq_flops(MAX_SEQLEN, vocab_size, model_dim, kv_dim, is_causal, num_shared_experts, num_total_routed_experts, num_active_routed_experts, expert_dim, n_layers, 
 											NULL, NULL, NULL, NULL, NULL, NULL);
