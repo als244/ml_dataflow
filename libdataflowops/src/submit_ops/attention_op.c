@@ -7,31 +7,17 @@
 // if TYPE FP8, output must be BF16
 // Softmax LSE is of type FP32 and has length total_q * num_q_heads
 
-// To compute required size of attn_workspace:
+int dataflow_get_attention_workspace_size(Dataflow_Handle * handle, DataflowDatatype dtype, int is_training, 
+											int num_q_heads, int num_kv_heads, int head_dim, 
+											int max_chunk_size, int max_seq_len, int max_seqs_in_chunk,
+											int is_causal) {
 
-// attn_workspace_size = 0
-
-// Occum and LSE accum:
-// If num_splits > 1:
-//      attn_workspace_size += num_splits * sizeof(float) * num_q_heads * total_q * (1 + head_dim)
-
-// Tile count sem: 
-// If arch >= 90 || num_splits > 1:
-//      attn_workspace_size += sizeof(int)
-
-// Dynamic split ptr for each seq:
-// If num_seqs <= 992:
-//      attn_workspace_size += num_seqs * sizeof(int)
-
-
-// ASSUME CAUSAL
-
-// - cum_q_seqlens should be of length num_seqs + 1, starting with 0
-//		- cumsum of # of queries in each sequence
-// - cum_k_seqlens should be of length num_seqs + 1, starting with 0
-//		- cumsum of total # (prior context + current) of keys in sequence (should be >= # of queries) 
-//			- (assumes that if sequence has Q queries and K keys, the starting position of Q_0
-//				occurs at position K - Q)
+	return flash_attention_get_workspace_size(handle, dtype, is_training, 
+											  num_q_heads, num_kv_heads, head_dim, 
+											  max_chunk_size, max_seq_len, max_seqs_in_chunk, 
+											  is_causal);
+											
+}
 
 int dataflow_submit_attention(Dataflow_Handle * handle, int stream_id,
 						DataflowDatatype fwd_dt,
