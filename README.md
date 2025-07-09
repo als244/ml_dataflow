@@ -232,7 +232,7 @@ $S$ = seqlen, $N$ = seqs per step, $T$ = step runtime, $D$ = model dim, $K$ = kv
 \text{Tokens per second} = (N * S) / T
 ```
 
-- TFLOPS/s: Effective throughput of processing (model flops / runtime). There is ambiguity among different frameworks about the proper "cost" of the model, so this number is hard to compare apples-to-apples if formulas are not given. It is common for many codebases to "over-report" TFLOPS/sec for causal models (not accounting for the fact that only half of the attention scores need to be calculated). The model cost should be implementation agnostic. The TFLOP numbers in the performance reports above are derived from the formula blelow (llama3 model architecture, causal attention):
+- TFLOPS/s: Effective throughput of processing (model flops / runtime). There is ambiguity among different frameworks about the proper "cost" of the model, so this number is hard to compare apples-to-apples if formulas are not given. It is common for codebases to over-report TFLOPS/sec for causal models (not accounting for the fact that only half of the attention scores need to be calculated) -- the model cost should be implementation agnostic. The TFLOP numbers in the performance reports above are derived from the formula below (Llama3 model architecture, causal attention):
 ```math
 \begin{aligned}
 \text{layer matmul flops} &= 2 * S * D * (2 * D + 2 * K + 3 * F) \\
