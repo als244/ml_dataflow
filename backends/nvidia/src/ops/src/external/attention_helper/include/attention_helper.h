@@ -32,10 +32,19 @@
 // If is_training, returns the MAX(fwd_workspace_size, bwd_workspace_size
 
 // Used in order to help autoconfigure memory during dataflow preparation...
-uint64_t flash_attention_get_workspace_size(Dataflow_Handle * dataflow_handle, Dataflow_Datatype dtype, int is_training, 
+// Stream is irrelevant here, but just using same format as other external ops
+// for portability reasons...
+
+int flash_attention_get_workspace_size(Dataflow_Handle * dataflow_handle, int stream_id, Op * op, void * op_extra);
+
+
+/*
+int flash[2|3]_get_[fwd|bwd]_workspace_size(Dataflow_Handle * dataflow_handle, int flash_dtype_as_int, int is_training, 
                                             int num_q_heads, int num_kv_heads, int head_dim, 
                                             int max_chunk_size, int max_seq_len, int max_seqs_in_chunk,
-                                            int is_causal);
+                                            int is_causal,
+                                            uint64_t * ret_workspace_size);
+*/
 
 int flash_attention_fwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * op, void * op_extra);
 

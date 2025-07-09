@@ -501,10 +501,11 @@ extern "C" {
         return 0;
     }
 
-    uint64_t flash3_get_fwd_workspace_size(DataflowDatatype dtype, int arch, int num_sm, 
+    int flash3_get_fwd_workspace_size(int flash_dtype_as_int, int arch, int num_sm, 
                                             int num_q_heads, int num_kv_heads, int head_dim, 
                                             int max_chunk_size, int max_seq_len, int max_seqs_in_chunk,
-                                            int is_causal){
+                                            int is_causal,
+                                            uint64_t * ret_workspace_size){
 
         int ret;
 
@@ -522,7 +523,7 @@ extern "C" {
 
         ret = set_flash3_fwd_params(params,
                                     arch, num_sm,
-                                    (int) dtype,
+                                    flash_dtype_as_int,
                                     max_seqs_in_chunk, max_chunk_size, max_seq_len,
                                     &dummy_ptr, &dummy_ptr, max_chunk_size,
                                     &dummy_ptr, &dummy_ptr, max_seq_len,
@@ -533,7 +534,7 @@ extern "C" {
 
         if (ret) {
             fprintf(stderr, "Error: unable to get flash3_get_fwd_workspace_size\n");
-            return 0;
+            return -1;
         }
 
         // now call set_workspace to discover what the required workspace size is...
@@ -543,10 +544,11 @@ extern "C" {
         ret = set_flash3_fwd_workspace(params, (void *) &dummy_ptr, &workspace_size, NULL, NULL);
         if (ret) {
             fprintf(stderr, "Error: unable to get flash3_get_fwd_workspace_size\n");
-            return 0;
+            return -1;
         }
         
-        return workspace_size;
+        *ret_workspace_size = workspace_size;
+        return 0;
     }
     
 
@@ -707,17 +709,19 @@ extern "C" {
     }
 
 
-    uint64_t flash3_get_bwd_workspace_size(DataflowDatatype dtype, int arch, int num_sm, 
+    int flash3_get_bwd_workspace_size(int flash_dtype_as_int, int arch, int num_sm, 
                                             int num_q_heads, int num_kv_heads, int head_dim, 
                                             int max_chunk_size, int max_seq_len, int max_seqs_in_chunk,
-                                            int is_causal){
+                                            int is_causal,
+                                            uint64_t * ret_workspace_size){
 
         int ret;
 
-        
+        DataflowDatatype dtype = (DataflowDatatype) flash_dtype_as_int;
+
         if ((dtype != DATAFLOW_FP16) && (dtype != DATAFLOW_BF16)){
             fprintf(stderr, "Error: cannot get flash3 bwd workspace size for dtype (enum value %d), flash3 bwd only supports FP16 or BF16 bwds...\n", dtype);
-            return 0;
+            return -1;
         }
 
         // To get the workspace size we need to determine num_splits
@@ -729,7 +733,7 @@ extern "C" {
 
         ret = set_flash3_fwd_params(params,
                                     arch, num_sm,
-                                    (int) dtype,
+                                    flash_dtype_as_int,
                                     max_seqs_in_chunk, max_chunk_size, max_seq_len,
                                     &dummy_ptr, &dummy_ptr, max_chunk_size,
                                     &dummy_ptr, &dummy_ptr, max_seq_len,
@@ -740,7 +744,7 @@ extern "C" {
 
         if (ret) {
             fprintf(stderr, "Error: unable to get flash3_get_bwd_workspace_size\n");
-            return 0;
+            return -1;
         }
 
         uint64_t workspace_size;
@@ -748,10 +752,11 @@ extern "C" {
         ret = set_flash3_bwd_workspace(params, (void *) &dummy_ptr, &workspace_size, NULL, NULL);
         if (ret) {
             fprintf(stderr, "Error: unable to get flash3_get_bwd_workspace_size\n");
-            return 0;
+            return -1;
         }
 
-        return workspace_size;
+        *ret_workspace_size = workspace_size;
+        return 0;
     }
 
     // if TYPE FP8, output must be BF16

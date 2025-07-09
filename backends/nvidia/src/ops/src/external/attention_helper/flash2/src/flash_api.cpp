@@ -237,22 +237,28 @@ extern "C" {
         return 0;
     }
 
-    uint64_t flash2_get_fwd_workspace_size(DataflowDatatype dtype, int arch, int num_sm, 
+    int flash2_get_fwd_workspace_size(int flash_dtype_as_int, int arch, int num_sm, 
                                             int num_q_heads, int num_kv_heads, int head_dim, 
                                             int max_chunk_size, int max_seq_len, int max_seqs_in_chunk,
-                                            int is_causal) {
+                                            int is_causal,
+                                            uint64_t * ret_workspace_size) {
+        *ret_workspace_size = 0;
         return 0;
     }
 
 
-    uint64_t flash2_get_bwd_workspace_size(DataflowDatatype dtype, int arch, int num_sm, 
+    int flash2_get_bwd_workspace_size(int flash_dtype_as_int, int arch, int num_sm, 
                                             int num_q_heads, int num_kv_heads, int head_dim, 
                                             int max_chunk_size, int max_seq_len, int max_seqs_in_chunk,
-                                            int is_causal) {
+                                            int is_causal,
+                                            uint64_t * ret_workspace_size) {
 
         uint64_t workspace_size = 0;
 
         uint64_t dtype_size;
+
+        DataflowDatatype dtype = (DataflowDatatype) flash_dtype_as_int;
+
         switch (dtype){
             case DATAFLOW_FP32:
                 dtype_size = 4;
@@ -265,7 +271,7 @@ extern "C" {
                 break;
             default:
                 fprintf(stderr, "Unsupported dtype for flash2 bwd: enum value %d\n", dtype);
-                return 0;
+                return -1;
         }
       
         // Always stored in fp32
@@ -287,7 +293,8 @@ extern "C" {
 
         workspace_size += dq_accum_size;
 
-        return workspace_size;
+        *ret_workspace_size = workspace_size;
+        return 0;
     }
 
 

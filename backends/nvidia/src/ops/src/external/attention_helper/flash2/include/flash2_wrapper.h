@@ -11,18 +11,20 @@
 // Max seqs per chunk refers the maximum number of unique sequences that are processed in a single chunk
 
 // Current forward workspace is 0
-uint64_t flash2_get_fwd_workspace_size(DataflowDatatype dtype, int arch, int num_sm, 
+int flash2_get_fwd_workspace_size(int flash_dtype_as_int, int arch, int num_sm, 
                                         int num_q_heads, int num_kv_heads, int head_dim, 
                                         int max_chunk_size, int max_seq_len, int max_seqs_in_chunk,
-                                        int is_causal);
+                                        int is_causal,
+                                        uint64_t * ret_workspace_size);
 
 // In order to do autoconfiguration it is important for system to ensure that attention can run
 // so it needs to know the minimmum workspace size
 // For long seqs using GQA this number can be quite large
-uint64_t flash2_get_bwd_workspace_size(DataflowDatatype dtype, int arch, int num_sm, 
+int flash2_get_bwd_workspace_size(int flash_dtype_as_int, int arch, int num_sm, 
                                         int num_q_heads, int num_kv_heads, int head_dim, 
                                         int max_chunk_size, int max_seq_len, int max_seqs_in_chunk,
-                                        int is_causal);
+                                        int is_causal,
+                                        uint64_t * ret_workspace_size);
 
 int flash2_fwd_wrapper(CUstream stream, int arch, int num_sm,
                         int flash_dtype_as_int,

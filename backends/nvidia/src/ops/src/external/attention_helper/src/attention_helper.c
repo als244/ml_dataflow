@@ -1,36 +1,65 @@
 #include "attention_helper.h"
 
-uint64_t flash_attention_get_workspace_size(Dataflow_Handle * dataflow_handle, Dataflow_Datatype dtype, int is_training, 
-											int num_q_heads, int num_kv_heads, int head_dim, 
-											int max_chunk_size, int max_seq_len, int max_seqs_in_chunk,
-											int is_causal) {
+int flash_attention_get_workspace_size(Dataflow_Handle * dataflow_handle, int stream_id, Op * op, void * op_extra) {
+
+	int ret;
 
 	Cuda_Device_Info * device_info = (Cuda_Device_Info *) dataflow_handle -> device_info;
 
 	int arch = device_info -> arch_num;
 	int sm_count = device_info -> sm_count;
 
+	void ** op_args = op -> op_args;
+
+	int flash_dtype_as_int = *((int *)(op_args[0]));
+	int is_training = *((int *)(op_args[1]));
+	int num_q_heads = *((int *)(op_args[2]));
+	int num_kv_heads = *((int *)(op_args[3]));
+	int head_dim = *((int *)(op_args[4]));
+	int max_chunk_size = *((int *)(op_args[5]));
+	int max_seq_len = *((int *)(op_args[6]));
+	int max_seqs_in_chunk = *((int *)(op_args[7]));
+	int is_causal = *((int *)(op_args[8]));
+	uint64_t * ret_workspace_size = *((uint64_t **) op_args[9]);
+
+	// assume failure
+	*ret_workspace_size = 0;
+
 	uint64_t fwd_workspace_size;
 
 	if ((arch == 90 && USE_FLASH3_HOPPER) || ((arch == 80 || arch == 86 || arch == 89) && USE_FLASH3_AMPERE)) {
-		fwd_workspace_size = flash3_get_fwd_workspace_size(dtype, arch, sm_count, num_q_heads, num_kv_heads, head_dim, max_chunk_size, max_seq_len, max_seqs_in_chunk, is_causal);
+		ret = flash3_get_fwd_workspace_size(flash_dtype_as_int, arch, sm_count, num_q_heads, num_kv_heads, head_dim, max_chunk_size, max_seq_len, max_seqs_in_chunk, is_causal, &fwd_workspace_size);
 	} else {
-		fwd_workspace_size = flash2_get_fwd_workspace_size(dtype, arch, sm_count, num_q_heads, num_kv_heads, head_dim, max_chunk_size, max_seq_len, max_seqs_in_chunk, is_causal);
+		ret = flash2_get_fwd_workspace_size(flash_dtype_as_int, arch, sm_count, num_q_heads, num_kv_heads, head_dim, max_chunk_size, max_seq_len, max_seqs_in_chunk, is_causal, &fwd_workspace_size);
+	}
+
+	if (ret){
+		fprintf(stderr, "Error: unable to get flash attention workspace size\n");
+		return -1;
 	}
 
 	if (!is_training){
-		return fwd_workspace_size;
+		*ret_workspace_size = fwd_workspace_size;
+		return 0;
 	}
 
 	uint64_t bwd_workspace_size;
 
 	if ((arch == 90 && USE_FLASH3_HOPPER) || ((arch == 80 || arch == 86 || arch == 89) && USE_FLASH3_AMPERE)) {
-		bwd_workspace_size = flash3_get_bwd_workspace_size(dtype, arch, sm_count, num_q_heads, num_kv_heads, head_dim, max_chunk_size, max_seq_len, max_seqs_in_chunk, is_causal);
+		ret = flash3_get_bwd_workspace_size(flash_dtype_as_int, arch, sm_count, num_q_heads, num_kv_heads, head_dim, max_chunk_size, max_seq_len, max_seqs_in_chunk, is_causal, &bwd_workspace_size);
 	} else {
-		bwd_workspace_size = flash2_get_bwd_workspace_size(dtype, arch, sm_count, num_q_heads, num_kv_heads, head_dim, max_chunk_size, max_seq_len, max_seqs_in_chunk, is_causal);
+		ret = flash2_get_bwd_workspace_size(flash_dtype_as_int, arch, sm_count, num_q_heads, num_kv_heads, head_dim, max_chunk_size, max_seq_len, max_seqs_in_chunk, is_causal, &bwd_workspace_size);
 	}
 
-	return MY_MAX(fwd_workspace_size, bwd_workspace_size);
+	if (ret){
+		fprintf(stderr, "Error: unable to get flash attention workspace size\n");
+		return -1;
+	}
+
+	uint64_t max_workspace_size = MY_MAX(fwd_workspace_size, bwd_workspace_size);
+
+	*ret_workspace_size = max_workspace_size;
+	return 0;
 }
 
 int flash_attention_fwd(Dataflow_Handle * dataflow_handle, int stream_id, Op * op, void * op_extra) {

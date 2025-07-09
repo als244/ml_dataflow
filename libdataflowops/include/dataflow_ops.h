@@ -83,10 +83,11 @@ int dataflow_submit_matmul(Dataflow_Handle * handle, int stream_id,
 // returns the required workspace size for the attention op
 // exported by libattention_helper.so
 
-uint64_t dataflow_get_attention_workspace_size(Dataflow_Handle * handle, DataflowDatatype dtype, int is_training, 
+int dataflow_get_attention_workspace_size(Dataflow_Handle * handle, DataflowDatatype attn_dt, int is_training, 
 											int num_q_heads, int num_kv_heads, int head_dim, 
 											int max_chunk_size, int max_seq_len, int max_seqs_in_chunk,
-											int is_causal);
+											int is_causal,
+											uint64_t * ret_workspace_size);
 
 
 int dataflow_submit_attention(Dataflow_Handle * handle, int stream_id,

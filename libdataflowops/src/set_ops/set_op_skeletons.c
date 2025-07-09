@@ -72,6 +72,9 @@ int dataflow_set_op_skeleton(Op_Skeleton * skeleton, char * op_name, DataflowDat
 		else if (strcmp(op_name, "flash_attention_bwd") == 0) {
 			dataflow_set_flash_attention_bwd_skeleton(skeleton);
 		}
+		else if (strcmp(op_name, "flash_attention_get_workspace_size") == 0) {
+			dataflow_set_flash_attention_get_workspace_size_skeleton(skeleton);
+		}
 		else{
 			printf("Cannot set skeleton, unknown op: %s, with fwd_dt: %s, bwd_dt: %s\n", op_name, dataflow_datatype_as_string(fwd_dt), dataflow_datatype_as_string(bwd_dt));
 			return -1;
@@ -318,6 +321,48 @@ void dataflow_set_flash_attention_bwd_skeleton(Op_Skeleton * skeleton) {
 	dataflow_do_fingerprinting(skeleton_header, sizeof(Op_Skeleton_Header), (skeleton -> identifier).fingerprint);
 }
 
+void dataflow_set_flash_attention_get_workspace_size_skeleton(Op_Skeleton * skeleton) {
+
+	Op_Skeleton_Header * skeleton_header = &(skeleton -> header);
+
+	char op_nickname[MAX_OP_NICKNAME_SIZE];
+
+	sprintf(op_nickname, "%s", "flash_attention_get_workspace_size");
+
+	// MAX nicknmae size is set to 255 with 256 allocated space...
+	strncpy(skeleton_header -> op_nickname, op_nickname, MAX_OP_NICKNAME_SIZE);
+	// last character must be null no matter what, if nickname is less than null bytes were added prior
+	(skeleton_header -> op_nickname)[MAX_OP_NICKNAME_SIZE] = '\0'; 
+
+	uint64_t flash_attention_get_workspace_size(Dataflow_Handle * dataflow_handle, int flash_dtype_as_int, int is_training, 
+		int num_q_heads, int num_kv_heads, int head_dim, 
+		int max_chunk_size, int max_seq_len, int max_seqs_in_chunk,
+		int is_causal);
+
+	int num_args = 10;
+
+	skeleton_header -> num_args = num_args;
+
+	DataflowDatatype * arg_dtypes = skeleton_header -> arg_dtypes;
+
+	arg_dtypes[0] = DATAFLOW_INT_SCALAR;
+	arg_dtypes[1] = DATAFLOW_INT_SCALAR;
+	arg_dtypes[2] = DATAFLOW_INT_SCALAR;
+	arg_dtypes[3] = DATAFLOW_INT_SCALAR;
+	arg_dtypes[4] = DATAFLOW_INT_SCALAR;
+	arg_dtypes[5] = DATAFLOW_INT_SCALAR;
+	arg_dtypes[6] = DATAFLOW_INT_SCALAR;
+	arg_dtypes[7] = DATAFLOW_INT_SCALAR;
+	arg_dtypes[8] = DATAFLOW_INT_SCALAR;
+	// pointer to uint64_t in cpu mem that will be populated by the op...
+	arg_dtypes[9] = DATAFLOW_UINT64;
+	
+	for (int i = num_args; i < MAX_OP_ARGS; i++){
+		arg_dtypes[i] = DATAFLOW_NONE;
+	}
+
+	dataflow_do_fingerprinting(skeleton_header, sizeof(Op_Skeleton_Header), (skeleton -> identifier).fingerprint);
+}
 
 void dataflow_set_default_embedding_table_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype){
 

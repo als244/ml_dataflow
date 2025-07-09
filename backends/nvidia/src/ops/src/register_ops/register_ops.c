@@ -35,21 +35,22 @@ int dataflow_register_external_ops(Dataflow_Handle * dataflow_handle) {
 
 	// Register flash attention op
 
-	Op_Skeleton flash_attention_skeletons[2];
+	Op_Skeleton flash_attention_skeletons[3];
 	dataflow_set_flash_attention_fwd_skeleton(&flash_attention_skeletons[0]);
 	dataflow_set_flash_attention_bwd_skeleton(&flash_attention_skeletons[1]);
+	dataflow_set_flash_attention_get_workspace_size_skeleton(&flash_attention_skeletons[2]);
 
 	char flash_attention_lib[PATH_MAX];
 
 	sprintf(flash_attention_lib, "%s/lib/external/libattentionwrapper.so", (const char *) OPS_ROOT_DIR);
 	
-	char * flash_attention_symbols[2] = {"flash_attention_fwd", "flash_attention_bwd"};
+	char * flash_attention_symbols[3] = {"flash_attention_fwd", "flash_attention_bwd", "flash_attention_get_workspace_size"};
 
-	char * flash_attention_init_symbols[2] = {NULL, NULL};
+	char * flash_attention_init_symbols[3] = {NULL, NULL, NULL};
 
-	added_funcs = (dataflow_handle -> register_external_code)(dataflow_handle, flash_attention_lib, 2, flash_attention_skeletons, flash_attention_symbols, flash_attention_init_symbols);
-	if (added_funcs != 2){
-		fprintf(stderr, "Error: failed to register flash attention op, expected 2 functions, got %d...\n", added_funcs);
+	added_funcs = (dataflow_handle -> register_external_code)(dataflow_handle, flash_attention_lib, 3, flash_attention_skeletons, flash_attention_symbols, flash_attention_init_symbols);
+	if (added_funcs != 3){
+		fprintf(stderr, "Error: failed to register flash attention op, expected 3 functions, got %d...\n", added_funcs);
 		return -1;
 	}
 

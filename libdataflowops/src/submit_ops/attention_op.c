@@ -7,16 +7,41 @@
 // if TYPE FP8, output must be BF16
 // Softmax LSE is of type FP32 and has length total_q * num_q_heads
 
-uint64_t dataflow_get_attention_workspace_size(Dataflow_Handle * handle, DataflowDatatype dtype, int is_training, 
+int dataflow_get_attention_workspace_size(Dataflow_Handle * handle, DataflowDatatype attn_dt, int is_training, 
 											int num_q_heads, int num_kv_heads, int head_dim, 
 											int max_chunk_size, int max_seq_len, int max_seqs_in_chunk,
-											int is_causal) {
+											int is_causal,
+											uint64_t * ret_workspace_size) {
 
-	return flash_attention_get_workspace_size(handle, dtype, is_training, 
-											  num_q_heads, num_kv_heads, head_dim, 
-											  max_chunk_size, max_seq_len, max_seqs_in_chunk, 
-											  is_causal);
-											
+	int ret;
+
+	Op attention_get_workspace_size_op;
+
+	dataflow_set_flash_attention_get_workspace_size_skeleton(&attention_get_workspace_size_op.op_skeleton);
+
+	void ** op_args = attention_get_workspace_size_op.op_args;
+
+	int flash_dtype_as_int = (int) attn_dt;
+
+	op_args[0] = &flash_dtype_as_int;
+	op_args[1] = &is_training;
+	op_args[2] = &num_q_heads;
+	op_args[3] = &num_kv_heads;
+	op_args[4] = &head_dim;
+	op_args[5] = &max_chunk_size;
+	op_args[6] = &max_seq_len;
+	op_args[7] = &max_seqs_in_chunk;
+	op_args[8] = &is_causal;
+	op_args[9] = &ret_workspace_size;
+
+	// NO STREAM REQUIRED FOR THIS CPU-ONLY OP!
+	ret = (handle -> submit_op)(handle, &attention_get_workspace_size_op, NULL);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit attention_get_workspace_size_op...\n");
+		return -1;
+	}
+
+	return 0;
 }
 
 int dataflow_submit_attention(Dataflow_Handle * handle, int stream_id,

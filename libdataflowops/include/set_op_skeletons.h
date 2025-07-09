@@ -20,6 +20,7 @@ void dataflow_set_matmul_skeleton(Op_Skeleton * skeleton);
 // Flash3 Attention Helpder
 void dataflow_set_flash_attention_fwd_skeleton(Op_Skeleton * skeleton);
 void dataflow_set_flash_attention_bwd_skeleton(Op_Skeleton * skeleton);
+void dataflow_set_flash_attention_get_workspace_size_skeleton(Op_Skeleton * skeleton);
 
 
 
