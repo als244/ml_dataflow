@@ -44,14 +44,25 @@ def plot_throughput(csv_filepath, device_name, output_dir):
     csv_columns = ["host_mem_gb", "dev_mem_gb", "seq_len", "model_size", "chunk_size", "total_home_acts", "num_inp_only_saved", "num_inp_attn_saved", "num_full_saved", "total_dev_acts", "num_rounds_per_step", "seqs_per_step", "recompute_pct", "attn_flop_pct", "avg_step_time", "tok_per_sec", "tflops", "mfu", "hfu"]
     df = pd.read_csv(csv_filepath, names=csv_columns)
 
-    tflops_vmin = df[df['tflops'] > 0]['tflops'].min()
-    tflops_vmax = df[df['tflops'] > 0]['tflops'].max()
-
-    util_min_val = 0.25
+    util_min_val = 0.35
     util_max_val = 0.85
 
-    tok_sec_vmin = df[df['tok_per_sec'] > 0]['tok_per_sec'].min()
-    tok_sec_vmax = df[df['tok_per_sec'] > 0]['tok_per_sec'].max()
+    device_name_to_peak_bf16_tflops = {
+        "H100": 980,
+        "A100": 312.5,
+        "RTX5090": 209.5,
+        "RTX3090": 71.2
+    }
+
+    if device_name not in device_name_to_peak_bf16_tflops:
+        raise ValueError(f"Device {device_name} not found in device_name_to_peak_bf16_tflops")
+
+    peak_bf16_tflops = device_name_to_peak_bf16_tflops[device_name]
+
+    
+    tflops_vmin = util_min_val * peak_bf16_tflops
+    tflops_vmax = util_max_val * peak_bf16_tflops
+
 
     metrics = ['tok_per_sec', 'tflops', 'mfu', 'hfu']
     metric_labels = {
