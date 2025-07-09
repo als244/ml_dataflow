@@ -142,7 +142,7 @@ def plot_throughput(csv_filepath, device_name, output_dir):
 
                 # A threshold of 0.6 should work well for the 'YlGn' colormap.
                 # You can adjust this value if you use different colormaps.
-                luminance_threshold = 0.6
+                luminance_threshold = 0.4
                 
                 cmap_obj = plt.get_cmap(cmap)
                 norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
