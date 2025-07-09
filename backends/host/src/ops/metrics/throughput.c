@@ -188,7 +188,10 @@ float get_recompute_flops(int num_seqs, int seq_len, int n_layers, int model_dim
 		attn_flop_ratio = 0.5;
 	}
 
-	float recompute_attn_flops = num_seqs * n_layers * (attn_flop_ratio * 2 * seq_len_f * seq_len_f * model_dim_f);
+	
+	int num_seqs_f = (float) num_seqs;
+	int n_layers_f = (float) n_layers;
+	float recompute_attn_flops = num_seqs_f * n_layers_f * (attn_flop_ratio * 2 * seq_len_f * seq_len_f * model_dim_f);
 	recompute_flops += recompute_attn_flops;
 
 	// if we need to recompute fwd attention too
