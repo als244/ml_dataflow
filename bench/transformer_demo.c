@@ -927,7 +927,7 @@
 
 		int is_training = 1;
 
-		ret = dataflow_get_attention_workspace_size(&dataflow_handle, fwd_dt, is_training,
+		ret = dataflow_get_attention_workspace_size(&dataflow_handle, block_dt, is_training,
 													num_q_heads, num_kv_heads, head_dim,
 													max_tokens_per_chunk, max_seqlen, max_seqs_in_chunk,
 													is_causal,
@@ -949,7 +949,7 @@
 
 
 
-		
+
 		// DETERMINING DEVICE MEMORY PARTITIONING!
 
 		uint64_t chunk_act_size = get_chunk_activations_size(chunk_size, model_dim, kv_dim, num_total_active_experts, expert_dim, block_dt);
@@ -977,8 +977,6 @@
 
 		int num_chunks = num_chunks_per_seq * num_seq_groups_per_round;
 
-
-		int max_seqlen = MAX_SEQLEN;
 
 		uint64_t context_tokens = MY_MAX(max_tokens_per_chunk, max_seqlen);
 
