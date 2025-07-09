@@ -520,7 +520,7 @@ extern "C" {
         
         int dummy_ptr;
 
-        ret = set_flash3_fwd_params(Flash_fwd_params &params,
+        ret = set_flash3_fwd_params(params,
                                     arch, num_sm,
                                     (int) dtype,
                                     max_seqs_in_chunk, max_chunk_size, max_seq_len,
