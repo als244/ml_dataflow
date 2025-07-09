@@ -182,12 +182,14 @@ float get_recompute_flops(int seq_len, int model_dim, int is_causal, int num_sha
 
 	// We are using flash attention, so we by default recompute the seq_len x seq_len attention score matrix.
 	float seq_len_f = (float) seq_len;
-	float recompute_attn_flops = 2 * seq_len_f * seq_len_f * model_dim_f;
 
 	float attn_flop_ratio = 1;
 	if (is_causal){
 		attn_flop_ratio = 0.5;
 	}
+
+	float recompute_attn_flops = attn_flop_ratio * 2 * seq_len_f * seq_len_f * model_dim;
+	recompute_flops += recompute_attn_flops;
 
 	for (int chunk_loc = 0; chunk_loc < num_inp_only_saved; chunk_loc++){
 		chunk_seq_len = (float) inp_only_seq_lens[chunk_loc];
