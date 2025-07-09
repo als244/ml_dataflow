@@ -27,7 +27,7 @@ You can learn more about the project's background/details [here](docs/background
 
 #### Ideal Schedule for Extending to Distributed Training
 - Almost all aspects of single-worker algorithm stay the same, except for cyclic sharding of layers across devices to create a ring. [Link to a simulator](https://dataflowsim.sunshein.net)
-- **No collective communication required**<sup>*</sup>! (*except for all-reduce before opt step if num replicas > 1). The forms of parallelism employed are PP/DP (intra-replica) and DP (inter-replica)
+- **No collective communication required**<sup>*</sup>! (*except for a.) all-reduce before opt step if num replicas > 1 or b.) if the batch size required to saturate GPUs is too large and inefficient for learning, EP or TP can be utilized). The forms of parallelism employed are PP/DP (intra-replica) and DP (inter-replica)
 - Eases resource allocation. A set of GPUs + slices of local host mem can be linked together and maintain high performance => doesn't require high BW GPU-GPU interconnects. This makes job scheduler's life easier and can bolster overall cluster utilization.
 #### Opportunity for Concurrent Training and Inference
 - Now that we have shuffled training-related data to host memory, this leaves room in precious device memory for running memory-bound inference workloads alongside the compute-bound training. This is particularly relevant for RL training...
