@@ -409,6 +409,7 @@
 		int model_dim;
 		int kv_dim;
 		int vocab_size;
+		int is_causal = 1;
 		
 
 		if (MODEL_CONFIG_SIZE_B == 70){
@@ -2667,8 +2668,6 @@
 
 		// seqs per chunk = 1 if seq uses >= 1 chunks, otherwise packing multiple seqs per chunk...
 		int seqs_per_round = num_seq_groups_per_round * num_seqs_per_chunk;
-
-		int is_causal = 1;
 
 		float per_seq_flops = get_seq_flops(MAX_SEQLEN, vocab_size, model_dim, kv_dim, is_causal, num_shared_experts, num_total_routed_experts, num_active_routed_experts, expert_dim, n_layers, 
 											NULL, NULL, NULL, NULL, NULL, NULL);
