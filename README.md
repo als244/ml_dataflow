@@ -247,7 +247,7 @@ Where the $(2 * D + 2 * K + 3 * F)$ factor is coming from Q, O, K+V and the 3 FF
 \text{MFU} = \text{TFLOPS} / \text{peak hardware TFLOPS}
 ```
 
-- HFU (Hardware Flops Utilization): A measure of processing throughput (including recomputations in numerator) relative to hardware capabilities. There are various levels are recomputation that occur depending on memory capacities and the system automatically configures this and calculates the metric. See the `throughput.c` file for more details. [Flash Attention](https://github.com/Dao-AILab/flash-attention) is employed which recomputes the attention score matrix (implicity) during the backwards pass, so by default at least $N * L * (.5 * 2 * (S * S * D))$ FLOPs are recomputed per step. Here we see that $\text{HFU}$ is strictly greater than $\text{MFU}$.
+- HFU (Hardware Flops Utilization): A measure of processing throughput (including recomputations in numerator) relative to hardware capabilities. There are 2 levels are recomputation that occur depending on memory capacities -- the system automatically configures this and calculates the accurate metric. See the `throughput.c` file for more details. [Flash Attention](https://github.com/Dao-AILab/flash-attention) is employed which recomputes the attention score matrix (implicity) during the backwards pass, so by default at least $N * L * (.5 * 2 * (S * S * D))$ FLOPs are recomputed per step. Here we see that $\text{HFU}$ is strictly greater than $\text{MFU}$.
 
 -----
 
