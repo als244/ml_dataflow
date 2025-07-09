@@ -180,7 +180,7 @@ float get_recompute_flops(int seq_len, int model_dim, int is_causal, int num_sha
 	float chunk_seq_len;
 	float seqs_per_chunk;
 
-	// We are using flash attention, so we by default recompute one of the matrices needed for attn bwd...
+	// We are using flash attention, so we by default recompute the seq_len x seq_len attention score matrix.
 	float seq_len_f = (float) seq_len;
 	float recompute_attn_flops = 2 * seq_len_f * seq_len_f * model_dim_f;
 
