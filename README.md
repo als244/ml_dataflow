@@ -234,6 +234,7 @@ $S$ = seqlen, $N$ = seqs per step, $T$ = step runtime, $D$ = model dim, $K$ = kv
 \text{head flops} &= 3 * (2 * S * D * V) \\
 \text{per seq flops} &= L * (3 * \text{layer matmul flops} + \text{attn fwd flops} + \text{attn bwd flops}) + \text{head flops} \\
 \text{model step cost} &= N * \text{per seq flops} \\
+&= N * (L * (6 * S * D * (2 * D + 2 * K + 3 * F) + 6 * S * S * D) + 6 * S * D * V) \\ 
 \text{TFLOPS} &= \text{model step cost} / T
 \end{aligned}
 ```
