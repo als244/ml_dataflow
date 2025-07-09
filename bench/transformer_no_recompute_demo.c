@@ -854,21 +854,6 @@
 		*/
 		
 
-		// SAME KERNEL WORKSPACE ACROSS ALL COMPUTATIONS!
-
-		// attention kernel bwd needs good amount of workspace...
-
-		// 2 GB
-		uint64_t kernelWorkspaceBytes = 2 * (1UL << 30);
-		void * kernelWorkspace = cur_dev_mem;
-		cur_dev_mem += kernelWorkspaceBytes;
-		used_dev_mem += kernelWorkspaceBytes;
-		// ensure alignment for matmuls..	
-		used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
-		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
-
-
-
 		// DETERMINE NUM DEV BLOCKS, NUM GRAD BLOCKS, and NUM DEV ACTIVATIONS
 
 		uint64_t fwd_block_size = aligned_block_size;
@@ -907,6 +892,36 @@
 				chunk_size = (min_chunk_size / seq_len + 1) * seq_len;
 			}
 		}
+
+		// SAME KERNEL WORKSPACE ACROSS ALL COMPUTATIONS!
+
+        // attention kernel bwd needs good amount of workspace...
+
+        // REALLY SHOULD QUERY THE ATTN BWD REQUIREMENTS IN ORDER TO KNOW!
+         // e.g. flash2 with chunksize 8k and seqlen 256k requires 5GB
+		// should be an easy API call -- attn bwd most likely the largest consumer...
+
+        // at least use 1GB
+        uint64_t baseKernelWorkspaceBytes = (1UL << 30);
+         // now if large chunk or long seq then increase
+		int chunk_size_rel = round((float) chunk_size / 8192.0);
+                uint64_t chunk_size_factor = 1;
+		if (chunk_size_rel > 0){
+			chunk_size_factor = chunk_size_rel;
+		}
+		int seqlen_rel = round((log((double) seq_len / 8192.0)));
+		uint64_t seqlen_factor = 1;
+		if (seqlen_rel > 0){
+			seqlen_factor = seqlen_rel;
+		}
+                
+		uint64_t kernelWorkspaceBytes = chunk_size_factor * seqlen_factor * baseKernelWorkspaceBytes;
+    	void * kernelWorkspace = cur_dev_mem;
+        cur_dev_mem += kernelWorkspaceBytes;
+        used_dev_mem += kernelWorkspaceBytes;
+        // ensure alignment for matmuls..       
+        used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
+        cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 
 
 		int max_tokens_per_chunk = chunk_size;

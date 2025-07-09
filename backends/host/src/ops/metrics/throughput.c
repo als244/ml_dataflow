@@ -151,7 +151,7 @@ float get_seq_flops(int seq_len, int vocab_size, int model_dim, int kv_dim, int 
 	return total_seq_flops;
 }
 
-float get_recompute_flops(int model_dim, int is_causal, int num_shared_experts, int num_active_routed_experts, int expert_dim,
+float get_recompute_flops(int seq_len, int model_dim, int is_causal, int num_shared_experts, int num_active_routed_experts, int expert_dim,
 								int chunk_size, int num_inp_attn_saved, int num_inp_only_saved, int * inp_only_seq_lens, 
 								float * ret_recompute_attn_flops, float * ret_recompute_matmul_flops){
 
@@ -180,7 +180,9 @@ float get_recompute_flops(int model_dim, int is_causal, int num_shared_experts, 
 	float chunk_seq_len;
 	float seqs_per_chunk;
 
-	float recompute_attn_flops = 0;
+	// We are using flash attention, so we by default recompute one of the matrices needed for attn bwd...
+	float seq_len_f = (float) seq_len;
+	float recompute_attn_flops = 2 * seq_len_f * seq_len_f * model_dim_f;
 
 	float attn_flop_ratio = 1;
 	if (is_causal){
@@ -248,7 +250,7 @@ int start_step_metrics(void * _step_throughput_op_args){
 
 	float recompute_attn_flops;
 	float recompute_matmul_flops;
-	float recompute_flops = get_recompute_flops(step_throughput_op_args->model_dim, step_throughput_op_args->is_causal, step_throughput_op_args->num_shared_experts, step_throughput_op_args->num_active_routed_experts, step_throughput_op_args->expert_dim,
+	float recompute_flops = get_recompute_flops(seq_len, step_throughput_op_args->model_dim, step_throughput_op_args->is_causal, step_throughput_op_args->num_shared_experts, step_throughput_op_args->num_active_routed_experts, step_throughput_op_args->expert_dim,
 													step_throughput_op_args->chunk_size, step_throughput_op_args->num_inp_attn_saved, step_throughput_op_args->num_inp_only_saved, step_throughput_op_args->inp_only_seq_lens,
 													&recompute_attn_flops, &recompute_matmul_flops);
 
