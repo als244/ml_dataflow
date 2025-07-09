@@ -2749,6 +2749,8 @@
 			// To determine recomputation flops...
 
 			// This version of the code does not have recomputation...
+			step_throughput_op_buffers[t].num_seqs_per_round = seqs_per_round;
+			step_throughput_op_buffers[t].num_rounds_per_step = num_rounds_per_step;
 			step_throughput_op_buffers[t].chunk_size = chunk_size;
 			step_throughput_op_buffers[t].num_inp_attn_saved = 0;
 			step_throughput_op_buffers[t].num_inp_only_saved = 0;
