@@ -754,27 +754,7 @@ extern "C" {
         return workspace_size;
     }
 
-    
-
-
-
     // if TYPE FP8, output must be BF16
-    
-    // To compute required size of attn_workspace:
-
-    // attn_workspace_size = 0
-
-    // Occum and LSE accum:
-    // If num_splits > 1:
-    //      attn_workspace_size += num_splits * sizeof(float) * num_q_heads * total_q * (1 + head_dim)
-    
-    // Tile count sem: 
-    // If arch >= 90 || num_splits > 1:
-    //      attn_workspace_size += sizeof(int)
-
-    // Dynamic split ptr for each seq:
-    // If num_seqs <= 992:
-    //      attn_workspace_size += num_seqs * sizeof(int)
 
     int flash3_fwd_wrapper(CUstream stream, int arch, int num_sm,
                         int flash_dtype_as_int,
@@ -801,7 +781,7 @@ extern "C" {
                                     k_seq_offsets, k_seq_lens, max_seqlen_k,
                                     num_q_heads, num_kv_heads, head_dim,
                                     x_q, x_k, x_v,
-                                    x_attn_out, (void *) softmax_lse,
+                                    x_attn_out, softmax_lse,
                                     is_causal);
 
         if (ret){
@@ -901,7 +881,7 @@ extern "C" {
                                     k_seq_offsets, k_seq_lens, max_seqlen_k,
                                     num_q_heads, num_kv_heads, head_dim,
                                     x_q, x_k, x_v,
-                                    x_attn_out, (void *)softmax_lse,
+                                    x_attn_out, softmax_lse,
                                     is_causal);
 
         if (ret){
