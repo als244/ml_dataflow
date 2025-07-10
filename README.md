@@ -20,7 +20,9 @@ You can learn more about the project's background/details [here](docs/background
 
 ### [Try It Out Yourself](#training-performance-demo) or [See Full Benchmarking Results](#benchmarked-results)
 
-![Sample Heatmap Tok/s, H100, LLama3-8B, Seqlen 64k](bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-65536-tok.png) 
+<!-- ![Sample Heatmap Tok/s, H100, LLama3-8B, Seqlen 64k](bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-65536-tok.png)  -->
+
+<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-65536-tok.png" alt="Sample Heatmap Tok/s, H100, LLama3-8B, Seqlen 64k" width="50%">
 
 ![Sample Heatmap TFLOPS/s, H100, LLama3-8B, Seqlen 64k](bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-65536-tflops.png) 
 
