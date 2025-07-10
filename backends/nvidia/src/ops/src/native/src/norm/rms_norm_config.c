@@ -64,7 +64,7 @@ int default_rms_norm_set_launch_config(Cuda_Launch_Config * cuda_launch_config, 
 
 	int num_rows = *((int *) op_args[0]);
 
-	int num_blocks = sm_count;
+	int num_blocks = num_rows;
 
 	cuda_launch_config -> gridDimX = num_blocks;
 
