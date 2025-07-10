@@ -83,9 +83,6 @@ int default_rms_norm_set_launch_config(Cuda_Launch_Config * cuda_launch_config, 
 		return -1;
 	}
 
-	cuda_launch_config -> blockDimX = 128;
-
-
 	cuda_launch_config -> sharedMemBytes = rms_smem;
 
 	return 0;
