@@ -74,7 +74,7 @@ int default_rms_norm_set_launch_config(Cuda_Launch_Config * cuda_launch_config, 
 
 	// saving weights as floats in smem
 	// and copying X to smem
-	int rms_smem = 4 * model_dim + (dtype_size * model_dim);
+	int rms_smem = 4 * model_dim;
 
 	int rms_max_smem = (cuda_function -> function_config).func_max_smem;
 
