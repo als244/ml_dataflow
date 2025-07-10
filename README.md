@@ -216,7 +216,7 @@ python bench/reproduce_results/plot_throughput.py <csv filepath to plot> <device
 
 ---
 
-<sup> Note: It ought to be the case that increasing one memory axis while keeping the other fixed should only equal or improve throughput. However, the recomputation decisions are currently "greedy" in the sense that it will save as much data as possible. This is ideal for the common case, but there are some scenarios (fast device + small device memory + short seq len) where the links to/from host memory become congested at bad times, leading to stalls -- in this case recompuation provides higher throughput. See the H100, 8B, seqlen 512 heatmap (or profile yourself). The configuration decisions currently being tuned to ensure more memory => higher throughput. </sup>
+<sup> Note: It ought to be the case that fixing one memory axis and increasing the other should result in equal or better performance. Unfortunately, take a look at the H100, 8B, seqlen 512 heatmap -- this is not a miscalculation. The recomputation assignments are currently "greedy" in the sense that the program will save as much data as possible. This is ideal for the common case, but there are some scenarios (fast device + small device memory + short seq len) where the links to/from host memory become congested at bad times, leading to stalls -- in this case recompuation provides higher throughput. Current research is designing a smoother, I/O balanced, auto-configuration scheme, which will ensure more memory => higher throughput. </sup>
 
 ---
 
