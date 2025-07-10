@@ -325,11 +325,15 @@ extern "C" __global__ void default_rms_norm_bf16_kernel(int n_rows, int n_cols, 
 
 	float rms_val;
 
+	__nv_bfloat16 weight_val;
+
 	for (int i = thread_id; i < n_cols; i+=blockDim.x){
 		// copying casting locations as in llama3
 		rms_val =  row[i] * recip_avg;
 
-		out[row_base + i] = __float2bfloat16(rms_val);
+		weight_val = __ldg(rms_weight + i);
+
+		out[row_base + i] = __float2bfloat16(rms_val) * weight_val;
 	}
 }
 
