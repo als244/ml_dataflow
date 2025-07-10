@@ -18,16 +18,26 @@ You can learn more about the project's background/details [here](docs/background
 #### Train long-sequences or large-models on single device or at home
 - Automatically offloads/prefetches (parameters, activations, gradients, & optimizer state) and configures recomputation based on specified memory capacities, seqlen, and model size. Asynchrous dataflow is abundant, but the math remains the same.
 
-<table align="center">
+You're right, making them too small defeats the purpose! Let's try a couple of adjustments to improve their visibility while keeping them side by side.
+
+Option 1: Slightly Larger Width and Remove align="center" from the Table
+
+Sometimes, allowing the table to take up the full width and increasing the image width a bit can help.
+
+Replace your current table code with this:
+
+HTML
+
+<table>
   <tr>
-    <td align="center">
-      <img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-8192-tok.png" alt="Sample Heatmap Tok/s, H100, LLama3-8B, Seqlen 8k" width="30%">
+    <td>
+      <img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-8192-tok.png" alt="Sample Heatmap Tok/s, H100, LLama3-8B, Seqlen 8k" width="32%">
     </td>
-    <td align="center">
-      <img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-8192-tflops.png" alt="Sample Heatmap TFLOPS/s, H100, LLama3-8B, Seqlen 8k" width="30%">
+    <td>
+      <img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-8192-tflops.png" alt="Sample Heatmap TFLOPS/s, H100, LLama3-8B, Seqlen 8k" width="32%">
     </td>
-    <td align="center">
-      <img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-8192-mfu.png" alt="Sample Heatmap MFU, H100, LLama3-8B, Seqlen 8k" width="30%">
+    <td>
+      <img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-8192-mfu.png" alt="Sample Heatmap MFU, H100, LLama3-8B, Seqlen 8k" width="32%">
     </td>
   </tr>
 </table>
