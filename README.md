@@ -18,7 +18,19 @@ You can learn more about the project's background/details [here](docs/background
 #### Train long-sequences or large-models on single device or at home
 - Automatically offloads/prefetches (parameters, activations, gradients, & optimizer state) and configures recomputation based on specified memory capacities, seqlen, and model size. Asynchrous dataflow is abundant, but the math remains the same.
 
-![Sample Heatmap, H100, LLama3-8B, Seqlen 8k](bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-8192-tok.png)
+<table align="center">
+  <tr>
+    <td align="center">
+      <img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-8192-tok.png" alt="Sample Heatmap Tok/s, H100, LLama3-8B, Seqlen 8k" width="30%">
+    </td>
+    <td align="center">
+      <img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-8192-tflops.png" alt="Sample Heatmap TFLOPS/s, H100, LLama3-8B, Seqlen 8k" width="30%">
+    </td>
+    <td align="center">
+      <img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-8192-mfu.png" alt="Sample Heatmap MFU, H100, LLama3-8B, Seqlen 8k" width="30%">
+    </td>
+  </tr>
+</table>
 
 ![Sample Heatmap, RTX 5090, LLama3-8B, Seqlen 64k](bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090-8B-65536-tok.png)
 
