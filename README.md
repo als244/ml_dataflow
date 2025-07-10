@@ -64,7 +64,7 @@ git clone git@github.com:als244/ml_dataflow.git
 make -j <NUM_PROCS>
 ```
 
-The project is built from ~10k lines of C, 8 logically unique GPU kernels, and wrappers over [Flash Attention](https://github.com/Dao-AILab/flash-attention) and vendor BLAS libraries.  
+The project is built from ~10k lines of C, 8 logically unique (memory-bound) GPU kernels, and wrappers over [Flash Attention](https://github.com/Dao-AILab/flash-attention) and vendor BLAS libraries.  
 
 ###### Note that building the flash2 and flash3 wrapper libraries may take some time (a few hours)...using more processors will help. 
 
