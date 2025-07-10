@@ -53,16 +53,14 @@ int default_rms_norm_set_launch_config(Cuda_Launch_Config * cuda_launch_config, 
 
 	Cuda_Device_Info * device_info = (Cuda_Device_Info *) dataflow_handle -> device_info;
 
-	int rms_max_threads_per_block = (cuda_function -> function_config).func_max_threads_per_block;
-	cuda_launch_config -> blockDimX = rms_max_threads_per_block;
-
+	
 	int sm_count = device_info -> sm_count;
 
 	void ** op_args = op -> op_args;
 
 	int num_rows = *((int *) op_args[0]);
 
-	int num_blocks = MY_MIN(num_rows, sm_count);
+	int num_blocks = sm_count;
 
 	cuda_launch_config -> gridDimX = num_blocks;
 
@@ -78,6 +76,9 @@ int default_rms_norm_set_launch_config(Cuda_Launch_Config * cuda_launch_config, 
 		fprintf(stderr, "Error: rms norm will fail. Unable to support model dim of %d and dtype %s. Not enough smem on device, max for this func is %d bytes, but requires %d...\n", model_dim, dataflow_datatype_as_string(norm_dt), rms_max_smem, rms_smem);
 		return -1;
 	}
+
+	cuda_launch_config -> blockDimX = 128;
+
 
 	cuda_launch_config -> sharedMemBytes = rms_smem;
 
