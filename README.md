@@ -19,7 +19,7 @@ You can learn more about the project's background/details [here](docs/background
 - Trains Llama3 8B (BF16) with 8k sequence length at ~10,800 vs ~10,120 Tok/s per H100
     - [Profiling](docs/sample_profiling_trace.md)
 - Requires only 1 H100 to achieve such performance.
-- 55% higher throughput compared to [Mosaic ML benchmark](https://github.com/mosaicml/llm-foundry/blob/main/scripts/train/benchmarking/README.md) training 7B model with 8k seqlen on 8 H100's (6935 Tok/sec)
+- 55% higher throughput compared to [Mosaic ML benchmark](https://github.com/mosaicml/llm-foundry/blob/main/scripts/train/benchmarking/README.md) training 7B model with 8k seqlen on 8 H100's (6935 Tok/sec per GPU)
 
 ### [Try It Out Yourself](#training-performance-demo) or [See Full Benchmarking Results](#benchmarked-results)
 
