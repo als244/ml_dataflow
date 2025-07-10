@@ -44,8 +44,15 @@ def plot_throughput(csv_filepath, device_name, output_dir):
     csv_columns = ["host_mem_gb", "dev_mem_gb", "seq_len", "model_size", "chunk_size", "total_home_acts", "num_inp_only_saved", "num_inp_attn_saved", "num_full_saved", "total_dev_acts", "num_rounds_per_step", "seqs_per_step", "recompute_pct", "attn_flop_pct", "avg_step_time", "tok_per_sec", "tflops", "mfu", "hfu"]
     df = pd.read_csv(csv_filepath, names=csv_columns)
 
-    util_min_val = 0.25
-    util_max_val = 0.85
+    device_name_to_util_range = {
+        "H100": (0.3, 0.7),
+        "A100": (0.15, 0.6),
+        "RTX5090": (0.35, 0.9),
+        "RTX3090": (0.35, 0.9)
+    }
+    
+    util_min_val = device_name_to_util_range[device_name][0]
+    util_max_val = device_name_to_util_range[device_name][1]
 
     device_name_to_peak_bf16_tflops = {
         "H100": 989,
