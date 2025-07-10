@@ -8,18 +8,19 @@ You can learn more about the project's background/details [here](docs/background
 
 ## Benefits
 
-#### Train long-sequences or large-models on single device or at home
-- Automatically offloads/prefetches (parameters, activations, gradients, & optimizer state) and configures recomputation based on specified memory capacities, seqlen, and model size. Asynchrous dataflow is abundant, but the math remains the same.
-
-![Sample Heatmap, H100, LLama3-8B, Seqlen 8k](bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-8192-tok.png)
-
-![Sample Heatmap, RTX 5090, LLama3-8B, Seqlen 64k](bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090-8B-65536-tok.png)
 
 #### 6% Higher Training Throughput vs. [Nvidia Baseline](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/dgxc-benchmarking/resources/llama31-8b-dgxc-benchmarking-b)
 - Trains Llama3 8B (BF16) with 8k sequence length at ~10,800 vs ~10,120 Tok/s per H100
     - [Profiling](docs/sample_profiling_trace.md)
 - Requires only 1 H100 to achieve such performance.
 - 55% higher throughput compared to [Mosaic ML benchmark](https://github.com/mosaicml/llm-foundry/blob/main/scripts/train/benchmarking/README.md) training 7B model with 8k seqlen on 8 H100's (6935 Tok/sec per GPU)
+
+#### Train long-sequences or large-models on single device or at home
+- Automatically offloads/prefetches (parameters, activations, gradients, & optimizer state) and configures recomputation based on specified memory capacities, seqlen, and model size. Asynchrous dataflow is abundant, but the math remains the same.
+
+![Sample Heatmap, H100, LLama3-8B, Seqlen 8k](bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-8192-tok.png)
+
+![Sample Heatmap, RTX 5090, LLama3-8B, Seqlen 64k](bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090-8B-65536-tok.png)
 
 ### [Try It Out Yourself](#training-performance-demo) or [See Full Benchmarking Results](#benchmarked-results)
 
@@ -224,9 +225,9 @@ python bench/reproduce_results/plot_throughput.py <csv filepath to plot> <device
 
 ---
 
-``
+<!--
 <sup> Note: It ought to be the case that fixing one memory axis and increasing the other should result in equal or better performance. Unfortunately, take a look at the H100, 8B, seqlen 512 heatmap -- this is not a miscalculation. The recomputation assignments are currently "greedy" in the sense that the program will save as much data as possible. This is ideal for the common case, but there are some scenarios (fast device + small device memory + short seq len) where the links to/from host memory become congested at bad times, leading to stalls; in this case the lower capacity host memory triggered a configuration with more recompuation that ended up resulting in higher throughput. Current research is designing a smoother, I/O balanced, auto-configuration scheme, which will ensure more memory => higher throughput. </sup>
-``
+-->
 
 ---
 
