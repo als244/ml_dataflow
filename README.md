@@ -28,10 +28,12 @@ You can learn more about the project's background/details [here](docs/background
 #### Ideal Schedule for Extending to Distributed Training
 - Almost all aspects of single-worker algorithm stay the same, except for cyclic sharding of layers across devices to create a ring. [Link to a simulator](https://dataflowsim.sunshein.net)
     - For a ring of $N$ devices, reduces the per step time and memory requirements by factor of $N$
-- **No collective communication required**<sup>*</sup>! (*except for a.) all-reduce before opt step if num replicas > 1 or b.) if the batch size required to saturate GPUs is too large and inefficient for learning, EP or TP can be utilized). The forms of parallelism employed are PP/DP (intra-replica) and DP (inter-replica)
+- **No collective communication required**<sup>*</sup>! The forms of parallelism employed are PP/DP (intra-replica) and DP (inter-replica). 
+    - <sup>*</sup>Except: a. all-reduce before opt step if num replicas > 1 or b. if the batch size required to saturate GPUs with only PP+replicas is too large/inefficient for learning (short seqs / large clusters), EP or TP should also be employed. 
 - Eases resource allocation. A set of GPUs + slices of local host mem can be linked together and maintain high performance => doesn't require high BW GPU-GPU interconnects. This makes job scheduler's life easier and can bolster overall cluster utilization.
+    - Especially important for upcoming generations when each 'node' has hundreds of GPUs and costs $$$ -- the per-node granularity is so large and expensive that these will inevitably become fragmented.
 #### Opportunity for Concurrent Training and Inference
-- Now that we have shuffled training-related data to host memory, this leaves room in precious device memory for running memory-bound inference workloads alongside the compute-bound training. This is particularly relevant for RL training...
+- Achieving high training throughput with low HBM footprint opens doors for running memory-bound inference workloads alongside the compute-bound training. This is particularly relevant for RL training...
 
 -----
 
@@ -61,6 +63,8 @@ git clone git@github.com:als244/ml_dataflow.git
 ```shell
 make -j <NUM_PROCS>
 ```
+
+The project is built from ~10k lines of C source, 8 logically unique GPU kernels, and wrappers over Flash Attention and vendor BLAS libraries.  
 
 ###### Note that building the flash2 and flash3 wrapper libraries may take some time (a few hours)...using more processors will help. 
 
@@ -257,9 +261,9 @@ Where the $(2 * D + 2 * K + 3 * F)$ factor is coming from Q, O, K+V and the 3 FF
 
 -----
 
-**Practical note**: The training demo source code is quite messy! This is not the intended usage, there are some missing pieces... Critical upstream functionality (*data ingestion*, *model/loss/optimizer customization*, *model saving/loading*, *multi-worker training*, & *a wider set of common kernels such as attention variants, other normalizations, optimizers, convolutions, and MoE selecting/routing/combining*) is underway. You can try out a [simulator](https://dataflowsim.sunshein.net) for what this repo aims to accomplish in its final multi-worker form.
+**Practical note**: The training demo source code is quite messy! This is not the intended usage, there are some missing pieces... Critical upstream functionality (*data ingestion*, *model/loss/optimizer customization*, *model saving/loading*, *multi-worker training*, & *a wider set of common kernels such as attention variants, other normalizations, optimizers, convolutions, and MoE selecting/routing/combining*) is underway.
 
-The plan is to build a robust core of C libraries and create user-friendly Python bindings (at the various layers of stack) for convenient interfacing. Typical usage will have a similar API to most other training frameworks and only need to use the top-level bindings. 
+The plan is to build a robust core of C libraries and create user-friendly Python bindings (at the various layers of stack) for convenient interfacing. Typical usage will have a similar API to most other training frameworks and only need to use the top-level bindings.
 
 A true interface will be released when the basic dataloading functionality is ready. 
 
@@ -271,4 +275,7 @@ The intial emphasis is for training; after this is working properly, focus will 
 
 
 ***Not ready yet...***
+
+
+
 
