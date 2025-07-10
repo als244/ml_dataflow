@@ -45,12 +45,12 @@ def plot_throughput(csv_filepath, device_name, output_dir):
     df = pd.read_csv(csv_filepath, names=csv_columns)
 
     device_name_to_util_range = {
-        "H100": (0.3, 0.7),
+        "H100": (0.35, 0.7),
         "A100": (0.15, 0.6),
         "RTX5090": (0.35, 0.9),
         "RTX3090": (0.35, 0.9)
     }
-    
+
     util_min_val = device_name_to_util_range[device_name][0]
     util_max_val = device_name_to_util_range[device_name][1]
 
