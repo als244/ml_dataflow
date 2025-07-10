@@ -27,7 +27,7 @@ You can learn more about the project's background/details [here](docs/background
 
 #### Ideal Schedule for Extending to Distributed Training
 - Almost all aspects of single-worker algorithm stay the same, except for cyclic sharding of layers across devices to create a ring. [Link to a simulator](https://dataflowsim.sunshein.net)
-    - For a ring of $N$ devices, reduces the per step time and memory requirements by factor of $N$
+    - A ring of $N$ devices reduces the per step time and memory requirements by factor of $N$
 - **No collective communication required**<sup>*</sup>! The forms of parallelism employed are PP/DP (intra-replica) and DP (inter-replica). 
     - <sup>*</sup>Except: a. all-reduce before opt step if num replicas > 1 or b. if the batch size required to saturate GPUs with only PP+replicas is too large/inefficient for learning (short seqs / large clusters), EP or TP should also be employed. 
 - Eases resource allocation. A set of GPUs + slices of local host mem can be linked together and maintain high performance => doesn't require high BW GPU-GPU interconnects. This makes job scheduler's life easier and can bolster overall cluster utilization.
