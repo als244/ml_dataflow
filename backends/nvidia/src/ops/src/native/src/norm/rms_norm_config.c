@@ -6,6 +6,7 @@ int default_rms_norm_set_attribute_config(Dataflow_Handle * dataflow_handle, Cud
 
 	Cuda_Device_Info * dev_info = (Cuda_Device_Info *) dataflow_handle -> device_info;
 
+	/*
 	int dev_max_smem = dev_info -> optin_max_smem_per_block;
 
 	int rms_max_mem = dev_max_smem - (1U << 11);
@@ -15,6 +16,7 @@ int default_rms_norm_set_attribute_config(Dataflow_Handle * dataflow_handle, Cud
 		fprintf(stderr, "Error: could not set rms norm attribute for smem of size: %d...\n", rms_max_mem);
 		return -1;
 	}
+	*/
 
 	(cuda_function -> function_config).func_max_smem = rms_max_mem;
 
