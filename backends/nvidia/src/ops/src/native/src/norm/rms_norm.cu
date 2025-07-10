@@ -297,8 +297,6 @@ extern "C" __global__ void default_rms_norm_bf16_kernel(int n_rows, int n_cols, 
 		reduction_data_sq[warp_id] = running_sq_sum;
 	}
 
-	__syncthreads();
-
 	if (warp_id == 0){
 		running_sq_sum = reduction_data_sq[lane_id];
 
