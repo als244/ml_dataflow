@@ -272,6 +272,8 @@ extern "C" __global__ void default_rms_norm_bf16_kernel(int n_rows, int n_cols, 
 	int warp_id = thread_id / 32;
 	int lane_id = thread_id % 32;
 
+	unsigned warp_mask = 0xFFFFFFFFU;
+
 	float running_sq_sum = 0;
 
 	if (thread_id < 32){
@@ -311,7 +313,7 @@ extern "C" __global__ void default_rms_norm_bf16_kernel(int n_rows, int n_cols, 
 
 			// During inference this should be null and not needed
 			if (rms_vals){
-				rms_vals[row_id] = reduction_data_sq[0];
+				rms_vals[row_ind] = reduction_data_sq[0];
 			}
 		}
 	}
