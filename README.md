@@ -22,7 +22,7 @@ You can learn more about the project's background/details [here](docs/background
 
 <!-- ![Sample Heatmap Tok/s, H100, LLama3-8B, Seqlen 64k](bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-65536-tok.png)  -->
 
-#### Example Results of Training 64K Sequence Length on Single-Device
+#### Example Results of Training an 8B model with 64K Sequence Length on Single-Device
 
 ##### H100
 
