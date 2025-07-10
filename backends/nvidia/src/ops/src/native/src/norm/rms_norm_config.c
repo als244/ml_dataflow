@@ -18,7 +18,9 @@ int default_rms_norm_set_attribute_config(Dataflow_Handle * dataflow_handle, Cud
 	}
 	*/
 
-	(cuda_function -> function_config).func_max_smem = rms_max_mem;
+	int rms_max_smem = dev_info -> optin_max_smem_per_block;
+
+	(cuda_function -> function_config).func_max_smem = rms_max_smem;
 
 	ret = cu_func_get_attribute(&((cuda_function -> function_config).func_max_threads_per_block), cuda_function -> function_handle, CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK);
 	if (ret){
