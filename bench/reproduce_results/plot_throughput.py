@@ -66,8 +66,8 @@ def plot_throughput(csv_filepath, device_name, output_dir):
 
     metrics = ['tok_per_sec', 'tflops', 'mfu', 'hfu']
     metric_labels = {
-        'tok_per_sec': 'Tokens per Second',
-        'tflops': 'TFLOPS',
+        'tok_per_sec': 'Tokens/sec',
+        'tflops': 'TFLOPS/s',
         'mfu': 'MFU',
         'hfu': 'HFU',
     }
@@ -157,7 +157,7 @@ def plot_throughput(csv_filepath, device_name, output_dir):
                 # --- START: Manual Font Color Correction ---
                 # This block will now work correctly because ax.texts
                 # will contain an entry for every non-zero cell.
-                luminance_threshold = 0.4
+                luminance_threshold = 0.5
                 
                 cmap_obj = plt.get_cmap(cmap)
                 norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
