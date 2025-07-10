@@ -44,7 +44,7 @@ def plot_throughput(csv_filepath, device_name, output_dir):
     csv_columns = ["host_mem_gb", "dev_mem_gb", "seq_len", "model_size", "chunk_size", "total_home_acts", "num_inp_only_saved", "num_inp_attn_saved", "num_full_saved", "total_dev_acts", "num_rounds_per_step", "seqs_per_step", "recompute_pct", "attn_flop_pct", "avg_step_time", "tok_per_sec", "tflops", "mfu", "hfu"]
     df = pd.read_csv(csv_filepath, names=csv_columns)
 
-    util_min_val = 0.35
+    util_min_val = 0.25
     util_max_val = 0.85
 
     device_name_to_peak_bf16_tflops = {
@@ -132,13 +132,19 @@ def plot_throughput(csv_filepath, device_name, output_dir):
 
                 hide_zeros = heatmap_data == 0
                 hide_non_zeros = heatmap_data != 0
+                
+                # --- FIX START ---
+                # Prepare a dataframe for annotations to ensure all non-zero cells are annotated.
+                # This explicitly tells seaborn what to print, bypassing an issue where
+                # annot=True fails to add text for certain data values.
+                annot_data = heatmap_data.applymap(lambda v: f"{v:.2f}" if v != 0 else "")
 
                 ax = sns.heatmap(
                     heatmap_data,
                     mask=hide_zeros,
-                    annot=True,
+                    annot=annot_data,    # Use the prepared dataframe for annotations
+                    fmt='',              # Disable automatic formatting, as we did it manually
                     annot_kws=annot_kws,
-                    fmt=".2f",
                     linewidths=1.0,
                     linecolor='white',
                     cmap=cmap,
@@ -146,29 +152,21 @@ def plot_throughput(csv_filepath, device_name, output_dir):
                     vmin=vmin,
                     vmax=vmax
                 )
+                # --- FIX END ---
 
                 # --- START: Manual Font Color Correction ---
-                # This block fixes the inconsistent font color issue by manually setting
-                # the color based on a custom luminance threshold.
-
-                # A threshold of 0.6 should work well for the 'YlGn' colormap.
-                # You can adjust this value if you use different colormaps.
+                # This block will now work correctly because ax.texts
+                # will contain an entry for every non-zero cell.
                 luminance_threshold = 0.4
                 
                 cmap_obj = plt.get_cmap(cmap)
                 norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
                 
-                # Get the data values that have annotations
                 annotated_data = heatmap_data.to_numpy()[hide_non_zeros.to_numpy()]
                 
                 for text_artist, value in zip(ax.texts, annotated_data):
-                    # Get the background color of the cell
                     bg_color = cmap_obj(norm(value))
-                    
-                    # Calculate luminance (YIQ formula)
                     luminance = (bg_color[0] * 299 + bg_color[1] * 587 + bg_color[2] * 114) / 1000
-                    
-                    # Set the font color
                     text_artist.set_color('black' if luminance > luminance_threshold else 'white')
                 # --- END: Manual Font Color Correction ---
 
