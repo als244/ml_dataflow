@@ -285,6 +285,7 @@ extern "C" __global__ void default_rms_norm_bf16_kernel(int n_rows, int n_cols, 
 	float float_val;
 	for (int i = thread_id; i < n_cols; i+=blockDim.x){
 		float_val = __bfloat162float(X[row_base + i]);
+		row[i] = float_val;
 		running_sq_sum += float_val * float_val;
 	}
 
