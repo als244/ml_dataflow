@@ -361,10 +361,9 @@ extern "C" __global__ void default_rms_norm_bwd_x_bf16_bf16_kernel(int n_rows, i
 
 	float cur_recip_avg = fwd_rms_vals[row_ind];
 
-	__nv_bfloat16 weight_val;
 	__nv_bfloat16 cur_weight;
 
-	float cur_upstream_sum;
+	__nv_bfloat16 cur_upstream_sum;
 
 	float deriv;
 	
