@@ -2965,11 +2965,19 @@
 			printf("\tSeqs per round: %d\n", seqs_per_round);
 			printf("\tSeqs per step: %d\n\n", seqs_per_step);
 
+			printf("\tDevice Memory Partitioning:\n");
+			printf("\t\tNum Model Param Blocks: %d\n", NUM_DEV_BLOCKS);
+			printf("\t\tNum Model Grad Blocks: %d\n", NUM_DEV_GRAD_BLOCKS);
+			printf("\t\tNum (Chunk, Layer) Activation Slots: %d\n\n", NUM_DEV_ACTIVATION_SLOTS);
+
 			printf("\tHost Activations: %d\n", total_home_acts);
 			printf("\t\tNum Full Saved Activations: %d\n", num_full_saved);
 			printf("\t\tNum Inp + Attn Saved Activations: %d\n", num_inp_attn_saved);
 			printf("\t\tNum Inp Only Saved Activations: %d\n", num_inp_only_saved);
 			printf("\tDevice Activations: %d\n\n", total_dev_acts);
+
+			
+			
 
 			printf("# Model Params: %.2fB\n\n", all_model_num_els / 1e9);
 		}
