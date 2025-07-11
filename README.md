@@ -33,19 +33,6 @@ You can learn more about the project's background/details [here](docs/background
 
 <img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-65536-tflops.png" alt="Sample Heatmap TFLOPS/s, H100, LLama3-8B, Seqlen 64k" width="70%">
 
-
-### Future Direction
-
-#### Ideal Schedule for Extending to Distributed Training
-- Almost all aspects of single-worker algorithm stay the same, except for cyclic sharding of layers across devices to create a ring. [Link to a simulator](https://dataflowsim.sunshein.net)
-    - A ring of $N$ devices reduces the per step time and memory requirements by factor of $N$
-- **No collective communication required**<sup>*</sup>! The forms of parallelism employed are PP/DP (intra-replica) and DP (inter-replica). 
-    - <sup>*</sup>Except: a. all-reduce before opt step if num replicas > 1 or b. if the batch size required to saturate GPUs with only PP+replicas is too large/inefficient for learning (short seqs / large clusters), EP or TP should also be employed. 
-- Eases resource allocation. A set of GPUs + slices of local host mem can be linked together and maintain high performance => doesn't require high BW GPU-GPU interconnects. This makes job scheduler's life easier and can bolster overall cluster utilization.
-    - Especially important for upcoming generations when each 'node' has hundreds of GPUs and costs $$$ -- the per-node granularity is so large and expensive that these will inevitably become fragmented.
-#### Opportunity for Concurrent Training and Inference
-- Achieving high training throughput with low HBM footprint opens doors for running memory-bound inference workloads alongside the compute-bound training. This is particularly relevant for RL training...
-
 -----
 
 ## Training Performance Demo
@@ -292,6 +279,19 @@ The intial emphasis is for training; after this is working properly, focus will 
 
 ***Not ready yet...***
 
+-----
+
+### Future Direction
+
+#### Ideal Schedule for Extending to Distributed Training
+- Almost all aspects of single-worker algorithm stay the same, except for cyclic sharding of layers across devices to create a ring.
+    - A ring of $N$ devices reduces the per step time and memory requirements by factor of $N$
+- **No collective communication required**<sup>*</sup>! The forms of parallelism employed are PP/DP (intra-replica) and DP (inter-replica). 
+    - <sup>*</sup>Except: a. all-reduce before opt step if num replicas > 1 or b. if the batch size required to saturate GPUs with only PP+replicas is too large/inefficient for learning (short seqs / large clusters), EP or TP should also be employed. 
+- Eases resource allocation. A set of GPUs + slices of local host mem can be linked together and maintain high performance => doesn't require high BW GPU-GPU interconnects. This makes job scheduler's life easier and can bolster overall cluster utilization.
+    - Especially important for upcoming generations when each 'node' has hundreds of GPUs and costs $$$ -- the per-node granularity is so large and expensive that these will inevitably become fragmented.
+#### Opportunity for Concurrent Training and Inference
+- Achieving high training throughput with low HBM footprint opens doors for running memory-bound inference workloads alongside the compute-bound training. This is particularly relevant for RL training...
 
 
 
