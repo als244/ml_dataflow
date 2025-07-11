@@ -49,6 +49,8 @@ You can demo training performance of canonical causal transformer under differen
 ##### System Support 
 - OS: 
     - Linux
+- Compiler:
+    - gcc13+
 - Backends:
     - Nvidia GPUs
         - sm80+ (Ampere/Ada, Hopper, Blackwell)
