@@ -67,6 +67,14 @@ A few words about the forward layers image.
 
 ---
 
+## Head
+
+![head.png](../bench/reproduce_results/profiling/sample_profiling_max_mem_64k_8b_h100/head.png)
+
+A few words about the head image.
+
+---
+
 ## Backward Layers
 
 ![bwd_layers.png](../bench/reproduce_results/profiling/sample_profiling_max_mem_64k_8b_h100/bwd_layers.png)
@@ -77,7 +85,7 @@ A few words about the backward layers image.
 
 ## Step Overhead
 
-![step_overhead.png](../bench/reproduce_results/profiling/sample_profiling_max_mem_64k_8b_h100/step_overhead.png)
+![step_overhead.png](../bench/reproduce_results/profiling/sample_profiling_max_mem_64k_8b_h100/optimizer_step.png)
 
 A few words about the step overhead image.
 
