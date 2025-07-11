@@ -31,7 +31,7 @@ This will create an nsys report: `bench/profiling/host_178_dev_78_seq_65536_mode
     - Only Inp + Context: 0
 
 
-The lime green section at the top-ish of each image (corresponding to "SM Instructions") represents the "Tensor Active" ratio (fraction of cycles where a tensor pipe was working). This run achieves 77% tensor active utilization, but the clock rate is throttled (as the H100 is power-bound) so we see HFU < .77, in this case HFU = 60%. The "GPC clock" at the top of the first image shows the clock rate (averages 1460 Mhz vs. 1755 Mhz of boost clock).
+The lime green section at the top-ish of each image (corresponding to "SM Instructions") represents the "Tensor Active" ratio (fraction of cycles where a tensor pipe was working). This run achieves ~75% tensor active utilization, but the clock rate is throttled (as the H100 is power-bound) so we see HFU < .75, in this case HFU = 60%. The "GPC clock" at the top of the first image shows the clock rate (averages 1460 Mhz vs. 1755 Mhz of boost clock).
 
 ---
 
