@@ -79,7 +79,7 @@ git clone git@github.com:als244/ml_dataflow.git
 make -j <NUM_PROCS>
 ```
 
-The project is built from ~10k lines of C, 8 logically unique (memory-bound) GPU kernels, and wrappers over [Flash Attention](https://github.com/Dao-AILab/flash-attention) and vendor BLAS libraries (performance critical computation kernels). The only depedencies are the backend userspace driver & BLAS lib along with libcrypto (typically pre-installed). For Nvidia backend it assumes that libs and headers are in standard location `/usr/local/cuda`. 
+The project is built from ~10k lines of C, 8 logically unique (memory-bound, partially optimized) GPU kernels, and wrappers over [Flash Attention](https://github.com/Dao-AILab/flash-attention) and vendor BLAS libraries (performance critical computation kernels). The only depedencies are the backend userspace driver & BLAS lib along with libcrypto (typically pre-installed). For Nvidia backend it assumes that libs and headers are in standard location `/usr/local/cuda`. 
 
 ###### Note that building the flash2 and flash3 wrapper libraries may take some time (a few hours)...using more processors will help. 
 
