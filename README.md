@@ -21,17 +21,17 @@ You can learn more about the project's background/details [here](docs/background
 
 #### Example Results of Training an 8B model with 64K Sequence Length on Single-Device
 
-##### RTX 5090
-
-<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090-8B-65536-tok.png" alt="Sample Heatmap Tok/, RTX 5090, LLama3-8B, Seqlen 64k" width="70%">
-
-<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090-8B-65536-tflops.png" alt="Sample Heatmap TFLOPS/s, RTX 5090, LLama3-8B, Seqlen 64k" width="70%">
-
 ##### H100
 
 <img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-65536-tok.png" alt="Sample Heatmap Tok/s, H100, LLama3-8B, Seqlen 64k" width="70%">
 
 <img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-65536-tflops.png" alt="Sample Heatmap TFLOPS/s, H100, LLama3-8B, Seqlen 64k" width="70%">
+
+##### RTX 5090
+
+<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090-8B-65536-tok.png" alt="Sample Heatmap Tok/, RTX 5090, LLama3-8B, Seqlen 64k" width="70%">
+
+<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090-8B-65536-tflops.png" alt="Sample Heatmap TFLOPS/s, RTX 5090, LLama3-8B, Seqlen 64k" width="70%">
 
 -----
 
