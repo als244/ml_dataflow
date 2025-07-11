@@ -6,7 +6,7 @@ You can learn more about the project's background/details [here](docs/background
 
 -----
 
-## Benefits
+## Highlights
 
 
 #### 9% Higher Training Throughput vs. [Nvidia Baseline](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/dgxc-benchmarking/resources/llama31-8b-dgxc-benchmarking-b)
