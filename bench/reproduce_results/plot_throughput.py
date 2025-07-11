@@ -140,17 +140,16 @@ def plot_throughput(csv_filepath, device_name, output_dir):
                 hide_zeros = heatmap_data == 0
                 hide_non_zeros = heatmap_data != 0
                 
-                # --- FIX START ---
-                # Prepare a dataframe for annotations to ensure all non-zero cells are annotated.
-                # This explicitly tells seaborn what to print, bypassing an issue where
-                # annot=True fails to add text for certain data values.
+                # Prepare a dataframe for annotations. This bypasses an issue where
+                # seaborn's automatic annotation fails to add text for certain values.
+                # We format non-zero values as strings and leave zero-value cells empty.
                 annot_data = heatmap_data.applymap(lambda v: f"{v:.2f}" if v != 0 else "")
 
                 ax = sns.heatmap(
                     heatmap_data,
                     mask=hide_zeros,
                     annot=annot_data,    # Use the prepared dataframe for annotations
-                    fmt='',              # Disable automatic formatting, as we did it manually
+                    fmt='',              # Disable automatic formatting, as we've done it manually
                     annot_kws=annot_kws,
                     linewidths=1.0,
                     linecolor='white',
@@ -159,9 +158,8 @@ def plot_throughput(csv_filepath, device_name, output_dir):
                     vmin=vmin,
                     vmax=vmax
                 )
-                # --- FIX END ---
 
-                # --- START: Manual Font Color Correction ---
+                # ---  Manual Font Color Correction ---
                 # This block will now work correctly because ax.texts
                 # will contain an entry for every non-zero cell.
                 luminance_threshold = 0.5
@@ -175,8 +173,7 @@ def plot_throughput(csv_filepath, device_name, output_dir):
                     bg_color = cmap_obj(norm(value))
                     luminance = (bg_color[0] * 299 + bg_color[1] * 587 + bg_color[2] * 114) / 1000
                     text_artist.set_color('black' if luminance > luminance_threshold else 'white')
-                # --- END: Manual Font Color Correction ---
-
+        
                 sns.heatmap(
                     heatmap_data,
                     mask=hide_non_zeros,
