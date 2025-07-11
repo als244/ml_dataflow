@@ -347,9 +347,9 @@ extern "C" __global__ void default_rms_norm_fp8e4m3_kernel(int n_rows, int n_col
 		// copying casting locations as in llama3
 		rms_val =  row[i] * recip_avg;
 
-		weight_val = __ldg(rms_weight + i);
+		weight_val = rms_weight[i];
 
-		out[row_base + i] = __nv_fp8_e4m3(rms_val) * weight_val;
+		out[row_base + i] = __nv_fp8_e4m3(rms_val * float(weight_val));
 	}
 }
 
@@ -435,8 +435,8 @@ extern "C" __global__ void default_rms_norm_fp8e5m2_kernel(int n_rows, int n_col
 		// copying casting locations as in llama3
 		rms_val =  row[i] * recip_avg;
 
-		weight_val = __ldg(rms_weight + i);
+		weight_val = rms_weight[i];
 
-		out[row_base + i] = __nv_fp8_e5m2(rms_val) * weight_val;
+		out[row_base + i] = __nv_fp8_e5m2(rms_val * float(weight_val));
 	}
 }

@@ -19,7 +19,7 @@ extern "C" __global__ void default_rms_norm_recompute_fp32_kernel(int n_rows, in
 	float weight_val;
 		
     // 2. do streaming update based on prior cur_recip_avg
-	for (int i = lane_id; i < n_cols; i+=WARP_SIZE){
+	for (int i = threadIdx.x; i < n_cols; i+=blockDim.x){
 		cur_row_val = X[row_base + i];
 		rms_val = cur_row_val * cur_recip_avg;
 		weight_val = __ldg(rms_weight + i);
@@ -42,10 +42,10 @@ extern "C" __global__ void default_rms_norm_recompute_fp16_kernel(int n_rows, in
     // 1.) load in new rms val
     float cur_recip_avg = rms_vals[row_ind];
 
-	float weight_val;
+	__half weight_val;
 		
     // 2. do streaming update based on prior cur_recip_avg
-	for (int i = lane_id; i < n_cols; i+=WARP_SIZE){
+	for (int i = threadIdx.x; i < n_cols; i+=blockDim.x){
 		cur_row_val = __half2float(X[row_base + i]);
 		rms_val = cur_row_val * cur_recip_avg;
 		weight_val = __ldg(rms_weight + i);
@@ -68,10 +68,10 @@ extern "C" __global__ void default_rms_norm_recompute_bf16_kernel(int n_rows, in
     // 1.) load in new rms val
     float cur_recip_avg = rms_vals[row_ind];
 
-	float weight_val;
+	__nv_bfloat16 weight_val;
 		
     // 2. do streaming update based on prior cur_recip_avg
-	for (int i = lane_id; i < n_cols; i+=WARP_SIZE){
+	for (int i = threadIdx.x; i < n_cols; i+=blockDim.x){
 		cur_row_val = __bfloat162float(X[row_base + i]);
 		rms_val = cur_row_val * cur_recip_avg;
 		weight_val = __ldg(rms_weight + i);
@@ -94,14 +94,14 @@ extern "C" __global__ void default_rms_norm_recompute_fp8e4m3_kernel(int n_rows,
     // 1.) load in new rms val
     float cur_recip_avg = rms_vals[row_ind];
 
-	float weight_val;
+	__nv_fp8_e4m3 weight_val;
 		
     // 2. do streaming update based on prior cur_recip_avg
-	for (int i = lane_id; i < n_cols; i+=WARP_SIZE){
+	for (int i = threadIdx.x; i < n_cols; i+=blockDim.x){
 		cur_row_val = float(X[row_base + i]);
 		rms_val = cur_row_val * cur_recip_avg;
-		weight_val = __ldg(rms_weight + i);
-        out[row_base + i] = __nv_fp8_e4m3(rms_val) * weight_val;
+		weight_val = rms_weight[i];
+        out[row_base + i] = __nv_fp8_e4m3(rms_val * float(weight_val));
 	}
 }
 
@@ -121,13 +121,13 @@ extern "C" __global__ void default_rms_norm_recompute_fp8e5m2_kernel(int n_rows,
     // 1.) load in new rms val
     float cur_recip_avg = rms_vals[row_ind];
 
-	float weight_val;
+	__nv_fp8_e5m2 weight_val;
 		
     // 2. do streaming update based on prior cur_recip_avg
-	for (int i = lane_id; i < n_cols; i+=WARP_SIZE){
+	for (int i = threadIdx.x; i < n_cols; i+=blockDim.x){
 		cur_row_val = float(X[row_base + i]);
 		rms_val = cur_row_val * cur_recip_avg;
-		weight_val = __ldg(rms_weight + i);
-        out[row_base + i] = __nv_fp8_e5m2(rms_val) * weight_val;
+		weight_val = rms_weight[i];
+        out[row_base + i] = __nv_fp8_e5m2(rms_val * float(weight_val));
 	}
 }

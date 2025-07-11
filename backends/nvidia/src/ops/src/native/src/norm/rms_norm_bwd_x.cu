@@ -392,7 +392,7 @@ extern "C" __global__ void default_rms_norm_bwd_x_bf16_bf16_kernel(int n_rows, i
 		// if we want to recompute the forward pass, we already have done all the work
 		// and can save it down here...
 		if (X_out){
-			X_out[row_id * n_cols + i] = out_val;
+			X_out[row_base + i] = out_val;
 		}
 
 		cur_upstream_sum += __bfloat162float(upstream_row[i] * out_val);
