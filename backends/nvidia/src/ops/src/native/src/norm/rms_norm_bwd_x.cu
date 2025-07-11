@@ -363,7 +363,7 @@ extern "C" __global__ void default_rms_norm_bwd_x_bf16_bf16_kernel(int n_rows, i
 
 	__nv_bfloat16 cur_weight;
 
-	__nv_bfloat16 cur_upstream_sum;
+	float cur_upstream_sum;
 
 	float deriv;
 	

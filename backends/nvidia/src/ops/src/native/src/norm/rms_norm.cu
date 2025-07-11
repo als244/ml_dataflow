@@ -341,7 +341,7 @@ extern "C" __global__ void default_rms_norm_fp8e4m3_kernel(int n_rows, int n_col
 
 	float rms_val;
 
-	__nv_bfloat16 weight_val;
+	__nv_fp8_e4m3 weight_val;
 
 	for (int i = thread_id; i < n_cols; i+=blockDim.x){
 		// copying casting locations as in llama3
@@ -429,7 +429,7 @@ extern "C" __global__ void default_rms_norm_fp8e5m2_kernel(int n_rows, int n_col
 
 	float rms_val;
 
-	__nv_bfloat16 weight_val;
+	__nv_fp8_e5m2 weight_val;
 
 	for (int i = thread_id; i < n_cols; i+=blockDim.x){
 		// copying casting locations as in llama3

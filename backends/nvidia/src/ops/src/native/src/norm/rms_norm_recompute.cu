@@ -17,6 +17,9 @@ extern "C" __global__ void default_rms_norm_recompute_fp32_kernel(int n_rows, in
     float cur_recip_avg = rms_vals[row_ind];
 
 	float weight_val;
+
+	float cur_row_val;
+	float rms_val;
 		
     // 2. do streaming update based on prior cur_recip_avg
 	for (int i = threadIdx.x; i < n_cols; i+=blockDim.x){
@@ -43,6 +46,9 @@ extern "C" __global__ void default_rms_norm_recompute_fp16_kernel(int n_rows, in
     float cur_recip_avg = rms_vals[row_ind];
 
 	__half weight_val;
+
+	float cur_row_val;
+	float rms_val;
 		
     // 2. do streaming update based on prior cur_recip_avg
 	for (int i = threadIdx.x; i < n_cols; i+=blockDim.x){
@@ -69,6 +75,9 @@ extern "C" __global__ void default_rms_norm_recompute_bf16_kernel(int n_rows, in
     float cur_recip_avg = rms_vals[row_ind];
 
 	__nv_bfloat16 weight_val;
+
+	float cur_row_val;
+	float rms_val;
 		
     // 2. do streaming update based on prior cur_recip_avg
 	for (int i = threadIdx.x; i < n_cols; i+=blockDim.x){
@@ -95,6 +104,9 @@ extern "C" __global__ void default_rms_norm_recompute_fp8e4m3_kernel(int n_rows,
     float cur_recip_avg = rms_vals[row_ind];
 
 	__nv_fp8_e4m3 weight_val;
+
+	float cur_row_val;
+	float rms_val;
 		
     // 2. do streaming update based on prior cur_recip_avg
 	for (int i = threadIdx.x; i < n_cols; i+=blockDim.x){
@@ -122,6 +134,9 @@ extern "C" __global__ void default_rms_norm_recompute_fp8e5m2_kernel(int n_rows,
     float cur_recip_avg = rms_vals[row_ind];
 
 	__nv_fp8_e5m2 weight_val;
+
+	float cur_row_val;
+	float rms_val;
 		
     // 2. do streaming update based on prior cur_recip_avg
 	for (int i = threadIdx.x; i < n_cols; i+=blockDim.x){
