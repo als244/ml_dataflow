@@ -100,7 +100,7 @@ For example:
 
 `./transformerDemo 80 20 4096 8` will train the 8B model architecture (full bf16, causal attention, next token prediction, AdamW). The sequence length is set to 4096 tokens. The memory capacities are set to enforce <= 80 GB of host memory and <= 20 GB of device memory (where XXX GB is defined as XXX * 2^30 bytes).
 
-Profiling guide: [A sample profile of 64k seq, 8B on h100](docs/sample_profiling_trace.md)
+Profiling overview: [Sample profile of 64k seq, 8B on h100](docs/sample_profiling_trace.md)
 
 **Training Overview & Terminology**:
 

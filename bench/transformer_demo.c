@@ -3724,7 +3724,13 @@
 									printf("\n\nSubmitting recompute for seq group #%d, chunk #%d, block #%d...\n\n", seq_group, chunk_id, k);
 								}
 
-								sprintf(profile_msg, "Recompute X: seq group #%d, chunk #%d, block #%d", seq_group, chunk_id, k);
+								if (cur_saved_activation_level == SAVED_ACTIVATION_LEVEL_INP_ONLY){
+									sprintf(profile_msg, "Recompute (full)");
+								}
+								else if (cur_saved_activation_level == SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY){
+									sprintf(profile_msg, "Recompute (partial)");
+								}
+								
 								dataflow_handle.profiler.range_push(profile_msg);
 								ret = dataflow_submit_transformer_block_recompute(&dataflow_handle, compute_stream_id, 
 												working_block,
@@ -3744,7 +3750,7 @@
 								printf("\n\nSubmitting bwd_x for seq group #%d, chunk #%d, block #%d...\n\n", seq_group, chunk_id, k);
 							}
 
-							sprintf(profile_msg, "Bwd X: seq group #%d, chunk #%d, block #%d", seq_group, chunk_id, k);
+							sprintf(profile_msg, "Bwd X");
 							dataflow_handle.profiler.range_push(profile_msg);
 
 							ret = dataflow_submit_transformer_block_bwd_x(&dataflow_handle, compute_stream_id,
@@ -3883,7 +3889,7 @@
 							// utilizing the newly populated grad_activations struct
 							// to update the grad_weights...
 
-							sprintf(profile_msg, "Bwd W: seq group #%d, chunk #%d, block #%d", seq_group, chunk_id, k);
+							sprintf(profile_msg, "Bwd W");
 							dataflow_handle.profiler.range_push(profile_msg);
 
 							// uses the same input transition as bwd_x...
@@ -4959,7 +4965,7 @@
 				dataflow_handle.profiler.range_pop();
 			}
 
-			// consider sending all the results back to host as the end of the step...
+			// only mark step as completed after all the results have been sent back to host...
 			ret = dataflow_submit_end_step_metrics_host(&dataflow_handle, outbound_stream_id, 
 													end_step_metrics, &(step_throughput_op_buffers[t - 1]));
 			if (ret){
