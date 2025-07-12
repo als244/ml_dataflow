@@ -39,7 +39,7 @@ def plot_throughput(csv_filepath, device_name, output_dir):
     annot_kws = {"size": 14}
 
     # --- Colormap for zero values ---
-    dark_red_cmap = matplotlib.colors.ListedColormap(['#8B0000'])
+    failed_cmap = matplotlib.colors.ListedColormap(['#000000'])
 
     csv_columns = ["host_mem_gb", "dev_mem_gb", "seq_len", "model_size", "chunk_size", "total_home_acts", "num_inp_only_saved", "num_inp_attn_saved", "num_full_saved", "total_dev_acts", "num_rounds_per_step", "seqs_per_step", "recompute_pct", "attn_flop_pct", "avg_step_time", "tok_per_sec", "tflops", "mfu", "hfu"]
     df = pd.read_csv(csv_filepath, names=csv_columns)
@@ -180,7 +180,7 @@ def plot_throughput(csv_filepath, device_name, output_dir):
                     annot=False,
                     linewidths=1.0,
                     linecolor='white',
-                    cmap=dark_red_cmap,
+                    cmap=failed_cmap,
                     cbar=False,
                     ax=ax
                 )
