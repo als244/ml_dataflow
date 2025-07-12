@@ -46,7 +46,7 @@ You can demo training performance of canonical causal transformer under differen
 
 #### Installation & Usage
 
-##### System Support 
+##### System Requirements (for now)
 - OS: 
     - Linux
 - Compiler:
