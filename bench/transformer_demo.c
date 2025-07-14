@@ -2267,10 +2267,10 @@
 		// CORRECT FOR LINK CONGESTION! 
 		// potentially downgrade full saved activations to inp+attn if too much data is being transferred
 
-		int full_per_window;
-		int attn_per_window;
+		int full_per_window = full_to_assign / full_windows_saved;
+		int attn_per_window = attn_to_assign / full_windows_saved;
 
-		if (only_to_assign == 0){
+		if (only_to_assign == 0 && (DEMO_SEQ_LEN <= chunk_size)){
 			
 			// might need to downgrade full to assign based on max_bytes_per_window_saved
 
