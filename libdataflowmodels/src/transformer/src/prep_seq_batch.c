@@ -124,12 +124,6 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
     // Align offset to 256 bytes
     cur_offset = (cur_offset + 255) & ~255UL;
 
-    saved_activations_offsets -> ffn_norm_rms_vals = cur_offset;
-    cur_offset += total_tokens * sizeof(float);
-
-    // Align offset to 256 bytes
-    cur_offset = (cur_offset + 255) & ~255UL;
-
     int num_local_experts = saved_activations_offsets -> num_local_experts;
         // need to allocate space for saved activations offsets...
     int num_shared_experts = (block_config -> moe_config).num_shared_experts;
