@@ -2274,7 +2274,7 @@
 			attn_per_window = 0;
 		}
 
-		if (only_to_assign == 0 && (DEMO_SEQ_LEN <= chunk_size)){
+		if (only_to_assign == 0 && (DEMO_SEQ_LEN <= chunk_size) && full_windows_saved > 0){
 			
 			// might need to downgrade full to assign based on max_bytes_per_window_saved
 
