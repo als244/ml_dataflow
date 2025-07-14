@@ -176,7 +176,8 @@ float get_chunk_block_flops(int chunk_size, int prior_seq_len, int max_seq_len, 
 	}
 
 	if (prior_seq_len > 0){
-		chunk_block_flops += attn_flop_ratio * 2 * 2 * chunk_size_f * prior_seq_len * model_dim_f;
+		float new_seq_len_f = (float) (prior_seq_len + chunk_size);
+		chunk_block_flops += attn_flop_ratio * 2 * 2 * chunk_size_f * new_seq_len_f * model_dim_f;
 	}
 	else{
 		int seqs_per_chunk = chunk_size / max_seq_len;
