@@ -8,11 +8,11 @@
 
 	// peak flops found in:
 	// https://images.nvidia.com/aem-dam/Solutions/geforce/blackwell/nvidia-rtx-blackwell-gpu-architecture.pdf
-	#define A100_PEAK_BF16_TFLOPS 3.12e14
-	#define H100_PEAK_BF16_TFLOPS 9.89e14
-	#define RTX_3090_PEAK_BF16_TFLOPS 7.1e13
-	#define RTX_4090_PEAK_BF16_TFLOPS 1.65e14
-	#define RTX_5090_PEAK_BF16_TFLOPS 2.095e14
+	#define A100_PEAK_BF16_FLOPS 3.12e14
+	#define H100_PEAK_BF16_FLOPS 9.89e14
+	#define RTX_3090_PEAK_BF16_FLOPS 7.1e13
+	#define RTX_4090_PEAK_BF16_FLOPS 1.65e14
+	#define RTX_5090_PEAK_BF16_FLOPS 2.095e14
 	
 
 	#define NUM_TOKENS_EXAMPLE_SEQ 65536
@@ -269,7 +269,7 @@
 
 		HardwareArchType hardware_arch_type = dataflow_handle.hardware_arch_type;
 
-		float PEAK_BF16_TFLOPS;
+		float PEAK_BF16_FLOPS;
 
 		// this is just for testing,.. in 
 		// reality determined dynamically...
@@ -277,24 +277,24 @@
 
 		switch (hardware_arch_type){
 			case BACKEND_ARCH_A100:
-				PEAK_BF16_TFLOPS = A100_PEAK_BF16_TFLOPS;
+				PEAK_BF16_FLOPS = A100_PEAK_BF16_FLOPS;
 				break;
 			case BACKEND_ARCH_H100:
-				PEAK_BF16_TFLOPS = H100_PEAK_BF16_TFLOPS;
+				PEAK_BF16_FLOPS = H100_PEAK_BF16_FLOPS;
 				MIN_CHUNK_SIZE = 16384;
 				break;
 			case BACKEND_ARCH_RTX_3090:
-				PEAK_BF16_TFLOPS = RTX_3090_PEAK_BF16_TFLOPS;
+				PEAK_BF16_FLOPS = RTX_3090_PEAK_BF16_FLOPS;
 				break;
 			case BACKEND_ARCH_RTX_4090:
-				PEAK_BF16_TFLOPS = RTX_4090_PEAK_BF16_TFLOPS;
+				PEAK_BF16_FLOPS = RTX_4090_PEAK_BF16_FLOPS;
 				break;
 			case BACKEND_ARCH_RTX_5090:
-				PEAK_BF16_TFLOPS = RTX_5090_PEAK_BF16_TFLOPS;
+				PEAK_BF16_FLOPS = RTX_5090_PEAK_BF16_FLOPS;
 				break;
 			default:
 				fprintf(stderr, "Error: unknown hardware architecture, cannot set peak bf16 tflops and record MFU...\n");
-				PEAK_BF16_TFLOPS = 0;
+				PEAK_BF16_FLOPS = 0;
 				break;
 		}
 
@@ -2255,7 +2255,7 @@
 
 		
 
-		float runtime_dev_window_sec = (min_window_flops / 1e12) / (FLOP_EFFICIENCY_ESTIMATE * PEAK_BF16_TFLOPS);
+		float runtime_dev_window_sec = min_window_flops / (FLOP_EFFICIENCY_ESTIMATE * PEAK_BF16_FLOPS);
 
 		float link_speed_bytes_per_sec = 50 * 1e9;
 
@@ -2986,7 +2986,7 @@
 
 		float flop_efficiency_estimate = FLOP_EFFICIENCY_ESTIMATE;
 
-		float per_round_duration_s_est = flops_per_round / (flop_efficiency_estimate * PEAK_BF16_TFLOPS);
+		float per_round_duration_s_est = flops_per_round / (flop_efficiency_estimate * PEAK_BF16_FLOPS);
 
 		int num_rounds_per_step = MY_MAX(1, round(target_duration_per_step_s / per_round_duration_s_est));
 
@@ -3038,7 +3038,7 @@
 			step_throughput_op_buffers[t].expert_dim = expert_dim;
 			step_throughput_op_buffers[t].vocab_size = vocab_size;
 			step_throughput_op_buffers[t].num_layers = n_layers;
-			step_throughput_op_buffers[t].peak_hardware_flop_rate = PEAK_BF16_TFLOPS;
+			step_throughput_op_buffers[t].peak_hardware_flop_rate = PEAK_BF16_FLOPS;
 			step_throughput_op_buffers[t].to_print_metrics = TO_PRINT_THROUGHPUT_METRICS;
 			step_throughput_op_buffers[t].to_print_verbose = TO_PRINT_THROUGHPUT_METRICS_VERBOSE;
 
