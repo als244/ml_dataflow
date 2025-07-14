@@ -2146,7 +2146,7 @@
 		uint64_t inp_only_saved_size = get_seq_batch_saved_activations_buffer_size(seq_batches[0], SAVED_ACTIVATION_LEVEL_INP_ONLY);
 
 		// First ensure that we can fit all using inp only...
-		uint64_t all_inp_only_size = inp_only_saved_size * total_acts;
+		uint64_t all_inp_only_size = inp_only_saved_size * total_home_acts;
 		if (all_inp_only_size > remaining_host_mem){
 			fprintf(stderr, "Error: not enough host memory to fit all activations using inp only. Needed %.3f GB, remaining: %.3f GB...\n", (float) all_inp_only_size / (1024.0 * 1024.0 * 1024.0), (float) remaining_host_mem / (1024.0 * 1024.0 * 1024.0));
 			return -1;
@@ -2171,12 +2171,12 @@
         }
 
         // We can't upgrade more than the total number of activations
-        if (num_upgraded_to_attn > total_acts) {
-            num_upgraded_to_attn = total_acts;
+        if (num_upgraded_to_attn > total_home_acts) {
+            num_upgraded_to_attn = total_home_acts;
         }
 
         int num_inp_attn_saved = num_upgraded_to_attn;
-        int num_inp_only_saved = total_acts - num_inp_attn_saved;
+        int num_inp_only_saved = total_home_acts - num_inp_attn_saved;
 
         // Now, from the ones upgraded to inp_attn, see how many can be further upgraded to full_saved
         uint64_t current_mem_usage = (num_inp_attn_saved * inp_attn_saved_size) + (num_inp_only_saved * inp_only_saved_size);
@@ -2234,6 +2234,52 @@
 
 		int cur_inp_only_assigned = 0;
 
+		// minimum rnutime that total_dev_acts consectuive forward layers takes
+		float runtime_dev_window_sec = total_dev_acts * 0.0135;
+
+		float link_speed_bytes_per_sec = 50 * 1e9;
+
+		float max_bytes_per_window_saved = runtime_dev_window_sec * link_speed_bytes_per_sec;
+
+		int full_windows_saved = total_home_acts / total_dev_acts;
+		int non_window_home_acts = total_home_acts % total_dev_acts;
+
+		// CORRECT FOR LINK CONGESTION! 
+		// potentially downgrade full saved activations to inp+attn if too much data is being transferred
+
+		if (only_to_assign == 0){
+			
+			// might need to downgrade full to assign based on max_bytes_per_window_saved
+
+			uint64_t full_window_attn_inp_only_size = inp_attn_saved_size * total_dev_acts;
+			if (full_window_attn_inp_only_size > max_bytes_per_window_saved){
+				// downgrade all full windows to attn
+				attn_to_assign += full_to_assign;
+				full_to_assign = 0;
+			}
+			else{
+				uint64_t room_for_full = max_bytes_per_window_saved - full_window_attn_inp_only_size;
+				uint64_t num_space_for_full_per_window = room_for_full / full_upgrade_cost;
+				if (num_space_for_full_per_window == 0){
+					full_to_assign = MY_MIN(full_to_assign, non_window_home_acts);
+					attn_to_assign = total_home_acts - full_to_assign;
+				}
+				else{
+					
+					int target_attn_to_assign = (total_dev_acts - num_space_for_full_per_window) * full_windows_saved;
+					int target_full_to_assign = total_home_acts - target_attn_to_assign;
+					
+					// now need to downgrade in order to prevent congestion (recompute is better than idle)
+					if (target_full_to_assign < full_to_assign){
+						full_to_assign = target_full_to_assign;
+						attn_to_assign = total_home_acts - full_to_assign;
+					}
+				}
+			}
+		}
+
+		// for each of the full windows, do the same ordering
+
 		// make sure to recompute attention on the short seq portions...
 
 		if (only_to_assign > 0){
@@ -2287,11 +2333,11 @@
 
 			for (int i = 0; i < total_home_acts; i++){
 
-				if ((i % 2 == 0) && (full_to_assign > 0)){
+				if ((i % 2 == 1) && (full_to_assign > 0)){
 					saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_FULL;
 					full_to_assign--;
 				}
-				else if ((i % 2 == 1) && (attn_to_assign > 0)){
+				else if ((i % 2 == 0) && (attn_to_assign > 0)){
 					saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY;
 					attn_to_assign--;
 				}
@@ -3539,6 +3585,18 @@
 
 							if (ret){
 								fprintf(stderr, "Error: failed to submit outbound transfer for loss tracker...\n");
+								return -1;
+							}
+
+							cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, loss_stream_id);
+							if (!cur_stream_state){
+								fprintf(stderr, "Error: failed to get stream state for loss tracker...\n");
+								return -1;
+							}
+
+							ret = dataflow_handle.submit_dependency(&dataflow_handle, compute_stream_id, cur_stream_state);
+							if (ret){
+								fprintf(stderr, "Error: failed to submit dependency to for compute stream to wait on loss tracker transfers...\n");
 								return -1;
 							}
 						}
