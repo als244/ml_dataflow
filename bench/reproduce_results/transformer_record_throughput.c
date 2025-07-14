@@ -8,11 +8,11 @@
 
 	// peak flops found in:
 	// https://images.nvidia.com/aem-dam/Solutions/geforce/blackwell/nvidia-rtx-blackwell-gpu-architecture.pdf
-	#define A100_PEAK_BF16_TFLOPS 3.12e14
-	#define H100_PEAK_BF16_TFLOPS 9.89e14
-	#define RTX_3090_PEAK_BF16_TFLOPS 7.1e13
-	#define RTX_4090_PEAK_BF16_TFLOPS 1.65e14
-	#define RTX_5090_PEAK_BF16_TFLOPS 2.095e14
+	#define A100_PEAK_BF16_FLOPS 3.12e14
+	#define H100_PEAK_BF16_FLOPS 9.89e14
+	#define RTX_3090_PEAK_BF16_FLOPS 7.1e13
+	#define RTX_4090_PEAK_BF16_FLOPS 1.65e14
+	#define RTX_5090_PEAK_BF16_FLOPS 2.095e14
 	
 	// this is just for testing,.. in 
 	// reality determined dynamically...
@@ -273,29 +273,29 @@
 		
 		int MIN_CHUNK_SIZE = 8192;
 
-		float PEAK_BF16_TFLOPS;
+		float PEAK_BF16_FLOPS;
 
 		switch (hardware_arch_type){
 			case BACKEND_ARCH_A100:
-				PEAK_BF16_TFLOPS = A100_PEAK_BF16_TFLOPS;
+				PEAK_BF16_FLOPS = A100_PEAK_BF16_FLOPS;
 				break;
 			case BACKEND_ARCH_H100:
-				PEAK_BF16_TFLOPS = H100_PEAK_BF16_TFLOPS;
+				PEAK_BF16_FLOPS = H100_PEAK_BF16_FLOPS;
 				// need higher arith intensity to saturate (for 1B model at least)
 				MIN_CHUNK_SIZE = 16384;
 				break;
 			case BACKEND_ARCH_RTX_3090:
-				PEAK_BF16_TFLOPS = RTX_3090_PEAK_BF16_TFLOPS;
+				PEAK_BF16_FLOPS = RTX_3090_PEAK_BF16_FLOPS;
 				break;
 			case BACKEND_ARCH_RTX_4090:
-				PEAK_BF16_TFLOPS = RTX_4090_PEAK_BF16_TFLOPS;
+				PEAK_BF16_FLOPS = RTX_4090_PEAK_BF16_FLOPS;
 				break;
 			case BACKEND_ARCH_RTX_5090:
-				PEAK_BF16_TFLOPS = RTX_5090_PEAK_BF16_TFLOPS;
+				PEAK_BF16_FLOPS = RTX_5090_PEAK_BF16_FLOPS;
 				break;
 			default:
 				fprintf(stderr, "Error: unknown hardware architecture, cannot set peak bf16 tflops and record MFU...\n");
-				PEAK_BF16_TFLOPS = 0;
+				PEAK_BF16_FLOPS = 0;
 				break;
 		}
 
@@ -2235,6 +2235,84 @@
 
 		int cur_inp_only_assigned = 0;
 
+		float min_window_flops;
+
+		int prior_seq_len = 0;
+		int cur_seq_len = 0;
+		for (int i = 0; i < total_dev_acts; i++){
+			min_window_flops += get_chunk_block_flops(chunk_size, prior_seq_len, DEMO_SEQ_LEN, model_dim, kv_dim, is_causal, num_shared_experts, num_total_routed_experts, num_active_routed_experts, expert_dim);
+			if (chunk_size + prior_seq_len < DEMO_SEQ_LEN){
+				prior_seq_len += chunk_size;
+			}
+			else{
+				prior_seq_len = 0;
+			}
+		}
+
+		
+
+		float runtime_dev_window_sec = min_window_flops / (FLOP_EFFICIENCY_ESTIMATE * PEAK_BF16_FLOPS);
+
+		float link_speed_bytes_per_sec = 50 * 1e9;
+
+		float max_bytes_per_window_saved = runtime_dev_window_sec * link_speed_bytes_per_sec;
+
+		int full_windows_saved = total_home_acts / total_dev_acts;
+		int non_window_home_acts = total_home_acts % total_dev_acts;
+
+		// CORRECT FOR LINK CONGESTION! 
+		// potentially downgrade full saved activations to inp+attn if too much data is being transferred
+
+		int full_per_window = full_to_assign / full_windows_saved;
+		int attn_per_window = attn_to_assign / full_windows_saved;
+
+		if (only_to_assign == 0 && (DEMO_SEQ_LEN <= chunk_size)){
+			
+			// might need to downgrade full to assign based on max_bytes_per_window_saved
+
+			uint64_t full_window_attn_inp_only_size = inp_attn_saved_size * total_dev_acts;
+			if (full_window_attn_inp_only_size > max_bytes_per_window_saved){
+				// downgrade all full windows to attn
+				attn_to_assign += full_to_assign;
+				full_to_assign = 0;
+				full_per_window = 0;
+				attn_per_window = total_dev_acts;
+			}
+			else{
+				uint64_t room_for_full = max_bytes_per_window_saved - full_window_attn_inp_only_size;
+				uint64_t num_space_for_full_per_window = room_for_full / full_upgrade_cost;
+				if (num_space_for_full_per_window == 0){
+					full_to_assign = MY_MIN(full_to_assign, non_window_home_acts);
+					attn_to_assign = total_home_acts - full_to_assign;
+					full_per_window = 0;
+					attn_per_window = total_dev_acts;
+				}
+				else{
+					
+					int target_attn_to_assign = (total_dev_acts - num_space_for_full_per_window) * full_windows_saved;
+					int target_full_to_assign = total_home_acts - target_attn_to_assign;
+					
+					// now need to downgrade in order to prevent congestion (recompute is better than idle)
+					if (target_full_to_assign < full_to_assign){
+						full_to_assign = target_full_to_assign;
+						attn_to_assign = total_home_acts - full_to_assign;
+						full_per_window = num_space_for_full_per_window;
+						attn_per_window = total_dev_acts - full_per_window;
+					}
+					else{
+						full_per_window = full_to_assign / full_windows_saved;
+						attn_per_window = total_dev_acts - full_per_window;
+					}
+				}
+			}
+
+			// Reset how many of each type we are assigning...
+			num_full_saved = full_to_assign;
+			num_inp_attn_saved = attn_to_assign;
+		}
+
+		// for each of the full windows, do the same ordering
+
 		// make sure to recompute attention on the short seq portions...
 
 		if (only_to_assign > 0){
@@ -2286,25 +2364,46 @@
 		// which chunk saves/recomputes besides for load balancing I/O.. (thus can alternate).
 		else{
 
-			for (int i = 0; i < total_home_acts; i++){
+			for (int i = 0; i < full_windows_saved; i++){
 
-				if ((i % 2 == 0) && (full_to_assign > 0)){
-					saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_FULL;
-					full_to_assign--;
-				}
-				else if ((i % 2 == 1) && (attn_to_assign > 0)){
-					saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY;
-					attn_to_assign--;
-				}
-				else{
-					if (full_to_assign > 0){
-						saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_FULL;
+				int cur_window_full_to_assign = full_per_window;
+				int cur_window_attn_to_assign = attn_per_window;
+
+				for (int j = i * total_dev_acts; j < (i + 1) * total_dev_acts; j++){
+
+					if ((i % 2 == 1) && (cur_window_full_to_assign > 0)){
+						saved_activation_levels[j] = SAVED_ACTIVATION_LEVEL_FULL;
+						cur_window_full_to_assign--;
 						full_to_assign--;
 					}
-					else{
-						saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY;
+					else if ((i % 2 == 0) && (cur_window_attn_to_assign > 0)){
+						saved_activation_levels[j] = SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY;
+						cur_window_attn_to_assign--;
 						attn_to_assign--;
 					}
+					else{
+						if (cur_window_full_to_assign > 0){
+							saved_activation_levels[j] = SAVED_ACTIVATION_LEVEL_FULL;
+							cur_window_full_to_assign--;
+							full_to_assign--;
+						}
+						else{
+							saved_activation_levels[j] = SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY;
+							cur_window_attn_to_assign--;
+							attn_to_assign--;
+						}
+					}
+				}
+			}
+
+			for (int j = full_windows_saved * total_dev_acts; j < total_home_acts; j++){
+				if (full_to_assign > 0){
+					saved_activation_levels[j] = SAVED_ACTIVATION_LEVEL_FULL;
+					full_to_assign--;
+				}
+				else{
+					saved_activation_levels[j] = SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY;
+					attn_to_assign--;
 				}
 			}
 		}
@@ -2754,10 +2853,13 @@
 
 
 
+		float used_host_mem_gb = (float) used_host_mem / (1024.0 * 1024.0 * 1024.0);
+		float used_dev_mem_gb = (float) used_dev_mem / (1024.0 * 1024.0 * 1024.0);
+
 		if (TO_PRINT_SETUP_CONFIG_SUMMARY){
 			printf("Setup Complete!\n\n");
-
-			printf("\nMEMORY USAGE (GB):\n\tHost: %.3f\n\tDevice: %.3f\n\n", (float) used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) used_dev_mem / (1024.0 * 1024.0 * 1024.0));
+			
+			printf("\nMEMORY USAGE (GB):\n\tHost: %.3f\n\tDevice: %.3f\n\n", used_host_mem_gb, used_dev_mem_gb);
 		}
 
 		if ((used_host_mem > host_size_bytes) || (used_dev_mem > dev_size_bytes)) {
@@ -2882,7 +2984,7 @@
 
 		float flop_efficiency_estimate = FLOP_EFFICIENCY_ESTIMATE;
 
-		float per_round_duration_s_est = flops_per_round / (flop_efficiency_estimate * PEAK_BF16_TFLOPS);
+		float per_round_duration_s_est = flops_per_round / (flop_efficiency_estimate * PEAK_BF16_FLOPS);
 
 		int num_rounds_per_step = MY_MAX(1, round(target_duration_per_step_s / per_round_duration_s_est));
 
@@ -2937,7 +3039,7 @@
 			step_throughput_op_buffers[t].expert_dim = expert_dim;
 			step_throughput_op_buffers[t].vocab_size = vocab_size;
 			step_throughput_op_buffers[t].num_layers = n_layers;
-			step_throughput_op_buffers[t].peak_hardware_flop_rate = PEAK_BF16_TFLOPS;
+			step_throughput_op_buffers[t].peak_hardware_flop_rate = PEAK_BF16_FLOPS;
 			step_throughput_op_buffers[t].to_print_metrics = TO_PRINT_THROUGHPUT_METRICS;
 			step_throughput_op_buffers[t].to_print_verbose = TO_PRINT_THROUGHPUT_METRICS_VERBOSE;
 			
@@ -5051,7 +5153,7 @@
 			return -1;
 		}
 
-		fprintf(f, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%f,%f,%f,%f,%f\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_CONFIG_SIZE_B, (int) chunk_size, total_home_acts, num_inp_only_saved, num_inp_attn_saved, num_full_saved, total_dev_acts, num_rounds_per_step, seqs_per_step, avg_recompute_pct, avg_attn_flop_pct,avg_step_time, avg_tok_per_sec, avg_tflops, avg_mfu, avg_hfu);
+		fprintf(f, "%d,%d,%d,%d,%f,%f,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%f,%f,%f,%f,%f\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_CONFIG_SIZE_B, used_host_mem_gb, used_dev_mem_gb, (int) chunk_size, total_home_acts, num_inp_only_saved, num_inp_attn_saved, num_full_saved, total_dev_acts, num_rounds_per_step, seqs_per_step, avg_recompute_pct, avg_attn_flop_pct,avg_step_time, avg_tok_per_sec, avg_tflops, avg_mfu, avg_hfu);
 		fclose(f);
 
 		return 0;
