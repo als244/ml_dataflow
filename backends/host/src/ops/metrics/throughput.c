@@ -151,6 +151,44 @@ float get_seq_flops(int seq_len, int vocab_size, int model_dim, int kv_dim, int 
 	return total_seq_flops;
 }
 
+float get_chunk_block_flops(int chunk_size, int prior_seq_len, int max_seq_len, int model_dim, int kv_dim, int is_causal, int num_shared_experts, int num_total_routed_experts, int num_active_routed_experts, int expert_dim) {
+
+	float chunk_size_f = (float) chunk_size;
+	float model_dim_f = (float) model_dim;
+	float kv_dim_f = (float) kv_dim;
+	float expert_dim_f = (float) expert_dim;
+	float max_seq_len_f = (float) max_seq_len;
+
+
+	float chunk_block_flops = 0;
+
+	// q proj
+	chunk_block_flops += 2 * chunk_size_f * model_dim_f * model_dim_f;
+
+	// k, v proj
+	chunk_block_flops += 2 * (2 * chunk_size_f * model_dim_f * kv_dim_f);	
+
+	// attention flops
+
+	float attn_flop_ratio = 1;
+	if (is_causal){
+		attn_flop_ratio = 0.5;
+	}
+
+	if (prior_seq_len > 0){
+		chunk_block_flops += attn_flop_ratio * 2 * 2 * chunk_size_f * prior_seq_len * model_dim_f;
+	}
+	else{
+		int seqs_per_chunk = chunk_size / max_seq_len;
+		chunk_block_flops += seqs_per_chunk * attn_flop_ratio * 2 * 2 * max_seq_len_f * max_seq_len_f * model_dim_f;
+	}
+
+	// ffn
+	chunk_block_flops += (num_shared_experts + num_active_routed_experts) * 3 * (2 * chunk_size_f * model_dim_f * expert_dim_f);
+
+	return chunk_block_flops;
+}
+
 float get_recompute_flops(int num_seqs_per_round, int seq_len, int n_layers, int model_dim, int is_causal, int num_shared_experts, int num_active_routed_experts, int expert_dim,
 								int chunk_size, int num_inp_attn_saved, int num_inp_only_saved, int * inp_only_seq_lens, 
 								float * ret_recompute_attn_flops, float * ret_recompute_matmul_flops){
