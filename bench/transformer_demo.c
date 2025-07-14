@@ -2236,9 +2236,6 @@
 
 		// minimum rnutime that total_dev_acts consectuive forward layers takes
 
-		int window_total_tokens = total_dev_acts * chunk_size;
-		int window_remain_tokens = window_total_tokens;
-
 		float min_window_flops;
 
 		int prior_seq_len = 0;
@@ -2267,8 +2264,16 @@
 		// CORRECT FOR LINK CONGESTION! 
 		// potentially downgrade full saved activations to inp+attn if too much data is being transferred
 
-		int full_per_window = full_to_assign / full_windows_saved;
-		int attn_per_window = attn_to_assign / full_windows_saved;
+		int full_per_window;
+		int attn_per_window;
+		if (full_windows_saved > 0){
+			full_per_window = full_to_assign / full_windows_saved;
+			attn_per_window = attn_to_assign / full_windows_saved;
+		}
+		else{
+			full_per_window = 0;
+			attn_per_window = 0;
+		}
 
 		if (only_to_assign == 0 && (DEMO_SEQ_LEN <= chunk_size)){
 			
@@ -2857,10 +2862,13 @@
 
 
 
+		float used_host_mem_gb = (float) used_host_mem / (1024.0 * 1024.0 * 1024.0);
+		float used_dev_mem_gb = (float) used_dev_mem / (1024.0 * 1024.0 * 1024.0);
+		
 		if (TO_PRINT_SETUP_CONFIG_SUMMARY){
 			printf("Setup Complete!\n\n");
 
-			printf("\nMEMORY USAGE (GB):\n\tHost: %.3f\n\tDevice: %.3f\n\n", (float) used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) used_dev_mem / (1024.0 * 1024.0 * 1024.0));
+			printf("\nMEMORY USAGE (GB):\n\tHost: %.3f\n\tDevice: %.3f\n\n", used_host_mem_gb, used_dev_mem_gb);
 		}
 
 		if ((used_host_mem > host_size_bytes) || (used_dev_mem > dev_size_bytes)) {
