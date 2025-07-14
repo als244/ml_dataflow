@@ -2147,7 +2147,7 @@
 		uint64_t inp_only_saved_size = get_seq_batch_saved_activations_buffer_size(seq_batches[0], SAVED_ACTIVATION_LEVEL_INP_ONLY);
 
 		// First ensure that we can fit all using inp only...
-		uint64_t all_inp_only_size = inp_only_saved_size * total_acts;
+		uint64_t all_inp_only_size = inp_only_saved_size * total_home_acts;
 		if (all_inp_only_size > remaining_host_mem){
 			fprintf(stderr, "Error: not enough host memory to fit all activations using inp only. Needed %.3f GB, remaining: %.3f GB...\n", (float) all_inp_only_size / (1024.0 * 1024.0 * 1024.0), (float) remaining_host_mem / (1024.0 * 1024.0 * 1024.0));
 			return -1;
@@ -2172,12 +2172,12 @@
         }
 
         // We can't upgrade more than the total number of activations
-        if (num_upgraded_to_attn > total_acts) {
-            num_upgraded_to_attn = total_acts;
+        if (num_upgraded_to_attn > total_home_acts) {
+            num_upgraded_to_attn = total_home_acts;
         }
 
         int num_inp_attn_saved = num_upgraded_to_attn;
-        int num_inp_only_saved = total_acts - num_inp_attn_saved;
+        int num_inp_only_saved = total_home_acts - num_inp_attn_saved;
 
         // Now, from the ones upgraded to inp_attn, see how many can be further upgraded to full_saved
         uint64_t current_mem_usage = (num_inp_attn_saved * inp_attn_saved_size) + (num_inp_only_saved * inp_only_saved_size);
