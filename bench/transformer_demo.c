@@ -2235,7 +2235,27 @@
 		int cur_inp_only_assigned = 0;
 
 		// minimum rnutime that total_dev_acts consectuive forward layers takes
-		float runtime_dev_window_sec = total_dev_acts * 0.0135;
+
+		int window_total_tokens = total_dev_acts * chunk_size;
+		int window_remain_tokens = window_total_tokens;
+
+		float min_window_flops;
+
+		int prior_seq_len = 0;
+		int cur_seq_len = 0;
+		for (int i = 0; i < total_dev_acts; i++){
+			min_window_flops += get_chunk_block_flops(chunk_size, prior_seq_len, DEMO_SEQ_LEN, model_dim, kv_dim, is_causal, num_shared_experts, num_total_routed_experts, num_active_routed_experts, expert_dim);
+			if (chunk_size + prior_seq_len < DEMO_SEQ_LEN){
+				prior_seq_len += chunk_size;
+			}
+			else{
+				prior_seq_len = 0;
+			}
+		}
+
+		
+
+		float runtime_dev_window_sec = (min_window_flops / 1e12) / (FLOP_EFFICIENCY_ESTIMATE * PEAK_BF16_TFLOPS);
 
 		float link_speed_bytes_per_sec = 50 * 1e9;
 
@@ -2289,6 +2309,10 @@
 					}
 				}
 			}
+
+			// Reset how many of each type we are assigning...
+			num_full_saved = full_to_assign;
+			num_inp_attn_saved = attn_to_assign;
 		}
 
 		// for each of the full windows, do the same ordering
