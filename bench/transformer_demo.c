@@ -2247,6 +2247,9 @@
 		// CORRECT FOR LINK CONGESTION! 
 		// potentially downgrade full saved activations to inp+attn if too much data is being transferred
 
+		int full_per_window;
+		int attn_per_window;
+
 		if (only_to_assign == 0){
 			
 			// might need to downgrade full to assign based on max_bytes_per_window_saved
@@ -2256,6 +2259,8 @@
 				// downgrade all full windows to attn
 				attn_to_assign += full_to_assign;
 				full_to_assign = 0;
+				full_per_window = 0;
+				attn_per_window = total_dev_acts;
 			}
 			else{
 				uint64_t room_for_full = max_bytes_per_window_saved - full_window_attn_inp_only_size;
@@ -2263,6 +2268,8 @@
 				if (num_space_for_full_per_window == 0){
 					full_to_assign = MY_MIN(full_to_assign, non_window_home_acts);
 					attn_to_assign = total_home_acts - full_to_assign;
+					full_per_window = 0;
+					attn_per_window = total_dev_acts;
 				}
 				else{
 					
@@ -2273,6 +2280,12 @@
 					if (target_full_to_assign < full_to_assign){
 						full_to_assign = target_full_to_assign;
 						attn_to_assign = total_home_acts - full_to_assign;
+						full_per_window = num_space_for_full_per_window;
+						attn_per_window = total_dev_acts - full_per_window;
+					}
+					else{
+						full_per_window = full_to_assign / full_windows_saved;
+						attn_per_window = total_dev_acts - full_per_window;
 					}
 				}
 			}
@@ -2331,25 +2344,46 @@
 		// which chunk saves/recomputes besides for load balancing I/O.. (thus can alternate).
 		else{
 
-			for (int i = 0; i < total_home_acts; i++){
+			for (int i = 0; i < full_windows_saved; i++){
 
-				if ((i % 2 == 1) && (full_to_assign > 0)){
-					saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_FULL;
-					full_to_assign--;
-				}
-				else if ((i % 2 == 0) && (attn_to_assign > 0)){
-					saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY;
-					attn_to_assign--;
-				}
-				else{
-					if (full_to_assign > 0){
-						saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_FULL;
+				int cur_window_full_to_assign = full_per_window;
+				int cur_window_attn_to_assign = attn_per_window;
+
+				for (int j = i * total_dev_acts; j < (i + 1) * total_dev_acts; j++){
+
+					if ((i % 2 == 1) && (cur_window_full_to_assign > 0)){
+						saved_activation_levels[j] = SAVED_ACTIVATION_LEVEL_FULL;
+						cur_window_full_to_assign--;
 						full_to_assign--;
 					}
-					else{
-						saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY;
+					else if ((i % 2 == 0) && (cur_window_attn_to_assign > 0)){
+						saved_activation_levels[j] = SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY;
+						cur_window_attn_to_assign--;
 						attn_to_assign--;
 					}
+					else{
+						if (cur_window_full_to_assign > 0){
+							saved_activation_levels[j] = SAVED_ACTIVATION_LEVEL_FULL;
+							cur_window_full_to_assign--;
+							full_to_assign--;
+						}
+						else{
+							saved_activation_levels[j] = SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY;
+							cur_window_attn_to_assign--;
+							attn_to_assign--;
+						}
+					}
+				}
+			}
+
+			for (int j = full_windows_saved * total_dev_acts; j < total_home_acts; j++){
+				if (full_to_assign > 0){
+					saved_activation_levels[j] = SAVED_ACTIVATION_LEVEL_FULL;
+					full_to_assign--;
+				}
+				else{
+					saved_activation_levels[j] = SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY;
+					attn_to_assign--;
 				}
 			}
 		}
