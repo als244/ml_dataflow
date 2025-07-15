@@ -3,7 +3,7 @@ CFLAGS = -g -fPIC
 
 CUDA_INCLUDE_DIR = /usr/local/cuda/include
 CUDA_LIB_DIR = /usr/local/cuda/lib64/stubs
-CUDA_LIB_DEPENDS = -L${CUDA_LIB_DIR} -lcuda -lcublasLt
+CUDA_LIB_DEPENDS = -L${CUDA_LIB_DIR} -lcuda -lcublasLt -lnvidia-ml
 
 DATAFLOW_INCLUDE_DIR = ../../../../libdataflow/include
 DATAFLOW_LIB_DIR = ${CURDIR}/../../../../libdataflow/lib
@@ -27,6 +27,10 @@ LIB_NAME = libcuda_dataflow_handle.so
 objs/cuda_drv.o: src/cuda_drv.c
 	${CC} ${CFLAGS} ${ALL_INCLUDES} -c $< -o $@
 
+## Interface to NVML
+
+objs/cuda_nvml.o: src/cuda_nvml.c
+	${CC} ${CFLAGS} ${ALL_INCLUDES} -c $< -o $@
 
 ## Cuda Profiler
 objs/cuda_profiler.o: src/cuda_profiler.c
