@@ -41,7 +41,7 @@ def plot_throughput(csv_filepath, device_name, output_dir):
     # --- Colormap for zero values ---
     failed_cmap = matplotlib.colors.ListedColormap(['#000000'])
 
-    csv_columns = ["host_mem_gb", "dev_mem_gb", "seq_len", "model_size", "chunk_size", "total_home_acts", "num_inp_only_saved", "num_inp_attn_saved", "num_full_saved", "total_dev_acts", "num_rounds_per_step", "seqs_per_step", "recompute_pct", "attn_flop_pct", "avg_step_time", "tok_per_sec", "tflops", "mfu", "hfu"]
+    csv_columns = ["host_mem_gb", "dev_mem_gb", "seq_len", "model_size", "used_host_mem_gb", "used_dev_mem_gb", "chunk_size", "total_home_acts", "num_inp_only_saved", "num_inp_attn_saved", "num_full_saved", "total_dev_acts", "num_rounds_per_step", "seqs_per_step", "recompute_pct", "attn_flop_pct", "avg_step_time", "tok_per_sec", "tflops", "mfu", "hfu"]
     df = pd.read_csv(csv_filepath, names=csv_columns)
 
     device_name_to_util_range = {
