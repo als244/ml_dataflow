@@ -28,7 +28,7 @@ int cuda_nvml_get_pcie_info(int device_id, unsigned int * pcie_link_width, unsig
     }
 
     // Get PCIe link speed (generation)
-    result = nvmlDeviceGetCurrPcieLinkGen(device, pcie_link_gen);
+    result = nvmlDeviceGetCurrPcieLinkGeneration(device, pcie_link_gen);
     if (NVML_SUCCESS != result) {
         fprintf(stderr, "Failed to get PCIe link speed for device %d: %s\n", device_id, nvmlErrorString(result));
         return -1;
