@@ -822,6 +822,34 @@ int cuda_set_device_info(Cuda_Device_Info * device_info, CUdevice dev){
 	return 0;
 }
 
+int cuda_set_pcie_info(Dataflow_Handle * dataflow_handle){
+
+	int ret;
+
+	ret = cuda_nvml_init();
+	if (ret){
+		fprintf(stderr, "Error: failed to initialize nvml...\n");
+		return -1;
+	}
+
+	Cuda_Device_Info * device_info = (Cuda_Device_Info *) dataflow_handle -> device_info;
+
+	ret = cuda_nvml_get_pcie_info(dataflow_handle -> device_id, &(device_info -> pcie_link_width), &(device_info -> pcie_link_gen));
+	if (ret){
+		fprintf(stderr, "Error: failed to get pcie info...\n");
+		return -1;
+	}
+
+	ret = cuda_nvml_shutdown();
+	if (ret){
+		fprintf(stderr, "Error: failed to shutdown nvml...\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+
 
 int dataflow_init_handle(Dataflow_Handle * dataflow_handle, ComputeType compute_type, int device_id, 
 								int ctx_id, unsigned int ctx_flags, 
@@ -981,6 +1009,13 @@ int dataflow_init_handle(Dataflow_Handle * dataflow_handle, ComputeType compute_
 	ret = dataflow_init_table(&(dataflow_handle -> op_table), hash_func, key_size_bytes, value_size_bytes, min_table_size, max_table_size, load_factor, shrink_factor);
 	if (ret){
 		fprintf(stderr, "Error: failed to init op table...\n");
+		return -1;
+	}
+
+	// Set PCIe info...
+	ret = cuda_set_pcie_info(dataflow_handle);
+	if (ret){
+		fprintf(stderr, "Error: failed to set pcie info...\n");
 		return -1;
 	}
 

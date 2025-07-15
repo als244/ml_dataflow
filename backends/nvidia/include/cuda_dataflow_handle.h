@@ -21,6 +21,8 @@ typedef struct cuda_device_info {
 	int optin_max_smem_per_block;
 	int host_numa_id;
 	char device_name[256];
+	unsigned int pcie_link_width;
+	unsigned int pcie_link_gen;
 } Cuda_Device_Info;
 
 typedef struct cuda_function_config {
