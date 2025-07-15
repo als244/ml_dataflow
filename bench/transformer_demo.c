@@ -27,6 +27,8 @@
 	// to help determien how many rounds per step
 	#define FLOP_EFFICIENCY_ESTIMATE 0.6f
 
+	#define PCIE_LINK_EFFICIENCY 0.75f
+
 	#define NUM_STEPS 10
 
 	// num_chunks = num_chunks_per_seq * num_seq_groups_per_round
@@ -2254,7 +2256,9 @@
 
 		float runtime_dev_window_sec = min_window_flops / (FLOP_EFFICIENCY_ESTIMATE * PEAK_BF16_FLOPS);
 
-		float link_speed_bytes_per_sec = 50 * 1e9;
+		float theo_link_speed_bytes_per_sec = get_home_link_speed_bytes_per_sec(dataflow_handle.pcie_link_width, dataflow_handle.pcie_link_gen);
+
+		float link_speed_bytes_per_sec = PCIE_LINK_EFFICIENCY * theo_link_speed_bytes_per_sec;
 
 		float max_bytes_per_window_saved = runtime_dev_window_sec * link_speed_bytes_per_sec;
 
