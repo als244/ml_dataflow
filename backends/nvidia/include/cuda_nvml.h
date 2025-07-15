@@ -18,3 +18,5 @@ int cuda_nvml_init();
 int cuda_nvml_get_pcie_info(int device_id, unsigned int * pcie_link_width, unsigned int * pcie_link_gen);
 
 int cuda_nvml_shutdown();
+
+#endif
