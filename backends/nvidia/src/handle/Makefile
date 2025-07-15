@@ -12,7 +12,7 @@ SELF_INCLUDE_DIR = ../../include
 
 ALL_INCLUDES = -I${SELF_INCLUDE_DIR} -I${DATAFLOW_INCLUDE_DIR} -I${CUDA_INCLUDE_DIR}
 
-ALL_OBJS = objs/cuda_drv.o objs/cuda_profiler.o objs/cuda_dataflow_handle.o
+ALL_OBJS = objs/cuda_drv.o objs/cuda_nvml.o objs/cuda_profiler.o objs/cuda_dataflow_handle.o
 
 OTHER_LIB_DEPENDS = -pthread -ldl ${CUDA_LIB_DEPENDS} -L${DATAFLOW_LIB_DIR} -ldataflow -Wl,-rpath,${DATAFLOW_LIB_DIR} -Wl,-rpath,${CUDA_LIB_DIR} -Wl,--enable-new-dtags
 
