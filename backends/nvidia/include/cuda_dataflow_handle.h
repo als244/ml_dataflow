@@ -2,6 +2,7 @@
 #define CUDA_DATAFLOW_HANDLE_H
 
 #include "cuda_drv.h"
+#include "cuda_nvml.h"
 #include "dataflow.h"
 #include "cuda_profiler.h"
 
