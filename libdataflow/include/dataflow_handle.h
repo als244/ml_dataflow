@@ -61,7 +61,8 @@ struct dataflow_handle {
 
 	// gets populated by backend specific code
 	HardwareArchType hardware_arch_type;
-	float home_link_speed_bytes_per_sec;
+	unsigned int pcie_link_width;
+	unsigned int pcie_link_gen;
 
 	// user defined id in case multiple handles are created on same device
 	int ctx_id;

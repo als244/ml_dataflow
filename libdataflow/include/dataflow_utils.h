@@ -12,5 +12,7 @@ void * load_host_matrix_from_file(char * filepath, uint64_t M, uint64_t N, Dataf
 
 int save_host_matrix(char * filename, void * mat, uint64_t M, uint64_t N, DataflowDatatype dt);
 
+float get_home_link_speed_bytes_per_sec(unsigned int pcie_link_width, unsigned int pcie_link_gen);
+
 
 #endif

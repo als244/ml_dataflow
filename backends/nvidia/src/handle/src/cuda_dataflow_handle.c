@@ -1018,6 +1018,8 @@ int dataflow_init_handle(Dataflow_Handle * dataflow_handle, ComputeType compute_
 		fprintf(stderr, "Error: failed to set pcie info...\n");
 		return -1;
 	}
+	dataflow_handle -> pcie_link_width = device_info -> pcie_link_width;
+	dataflow_handle -> pcie_link_gen = device_info -> pcie_link_gen;
 
 	// SET FUNCTION POINTERS SO COMPUTE HANDLE CAN BE USEFUL...!
 

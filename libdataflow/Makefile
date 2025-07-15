@@ -17,7 +17,7 @@ AVX512_INTRIN_FLAGS = -mavx512f -mavx512fp16 -mavx512bf16
 TABLE_OBJS = objs/dataflow_table.o
 FINGERPRINT_OBJS = objs/dataflow_fingerprint.o
 DATATYPE_OBJS = objs/dataflow_datatype.o objs/solo_conversion.o objs/convert_datatype.o objs/convert_datatype_avx512.o
-MISC_OBJS = objs/create_host_matrix.o
+MISC_OBJS = objs/create_host_matrix.o objs/pcie_link_speed.o
 
 ALL_OBJS = ${TABLE_OBJS} ${FINGERPRINT_OBJS} ${DATATYPE_OBJS} ${MISC_OBJS}
 
@@ -65,6 +65,9 @@ objs/convert_datatype_avx512.o: src/dataflow_datatype/convert_datatype_avx512.c
 ## Misc Objects
 
 objs/create_host_matrix.o: src/misc/create_host_matrix.c
+	${CC} ${CFLAGS} ${ALL_INCLUDES} -c $< -o $@
+
+objs/pcie_link_speed.o: src/misc/pcie_link_speed.c
 	${CC} ${CFLAGS} ${ALL_INCLUDES} -c $< -o $@
 
 
