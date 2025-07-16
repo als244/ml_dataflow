@@ -27,6 +27,7 @@ deepspeed_config:
 
   bf16:
     enabled: true
+    optimizer_dtype: bf16
 
   activation_checkpointing:
     partition_activations: true
