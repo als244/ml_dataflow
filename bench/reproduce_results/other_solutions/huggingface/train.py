@@ -44,6 +44,8 @@ dataset = Dataset.from_dict(data_dict)
 training_args = TrainingArguments(
     output_dir="./results",
 
+    gradient_checkpointing=True,
+
     # Use max_steps to run for exactly 10 steps
     max_steps=10,
     
