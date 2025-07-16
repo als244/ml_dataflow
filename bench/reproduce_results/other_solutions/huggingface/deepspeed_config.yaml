@@ -27,3 +27,9 @@ deepspeed_config:
 
   bf16:
     enabled: true
+
+  activation_checkpointing:
+    partition_activations: true
+    cpu_checkpointing: true
+    contiguous_memory_optimization: false
+    synchronize_checkpoint_boundary: false
