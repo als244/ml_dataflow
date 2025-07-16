@@ -4,11 +4,10 @@ from transformers import AutoTokenizer, Trainer, TrainingArguments, AutoModelFor
 import numpy as np
 import sys
 
-# 1. Load the tokenizer and model
-model_name = "meta-llama/Llama-3-8B"
-
 seq_len = int(sys.argv[1])
 num_seqs = int(sys.argv[2])
+
+## Load dataset
 
 input_ids_np = np.fromfile("../../../../data/65536_token_ids_uint32.dat", dtype=np.uint32)
 labels_np = np.fromfile("../../../../data/65536_labels_uint32.dat", dtype=np.uint32)
@@ -72,6 +71,8 @@ training_args = TrainingArguments(
 
 
 # --- At this point, your dataset has 'input_ids', 'attention_mask', and 'labels' ---
+
+model_name = "./models/llama3_8B"
 
 # You would now load your model
 model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16)
