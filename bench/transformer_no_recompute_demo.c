@@ -2754,6 +2754,8 @@
 
 		int seqs_per_step = seqs_per_round * num_rounds_per_step;
 
+		float theo_link_speed_bytes_per_sec = get_home_link_speed_bytes_per_sec(dataflow_handle.pcie_link_width, dataflow_handle.pcie_link_gen);
+
 		if (TO_PRINT_SETUP_CONFIG_SUMMARY){
 			printf("SETUP CONFIG OVERVIEW:\n");
 			printf("\tKernel Workspace Bytes: %lu\n", kernelWorkspaceBytes);
