@@ -287,8 +287,8 @@ extern "C" __global__ void default_softmax_bf16_bf16_kernel(int n_rows, int n_co
 
 	int warp_id = thread_id / 32;
 	int lane_id = thread_id % 32;
-	int num_warps = blockDim.x / 32;
 
+	unsigned warp_mask = 0xFFFFFFFFU;
 	
 
 	if (warp_id == 0){
@@ -307,6 +307,8 @@ extern "C" __global__ void default_softmax_bf16_bf16_kernel(int n_rows, int n_co
     for (int i = thread_id; i < n_cols; i += blockDim.x){
         new_max = __hmax(new_max, row_start[i]);
     }
+
+	__syncwarp();
 
     // get warp max
 
@@ -347,6 +349,8 @@ extern "C" __global__ void default_softmax_bf16_bf16_kernel(int n_rows, int n_co
     for (int i = thread_id; i < n_cols; i += blockDim.x){
         new_sum += expf(__bfloat162float(row_start[i] - overall_max));
     }
+
+	__syncwarp();
 
     // get warp sum
 
