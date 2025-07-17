@@ -22,6 +22,8 @@ You can learn more about the project's background/details [here](docs/background
 
 ### Example results of training 8B model with long sequence lengths on just a single-device
 
+###### [Metric Definitions](#throughput-metrics)
+
 #### H100, 256k
 
 <img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-8B-262144-report.png" alt="Sample Heatmaps, H100, LLama3-8B, Seqlen 256k">
@@ -64,7 +66,7 @@ git clone git@github.com:als244/ml_dataflow.git
 make -j <NUM_PROCS>
 ```
 
-The project is built from ~10k lines of C, a few logically unique GPU kernels similar to [liger kernel](https://github.com/linkedin/Liger-Kernel), and wrappers over [Flash Attention](https://github.com/Dao-AILab/flash-attention) and vendor BLAS libraries (performance critical computation kernels). The only depedencies are the backend userspace driver & backend BLAS lib. For Nvidia backend it assumes that libs and headers are in standard location `/usr/local/cuda`. 
+The project is built from ~10k lines of C, a few logically unique GPU kernels (similar to [QuACK](https://github.com/Dao-AILab/quack) / [liger kernel](https://github.com/linkedin/Liger-Kernel)), and wrappers over [Flash Attention](https://github.com/Dao-AILab/flash-attention) and vendor BLAS libraries (performance critical computation kernels). The only depedencies are the backend userspace driver & backend BLAS lib. For Nvidia backend it assumes that libs and headers are in standard location `/usr/local/cuda`. 
 
 ###### Note that building the flash2 and flash3 wrapper libraries may take some time (a few hours)...using more processors will help. 
 
