@@ -246,7 +246,7 @@ extern "C" __global__ void default_softmax_fp16_fp16_kernel(int n_rows, int n_co
  * @param X      Pointer to the input matrix in global memory (bfloat16).
  * @param out    Pointer to the output matrix in global memory (bfloat16).
  */
- extern "C" __global__ void default_softmax_bf16_bf16_kernel(int n_rows, int n_cols, __nv_bfloat16 * X, __nv_bfloat16 * out) {
+ extern "C" __global__ void opt_default_softmax_bf16_bf16_kernel(int n_rows, int n_cols, __nv_bfloat16 * X, __nv_bfloat16 * out) {
     // Each block processes one row of the input matrix.
     uint64_t row_ind = blockIdx.x;
     if (row_ind >= n_rows) {
@@ -392,7 +392,7 @@ extern "C" __global__ void default_softmax_fp16_fp16_kernel(int n_rows, int n_co
     }
 }
 
-extern "C" __global__ void naive_default_softmax_bf16_bf16_kernel(int n_rows, int n_cols, __nv_bfloat16 * X, __nv_bfloat16 * out) {
+extern "C" __global__ void default_softmax_bf16_bf16_kernel(int n_rows, int n_cols, __nv_bfloat16 * X, __nv_bfloat16 * out) {
     // Each block processes one row
     uint64_t row_ind = blockIdx.x;
     if (row_ind >= n_rows) {
