@@ -22,11 +22,11 @@ You can learn more about the project's background/details [here](docs/background
 
 ### Example results of training 8B model with long sequence lengths on just a single-device
 
-##### H100, 256k
+#### H100, 256k
 
 <img src="bench/reproduce_results/figures/memory_throughput_heatmaps/h100/H100-8B-262144-report.png" alt="Sample Heatmaps, H100, LLama3-8B, Seqlen 256k">
 
-##### RTX 5090, 128k
+#### RTX 5090, 128k
 
 <img src="bench/reproduce_results/figures/memory_throughput_heatmaps/rtx5090/RTX5090-8B-131072-report.png" alt="Sample Heatmaps, RTX 5090, LLama3-8B, Seqlen 128k">
 
