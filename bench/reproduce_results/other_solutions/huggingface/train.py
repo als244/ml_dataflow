@@ -25,17 +25,19 @@ long_labels_seq = labels_np[indices]
 # --- Make `num_seqs` copies of this sequence ---
 # We use np.tile to repeat the single long sequence `num_seqs` times,
 # creating a 2D array of shape (num_seqs, seq_len).
-final_input_ids = np.tile(long_input_ids_seq, (num_seqs, 1))
-final_labels = np.tile(long_labels_seq, (num_seqs, 1))
+final_input_ids = np.tile(long_input_ids_seq, (num_seqs, 1)).tolist()
+final_labels = np.tile(long_labels_seq, (num_seqs, 1)).tolist()
 
 # Create an attention mask of all 1s with the same shape, as there is no padding.
 final_attention_mask = np.ones_like(final_input_ids)
 
+
+
 # Populate the dictionary, converting the NumPy arrays to Python lists
 data_dict = {
-    "input_ids": final_input_ids.tolist(),
-    "labels": final_labels.tolist(),
-    "attention_mask": final_attention_mask.tolist(),
+    "input_ids": final_input_ids,
+    "labels": final_labels,
+    "attention_mask": final_attention_mask,
 }
 
 dataset = Dataset.from_dict(data_dict)
@@ -61,13 +63,14 @@ training_args = TrainingArguments(
     adam_epsilon=1e-8,
     
     # --- Learning Rate Scheduler (Correct) ---
-    lr_scheduler_type="constant",
+    #lr_scheduler_type="constant",
     warmup_ratio=0,
     
     # Set logging_steps to 1 to see loss at each step
     logging_steps=1,
     save_steps=10,
     bf16=True,
+    deepspeed="./deepspeed_config.json"
 )
 
 
