@@ -4,6 +4,15 @@
 #define ROPE_VEC_SIZE 8
 #define ROPE_PAIRS (ROPE_VEC_SIZE / 2)
 
+/* * A union to convert between a float4 vector and an array of four 
+ * __nv_bfloat162 ROPE_BWD_PAIRS. This facilitates efficient 16-byte memory 
+ * operations while allowing easy access to individual data ROPE_BWD_PAIRS.
+ */
+ typedef union {
+    float4 f4;
+    __nv_bfloat162 bf162[ROPE_PAIRS];
+} rope_f4_bf162_converter;
+
 extern "C" __global__ void default_rope_fp32_kernel(int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta, int * seq_positions, float * X_q, float * X_k){
     
     int row_ind = blockIdx.x;
@@ -177,7 +186,7 @@ extern "C" __global__ void default_rope_bf16_kernel(
 
     // Iterate through the heads in the row
     for (int vec_start_dim = base_dim_in_head; vec_start_dim < model_dim; vec_start_dim += head_dim) {
-        f4_bf162_converter data;
+        rope_f4_bf162_converter data;
 
         // Vectorized load of 8 bfloat16 values (16 bytes)
         data.f4 = *( (float4*)(&X_q_row[vec_start_dim]) );
@@ -207,7 +216,7 @@ extern "C" __global__ void default_rope_bf16_kernel(
     __nv_bfloat16* X_k_row = X_k + (uint64_t)row_ind * kv_dim;
 
     for (int vec_start_dim = base_dim_in_head; vec_start_dim < kv_dim; vec_start_dim += head_dim) {
-        f4_bf162_converter data;
+        rope_f4_bf162_converter data;
 
         data.f4 = *( (float4*)(&X_k_row[vec_start_dim]) );
 
