@@ -2,6 +2,12 @@
 
 #define RMS_NORM_BWD_W_VEC_SIZE 4
 
+// A union for C-style type-punning to reinterpret float bits as __nv_bfloat162
+union F32_BF162_Caster {
+    float f;
+    __nv_bfloat162 b;
+};
+
 extern "C" __global__ void default_rms_norm_bwd_w_fp32_fp32_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, float * X_inp, float * upstream_dX, float * dW_workspace, int * ret_num_blocks_launched){
 	
 	if (blockIdx.x == 0 && threadIdx.x == 0){
