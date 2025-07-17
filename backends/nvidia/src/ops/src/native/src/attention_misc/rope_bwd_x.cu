@@ -152,6 +152,10 @@ extern "C" __global__ void default_rope_bwd_x_bf16_kernel(
     __nv_bfloat16* __restrict__ dX_q,
     __nv_bfloat16* __restrict__ dX_k) {
 
+    // Shared memory for caching sin/cos values.
+    __shared__ float smem_cos[MAX_HEAD_DIM_ROPE / 2];
+    __shared__ float smem_sin[MAX_HEAD_DIM_ROPE / 2];
+
     // One block per token (row)
     const int row_ind = blockIdx.x;
     if (row_ind >= num_tokens) {
@@ -159,45 +163,47 @@ extern "C" __global__ void default_rope_bwd_x_bf16_kernel(
     }
 
     const int seq_pos = seq_positions[row_ind];
+    const int num_pairs = head_dim / 2;
 
-    // The starting dimension within a head for this thread's vector.
-    // Note: Launch with blockDim.x = head_dim / ROPE_BWD_VEC_SIZE.
-    const int base_dim_in_head = ROPE_BWD_VEC_SIZE * threadIdx.x;
-
-    // Pre-calculate the cosine and sine values for the 4 ROPE_BWD_PAIRS.
-    float cos_vals[ROPE_BWD_PAIRS];
-    float sin_vals[ROPE_BWD_PAIRS];
-
-    for (int i = 0; i < ROPE_BWD_PAIRS; ++i) {
-        const int dim_offset = 2 * i;
-        const float current_dim = (float)(base_dim_in_head + dim_offset);
-        const float inv_freq = __powf((float)theta, -current_dim / (float)head_dim);
-        __sincosf((float)seq_pos * inv_freq, &sin_vals[i], &cos_vals[i]);
+    // --- Phase 1: Pre-compute sin/cos values into shared memory ---
+    // This section is identical to the optimized forward pass.
+    for (int i = threadIdx.x; i < num_pairs; i += blockDim.x) {
+        const float current_dim = (float)(2 * i);
+        const float inv_freq = powf(theta, -current_dim / (float)head_dim);
+        sincosf((float)seq_pos * inv_freq, &smem_sin[i], &smem_cos[i]);
     }
+    __syncthreads(); // Ensure all threads have finished writing to smem.
+
+    // --- Phase 2: Apply inverse RoPE using a grid-stride loop ---
 
     // --- Process Query Gradients (dX_q) ---
+    const int num_q_vectors = model_dim / ROPE_VEC_SIZE;
     __nv_bfloat16* dX_q_row = dX_q + (uint64_t)row_ind * model_dim;
 
-    for (int vec_start_dim = base_dim_in_head; vec_start_dim < model_dim; vec_start_dim += head_dim) {
-        rope_bwd_f4_bf162_converter data;
+    for (int vec_idx = threadIdx.x; vec_idx < num_q_vectors; vec_idx += blockDim.x) {
+        const int vec_start_dim = vec_idx * ROPE_VEC_SIZE;
+        const int base_dim_in_head = vec_start_dim % head_dim;
 
-        // Vectorized load
+        rope_bwd_f4_bf162_converter data;
         data.f4 = *( (float4*)(&dX_q_row[vec_start_dim]) );
 
         #pragma unroll
-        for (int i = 0; i < ROPE_BWD_PAIRS; ++i) {
+        for (int i = 0; i < ROPE_PAIRS; ++i) {
+            const int pair_idx = (base_dim_in_head / 2) + i;
+
             const float2 input_grads = __bfloat1622float2(data.bf162[i]);
             const float dx_even = input_grads.x;
             const float dx_odd = input_grads.y;
 
-            // Backward pass transformation (inverse rotation)
-            const float drope_even = cos_vals[i] * dx_even + sin_vals[i] * dx_odd;
-            const float drope_odd  = cos_vals[i] * dx_odd - sin_vals[i] * dx_even;
+            const float cos_val = smem_cos[pair_idx];
+            const float sin_val = smem_sin[pair_idx];
+
+            // Apply the backward transformation (inverse rotation)
+            const float drope_even = cos_val * dx_even + sin_val * dx_odd;
+            const float drope_odd  = cos_val * dx_odd  - sin_val * dx_even;
 
             data.bf162[i] = __floats2bfloat162_rn(drope_even, drope_odd);
         }
-
-        // Vectorized store
         *( (float4*)(&dX_q_row[vec_start_dim]) ) = data.f4;
     }
 
@@ -205,31 +211,39 @@ extern "C" __global__ void default_rope_bwd_x_bf16_kernel(
     if (!dX_k) {
         return;
     }
-    
+
+    __syncthreads(); // Sync to ensure all Q-gradient writes are complete.
+
     const int kv_dim = num_kv_heads * head_dim;
+    const int num_k_vectors = kv_dim / ROPE_VEC_SIZE;
     __nv_bfloat16* dX_k_row = dX_k + (uint64_t)row_ind * kv_dim;
 
-    for (int vec_start_dim = base_dim_in_head; vec_start_dim < kv_dim; vec_start_dim += head_dim) {
-        rope_bwd_f4_bf162_converter data;
+    for (int vec_idx = threadIdx.x; vec_idx < num_k_vectors; vec_idx += blockDim.x) {
+        const int vec_start_dim = vec_idx * ROPE_VEC_SIZE;
+        const int base_dim_in_head = vec_start_dim % head_dim;
 
+        rope_bwd_f4_bf162_converter data;
         data.f4 = *( (float4*)(&dX_k_row[vec_start_dim]) );
 
         #pragma unroll
-        for (int i = 0; i < ROPE_BWD_PAIRS; ++i) {
+        for (int i = 0; i < ROPE_PAIRS; ++i) {
+            const int pair_idx = (base_dim_in_head / 2) + i;
+
             const float2 input_grads = __bfloat1622float2(data.bf162[i]);
             const float dx_even = input_grads.x;
             const float dx_odd = input_grads.y;
+            
+            const float cos_val = smem_cos[pair_idx];
+            const float sin_val = smem_sin[pair_idx];
 
-            // Backward pass transformation
-            const float drope_even = cos_vals[i] * dx_even + sin_vals[i] * dx_odd;
-            const float drope_odd  = cos_vals[i] * dx_odd - sin_vals[i] * dx_even;
+            // Apply the backward transformation (inverse rotation)
+            const float drope_even = cos_val * dx_even + sin_val * dx_odd;
+            const float drope_odd  = cos_val * dx_odd  - sin_val * dx_even;
             
             data.bf162[i] = __floats2bfloat162_rn(drope_even, drope_odd);
         }
-        
         *( (float4*)(&dX_k_row[vec_start_dim]) ) = data.f4;
     }
-    
 }
 
 extern "C" __global__ void naive_default_rope_bwd_x_bf16_kernel(int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta, int * seq_positions, __nv_bfloat16 * dX_q, __nv_bfloat16 * dX_k){

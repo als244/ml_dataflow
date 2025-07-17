@@ -21,7 +21,7 @@ int default_rope_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Data
 	cuda_launch_config -> gridDimX = num_tokens;
 
 	//cuda_launch_config -> blockDimX = head_dim / 2;
-	cuda_launch_config -> blockDimX = head_dim / 8;
+	cuda_launch_config -> blockDimX = 128;
 
 	if (cuda_launch_config -> blockDimX > max_threads_per_block) {
 		fprintf(stderr, "Error: rope will fail to launch with head_dim = %d, kernel needs %d threads per block, but only %d are available\n", head_dim, cuda_launch_config -> blockDimX, max_threads_per_block);
@@ -55,7 +55,7 @@ int default_rope_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_launch_config
 	cuda_launch_config -> gridDimX = num_tokens;
 
 	//cuda_launch_config -> blockDimX = head_dim / 2;
-	cuda_launch_config -> blockDimX = head_dim / 8;
+	cuda_launch_config -> blockDimX = 128;
 
 	if (cuda_launch_config -> blockDimX > max_threads_per_block) {
 		fprintf(stderr, "Error: rope will fail to launch with head_dim = %d, kernel needs %d threads per block, but only %d are available\n", head_dim, cuda_launch_config -> blockDimX, max_threads_per_block);

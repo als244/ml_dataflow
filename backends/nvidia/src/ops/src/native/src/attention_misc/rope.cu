@@ -3,6 +3,7 @@
 // Define constants for vectorization dimensions
 #define ROPE_VEC_SIZE 8
 #define ROPE_PAIRS (ROPE_VEC_SIZE / 2)
+#define ROPE_MAX_HEAD_DIM 256
 
 /* * A union to convert between a float4 vector and an array of four 
  * __nv_bfloat162 ROPE_BWD_PAIRS. This facilitates efficient 16-byte memory 
@@ -158,6 +159,10 @@ extern "C" __global__ void default_rope_bf16_kernel(
     __nv_bfloat16* __restrict__ X_q,
     __nv_bfloat16* __restrict__ X_k) {
     
+    // Shared memory for caching sin/cos values.
+    __shared__ float smem_cos[ROPE_MAX_HEAD_DIM / 2];
+    __shared__ float smem_sin[ROPE_MAX_HEAD_DIM / 2];
+
     // One block per token (row)
     const int row_ind = blockIdx.x;
     if (row_ind >= num_tokens) {
@@ -165,45 +170,46 @@ extern "C" __global__ void default_rope_bf16_kernel(
     }
 
     const int seq_pos = seq_positions[row_ind];
+    const int num_pairs = head_dim / 2;
 
-    // The starting dimension within a head for this thread's vector.
-    // Note: Launch with blockDim.x = head_dim / ROPE_VEC_SIZE.
-    const int base_dim_in_head = ROPE_VEC_SIZE * threadIdx.x;
-
-    // Pre-calculate the cosine and sine values for the 4 ROPE_PAIRS.
-    float cos_vals[ROPE_PAIRS];
-    float sin_vals[ROPE_PAIRS];
-
-    for (int i = 0; i < ROPE_PAIRS; ++i) {
-        const int dim_offset = 2 * i;
-        const float current_dim = (float)(base_dim_in_head + dim_offset);
-        const float inv_freq = __powf((float)theta, -current_dim / (float)head_dim);
-        __sincosf((float)seq_pos * inv_freq, &sin_vals[i], &cos_vals[i]);
+    // --- Phase 1: Pre-compute sin/cos values into shared memory ---
+    // Parallelize the calculation over the threads in the block.
+    for (int i = threadIdx.x; i < num_pairs; i += blockDim.x) {
+        const float current_dim = (float)(2 * i);
+        const float inv_freq = powf(theta, -current_dim / (float)head_dim);
+        sincosf((float)seq_pos * inv_freq, &smem_sin[i], &smem_cos[i]);
     }
+    __syncthreads(); // Ensure all threads have finished writing to smem.
 
+    // --- Phase 2: Apply RoPE using a grid-stride loop ---
+    
     // --- Process Queries (X_q) ---
+    const int num_q_vectors = model_dim / ROPE_VEC_SIZE;
     __nv_bfloat16* X_q_row = X_q + (uint64_t)row_ind * model_dim;
 
-    // Iterate through the heads in the row
-    for (int vec_start_dim = base_dim_in_head; vec_start_dim < model_dim; vec_start_dim += head_dim) {
-        rope_f4_bf162_converter data;
+    for (int vec_idx = threadIdx.x; vec_idx < num_q_vectors; vec_idx += blockDim.x) {
+        const int vec_start_dim = vec_idx * ROPE_VEC_SIZE;
+        const int base_dim_in_head = vec_start_dim % head_dim;
 
-        // Vectorized load of 8 bfloat16 values (16 bytes)
+        rope_f4_bf162_converter data;
         data.f4 = *( (float4*)(&X_q_row[vec_start_dim]) );
 
         #pragma unroll
         for (int i = 0; i < ROPE_PAIRS; ++i) {
+            const int pair_idx = (base_dim_in_head / 2) + i;
+
             const float2 vals_fp32 = __bfloat1622float2(data.bf162[i]);
             const float x_even = vals_fp32.x;
             const float x_odd = vals_fp32.y;
 
-            const float rope_even = cos_vals[i] * x_even - sin_vals[i] * x_odd;
-            const float rope_odd = cos_vals[i] * x_odd + sin_vals[i] * x_even;
+            const float cos_val = smem_cos[pair_idx];
+            const float sin_val = smem_sin[pair_idx];
+
+            const float rope_even = cos_val * x_even - sin_val * x_odd;
+            const float rope_odd = cos_val * x_odd + sin_val * x_even;
 
             data.bf162[i] = __floats2bfloat162_rn(rope_even, rope_odd);
         }
-
-        // Vectorized store of 8 bfloat16 values
         *( (float4*)(&X_q_row[vec_start_dim]) ) = data.f4;
     }
 
@@ -212,26 +218,37 @@ extern "C" __global__ void default_rope_bf16_kernel(
         return;
     }
 
+    // It's possible some threads are still working on queries.
+    // Sync to ensure all Q writes are globally visible before K processing.
+    __syncthreads();
+
     const int kv_dim = num_kv_heads * head_dim;
+    const int num_k_vectors = kv_dim / ROPE_VEC_SIZE;
     __nv_bfloat16* X_k_row = X_k + (uint64_t)row_ind * kv_dim;
 
-    for (int vec_start_dim = base_dim_in_head; vec_start_dim < kv_dim; vec_start_dim += head_dim) {
-        rope_f4_bf162_converter data;
+    for (int vec_idx = threadIdx.x; vec_idx < num_k_vectors; vec_idx += blockDim.x) {
+        const int vec_start_dim = vec_idx * ROPE_VEC_SIZE;
+        const int base_dim_in_head = vec_start_dim % head_dim;
 
+        rope_f4_bf162_converter data;
         data.f4 = *( (float4*)(&X_k_row[vec_start_dim]) );
 
         #pragma unroll
         for (int i = 0; i < ROPE_PAIRS; ++i) {
+            const int pair_idx = (base_dim_in_head / 2) + i;
+
             const float2 vals_fp32 = __bfloat1622float2(data.bf162[i]);
             const float x_even = vals_fp32.x;
             const float x_odd = vals_fp32.y;
+            
+            const float cos_val = smem_cos[pair_idx];
+            const float sin_val = smem_sin[pair_idx];
 
-            const float rope_even = cos_vals[i] * x_even - sin_vals[i] * x_odd;
-            const float rope_odd = cos_vals[i] * x_odd + sin_vals[i] * x_even;
+            const float rope_even = cos_val * x_even - sin_val * x_odd;
+            const float rope_odd = cos_val * x_odd + sin_val * x_even;
 
             data.bf162[i] = __floats2bfloat162_rn(rope_even, rope_odd);
         }
-        
         *( (float4*)(&X_k_row[vec_start_dim]) ) = data.f4;
     }
 }
