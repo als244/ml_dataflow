@@ -12,8 +12,8 @@ You can learn more about the project's background/details [here](docs/background
 #### 3% Higher Training Throughput vs. [Nvidia Baseline](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/dgxc-benchmarking/resources/nemo-llama31-dgxc-benchmarking-g)
 - Trains Llama3 8B (BF16) with 8k sequence length at [~10,950](./bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-8B-8192-report.png) vs ~10,650 Tok/s per H100
     - Requires only 1 H100 to achieve such performance.
-- Training 8B with 64k seqlen achieves 183% higher throughput compared to a prior [Mosaic ML benchmark](https://github.com/mosaicml/llm-foundry/blob/main/scripts/train/benchmarking/README.md) training a smaller 7B MPT model across 8 H100's (5540 Tok/sec vs. 1956 Tok/sec per GPU)
-- Training 8B with 512k seqlen on single H100 with 256GB of host memory achieves 88% higher throughput vs. [Snowflake benchmark](https://www.arxiv.org/pdf/2506.13996) ([950 Tok/sec](bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-8B-524288-report.png) vs. 506 Tok/sec per GPU)
+<!-- - Training 8B with 64k seqlen achieves 183% higher throughput compared to a prior [Mosaic ML benchmark](https://github.com/mosaicml/llm-foundry/blob/main/scripts/train/benchmarking/README.md) training a smaller 7B MPT model across 8 H100's (5540 Tok/sec vs. 1956 Tok/sec per GPU)
+- Training 8B with 512k seqlen on single H100 with 256GB of host memory achieves 88% higher throughput vs. [Snowflake benchmark](https://www.arxiv.org/pdf/2506.13996) ([950 Tok/sec](bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-8B-524288-report.png) vs. 506 Tok/sec per GPU) -->
 
 #### Train long-sequences or large-models on single device or at home
 - Automatically offloads/prefetches (parameters, activations, gradients, & optimizer state) and configures recomputation based on specified memory capacities, seqlen, and model size. Asynchrous dataflow is abundant, but the math remains the same.
@@ -183,7 +183,9 @@ python bench/reproduce_results/plot_throughput.py <csv filepath to plot> <device
 | **1048576**        |   | [1B](./bench/reproduce_results/figures/memory_throughput_heatmaps/A100/A100-1B-1048576-report.png)| [8B](./bench/reproduce_results/figures/memory_throughput_heatmaps/A100/A100-8B-1048576-report.png)|
 
 </details>
+
 ---
+
 <details>
 <summary><strong>NVIDIA RTX 5090</strong></summary>
 
@@ -204,7 +206,9 @@ python bench/reproduce_results/plot_throughput.py <csv filepath to plot> <device
 | **1048576**        |   | [1B](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-1B-1048576-report.png)| [8B](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-8B-1048576-report.png)|
 
 </details>
+
 ---
+
 <details>
 <summary><strong>NVIDIA RTX 3090</strong></summary>
 
