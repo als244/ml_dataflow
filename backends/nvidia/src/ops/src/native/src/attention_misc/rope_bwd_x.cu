@@ -1,5 +1,17 @@
 #include "nvidia_ops.h"
 
+// Define constants for vectorization dimensions
+#define VEC_SIZE 8
+#define PAIRS (VEC_SIZE / 2)
+
+/* * A union to convert between a float4 vector and an array of four 
+ * __nv_bfloat162 pairs. This facilitates efficient 16-byte memory 
+ * operations while allowing easy access to individual data pairs.
+ */
+typedef union {
+    float4 f4;
+    __nv_bfloat162 bf162[PAIRS];
+} f4_bf162_converter;
 
 extern "C" __global__ void default_rope_bwd_x_fp32_kernel(int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta, int * seq_positions, float * dX_q, float * dX_k){
     
@@ -130,7 +142,97 @@ extern "C" __global__ void default_rope_bwd_x_fp16_kernel(int num_tokens, int mo
     }
 }
 
-extern "C" __global__ void default_rope_bwd_x_bf16_kernel(int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta, int * seq_positions, __nv_bfloat16 * dX_q, __nv_bfloat16 * dX_k){
+extern "C" __global__ void default_rope_bwd_x_bf16_kernel(
+    int num_tokens,
+    int model_dim,
+    int head_dim,
+    int num_kv_heads,
+    int theta,
+    int* __restrict__ seq_positions,
+    __nv_bfloat16* __restrict__ dX_q,
+    __nv_bfloat16* __restrict__ dX_k) {
+
+    // One block per token (row)
+    const int row_ind = blockIdx.x;
+    if (row_ind >= num_tokens) {
+        return;
+    }
+
+    const int seq_pos = seq_positions[row_ind];
+
+    // The starting dimension within a head for this thread's vector.
+    // Note: Launch with blockDim.x = head_dim / VEC_SIZE.
+    const int base_dim_in_head = VEC_SIZE * threadIdx.x;
+
+    // Pre-calculate the cosine and sine values for the 4 pairs.
+    float cos_vals[PAIRS];
+    float sin_vals[PAIRS];
+
+    for (int i = 0; i < PAIRS; ++i) {
+        const int dim_offset = 2 * i;
+        const float current_dim = (float)(base_dim_in_head + dim_offset);
+        const float inv_freq = __powf((float)theta, -current_dim / (float)head_dim);
+        __sincosf((float)seq_pos * inv_freq, &sin_vals[i], &cos_vals[i]);
+    }
+
+    // --- Process Query Gradients (dX_q) ---
+    __nv_bfloat16* dX_q_row = dX_q + (uint64_t)row_ind * model_dim;
+
+    for (int vec_start_dim = base_dim_in_head; vec_start_dim < model_dim; vec_start_dim += head_dim) {
+        f4_bf162_converter data;
+
+        // Vectorized load
+        data.f4 = *( (float4*)(&dX_q_row[vec_start_dim]) );
+
+        #pragma unroll
+        for (int i = 0; i < PAIRS; ++i) {
+            const float2 input_grads = __bfloat1622float2(data.bf162[i]);
+            const float dx_even = input_grads.x;
+            const float dx_odd = input_grads.y;
+
+            // Backward pass transformation (inverse rotation)
+            const float drope_even = cos_vals[i] * dx_even + sin_vals[i] * dx_odd;
+            const float drope_odd  = cos_vals[i] * dx_odd - sin_vals[i] * dx_even;
+
+            data.bf162[i] = __floats2bfloat162_rn(drope_even, drope_odd);
+        }
+
+        // Vectorized store
+        *( (float4*)(&dX_q_row[vec_start_dim]) ) = data.f4;
+    }
+
+    // --- Process Key Gradients (dX_k) ---
+    if (!dX_k) {
+        return;
+    }
+    
+    const int kv_dim = num_kv_heads * head_dim;
+    __nv_bfloat16* dX_k_row = dX_k + (uint64_t)row_ind * kv_dim;
+
+    for (int vec_start_dim = base_dim_in_head; vec_start_dim < kv_dim; vec_start_dim += head_dim) {
+        f4_bf162_converter data;
+
+        data.f4 = *( (float4*)(&dX_k_row[vec_start_dim]) );
+
+        #pragma unroll
+        for (int i = 0; i < PAIRS; ++i) {
+            const float2 input_grads = __bfloat1622float2(data.bf162[i]);
+            const float dx_even = input_grads.x;
+            const float dx_odd = input_grads.y;
+
+            // Backward pass transformation
+            const float drope_even = cos_vals[i] * dx_even + sin_vals[i] * dx_odd;
+            const float drope_odd  = cos_vals[i] * dx_odd - sin_vals[i] * dx_even;
+            
+            data.bf162[i] = __floats2bfloat162_rn(drope_even, drope_odd);
+        }
+        
+        *( (float4*)(&dX_k_row[vec_start_dim]) ) = data.f4;
+    }
+    
+}
+
+extern "C" __global__ void naive_default_rope_bwd_x_bf16_kernel(int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta, int * seq_positions, __nv_bfloat16 * dX_q, __nv_bfloat16 * dX_k){
     
     int row_ind = blockIdx.x;
     if (row_ind >= num_tokens) {

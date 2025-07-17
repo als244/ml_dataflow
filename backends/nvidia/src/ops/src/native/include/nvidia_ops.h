@@ -123,14 +123,33 @@ extern "C" __global__ void default_rms_norm_noscale_bwd_x_fp8e5m2_bf16_kernel(in
 // Forward
 extern "C" __global__ void default_rope_fp32_kernel(int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta, int * seq_positions, float * X_q, float * X_k);
 extern "C" __global__ void default_rope_fp16_kernel(int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta, int * seq_positions, __half * X_q, __half * X_k);
-extern "C" __global__ void default_rope_bf16_kernel(int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta, int * seq_positions, __nv_bfloat16 * X_q, __nv_bfloat16 * X_k);
+//extern "C" __global__ void default_rope_bf16_kernel(int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta, int * seq_positions, __nv_bfloat16 * X_q, __nv_bfloat16 * X_k);
+extern "C" __global__ void default_rope_bf16_kernel(
+    int num_tokens,
+    int model_dim,
+    int head_dim,
+    int num_kv_heads,
+    int theta,
+    int* __restrict__ seq_positions, // Can also be restricted
+    __nv_bfloat16* __restrict__ X_q,
+    __nv_bfloat16* __restrict__ X_k);
 extern "C" __global__ void default_rope_fp8e4m3_kernel(int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta, int * seq_positions, __nv_fp8_e4m3 * X_q, __nv_fp8_e4m3 * X_k);
 extern "C" __global__ void default_rope_fp8e5m2_kernel(int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta, int * seq_positions, __nv_fp8_e5m2 * X_q, __nv_fp8_e5m2 * X_k);
 
 
 extern "C" __global__ void default_rope_bwd_x_fp32_kernel(int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta, int *seq_positions, float *dX_q, float *dX_k);
 extern "C" __global__ void default_rope_bwd_x_fp16_kernel(int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta, int *seq_positions, __half *dX_q, __half *dX_k);
-extern "C" __global__ void default_rope_bwd_x_bf16_kernel(int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta, int *seq_positions, __nv_bfloat16 *dX_q, __nv_bfloat16 *dX_k);
+//extern "C" __global__ void default_rope_bwd_x_bf16_kernel(int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta, int *seq_positions, __nv_bfloat16 *dX_q, __nv_bfloat16 *dX_k);
+extern "C" __global__ void default_rope_bwd_x_bf16_kernel(
+    int num_tokens,
+    int model_dim,
+    int head_dim,
+    int num_kv_heads,
+    int theta,
+    int* __restrict__ seq_positions,
+    __nv_bfloat16* __restrict__ dX_q,
+    __nv_bfloat16* __restrict__ dX_k);
+
 // extern "C" __global__ void default_rope_bwd_x_fp8e4m3_kernel(int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta, int *seq_positions, __nv_fp8_e4m3 *dX_q, __nv_fp8_e4m3 *dX_k);
 // extern "C" __global__ void default_rope_bwd_x_fp8e5m2_kernel(int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta, int *seq_positions, __nv_fp8_e5m2 *dX_q, __nv_fp8_e5m2 *dX_k);
 
