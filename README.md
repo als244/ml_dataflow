@@ -26,13 +26,9 @@ You can learn more about the project's background/details [here](docs/background
 
 <img src="bench/reproduce_results/figures/memory_throughput_heatmaps/h100/H100-8B-262144-report.png" alt="Sample Heatmaps, H100, LLama3-8B, Seqlen 256k">
 
-<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-262144-tflops.png" alt="Sample Heatmap TFLOPS/s, H100, LLama3-8B, Seqlen 256k" width="70%">
-
 ##### RTX 5090, 128k
 
-<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090-8B-131072-tok.png" alt="Sample Heatmap Tok/, RTX 5090, LLama3-8B, Seqlen 128k" width="70%">
-
-<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090-8B-131072-tflops.png" alt="Sample Heatmap TFLOPS/s, RTX 5090, LLama3-8B, Seqlen 128k" width="70%">
+<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/rtx5090/RTX5090-8B-131072-report.png" alt="Sample Heatmaps, RTX 5090, LLama3-8B, Seqlen 128k">
 
 -----
 
