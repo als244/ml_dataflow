@@ -88,8 +88,105 @@ extern "C" __global__ void default_swiglu_bwd_x_fp16_fp16_kernel(int num_rows, i
                 }
         }
 }
- 
 extern "C" __global__ void default_swiglu_bwd_x_bf16_bf16_kernel(int num_rows, int num_cols, __nv_bfloat16 * x_w1, __nv_bfloat16 * x_w3, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX_w1, __nv_bfloat16 * dX_w3) {
+
+    // This kernel requires the column dimension to be divisible by 4.
+    const int num_cols_vec = num_cols / 4;
+
+    const float2 *x_w1_vec = (const float2*)(x_w1);
+    const float2 *x_w3_vec = (const float2*)(x_w3);
+    const float2 *upstream_dX_vec = (const float2*)(upstream_dX);
+    float2 *dX_w1_vec = (float2*)(dX_w1);
+    float2 *dX_w3_vec = (float2*)(dX_w3);
+
+    const int row_num = blockIdx.x;
+    if (row_num >= num_rows) {
+        return;
+    }
+
+    // Grid-stride loop to process 4 elements per thread per iteration.
+    for (int i = threadIdx.x; i < num_cols_vec; i += blockDim.x) {
+        const int idx = row_num * num_cols_vec + i;
+
+        // --- Step 1: Vectorized 64-bit Loads ---
+        const float2 x_w1_packed = x_w1_vec[idx];
+        const float2 x_w3_packed = x_w3_vec[idx];
+        const float2 upstream_dX_packed = upstream_dX_vec[idx];
+
+        // --- Step 2: Unpack bfloat16x4 to floatx4 for computation ---
+        const __nv_bfloat162* x_w1_b162s = (const __nv_bfloat162*)(&x_w1_packed);
+        const float2 x_w1_f2_0 = __bfloat1622float2(x_w1_b162s[0]);
+        const float2 x_w1_f2_1 = __bfloat1622float2(x_w1_b162s[1]);
+
+        const __nv_bfloat162* x_w3_b162s = (const __nv_bfloat162*)(&x_w3_packed);
+        const float2 x_w3_f2_0 = __bfloat1622float2(x_w3_b162s[0]);
+        const float2 x_w3_f2_1 = __bfloat1622float2(x_w3_b162s[1]);
+
+        const __nv_bfloat162* upstream_dX_b162s = (const __nv_bfloat162*)(&upstream_dX_packed);
+        const float2 upstream_dX_f2_0 = __bfloat1622float2(upstream_dX_b162s[0]);
+        const float2 upstream_dX_f2_1 = __bfloat1622float2(upstream_dX_b162s[1]);
+
+        // --- Step 3: Perform gradient calculations for all 4 elements ---
+        // Pre-calculate sigmoid and its derivative components
+        const float inv_exp_0 = __expf(-x_w1_f2_0.x);
+        const float inv_exp_1 = __expf(-x_w1_f2_0.y);
+        const float inv_exp_2 = __expf(-x_w1_f2_1.x);
+        const float inv_exp_3 = __expf(-x_w1_f2_1.y);
+
+        const float s1_0 = 1.0f / (1.0f + inv_exp_0);
+        const float s1_1 = 1.0f / (1.0f + inv_exp_1);
+        const float s1_2 = 1.0f / (1.0f + inv_exp_2);
+        const float s1_3 = 1.0f / (1.0f + inv_exp_3);
+
+        const float silu_x1_0 = x_w1_f2_0.x * s1_0;
+        const float silu_x1_1 = x_w1_f2_0.y * s1_1;
+        const float silu_x1_2 = x_w1_f2_1.x * s1_2;
+        const float silu_x1_3 = x_w1_f2_1.y * s1_3;
+
+        // Calculate gradient w.r.t. x3 (dX_w3)
+        const float dX_w3_f_0 = upstream_dX_f2_0.x * silu_x1_0;
+        const float dX_w3_f_1 = upstream_dX_f2_0.y * silu_x1_1;
+        const float dX_w3_f_2 = upstream_dX_f2_1.x * silu_x1_2;
+        const float dX_w3_f_3 = upstream_dX_f2_1.y * silu_x1_3;
+
+        // Calculate gradient w.r.t. x1 (dX_w1)
+        const float ds1_dx1_0 = s1_0 * (1.0f - s1_0);
+        const float ds1_dx1_1 = s1_1 * (1.0f - s1_1);
+        const float ds1_dx1_2 = s1_2 * (1.0f - s1_2);
+        const float ds1_dx1_3 = s1_3 * (1.0f - s1_3);
+
+        const float dsilu_dx1_0 = s1_0 + x_w1_f2_0.x * ds1_dx1_0;
+        const float dsilu_dx1_1 = s1_1 + x_w1_f2_0.y * ds1_dx1_1;
+        const float dsilu_dx1_2 = s1_2 + x_w1_f2_1.x * ds1_dx1_2;
+        const float dsilu_dx1_3 = s1_3 + x_w1_f2_1.y * ds1_dx1_3;
+
+        const float dX_w1_f_0 = upstream_dX_f2_0.x * x_w3_f2_0.x * dsilu_dx1_0;
+        const float dX_w1_f_1 = upstream_dX_f2_0.y * x_w3_f2_0.y * dsilu_dx1_1;
+        const float dX_w1_f_2 = upstream_dX_f2_1.x * x_w3_f2_1.x * dsilu_dx1_2;
+        const float dX_w1_f_3 = upstream_dX_f2_1.y * x_w3_f2_1.y * dsilu_dx1_3;
+
+        // --- Step 4: Pack floatx4 results back to bfloat16x4 and store ---
+        // Pack dX_w1
+        const __nv_bfloat162 dX_w1_b162_0 = __float22bfloat162_rn(make_float2(dX_w1_f_0, dX_w1_f_1));
+        const __nv_bfloat162 dX_w1_b162_1 = __float22bfloat162_rn(make_float2(dX_w1_f_2, dX_w1_f_3));
+        float2 dX_w1_packed;
+        ((__nv_bfloat162*)(&dX_w1_packed))[0] = dX_w1_b162_0;
+        ((__nv_bfloat162*)(&dX_w1_packed))[1] = dX_w1_b162_1;
+
+        // Pack dX_w3
+        const __nv_bfloat162 dX_w3_b162_0 = __float22bfloat162_rn(make_float2(dX_w3_f_0, dX_w3_f_1));
+        const __nv_bfloat162 dX_w3_b162_1 = __float22bfloat162_rn(make_float2(dX_w3_f_2, dX_w3_f_3));
+        float2 dX_w3_packed;
+        ((__nv_bfloat162*)(&dX_w3_packed))[0] = dX_w3_b162_0;
+        ((__nv_bfloat162*)(&dX_w3_packed))[1] = dX_w3_b162_1;
+
+        // --- Step 5: Vectorized 64-bit Stores ---
+        dX_w1_vec[idx] = dX_w1_packed;
+        dX_w3_vec[idx] = dX_w3_packed;
+    }
+}
+ 
+extern "C" __global__ void naive_default_swiglu_bwd_x_bf16_bf16_kernel(int num_rows, int num_cols, __nv_bfloat16 * x_w1, __nv_bfloat16 * x_w3, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX_w1, __nv_bfloat16 * dX_w3) {
 
         int row_num = blockIdx.x;
         int thread_id = threadIdx.x;
