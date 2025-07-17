@@ -3086,6 +3086,9 @@
 			printf("\t\tNum Model Grad Blocks: %d\n", NUM_DEV_GRAD_BLOCKS);
 			printf("\t\tNum (Chunk, Layer) Activation Slots: %d\n\n", NUM_DEV_ACTIVATION_SLOTS);
 
+
+			printf("\tPCIe Gen: %u, # Lanes: %u\n\n", dataflow_handle.pcie_link_gen, dataflow_handle.pcie_link_width);
+
 			printf("\tHost Activations: %d\n", total_home_acts);
 			printf("\t\tNum Full Saved Activations: %d\n", num_full_saved);
 			printf("\t\tNum Inp + Attn Saved Activations: %d\n", num_inp_attn_saved);
