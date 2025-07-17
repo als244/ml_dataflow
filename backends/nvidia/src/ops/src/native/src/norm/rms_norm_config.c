@@ -183,8 +183,9 @@ int default_rms_norm_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_launch_co
 
 	int model_dim = *((int *) op_args[1]);
 
-	// saving down original row as floats in smem
-	int rms_base_smem = (4 + upstream_dtype_size) * model_dim;
+	int rms_base_smem = (fwd_dtype_size + upstream_dtype_size) * model_dim;
+
+	size_t aligned_offset = (rms_base_smem + 3) & ~3 + 32 * sizeof(float);
 
 	int rms_max_smem = (cuda_function -> function_config).func_max_smem;
 
@@ -198,7 +199,7 @@ int default_rms_norm_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_launch_co
 	int rms_max_threads_per_block = (cuda_function -> function_config).func_max_threads_per_block;
 	cuda_launch_config -> blockDimX = rms_max_threads_per_block;
 
-	cuda_launch_config -> sharedMemBytes = rms_base_smem;
+	cuda_launch_config -> sharedMemBytes = aligned_offset;
 
 	return 0;
 

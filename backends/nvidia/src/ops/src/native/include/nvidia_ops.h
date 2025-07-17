@@ -74,7 +74,15 @@ extern "C" __global__ void default_rms_norm_recompute_fp8e5m2_kernel(int n_rows,
 // can optionally pass in X_out to save recomputed value from fwd pass
 extern "C" __global__ void default_rms_norm_bwd_x_fp32_fp32_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, float * rms_weight, float * X_inp, float * upstream_dX, float * dX, float * X_out);
 extern "C" __global__ void default_rms_norm_bwd_x_fp16_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __half * rms_weight, __half * X_inp, __half * upstream_dX, __half * dX, __half * X_out);
-extern "C" __global__ void default_rms_norm_bwd_x_bf16_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_bfloat16 * rms_weight, __nv_bfloat16 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX, __nv_bfloat16 * X_out);
+//extern "C" __global__ void default_rms_norm_bwd_x_bf16_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_bfloat16 * rms_weight, __nv_bfloat16 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX, __nv_bfloat16 * X_out);
+extern "C" __global__ void default_rms_norm_bwd_x_bf16_bf16_kernel(
+    int n_rows, int n_cols, float eps,
+    const float * __restrict__ fwd_rms_vals,
+    const __nv_bfloat16 * __restrict__ rms_weight,
+    const __nv_bfloat16 * __restrict__ X_inp,
+    const __nv_bfloat16 * __restrict__ upstream_dX,
+    __nv_bfloat16 * __restrict__ dX,
+    __nv_bfloat16 * __restrict__ X_out);
 extern "C" __global__ void default_rms_norm_bwd_x_fp8e4m3_fp16_kernel(int n_rows, int n_cols,float eps, float * fwd_rms_vals, __nv_fp8_e4m3 * rms_weight, __nv_fp8_e4m3 * X_inp, __half * upstream_dX, __half * dX, __nv_fp8_e4m3 * X_out);
 extern "C" __global__ void default_rms_norm_bwd_x_fp8e4m3_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e4m3 * rms_weight, __nv_fp8_e4m3 * X_inp, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX, __nv_fp8_e4m3 * X_out);
 extern "C" __global__ void default_rms_norm_bwd_x_fp8e5m2_fp16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_fp8_e5m2 * rms_weight, __nv_fp8_e5m2 * X_inp, __half * upstream_dX, __half * dX, __nv_fp8_e5m2 * X_out);

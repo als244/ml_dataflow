@@ -88,6 +88,7 @@ extern "C" __global__ void default_swiglu_bwd_x_fp16_fp16_kernel(int num_rows, i
                 }
         }
 }
+
 extern "C" __global__ void default_swiglu_bwd_x_bf16_bf16_kernel(int num_rows, int num_cols, __nv_bfloat16 * x_w1, __nv_bfloat16 * x_w3, __nv_bfloat16 * upstream_dX, __nv_bfloat16 * dX_w1, __nv_bfloat16 * dX_w3) {
 
     // This kernel requires the column dimension to be divisible by 4.

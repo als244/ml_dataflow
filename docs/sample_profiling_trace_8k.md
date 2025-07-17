@@ -14,18 +14,18 @@ This will create an nsys report: `bench/profiling/host_75_dev_40_seq_8192_model_
 ### Auto-configuration details
 
 - Chunk size: 16384
-- Chunks per round:
-- Seqs per round:
-- Rounds per step:
-- Seqs per step:
-- Global batch size:
+- Chunks per round: 1
+- Seqs per round: 2
+- Rounds per step: 34
+- Seqs per step: 68
+- Global batch size: 68 seqs/544k tokens
 
 - Device Memory Partitioning (model has 32 blocks)
-    - Param Blocks: 
-    - Grad Blocks: 
-    - Total (chunk, layer) full activation slots: 
+    - Param Blocks: 10
+    - Grad Blocks: 9
+    - Total (chunk, layer) full activation slots: 9
 
-- Host Activations ($32 * 4 -  = $ total):
-    - Fully Saved: 
-    - Only Inp + Context + Attn:
+- Host Activations ($32 * 4 - 9 = 23$ total):
+    - Fully Saved: 9
+    - Only Inp + Context + Attn: 14
     - Only Inp + Context: 0
