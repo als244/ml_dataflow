@@ -302,38 +302,31 @@ extern "C" __global__ void default_softmax_bf16_bf16_kernel(int n_rows, int n_co
 
 	__nv_bfloat16 new_max = NEG_INF_DEV_BF16;
 
+    // get row max:
 
-	unsigned warp_mask = 0xFFFFFFFFU;
+    for (int i = thread_id; i < n_cols; i += blockDim.x){
+        new_max = __hmax(new_max, row_start[i]);
+    }
 
-	int cur_ind = thread_id;
+    // get warp max
 
-	// Assuming N is a multiple of 32 for simplicity...
-	while (cur_ind < n_cols){
+    for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
+        other_val = __shfl_down_sync(warp_mask, new_max, warp_offset);
+        new_max = __hmax(new_max, other_val);
+    }
 
-		new_max = __hmax(new_max, row_start[cur_ind]);
-
-		#pragma unroll
-		for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
-			other_val = __shfl_down_sync(warp_mask, new_max, warp_offset);
-			new_max = __hmax(new_max, other_val);
-		}
-
-		cur_ind += num_warps * 32;
-	}
-
-	if (lane_id == 0){
+    if (lane_id == 0){
 		warp_maxs[warp_id] = new_max;
 	}
 
+    // get row max
+
 	__syncthreads();
 
+    if (warp_id == 0){
+        new_max = warp_maxs[lane_id];
 
-	if (warp_id == 0){
-
-		new_max = warp_maxs[lane_id];
-
-		#pragma unroll
-		for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
+        for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
 			other_val = __shfl_down_sync(warp_mask, new_max, warp_offset);
 			new_max = __hmax(new_max, other_val);
 		}
@@ -341,69 +334,55 @@ extern "C" __global__ void default_softmax_bf16_bf16_kernel(int n_rows, int n_co
 		if (lane_id == 0){
 			global_max[0] = new_max;
 		}
+    }
+
+    __syncthreads();
+
+    __nv_bfloat16 overall_max = global_max[0];
+
+    // get sum of exp(row - max)
+
+    float new_sum = 0;
+
+    for (int i = thread_id; i < n_cols; i += blockDim.x){
+        new_sum += expf(__bfloat162float(row_start[i] - overall_max));
+    }
+
+    // get warp sum
+
+    for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
+        new_sum += __shfl_down_sync(warp_mask, new_sum, warp_offset);
+    }
+
+    if (lane_id == 0){
+		warp_sums[warp_id] = new_sum;
 	}
 
 	__syncthreads();
 
+    // get block sum
 
-	// now do sums
+    if (warp_id == 0){
+        new_sum = warp_sums[lane_id];
 
-	cur_ind = thread_id;
+        for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
+            new_sum += __shfl_down_sync(warp_mask, new_sum, warp_offset);
+        }
 
-	__nv_bfloat16 overall_max = global_max[0];
+        if (lane_id == 0){
+            global_sum[0] = new_sum;
+        }
+    }
 
-	float total_sum = 0;
-	float new_sum;
-	while (cur_ind < n_cols){
+    __syncthreads();
 
-		new_sum = expf(__bfloat162float(row_start[cur_ind] - overall_max));
+    float overall_sum = global_sum[0];
 
-		#pragma unroll
-		for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
-			new_sum += __shfl_down_sync(warp_mask, new_sum, warp_offset);
-		}
+    // get output
 
-		if (lane_id == 0){
-			total_sum += new_sum;
-		}
-
-		cur_ind += num_warps * 32;
-	}
-
-	if (lane_id == 0){
-		warp_sums[warp_id] = total_sum;
-	}
-
-	__syncthreads();
-
-	if (warp_id == 0){
-
-		total_sum = warp_sums[lane_id];
-
-		#pragma unroll
-		for (int warp_offset = 16; warp_offset > 0; warp_offset >>= 1){
-			total_sum += __shfl_down_sync(warp_mask, total_sum, warp_offset);
-		}
-
-		if (lane_id == 0){
-			global_sum[0] = total_sum;
-		}
-	}
-
-	__syncthreads();
-
-
-	// now do output
-
-	float overall_sum = global_sum[0];
-
-	cur_ind = thread_id;
-
-	while (cur_ind < n_cols){
-
-		out_row_start[cur_ind] = __float2bfloat16(expf(__bfloat162float(row_start[cur_ind] - overall_max)) / overall_sum);
-		cur_ind += num_warps * 32;
-	}
+    for (int i = thread_id; i < n_cols; i += blockDim.x){
+        out_row_start[i] = __float2bfloat16(expf(__bfloat162float(row_start[i] - overall_max)) / overall_sum);
+    }
 }
 
 extern "C" __global__ void default_softmax_fp8e4m3_fp16_kernel(int n_rows, int n_cols, __nv_fp8_e4m3 * X, __half * out) {
