@@ -3087,7 +3087,10 @@
 			printf("\t\tNum (Chunk, Layer) Activation Slots: %d\n\n", NUM_DEV_ACTIVATION_SLOTS);
 
 
-			printf("\tPCIe Gen: %u, # Lanes: %u\n\n", dataflow_handle.pcie_link_gen, dataflow_handle.pcie_link_width);
+			printf("\tPCIe Connection:\n");
+			printf("\t\tLink Gen: %u\n", dataflow_handle.pcie_link_gen);
+			printf("\t\t# Lanes: %u\n", dataflow_handle.pcie_link_width);
+			printf("\t\tTheo BW: %d GB/s\n\n", (int) (theo_link_speed_bytes_per_sec / (1024.0 * 1024.0 * 1024.0)));
 
 			printf("\tHost Activations: %d\n", total_home_acts);
 			printf("\t\tNum Full Saved Activations: %d\n", num_full_saved);
