@@ -295,12 +295,12 @@ extern "C" __global__ void default_rms_norm_bwd_x_bf16_bf16_kernel(
         float4 up_vec = ((float4*)s_upstream)[i];
         float4 w_vec = __ldg(((const float4*)rms_weight) + i);
         
-        bfloat162* x_b162_ptr = (bfloat162*)(&x_vec);
-        bfloat162* up_b162_ptr = (bfloat162*)(&up_vec);
-        bfloat162* w_b162_ptr = (bfloat162*)(&w_vec);
+        __nv_bfloat162* x_b162_ptr = (__nv_bfloat162*)(&x_vec);
+        __nv_bfloat162* up_b162_ptr = (__nv_bfloat162*)(&up_vec);
+        __nv_bfloat162* w_b162_ptr = (__nv_bfloat162*)(&w_vec);
         
         float4 out_vec;
-        bfloat162* out_b162_ptr = (bfloat162*)(&out_vec);
+        __nv_bfloat162* out_b162_ptr = (__nv_bfloat162*)(&out_vec);
 
         #pragma unroll
         for (int k = 0; k < VEC_SIZE / 2; ++k) {
@@ -351,15 +351,15 @@ extern "C" __global__ void default_rms_norm_bwd_x_bf16_bf16_kernel(
         float4 up_vec = ((float4*)s_upstream)[i];
         float4 w_vec = __ldg(((const float4*)rms_weight) + i);
 
-        bfloat162* x_b162_ptr = (bfloat162*)(&x_vec);
-        bfloat162* up_b162_ptr = (bfloat162*)(&up_vec);
-        bfloat162* w_b162_ptr = (bfloat162*)(&w_vec);
+        __nv_bfloat162* x_b162_ptr = (__nv_bfloat162*)(&x_vec);
+        __nv_bfloat162* up_b162_ptr = (__nv_bfloat162*)(&up_vec);
+        __nv_bfloat162* w_b162_ptr = (__nv_bfloat162*)(&w_vec);
         
         float4 dX_new_vec;
-        bfloat162* dX_new_b162_ptr = (bfloat162*)(&dX_new_vec);
+        __nv_bfloat162* dX_new_b162_ptr = (__nv_bfloat162*)(&dX_new_vec);
 
         float4 dX_old_vec = __ldcg(((const float4*)(dX + row_base)) + i);
-        bfloat162* dX_old_b162_ptr = (bfloat162*)(&dX_old_vec);
+        __nv_bfloat162* dX_old_b162_ptr = (__nv_bfloat162*)(&dX_old_vec);
         
         #pragma unroll
         for (int k = 0; k < VEC_SIZE / 2; k++) {
