@@ -12,6 +12,16 @@
 #include <float.h>
 #include "cuda_ptx_macros.h"
 
+/* * A union to convert between a float4 vector and an array of four 
+ * __nv_bfloat162 ROPE_BWD_PAIRS. This facilitates efficient 16-byte memory 
+ * operations while allowing easy access to individual data ROPE_BWD_PAIRS.
+ */
+ typedef union {
+    float4 f4;
+    __nv_bfloat162 bf162[ROPE_BWD_PAIRS];
+} f4_bf162_converter;
+
+
 
 #define WARP_SIZE 32
 #define MAX_BLOCK_DIM 1024

@@ -1,18 +1,8 @@
 #include "nvidia_ops.h"
 
 // Define constants for vectorization dimensions
-#define VEC_SIZE 8
-#define PAIRS (VEC_SIZE / 2)
-
-/* * A union to convert between a float4 vector and an array of four 
- * __nv_bfloat162 pairs. This facilitates efficient 16-byte memory 
- * operations while allowing easy access to individual data pairs.
- */
-typedef union {
-    float4 f4;
-    __nv_bfloat162 bf162[PAIRS];
-} f4_bf162_converter;
-
+#define ROPE_VEC_SIZE 8
+#define ROPE_PAIRS (ROPE_VEC_SIZE / 2)
 
 extern "C" __global__ void default_rope_fp32_kernel(int num_tokens, int model_dim, int head_dim, int num_kv_heads, int theta, int * seq_positions, float * X_q, float * X_k){
     
@@ -168,14 +158,14 @@ extern "C" __global__ void default_rope_bf16_kernel(
     const int seq_pos = seq_positions[row_ind];
 
     // The starting dimension within a head for this thread's vector.
-    // Note: Launch with blockDim.x = head_dim / VEC_SIZE.
-    const int base_dim_in_head = VEC_SIZE * threadIdx.x;
+    // Note: Launch with blockDim.x = head_dim / ROPE_VEC_SIZE.
+    const int base_dim_in_head = ROPE_VEC_SIZE * threadIdx.x;
 
-    // Pre-calculate the cosine and sine values for the 4 pairs.
-    float cos_vals[PAIRS];
-    float sin_vals[PAIRS];
+    // Pre-calculate the cosine and sine values for the 4 ROPE_PAIRS.
+    float cos_vals[ROPE_PAIRS];
+    float sin_vals[ROPE_PAIRS];
 
-    for (int i = 0; i < PAIRS; ++i) {
+    for (int i = 0; i < ROPE_PAIRS; ++i) {
         const int dim_offset = 2 * i;
         const float current_dim = (float)(base_dim_in_head + dim_offset);
         const float inv_freq = __powf((float)theta, -current_dim / (float)head_dim);
@@ -193,7 +183,7 @@ extern "C" __global__ void default_rope_bf16_kernel(
         data.f4 = *( (float4*)(&X_q_row[vec_start_dim]) );
 
         #pragma unroll
-        for (int i = 0; i < PAIRS; ++i) {
+        for (int i = 0; i < ROPE_PAIRS; ++i) {
             const float2 vals_fp32 = __bfloat1622float2(data.bf162[i]);
             const float x_even = vals_fp32.x;
             const float x_odd = vals_fp32.y;
@@ -222,7 +212,7 @@ extern "C" __global__ void default_rope_bf16_kernel(
         data.f4 = *( (float4*)(&X_k_row[vec_start_dim]) );
 
         #pragma unroll
-        for (int i = 0; i < PAIRS; ++i) {
+        for (int i = 0; i < ROPE_PAIRS; ++i) {
             const float2 vals_fp32 = __bfloat1622float2(data.bf162[i]);
             const float x_even = vals_fp32.x;
             const float x_odd = vals_fp32.y;
