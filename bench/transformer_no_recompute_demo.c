@@ -2768,6 +2768,11 @@
 			printf("\tSeqs per round: %d\n", seqs_per_round);
 			printf("\tSeqs per step: %d\n\n", seqs_per_step);
 
+			printf("\tPCIe Connection:\n");
+			printf("\t\tLink Gen: %u\n", dataflow_handle.pcie_link_gen);
+			printf("\t\t# Lanes: %u\n", dataflow_handle.pcie_link_width);
+			printf("\t\tTheo BW: %d GB/s\n\n", (int) (theo_link_speed_bytes_per_sec / (1024.0 * 1024.0 * 1024.0)));
+
 			// this version doesn't have recomputation...
 			printf("\tHost Activations: %d\n", total_home_acts);
 			printf("\t\tNum Full Saved Activations: %d\n", total_home_acts);

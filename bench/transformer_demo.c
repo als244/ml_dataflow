@@ -3086,7 +3086,6 @@
 			printf("\t\tNum Model Grad Blocks: %d\n", NUM_DEV_GRAD_BLOCKS);
 			printf("\t\tNum (Chunk, Layer) Activation Slots: %d\n\n", NUM_DEV_ACTIVATION_SLOTS);
 
-
 			printf("\tPCIe Connection:\n");
 			printf("\t\tLink Gen: %u\n", dataflow_handle.pcie_link_gen);
 			printf("\t\t# Lanes: %u\n", dataflow_handle.pcie_link_width);

@@ -31,7 +31,9 @@
 
 	#define PCIE_LINK_EFFICIENCY 0.75f
 
-	#define NUM_STEPS 3
+	//#define NUM_STEPS 5
+
+	//#define NUM_STEPS_TO_SKIP_FOR_RECORDING 2
 
 	// num_chunks = num_chunks_per_seq * num_seq_groups_per_round
 	// num_chunks_per_seq = seqlen / chunk_size
@@ -211,8 +213,8 @@
 
 		int ret;
 
-		if (argc != 6){
-			fprintf(stderr, "Error. Usage: ./transformerRecordThroughput <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model size billions: [1 | 8]> <output_filepath>\n");
+		if (argc != 8){
+			fprintf(stderr, "Error. Usage: ./transformerRecordThroughput <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model size billions: [1 | 8]> <num_steps> <num_steps_to_skip_for_recording> <output_filepath>\n");
 			return -1;
 		}
 
@@ -229,7 +231,15 @@
 			return -1;
 		}
 
-		char * output_filepath = argv[5];
+		int NUM_STEPS = atoi(argv[5]);
+		int NUM_STEPS_TO_SKIP_FOR_RECORDING = atoi(argv[6]);
+
+		if (NUM_STEPS_TO_SKIP_FOR_RECORDING >= NUM_STEPS){
+			fprintf(stderr, "Error. num_steps_to_skip_for_recording must be less than num_steps...\n");
+			return -1;
+		}
+
+		char * output_filepath = argv[7];
 
 		char MODEL_PATH[100];
 		sprintf(MODEL_PATH, "../../models/%dB", MODEL_CONFIG_SIZE_B);
@@ -3085,6 +3095,11 @@
 			printf("\tSeqs per round: %d\n", seqs_per_round);
 			printf("\tSeqs per step: %d\n\n", seqs_per_step);
 
+			printf("\tPCIe Connection:\n");
+			printf("\t\tLink Gen: %u\n", dataflow_handle.pcie_link_gen);
+			printf("\t\t# Lanes: %u\n", dataflow_handle.pcie_link_width);
+			printf("\t\tTheo BW: %d GB/s\n\n", (int) (theo_link_speed_bytes_per_sec / (1024.0 * 1024.0 * 1024.0)));
+
 			printf("\tHost Activations: %d\n", total_home_acts);
 			printf("\t\tNum Full Saved Activations: %d\n", num_full_saved);
 			printf("\t\tNum Inp + Attn Saved Activations: %d\n", num_inp_attn_saved);
@@ -5142,7 +5157,7 @@
 		float total_steps_hfu = 0;
 		float total_steps_recompute_pct = 0;
 		float total_attn_flop_pct = 0;
-		for (int t = 0; t < num_steps; t++){
+		for (int t = NUM_STEPS_TO_SKIP_FOR_RECORDING; t < num_steps; t++){
 			total_steps_time += step_throughput_op_buffers[t].duration_s;
 			total_steps_tok_per_sec += step_throughput_op_buffers[t].tokens_per_second;
 			total_steps_flops += step_throughput_op_buffers[t].achieved_flop_rate;
@@ -5152,13 +5167,15 @@
 			total_attn_flop_pct += step_throughput_op_buffers[t].total_attn_flops / step_throughput_op_buffers[t].total_flops;
 		}
 
-		float avg_step_time = total_steps_time / num_steps;
-		float avg_tok_per_sec = total_steps_tok_per_sec / num_steps;
-		float avg_tflops = total_steps_flops / num_steps / 1e12;
-		float avg_mfu = total_steps_mfu / num_steps;
-		float avg_hfu = total_steps_hfu / num_steps;
-		float avg_recompute_pct = total_steps_recompute_pct / num_steps;
-		float avg_attn_flop_pct = total_attn_flop_pct / num_steps;
+		int num_recorded_steps = num_steps - NUM_STEPS_TO_SKIP_FOR_RECORDING;
+
+		float avg_step_time = total_steps_time / num_recorded_steps;
+		float avg_tok_per_sec = total_steps_tok_per_sec / num_recorded_steps;
+		float avg_tflops = total_steps_flops / num_recorded_steps / 1e12;
+		float avg_mfu = total_steps_mfu / num_recorded_steps;
+		float avg_hfu = total_steps_hfu / num_recorded_steps;
+		float avg_recompute_pct = total_steps_recompute_pct / num_recorded_steps;
+		float avg_attn_flop_pct = total_attn_flop_pct / num_recorded_steps;
 		FILE * f = fopen(output_filepath, "a");
 		if (!f){
 			fprintf(stderr, "Error: failed to open file: %s...\n", output_filepath);
