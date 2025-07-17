@@ -179,12 +179,12 @@ extern "C" __global__ void default_rms_norm_fp16_kernel(int n_rows, int n_cols, 
 	}
 }
 
-extern "C" __global__ void opt_default_rms_norm_bf16_kernel(
+extern "C" __global__ void default_rms_norm_bf16_kernel(
     int n_rows, int n_cols, float eps,
-    const __nv_bfloat16 * __restrict__ rms_weight,
-    const __nv_bfloat16 * __restrict__ X,
-    __nv_bfloat16 * __restrict__ out,
-    float * __restrict__ rms_vals)
+    __nv_bfloat16 * rms_weight,
+    __nv_bfloat16 * X,
+    __nv_bfloat16 * out,
+    float * rms_vals)
 {
     // --- Kernel Setup ---
     extern __shared__ uint8_t sdata[];
@@ -300,7 +300,7 @@ extern "C" __global__ void opt_default_rms_norm_bf16_kernel(
 }
 
 
-extern "C" __global__ void default_rms_norm_bf16_kernel(int n_rows, int n_cols, float eps, __nv_bfloat16 * rms_weight, __nv_bfloat16 * X, __nv_bfloat16 * out, float * rms_vals) {
+extern "C" __global__ void naive_default_rms_norm_bf16_kernel(int n_rows, int n_cols, float eps, __nv_bfloat16 * rms_weight, __nv_bfloat16 * X, __nv_bfloat16 * out, float * rms_vals) {
 
 	// this gets dynamically allocated the size of model_dim
 	extern __shared__ uint8_t sdata[];

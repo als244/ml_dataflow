@@ -1,7 +1,7 @@
 #include "nvidia_ops.h"
 
 // Define vector size using a macro for C-style compatibility
-#define VEC_SIZE (sizeof(float4) / sizeof(__nv_bfloat16))
+#define RMS_NORM_BWD_X_VEC_SIZE (sizeof(float4) / sizeof(__nv_bfloat16))
 
 extern "C" __global__ void default_rms_norm_bwd_x_fp32_fp32_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, float * rms_weight, float * X_inp, float * upstream_dX, float * dX, float * X_out) {
 		
@@ -268,8 +268,8 @@ extern "C" __global__ void default_rms_norm_bwd_x_bf16_bf16_kernel(
     const unsigned warp_mask = 0xFFFFFFFFU;
 
     // --- 1. Load data into Shared Memory (Vectorized) ---
-    const int vec_n_cols = n_cols / VEC_SIZE;
-    const int remainder_start = vec_n_cols * VEC_SIZE;
+    const int vec_n_cols = n_cols / RMS_NORM_BWD_X_VEC_SIZE;
+    const int remainder_start = vec_n_cols * RMS_NORM_BWD_X_VEC_SIZE;
 
     // Vectorized load for the bulk of the data
     for (int i = thread_id; i < vec_n_cols; i += blockDim.x) {
@@ -303,7 +303,7 @@ extern "C" __global__ void default_rms_norm_bwd_x_bf16_bf16_kernel(
         __nv_bfloat162* out_b162_ptr = (__nv_bfloat162*)(&out_vec);
 
         #pragma unroll
-        for (int k = 0; k < VEC_SIZE / 2; ++k) {
+        for (int k = 0; k < RMS_NORM_BWD_X_VEC_SIZE / 2; ++k) {
             float2 x_f2 = __bfloat1622float2(x_b162_ptr[k]);
             float2 up_f2 = __bfloat1622float2(up_b162_ptr[k]);
             float2 w_f2 = __bfloat1622float2(w_b162_ptr[k]);
@@ -362,7 +362,7 @@ extern "C" __global__ void default_rms_norm_bwd_x_bf16_bf16_kernel(
         __nv_bfloat162* dX_old_b162_ptr = (__nv_bfloat162*)(&dX_old_vec);
         
         #pragma unroll
-        for (int k = 0; k < VEC_SIZE / 2; k++) {
+        for (int k = 0; k < RMS_NORM_BWD_X_VEC_SIZE / 2; k++) {
             float2 x_f2 = __bfloat1622float2(x_b162_ptr[k]);
             float2 up_f2 = __bfloat1622float2(up_b162_ptr[k]);
             float2 w_f2 = __bfloat1622float2(w_b162_ptr[k]);

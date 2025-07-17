@@ -235,7 +235,7 @@ extern "C" __global__ void default_rms_norm_bwd_w_bf16_bf16_kernel(
         *ret_num_blocks_launched = gridDim.x;
     }
 
-    if (n_cols % VEC_SIZE != 0) {
+    if (n_cols % RMS_NORM_BWD_W_VEC_SIZE != 0) {
         return;
     }
 
@@ -268,7 +268,7 @@ extern "C" __global__ void default_rms_norm_bwd_w_bf16_bf16_kernel(
     __syncthreads();
 
     // --- Main Computation (Vectorized) ---
-    const int n_cols_vec = n_cols / VEC_SIZE;
+    const int n_cols_vec = n_cols / RMS_NORM_BWD_W_VEC_SIZE;
 
     for (int i = threadIdx.x; i < n_cols_vec; i += blockDim.x) {
         float4 acc = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
@@ -276,7 +276,7 @@ extern "C" __global__ void default_rms_norm_bwd_w_bf16_bf16_kernel(
         for (int cur_row_idx = 0; cur_row_idx < rows_per_block; ++cur_row_idx) {
             const int cur_row = row_offset + cur_row_idx;
             const float cur_recip_avg = recip_avgs[cur_row_idx];
-            const int data_offset = cur_row * n_cols + i * VEC_SIZE;
+            const int data_offset = cur_row * n_cols + i * RMS_NORM_BWD_W_VEC_SIZE;
 
             const float2 dX_f2 = *((const float2*)(&upstream_dX[data_offset]));
             const float2 X_f2  = *((const float2*)(&X_inp[data_offset]));
