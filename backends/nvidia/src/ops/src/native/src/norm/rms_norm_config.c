@@ -74,14 +74,16 @@ int default_rms_norm_set_launch_config(Cuda_Launch_Config * cuda_launch_config, 
 	// and copying X to smem
 	int rms_smem = 4 * model_dim;
 
+	int aligned_offset = ((rms_smem + 3) & ~3) + 32 * sizeof(float);
+
 	int rms_max_smem = (cuda_function -> function_config).func_max_smem;
 
-	if (rms_smem > rms_max_smem){
+	if (aligned_offset > rms_max_smem){
 		fprintf(stderr, "Error: rms norm will fail. Unable to support model dim of %d and dtype %s. Not enough smem on device, max for this func is %d bytes, but requires %d...\n", model_dim, dataflow_datatype_as_string(norm_dt), rms_max_smem, rms_smem);
 		return -1;
 	}
 
-	cuda_launch_config -> sharedMemBytes = rms_smem;
+	cuda_launch_config -> sharedMemBytes = aligned_offset;
 
 	return 0;
 }

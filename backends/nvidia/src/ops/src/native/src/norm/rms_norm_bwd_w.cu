@@ -1,5 +1,6 @@
 #include "nvidia_ops.h"
 
+#define RMS_NORM_BWD_W_VEC_SIZE 4
 
 extern "C" __global__ void default_rms_norm_bwd_w_fp32_fp32_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, float * X_inp, float * upstream_dX, float * dW_workspace, int * ret_num_blocks_launched){
 	
@@ -215,8 +216,99 @@ extern "C" __global__ void default_rms_norm_bwd_w_fp16_fp16_kernel(int n_rows, i
 	}
 }
 
+extern "C" __global__ void default_rms_norm_bwd_w_bf16_bf16_kernel(
+    int n_rows, int n_cols, float eps,
+    const float* __restrict__ fwd_rms_vals,
+    const __nv_bfloat16* __restrict__ X_inp,
+    const __nv_bfloat16* __restrict__ upstream_dX,
+    float* __restrict__ dW_workspace,
+    int* __restrict__ ret_num_blocks_launched) {
 
-extern "C" __global__ void default_rms_norm_bwd_w_bf16_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_bfloat16 * X_inp, __nv_bfloat16 * upstream_dX, float * dW_workspace, int * ret_num_blocks_launched){
+	// Record the number of launched blocks
+    if (blockIdx.x == 0 && threadIdx.x == 0) {
+        *ret_num_blocks_launched = gridDim.x;
+    }
+
+    // This vectorized kernel requires n_cols to be a multiple of 4.
+    if (n_cols % RMS_NORM_BWD_W_VEC_SIZE != 0) {
+        return;
+    }
+
+    // Dynamically allocated shared memory
+    extern __shared__ uint8_t sdata[];
+
+    // --- Shared Memory Layout (using C-style casts) ---
+    float* weight_derivs = (float*)(sdata);
+    
+    // --- Determine Row Assignment for this Block ---
+    int row_base = blockIdx.x;
+    if (row_base >= n_rows) {
+        return;
+    }
+
+    int rows_per_block = n_rows / gridDim.x;
+    int rows_remain = n_rows % gridDim.x;
+    int row_offset;
+
+    if (blockIdx.x < rows_remain) {
+        rows_per_block += 1;
+        row_offset = row_base * rows_per_block;
+    } else {
+        row_offset = row_base * rows_per_block + rows_remain;
+    }
+
+    float* recip_avgs = (float*)(weight_derivs + n_cols);
+
+    // --- Load Reciprocal RMS Values into Shared Memory ---
+    for (int i = threadIdx.x; i < rows_per_block; i += blockDim.x) {
+        recip_avgs[i] = fwd_rms_vals[row_offset + i];
+    }
+    __syncthreads();
+
+    // --- Main Computation (Vectorized) ---
+    const int n_cols_vec = n_cols / RMS_NORM_BWD_W_VEC_SIZE;
+
+    for (int i = threadIdx.x; i < n_cols_vec; i += blockDim.x) {
+        float4 acc = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+
+        for (int cur_row_idx = 0; cur_row_idx < rows_per_block; ++cur_row_idx) {
+            const int cur_row = row_offset + cur_row_idx;
+            const float cur_recip_avg = recip_avgs[cur_row_idx];
+            const int data_offset = cur_row * n_cols + i * RMS_NORM_BWD_W_VEC_SIZE;
+
+            // Vectorized load using C-style casts
+            const float2 dX_f2 = *((const float2*)(&upstream_dX[data_offset]));
+            const float2 X_f2  = *((const float2*)(&X_inp[data_offset]));
+
+            // Unpack bfloat16 values to floats
+            const float2 dX_lo = __bfloat1622float2(__low2bfloat162(dX_f2));
+            const float2 dX_hi = __bfloat1622float2(__high2bfloat162(dX_f2));
+            const float2 X_lo  = __bfloat1622float2(__low2bfloat162(X_f2));
+            const float2 X_hi  = __bfloat1622float2(__high2bfloat162(X_f2));
+
+            // Accumulate the product
+            acc.x += dX_lo.x * X_lo.x * cur_recip_avg;
+            acc.y += dX_lo.y * X_lo.y * cur_recip_avg;
+            acc.z += dX_hi.x * X_hi.x * cur_recip_avg;
+            acc.w += dX_hi.y * X_hi.y * cur_recip_avg;
+        }
+
+        // Write the final accumulated values to shared memory
+        ((float4*)weight_derivs)[i] = acc;
+    }
+    __syncthreads();
+
+    // --- Write Final Results to Global Memory ---
+    float4* g_dW_workspace_f4 = (float4*)(&dW_workspace[blockIdx.x * n_cols]);
+    const float4* s_weight_derivs_f4 = (const float4*)(weight_derivs);
+
+    for (int i = threadIdx.x; i < n_cols_vec; i += blockDim.x) {
+        g_dW_workspace_f4[i] = s_weight_derivs_f4[i];
+    }
+}
+
+
+extern "C" __global__ void naive_default_rms_norm_bwd_w_bf16_bf16_kernel(int n_rows, int n_cols, float eps, float * fwd_rms_vals, __nv_bfloat16 * X_inp, __nv_bfloat16 * upstream_dX, float * dW_workspace, int * ret_num_blocks_launched){
 	
 	if (blockIdx.x == 0 && threadIdx.x == 0){
 		*ret_num_blocks_launched = gridDim.x;
