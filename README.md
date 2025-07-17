@@ -10,7 +10,7 @@ You can learn more about the project's background/details [here](docs/background
 
 
 #### 3% Higher Training Throughput vs. [Nvidia Baseline](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/dgxc-benchmarking/resources/nemo-llama31-dgxc-benchmarking-g)
-- Trains Llama3 8B (BF16) with 8k sequence length at [~10,950 vs. 10,650](./bench/reproduce_results/figures/memory_throughput_heatmaps/h100/H100-8B-8192-report.png) vs ~10,120 Tok/s per H100
+- Trains Llama3 8B (BF16) with 8k sequence length at [~10,950](./bench/reproduce_results/figures/memory_throughput_heatmaps/h100/H100-8B-8192-report.png) vs ~10,650 Tok/s per H100
     - Requires only 1 H100 to achieve such performance.
 - Training 8B with 64k seqlen achieves 183% higher throughput compared to a prior [Mosaic ML benchmark](https://github.com/mosaicml/llm-foundry/blob/main/scripts/train/benchmarking/README.md) training a smaller 7B MPT model across 8 H100's (5540 Tok/sec vs. 1956 Tok/sec per GPU)
 - Training 8B with 512k seqlen on single H100 with 256GB of host memory achieves 88% higher throughput vs. [Snowflake benchmark](https://www.arxiv.org/pdf/2506.13996) ([950 Tok/sec](bench/reproduce_results/figures/memory_throughput_heatmaps/h100/H100-8B-524288-report.png) vs. 506 Tok/sec per GPU)
