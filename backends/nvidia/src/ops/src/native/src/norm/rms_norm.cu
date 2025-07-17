@@ -231,7 +231,8 @@ extern "C" __global__ void default_rms_norm_bf16_kernel(
     const __nv_bfloat16* __restrict__ X,
     __nv_bfloat16* __restrict__ out,
     float* __restrict__ rms_vals) {
-   /*
+	
+	/*
      * Dynamically allocated shared memory. The size must be at least
      * n_cols * sizeof(float).
      */
@@ -363,10 +364,15 @@ extern "C" __global__ void default_rms_norm_bf16_kernel(
  
 		 /* Pack 8 floats back into 8 bfloat16s in a uint4 vector */
 		 uint4 packed_out;
-		 packed_out.x = __bfloat162_as_uint(__float22bfloat162_rn(f_out[0], f_out[1]));
-		 packed_out.y = __bfloat162_as_uint(__float22bfloat162_rn(f_out[2], f_out[3]));
-		 packed_out.z = __bfloat162_as_uint(__float22bfloat162_rn(f_out[4], f_out[5]));
-		 packed_out.w = __bfloat162_as_uint(__float22bfloat162_rn(f_out[6], f_out[7]));
+		 const __nv_bfloat162 bf162_0 = __float22bfloat162_rn(f_out[0], f_out[1]);
+		 const __nv_bfloat162 bf162_1 = __float22bfloat162_rn(f_out[2], f_out[3]);
+		 const __nv_bfloat162 bf162_2 = __float22bfloat162_rn(f_out[4], f_out[5]);
+		 const __nv_bfloat162 bf162_3 = __float22bfloat162_rn(f_out[6], f_out[7]);
+ 
+		 packed_out.x = *((const unsigned int*)&bf162_0);
+		 packed_out.y = *((const unsigned int*)&bf162_1);
+		 packed_out.z = *((const unsigned int*)&bf162_2);
+		 packed_out.w = *((const unsigned int*)&bf162_3);
  
 		 /* Store the 128-bit vector to global memory */
 		 out_vec[i] = packed_out;
