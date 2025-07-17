@@ -236,8 +236,6 @@ extern "C" __global__ void default_rms_norm_bwd_w_bf16_bf16_kernel(
 
     // Dynamically allocated shared memory
     extern __shared__ uint8_t sdata[];
-
-    // --- Shared Memory Layout (using C-style casts) ---
     float* weight_derivs = (float*)(sdata);
     
     // --- Determine Row Assignment for this Block ---
@@ -276,15 +274,26 @@ extern "C" __global__ void default_rms_norm_bwd_w_bf16_bf16_kernel(
             const float cur_recip_avg = recip_avgs[cur_row_idx];
             const int data_offset = cur_row * n_cols + i * RMS_NORM_BWD_W_VEC_SIZE;
 
-            // Vectorized load using C-style casts
+            // Vectorized load of 4 bfloat16s into a float2 (8 bytes)
             const float2 dX_f2 = *((const float2*)(&upstream_dX[data_offset]));
             const float2 X_f2  = *((const float2*)(&X_inp[data_offset]));
 
-            // Unpack bfloat16 values to floats
-            const float2 dX_lo = __bfloat1622float2(__low2bfloat162(dX_f2));
-            const float2 dX_hi = __bfloat1622float2(__high2bfloat162(dX_f2));
-            const float2 X_lo  = __bfloat1622float2(__low2bfloat162(X_f2));
-            const float2 X_hi  = __bfloat1622float2(__high2bfloat162(X_f2));
+            // --- FIX IS HERE ---
+            // Unpack the four bfloat16 values into four floats.
+            // We loaded 8 bytes into a float2. The .x and .y members of the float2
+            // each hold the 32 bits of two bfloat16 values. We reinterpret these
+            // float bit-patterns as __nv_bfloat162 using __nv_bfloat162_raw.
+            const __nv_bfloat162 dX_bf162_lo = __nv_bfloat162_raw(dX_f2.x);
+            const __nv_bfloat162 dX_bf162_hi = __nv_bfloat162_raw(dX_f2.y);
+            const __nv_bfloat162 X_bf162_lo  = __nv_bfloat162_raw(X_f2.x);
+            const __nv_bfloat162 X_bf162_hi  = __nv_bfloat162_raw(X_f2.y);
+
+            // Now, convert the __nv_bfloat162 pairs into float2 pairs
+            const float2 dX_lo = __bfloat1622float2(dX_bf162_lo);
+            const float2 dX_hi = __bfloat1622float2(dX_bf162_hi);
+            const float2 X_lo  = __bfloat1622float2(X_bf162_lo);
+            const float2 X_hi  = __bfloat1622float2(X_bf162_hi);
+            // --- END FIX ---
 
             // Accumulate the product
             acc.x += dX_lo.x * X_lo.x * cur_recip_avg;
