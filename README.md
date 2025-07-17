@@ -24,7 +24,7 @@ You can learn more about the project's background/details [here](docs/background
 
 ##### H100, 256k
 
-<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-262144-tok.png" alt="Sample Heatmap Tok/s, H100, LLama3-8B, Seqlen 256k" width="70%">
+<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-262144-report.png" alt="Sample Heatmaps, H100, LLama3-8B, Seqlen 256k">
 
 <img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-262144-tflops.png" alt="Sample Heatmap TFLOPS/s, H100, LLama3-8B, Seqlen 256k" width="70%">
 
