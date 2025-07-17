@@ -232,151 +232,111 @@ extern "C" __global__ void default_rms_norm_bf16_kernel(
     __nv_bfloat16* __restrict__ out,
     float* __restrict__ rms_vals) {
 	
-	/*
-     * Dynamically allocated shared memory. The size must be at least
-     * n_cols * sizeof(float).
-     */
-	 extern __shared__ uint8_t sdata[];
-	 float* row_smem = (float*)sdata;
- 
-	 /*
-	  * Shared memory for the parallel reduction of sum of squares.
-	  * One float per warp. Max 32 warps (1024 threads) supported.
-	  */
-	 __shared__ float reduction_data_sq[32];
- 
-	 const int row_ind = blockIdx.x;
-	 if (row_ind >= n_rows) {
-		 return;
-	 }
- 
-	 const int thread_id = threadIdx.x;
-	 const int warp_id = thread_id / 32;
-	 const int lane_id = thread_id % 32;
-	 const unsigned warp_mask = 0xFFFFFFFFU;
- 
-	 /* Base pointers for the current row, cast for vectorized access */
-	 const uint64_t row_offset = (uint64_t)row_ind * (uint64_t)n_cols;
-	 const uint4* x_vec = (const uint4*)(X + row_offset);
-	 uint4* out_vec = (uint4*)(out + row_offset);
-	 const uint4* w_vec = (const uint4*)rms_weight;
- 
-	 /*
-	  * Step 1: Vectorized load, convert to float, compute sum of squares,
-	  * and store float values to shared memory.
-	  * Each thread processes one uint4 (8 bfloat16s) per iteration.
-	  */
-	 float running_sq_sum = 0.0f;
-	 const int n_cols_div_8 = n_cols / 8;
- 
-	 for (int i = thread_id; i < n_cols_div_8; i += blockDim.x) {
-		 /* Load 8 bfloat16s as one 128-bit uint4 vector */
-		 const uint4 packed_x = __ldg(&x_vec[i]);
- 
-		 /* Unpack the 8 bfloat16s into 8 floats using bfloat162 intrinsics */
-		 const float2 f2_0 = __bfloat1622float2(*((const __nv_bfloat162*)&packed_x.x));
-		 const float2 f2_1 = __bfloat1622float2(*((const __nv_bfloat162*)&packed_x.y));
-		 const float2 f2_2 = __bfloat1622float2(*((const __nv_bfloat162*)&packed_x.z));
-		 const float2 f2_3 = __bfloat1622float2(*((const __nv_bfloat162*)&packed_x.w));
- 
-		 /* Store the 8 float values into shared memory */
-		 /* Casting the shared memory pointer to float4 for a vectorized store */
-		 ((float4*)row_smem)[i * 2]     = make_float4(f2_0.x, f2_0.y, f2_1.x, f2_1.y);
-		 ((float4*)row_smem)[i * 2 + 1] = make_float4(f2_2.x, f2_2.y, f2_3.x, f2_3.y);
- 
-		 /* Accumulate sum of squares */
-		 running_sq_sum += f2_0.x * f2_0.x + f2_0.y * f2_0.y;
-		 running_sq_sum += f2_1.x * f2_1.x + f2_1.y * f2_1.y;
-		 running_sq_sum += f2_2.x * f2_2.x + f2_2.y * f2_2.y;
-		 running_sq_sum += f2_3.x * f2_3.x + f2_3.y * f2_3.y;
-	 }
- 
-	 /*
-	  * Step 2: Parallel reduction to get the total sum of squares for the row.
-	  */
-	 /* Intra-warp reduction */
-	 for (int offset = 16; offset > 0; offset >>= 1) {
-		 running_sq_sum += __shfl_down_sync(warp_mask, running_sq_sum, offset);
-	 }
- 
-	 if (lane_id == 0) {
-		 reduction_data_sq[warp_id] = running_sq_sum;
-	 }
- 
-	 __syncthreads();
- 
-	 /* Inter-warp reduction (performed by the first warp) */
-	 if (warp_id == 0) {
-		 /* Ensure the reduction array is initialized before reading from it */
-		 running_sq_sum = (lane_id < blockDim.x / 32) ? reduction_data_sq[lane_id] : 0.0f;
- 
-		 for (int offset = 16; offset > 0; offset >>= 1) {
-			 running_sq_sum += __shfl_down_sync(warp_mask, running_sq_sum, offset);
-		 }
- 
-		 /*
-		  * Final calculation and broadcast. Thread 0 computes the reciprocal
-		  * of the RMS value and writes it to a known location in shared memory
-		  * for all other threads to read.
-		  */
-		 if (lane_id == 0) {
-			 const float inv_n_cols = 1.0f / (float)n_cols;
-			 const float rsqrt_val = rsqrtf(running_sq_sum * inv_n_cols + eps);
-			 reduction_data_sq[0] = rsqrt_val;
- 
-			 /* Optionally save the rsqrt value for the backward pass */
-			 if (rms_vals) {
-				 rms_vals[row_ind] = rsqrt_val;
-			 }
-		 }
-	 }
- 
-	 __syncthreads();
- 
-	 /*
-	  * Step 3 & 4: Apply normalization, scale by weights, and vectorized store.
-	  */
-	 const float recip_avg = reduction_data_sq[0];
- 
-	 for (int i = thread_id; i < n_cols_div_8; i += blockDim.x) {
-		 /* Load 8 float values from shared memory */
-		 const float4 f4_0 = ((float4*)row_smem)[i * 2];
-		 const float4 f4_1 = ((float4*)row_smem)[i * 2 + 1];
- 
-		 /* Load 8 bfloat16 weights and convert to float */
-		 const uint4 packed_w = __ldg(&w_vec[i]);
-		 const float2 w2_0 = __bfloat1622float2(*((const __nv_bfloat162*)&packed_w.x));
-		 const float2 w2_1 = __bfloat1622float2(*((const __nv_bfloat162*)&packed_w.y));
-		 const float2 w2_2 = __bfloat1622float2(*((const __nv_bfloat162*)&packed_w.z));
-		 const float2 w2_3 = __bfloat1622float2(*((const __nv_bfloat162*)&packed_w.w));
- 
-		 /* Apply normalization and element-wise weight scaling */
-		 const float f_out[8] = {
-			 f4_0.x * recip_avg * w2_0.x,
-			 f4_0.y * recip_avg * w2_0.y,
-			 f4_0.z * recip_avg * w2_1.x,
-			 f4_0.w * recip_avg * w2_1.y,
-			 f4_1.x * recip_avg * w2_2.x,
-			 f4_1.y * recip_avg * w2_2.y,
-			 f4_1.z * recip_avg * w2_3.x,
-			 f4_1.w * recip_avg * w2_3.y,
-		 };
- 
-		 /* Pack 8 floats back into 8 bfloat16s in a uint4 vector */
-		 uint4 packed_out;
-		 const __nv_bfloat162 bf162_0 = __float22bfloat162_rn(make_float2(f_out[0], f_out[1]));
-		 const __nv_bfloat162 bf162_1 = __float22bfloat162_rn(make_float2(f_out[2], f_out[3]));
-		 const __nv_bfloat162 bf162_2 = __float22bfloat162_rn(make_float2(f_out[4], f_out[5]));
-		 const __nv_bfloat162 bf162_3 = __float22bfloat162_rn(make_float2(f_out[6], f_out[7]));
- 
-		 packed_out.x = *((const unsigned int*)&bf162_0);
-		 packed_out.y = *((const unsigned int*)&bf162_1);
-		 packed_out.z = *((const unsigned int*)&bf162_2);
-		 packed_out.w = *((const unsigned int*)&bf162_3);
- 
-		 /* Store the 128-bit vector to global memory */
-		 out_vec[i] = packed_out;
-	 }
+		extern __shared__ uint8_t sdata[];
+		float* row_smem = (float*)sdata;
+	
+		__shared__ float reduction_data_sq[32];
+	
+		const int row_ind = blockIdx.x;
+		if (row_ind >= n_rows) {
+			return;
+		}
+	
+		const int thread_id = threadIdx.x;
+		const int warp_id = thread_id / 32;
+		const int lane_id = thread_id % 32;
+		const unsigned warp_mask = 0xFFFFFFFFU;
+	
+		const uint64_t row_offset = (uint64_t)row_ind * (uint64_t)n_cols;
+		const uint4* x_vec = (const uint4*)(X + row_offset);
+		uint4* out_vec = (uint4*)(out + row_offset);
+		const uint4* w_vec = (const uint4*)rms_weight;
+	
+		float running_sq_sum = 0.0f;
+		const int n_cols_div_8 = n_cols / 8;
+	
+		// Step 1: Vectorized load, compute sum of squares, and store to shared memory (transposed)
+		for (int i = thread_id; i < n_cols_div_8; i += blockDim.x) {
+			const uint4 packed_x = __ldg(&x_vec[i]);
+			
+			const float2 f2_0 = __bfloat1622float2(*((const __nv_bfloat162*)&packed_x.x));
+			const float2 f2_1 = __bfloat1622float2(*((const __nv_bfloat162*)&packed_x.y));
+			const float2 f2_2 = __bfloat1622float2(*((const __nv_bfloat162*)&packed_x.z));
+			const float2 f2_3 = __bfloat1622float2(*((const __nv_bfloat162*)&packed_x.w));
+	
+			const float f_in[8] = {
+				f2_0.x, f2_0.y, f2_1.x, f2_1.y,
+				f2_2.x, f2_2.y, f2_3.x, f2_3.y
+			};
+			
+			// Write to shared memory with a transposed layout to ensure coalesced access
+			#pragma unroll
+			for (int k = 0; k < 8; ++k) {
+				row_smem[k * n_cols_div_8 + i] = f_in[k];
+			}
+	
+			running_sq_sum += f_in[0] * f_in[0] + f_in[1] * f_in[1];
+			running_sq_sum += f_in[2] * f_in[2] + f_in[3] * f_in[3];
+			running_sq_sum += f_in[4] * f_in[4] + f_in[5] * f_in[5];
+			running_sq_sum += f_in[6] * f_in[6] + f_in[7] * f_in[7];
+		}
+	
+		// Step 2: Parallel reduction (unchanged)
+		for (int offset = 16; offset > 0; offset >>= 1) {
+			running_sq_sum += __shfl_down_sync(warp_mask, running_sq_sum, offset);
+		}
+		if (lane_id == 0) {
+			reduction_data_sq[warp_id] = running_sq_sum;
+		}
+		__syncthreads();
+		if (warp_id == 0) {
+			running_sq_sum = (lane_id < blockDim.x / 32) ? reduction_data_sq[lane_id] : 0.0f;
+			for (int offset = 16; offset > 0; offset >>= 1) {
+				running_sq_sum += __shfl_down_sync(warp_mask, running_sq_sum, offset);
+			}
+			if (lane_id == 0) {
+				const float inv_n_cols = 1.0f / (float)n_cols;
+				const float rsqrt_val = rsqrtf(running_sq_sum * inv_n_cols + eps);
+				reduction_data_sq[0] = rsqrt_val;
+				if (rms_vals) {
+					rms_vals[row_ind] = rsqrt_val;
+				}
+			}
+		}
+		__syncthreads();
+	
+		// Step 3 & 4: Load from shared, normalize, scale, and vectorized store
+		const float recip_avg = reduction_data_sq[0];
+	
+		for (int i = thread_id; i < n_cols_div_8; i += blockDim.x) {
+			// Load from shared memory using the same transposed layout
+			float f_smem[8];
+			#pragma unroll
+			for (int k = 0; k < 8; ++k) {
+				f_smem[k] = row_smem[k * n_cols_div_8 + i];
+			}
+	
+			const uint4 packed_w = __ldg(&w_vec[i]);
+			const float2 w2_0 = __bfloat1622float2(*((const __nv_bfloat162*)&packed_w.x));
+			const float2 w2_1 = __bfloat1622float2(*((const __nv_bfloat162*)&packed_w.y));
+			const float2 w2_2 = __bfloat1622float2(*((const __nv_bfloat162*)&packed_w.z));
+			const float2 w2_3 = __bfloat1622float2(*((const __nv_bfloat162*)&packed_w.w));
+			
+			const float f_out[8] = {
+				f_smem[0] * recip_avg * w2_0.x, f_smem[1] * recip_avg * w2_0.y,
+				f_smem[2] * recip_avg * w2_1.x, f_smem[3] * recip_avg * w2_1.y,
+				f_smem[4] * recip_avg * w2_2.x, f_smem[5] * recip_avg * w2_2.y,
+				f_smem[6] * recip_avg * w2_3.x, f_smem[7] * recip_avg * w2_3.y,
+			};
+	
+			uint4 packed_out;
+			*((__nv_bfloat162*)&packed_out.x) = __float22bfloat162_rn(make_float2(f_out[0], f_out[1]));
+			*((__nv_bfloat162*)&packed_out.y) = __float22bfloat162_rn(make_float2(f_out[2], f_out[3]));
+			*((__nv_bfloat162*)&packed_out.z) = __float22bfloat162_rn(make_float2(f_out[4], f_out[5]));
+			*((__nv_bfloat162*)&packed_out.w) = __float22bfloat162_rn(make_float2(f_out[6], f_out[7]));
+	
+			out_vec[i] = packed_out;
+		}
 }
 
 extern "C" __global__ void naive_default_rms_norm_bf16_kernel(int n_rows, int n_cols, float eps, __nv_bfloat16 * rms_weight, __nv_bfloat16 * X, __nv_bfloat16 * out, float * rms_vals) {
