@@ -8,6 +8,8 @@
 #include <cuda_bf16.h>
 #include <cuda_fp8.h>
 #include <mma.h>
+#include <math.h>
+#include <float.h>
 #include "cuda_ptx_macros.h"
 
 
