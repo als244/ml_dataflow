@@ -10,7 +10,7 @@ You can learn more about the project's background/details [here](docs/background
 
 
 #### 9% Higher Training Throughput vs. [Nvidia Baseline](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/dgxc-benchmarking/resources/llama31-8b-dgxc-benchmarking-b)
-- Trains Llama3 8B (BF16) with 8k sequence length at [~11,000](./bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-8192-tok.png) vs ~10,120 Tok/s per H100
+- Trains Llama3 8B (BF16) with 8k sequence length at [~10,950](./bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-8192-tok.png) vs ~10,120 Tok/s per H100
     - Requires only 1 H100 to achieve such performance.
 - Training 8B with 64k seqlen achieves 183% higher throughput compared to a prior [Mosaic ML benchmark](https://github.com/mosaicml/llm-foundry/blob/main/scripts/train/benchmarking/README.md) training a smaller 7B MPT model across 8 H100's (5540 Tok/sec vs. 1956 Tok/sec per GPU)
 - Training 8B with 512k seqlen on single H100 with 256GB of host memory achieves 88% higher throughput vs. [Snowflake benchmark](https://www.arxiv.org/pdf/2506.13996) ([950 Tok/sec](bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-524288-tok.png) vs. 506 Tok/sec per GPU)
@@ -20,19 +20,19 @@ You can learn more about the project's background/details [here](docs/background
 
 ### [Try It Out Yourself](#training-performance-demo) or [See Full Benchmarking Results](#benchmarked-results)
 
-#### Example Results of Training an 8B model with 64K Sequence Length on Single-Device
+### Example results of training 8B model with long sequence lengths on just a single-device
 
-##### H100
+##### H100, 256k
 
-<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-65536-tok.png" alt="Sample Heatmap Tok/s, H100, LLama3-8B, Seqlen 64k" width="70%">
+<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-262144-tok.png" alt="Sample Heatmap Tok/s, H100, LLama3-8B, Seqlen 256k" width="70%">
 
-<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-65536-tflops.png" alt="Sample Heatmap TFLOPS/s, H100, LLama3-8B, Seqlen 64k" width="70%">
+<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100-8B-262144-tflops.png" alt="Sample Heatmap TFLOPS/s, H100, LLama3-8B, Seqlen 256k" width="70%">
 
-##### RTX 5090
+##### RTX 5090, 128k
 
-<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090-8B-65536-tok.png" alt="Sample Heatmap Tok/, RTX 5090, LLama3-8B, Seqlen 64k" width="70%">
+<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090-8B-131072-tok.png" alt="Sample Heatmap Tok/, RTX 5090, LLama3-8B, Seqlen 128k" width="70%">
 
-<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090-8B-65536-tflops.png" alt="Sample Heatmap TFLOPS/s, RTX 5090, LLama3-8B, Seqlen 64k" width="70%">
+<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090-8B-131072-tflops.png" alt="Sample Heatmap TFLOPS/s, RTX 5090, LLama3-8B, Seqlen 128k" width="70%">
 
 -----
 
@@ -68,7 +68,7 @@ git clone git@github.com:als244/ml_dataflow.git
 make -j <NUM_PROCS>
 ```
 
-The project is built from ~10k lines of C, 8 logically unique (memory-bound, partially optimized) GPU kernels, and wrappers over [Flash Attention](https://github.com/Dao-AILab/flash-attention) and vendor BLAS libraries (performance critical computation kernels). The only depedencies are the backend userspace driver & backend BLAS lib. For Nvidia backend it assumes that libs and headers are in standard location `/usr/local/cuda`. 
+The project is built from ~10k lines of C, a few logically unique GPU kernels similar to [liger kernel](https://github.com/linkedin/Liger-Kernel), and wrappers over [Flash Attention](https://github.com/Dao-AILab/flash-attention) and vendor BLAS libraries (performance critical computation kernels). The only depedencies are the backend userspace driver & backend BLAS lib. For Nvidia backend it assumes that libs and headers are in standard location `/usr/local/cuda`. 
 
 ###### Note that building the flash2 and flash3 wrapper libraries may take some time (a few hours)...using more processors will help. 
 
@@ -129,7 +129,7 @@ Tested across 4 different machines:
 | RTX 3090 | 71 TFLOPS/s | 32 GB/s | Gaming PC (AMD x570, Ryzen 5950x) | 51.2 GB/s | 128 GB |
 
 *The H100 and A100 are each on 2-node NUMA systems with 8 memory controllers per NUMA node and with speeds of 4800 MT/s and 2933 MT/s respectively. Host memory BW refers to local numa node.
- 
+
 **Host memory capacity refers to local NUMA capacity (which is shared among 4 GPUs).
 
 ---
@@ -269,7 +269,7 @@ Where the $(2 * D + 2 * K + 3 * F)$ factor is coming from Q, O, K+V and the 3 FF
 \text{MFU} = \text{TFLOPS} / \text{peak hardware TFLOPS}
 ```
 
-- HFU (Hardware Flops Utilization): A measure of processing throughput (including recomputations in numerator) relative to hardware capabilities. There are 2 levels are recomputation that occur depending on memory capacities -- the system automatically configures this and calculates the accurate metric. See the `throughput.c` file for more details. [Flash Attention](https://github.com/Dao-AILab/flash-attention) is employed which recomputes the attention score matrix (implicity) during the backwards pass, so by default at least $N * L * (.5 * 2 * (S * S * D))$ FLOPs are recomputed per step. Here we see that $\text{HFU}$ is strictly greater than $\text{MFU}$.
+- HFU (Hardware Flops Utilization): A measure of processing throughput (including recomputations in numerator) relative to hardware capabilities. There are 2 levels are recomputation that occur depending on memory capacities -- the system automatically configures this and calculates the accurate metric. See the `throughput.c` file for more details. Flash Attention is employed which recomputes the attention score matrix (implicity) during the backwards pass, so by default at least $N * L * (.5 * 2 * (S * S * D))$ FLOPs are recomputed per step. Here we see that $\text{HFU}$ is strictly greater than $\text{MFU}$.
 
 -----
 
