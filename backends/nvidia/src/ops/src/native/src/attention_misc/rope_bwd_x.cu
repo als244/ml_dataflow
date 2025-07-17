@@ -3,6 +3,7 @@
 // Define constants for vectorization dimensions
 #define ROPE_BWD_VEC_SIZE 8
 #define ROPE_BWD_PAIRS (ROPE_BWD_VEC_SIZE / 2)
+#define ROPE_BWD_MAX_HEAD_DIM 256
 
 /* * A union to convert between a float4 vector and an array of four 
  * __nv_bfloat162 ROPE_BWD_PAIRS. This facilitates efficient 16-byte memory 
@@ -153,8 +154,8 @@ extern "C" __global__ void default_rope_bwd_x_bf16_kernel(
     __nv_bfloat16* __restrict__ dX_k) {
 
     // Shared memory for caching sin/cos values.
-    __shared__ float smem_cos[MAX_HEAD_DIM_ROPE / 2];
-    __shared__ float smem_sin[MAX_HEAD_DIM_ROPE / 2];
+    __shared__ float smem_cos[ROPE_BWD_MAX_HEAD_DIM / 2];
+    __shared__ float smem_sin[ROPE_BWD_MAX_HEAD_DIM / 2];
 
     // One block per token (row)
     const int row_ind = blockIdx.x;
