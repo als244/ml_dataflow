@@ -185,11 +185,11 @@ int default_rms_norm_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_launch_co
 
 	int rms_base_smem = (fwd_dtype_size + upstream_dtype_size) * model_dim;
 
-	size_t aligned_offset = (rms_base_smem + 3) & ~3 + 32 * sizeof(float);
+	int aligned_offset = ((rms_base_smem + 3) & ~3) + 32 * sizeof(float);
 
 	int rms_max_smem = (cuda_function -> function_config).func_max_smem;
 
-	if (rms_base_smem > rms_max_smem){
+	if (aligned_offset > rms_max_smem){
 		fprintf(stderr, "Error: rms norm bwd x will fail. Unable to support model dim of %d with upstream dtype %s. Not enough smem on device, max for this func is %d bytes, but requires %d...\n", model_dim, dataflow_datatype_as_string(upstream_dt), rms_max_smem, rms_base_smem);
 		return -1;
 	}
