@@ -6,197 +6,155 @@ import matplotlib.pyplot as plt
 import matplotlib.colors
 import numpy as np
 
-import sys
-import os
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
-import matplotlib.colors
-import numpy as np
-
 def plot_throughput(csv_filepath, device_name, output_dir):
     """
-    Generates heatmaps with metric-specific colormaps and value ranges.
-    - Tokens/sec: YlGn, vmin=min_non_zero, vmax=max
-    - TFLOPS: Blues, vmin=0, vmax=peak_tflops
-    - MFU/HFU: RdYlGn, vmin=0, vmax=1
-    - Zero values are colored dark red for emphasis across all plots.
+    Generates a single 2x2 subplot image and PDF containing four heatmaps 
+    (Tokens/sec, TFLOPS, MFU, HFU) for each model size and sequence length.
+    - The figure is titled with device, model, and sequence length information.
+    - Each subplot is titled with its corresponding metric.
+    - Metric-specific colormaps and value ranges are applied.
+    - Zero values are colored black for emphasis across all plots.
     """
     os.makedirs(output_dir, exist_ok=True)
-
-    # Create the 'pdf' subdirectory for PDF files
     pdf_output_dir = os.path.join(output_dir, "pdf")
     os.makedirs(pdf_output_dir, exist_ok=True)
 
-    # --- Style Settings ---
+    # --- Style and Colormap Settings ---
     plt.rcParams.update({
-        'font.size': 14,
-        'axes.titlesize': 18,
-        'axes.labelsize': 16,
-        'xtick.labelsize': 16,
-        'ytick.labelsize': 16
+        'font.size': 16,
+        'axes.titlesize': 20,
+        'axes.labelsize': 18,
+        'xtick.labelsize': 18,
+        'ytick.labelsize': 18,
+        'figure.titlesize': 24
     })
-    annot_kws = {"size": 14}
-
-    # --- Colormap for zero values ---
+    annot_kws = {"size": 16}
     failed_cmap = matplotlib.colors.ListedColormap(['#000000'])
 
+    # --- Data Loading and Preparation ---
     csv_columns = ["host_mem_gb", "dev_mem_gb", "seq_len", "model_size", "used_host_mem_gb", "used_dev_mem_gb", "chunk_size", "total_home_acts", "num_inp_only_saved", "num_inp_attn_saved", "num_full_saved", "total_dev_acts", "num_rounds_per_step", "seqs_per_step", "recompute_pct", "attn_flop_pct", "avg_step_time", "tok_per_sec", "tflops", "mfu", "hfu"]
+    
     df = pd.read_csv(csv_filepath, names=csv_columns)
 
+    # --- Device-Specific Performance Ranges ---
     device_name_to_util_range = {
-        "H100": (0.35, 0.7),
-        "A100": (0.15, 0.6),
-        "RTX5090": (0.35, 0.9),
-        "RTX3090": (0.35, 0.9)
+        "H100": (0.1, 0.9), "A100": (0.1, 0.9),
+        "RTX5090": (0.1, 0.9), "RTX3090": (0.1, 0.9)
     }
-
-    util_min_val = device_name_to_util_range[device_name][0]
-    util_max_val = device_name_to_util_range[device_name][1]
+    util_min_val, util_max_val = device_name_to_util_range.get(device_name, (0.1, 0.9))
 
     device_name_to_peak_bf16_tflops = {
-        "H100": 989,
-        "A100": 312.5,
-        "RTX5090": 209.5,
-        "RTX3090": 71.2
+        "H100": 989, "A100": 312.5,
+        "RTX5090": 209.5, "RTX3090": 71.2
     }
-
     if device_name not in device_name_to_peak_bf16_tflops:
         raise ValueError(f"Device {device_name} not found in device_name_to_peak_bf16_tflops")
-
     peak_bf16_tflops = device_name_to_peak_bf16_tflops[device_name]
-
     
     tflops_vmin = util_min_val * peak_bf16_tflops
     tflops_vmax = util_max_val * peak_bf16_tflops
 
-
-    metrics = ['tok_per_sec', 'tflops', 'mfu', 'hfu']
+    # --- Metric Definitions ---
     metric_labels = {
-        'tok_per_sec': 'Tokens/sec',
-        'tflops': 'TFLOPS/s',
-        'mfu': 'MFU',
-        'hfu': 'HFU',
+        'tok_per_sec': 'Tokens/sec', 'tflops': 'TFLOPS/s',
+        'mfu': 'MFU', 'hfu': 'HFU',
     }
-    metric_file_suffix = {
-        'tok_per_sec': 'tok',
-        'tflops': 'tflops',
-        'mfu': 'mfu',
-        'hfu': 'hfu',
+    plot_positions = {
+        (0, 0): 'tok_per_sec', (1, 0): 'tflops',
+        (0, 1): 'mfu', (1, 1): 'hfu',
     }
 
+    # --- Main Plotting Loop ---
     seq_lens = df['seq_len'].unique()
     model_sizes = df['model_size'].unique()
 
     for seq_len in seq_lens:
         df_seqlen_slice = df[df['seq_len'] == seq_len]
         for model_size in model_sizes:
-            df_model_size_slice = df_seqlen_slice[df_seqlen_slice['model_size'] == model_size]
-
-            max_mfu = df_model_size_slice[df_model_size_slice['mfu'] > 0]['mfu'].max()
-            max_tok_per_sec = df_model_size_slice[df_model_size_slice['tok_per_sec'] > 0]['tok_per_sec'].max()
-
-            tok_per_sec_at_max_mfu = (util_max_val / max_mfu) * max_tok_per_sec
-            tok_per_sec_at_min_mfu = (util_min_val / util_max_val) * tok_per_sec_at_max_mfu
-            
-            vmin_tok_per_sec = tok_per_sec_at_min_mfu
-            vmax_tok_per_sec = tok_per_sec_at_max_mfu
+            df_model_size_slice = df_seqlen_slice[df_seqlen_slice['model_size'] == model_size]            
 
             if df_model_size_slice.empty:
                 continue
 
-            for metric in metrics:
+            # --- Create a 2x2 Subplot Figure ---
+            fig, axs = plt.subplots(2, 2, figsize=(22, 18), sharex=True, sharey=True)
+            fig.suptitle(f"{device_name} Performance Report\nModel: {model_size}B, Sequence Length: {seq_len}")
+
+            # Calculate tok/sec range based on MFU
+            max_mfu = df_model_size_slice[df_model_size_slice['mfu'] > 0]['mfu'].max()
+            max_tok_per_sec = df_model_size_slice[df_model_size_slice['tok_per_sec'] > 0]['tok_per_sec'].max()
+            tok_per_sec_at_max_mfu = (util_max_val / max_mfu) * max_tok_per_sec if max_mfu > 0 else 0
+            tok_per_sec_at_min_mfu = (util_min_val / util_max_val) * tok_per_sec_at_max_mfu
+            
+            # --- Loop Through Subplot Positions and Metrics ---
+            for (r, c), metric in plot_positions.items():
+                ax = axs[r, c]
                 if metric not in df_model_size_slice.columns:
+                    ax.text(0.5, 0.5, f"{metric_labels[metric]}\nData Not Available", ha='center', va='center', fontsize=18)
+                    ax.set_xticks([])
+                    ax.set_yticks([])
                     continue
 
                 heatmap_data = df_model_size_slice.pivot_table(
-                    index='host_mem_gb',
-                    columns='dev_mem_gb',
-                    values=metric,
-                    aggfunc='mean'
+                    index='host_mem_gb', columns='dev_mem_gb', values=metric, aggfunc='mean'
                 ).fillna(0)
-
                 heatmap_data.sort_index(ascending=False, inplace=True)
 
                 if heatmap_data.empty:
                     continue
 
+                # --- Define Colormap and Value Range for Each Metric ---
                 if metric == 'tflops':
-                    cmap = 'viridis'
-                    vmin = tflops_vmin
-                    vmax = tflops_vmax
+                    cmap, vmin, vmax = 'viridis', tflops_vmin, tflops_vmax
                 elif metric in ['mfu', 'hfu']:
-                    cmap = 'RdYlGn'
-                    vmin = util_min_val
-                    vmax = util_max_val
+                    cmap, vmin, vmax = 'RdYlGn', util_min_val, util_max_val
                 elif metric == 'tok_per_sec':
-                    cmap = 'YlGn'
-                    non_zero_vals = heatmap_data[heatmap_data > 0]
-                    vmin = vmin_tok_per_sec
-                    vmax = vmax_tok_per_sec
+                    cmap, vmin, vmax = 'YlGn', tok_per_sec_at_min_mfu, tok_per_sec_at_max_mfu
 
-                plt.figure(figsize=(10, 8))
-
-                hide_zeros = heatmap_data == 0
-                hide_non_zeros = heatmap_data != 0
-                
-                # Prepare a dataframe for annotations. This bypasses an issue where
-                # seaborn's automatic annotation fails to add text for certain values.
-                # We format non-zero values as strings and leave zero-value cells empty.
+                # Prepare masks and annotation data
+                mask_zeros = heatmap_data == 0
                 annot_data = heatmap_data.applymap(lambda v: f"{v:.2f}" if v != 0 else "")
 
-                ax = sns.heatmap(
-                    heatmap_data,
-                    mask=hide_zeros,
-                    annot=annot_data,    # Use the prepared dataframe for annotations
-                    fmt='',              # Disable automatic formatting, as we've done it manually
-                    annot_kws=annot_kws,
-                    linewidths=1.0,
-                    linecolor='white',
-                    cmap=cmap,
-                    cbar_kws={'label': metric_labels.get(metric, metric)},
-                    vmin=vmin,
-                    vmax=vmax
+                # Plot heatmap for non-zero values
+                sns.heatmap(
+                    heatmap_data, mask=mask_zeros, annot=annot_data, fmt='', annot_kws=annot_kws,
+                    linewidths=1.0, linecolor='white', cmap=cmap, vmin=vmin, vmax=vmax,
+                    cbar_kws={'label': metric_labels.get(metric, metric)}, ax=ax
                 )
-
-                # ---  Manual Font Color Correction ---
-                # This block will now work correctly because ax.texts
-                # will contain an entry for every non-zero cell.
-                luminance_threshold = 0.5
                 
+                # --- Manual Font Color Correction for Readability ---
                 cmap_obj = plt.get_cmap(cmap)
                 norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
-                
-                annotated_data = heatmap_data.to_numpy()[hide_non_zeros.to_numpy()]
-                
-                for text_artist, value in zip(ax.texts, annotated_data):
-                    bg_color = cmap_obj(norm(value))
+                for text_artist in ax.texts:
+                    val = float(text_artist.get_text())
+                    bg_color = cmap_obj(norm(val))
                     luminance = (bg_color[0] * 299 + bg_color[1] * 587 + bg_color[2] * 114) / 1000
-                    text_artist.set_color('black' if luminance > luminance_threshold else 'white')
-        
+                    text_artist.set_color('black' if luminance > 0.5 else 'white')
+
+                # Overlay heatmap for zero values
                 sns.heatmap(
-                    heatmap_data,
-                    mask=hide_non_zeros,
-                    annot=False,
-                    linewidths=1.0,
-                    linecolor='white',
-                    cmap=failed_cmap,
-                    cbar=False,
-                    ax=ax
+                    heatmap_data, mask=~mask_zeros, annot=False, linewidths=1.0,
+                    linecolor='white', cmap=failed_cmap, cbar=False, ax=ax
                 )
-
-                plt.title(f"Performance for Model: {model_size}B, Seq Len: {seq_len} on {device_name}")
-                plt.xlabel("Device Memory (GB)")
-                plt.ylabel("Host Memory (GB)")
-                plt.tight_layout()
-
-                base_filename = f"{device_name}-{model_size}B-{seq_len}-{metric_file_suffix[metric]}"
-                pdf_path = os.path.join(pdf_output_dir, f"{base_filename}.pdf")
-                plt.savefig(pdf_path)
-                png_path = os.path.join(output_dir, f"{base_filename}.png")
-                plt.savefig(png_path)
                 
-                plt.close()
+                ax.set_title(metric_labels.get(metric, metric))
+                ax.set_xlabel('') # Clear individual labels for shared axes
+                ax.set_ylabel('')
+
+            # Set shared axis labels
+            fig.supxlabel("Device Memory (GB)")
+            fig.supylabel("Host Memory (GB)")
+
+            plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # Adjust layout for suptitle
+
+            # --- Save the Combined Figure ---
+            base_filename = f"{device_name}-{model_size}B-{seq_len}-report"
+            pdf_path = os.path.join(pdf_output_dir, f"{base_filename}.pdf")
+            plt.savefig(pdf_path)
+            png_path = os.path.join(output_dir, f"{base_filename}.png")
+            plt.savefig(png_path)
+            
+            plt.close(fig) # Close the figure to free memory
 
 if __name__ == "__main__":
     if len(sys.argv) != 4:
