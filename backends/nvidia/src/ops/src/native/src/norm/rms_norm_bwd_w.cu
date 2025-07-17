@@ -229,12 +229,10 @@ extern "C" __global__ void default_rms_norm_bwd_w_bf16_bf16_kernel(
         *ret_num_blocks_launched = gridDim.x;
     }
 
-    // This vectorized kernel requires n_cols to be a multiple of 4.
-    if (n_cols % RMS_NORM_BWD_W_VEC_SIZE != 0) {
+    if (n_cols % VEC_SIZE != 0) {
         return;
     }
 
-    // Dynamically allocated shared memory
     extern __shared__ uint8_t sdata[];
     float* weight_derivs = (float*)(sdata);
     
@@ -264,7 +262,7 @@ extern "C" __global__ void default_rms_norm_bwd_w_bf16_bf16_kernel(
     __syncthreads();
 
     // --- Main Computation (Vectorized) ---
-    const int n_cols_vec = n_cols / RMS_NORM_BWD_W_VEC_SIZE;
+    const int n_cols_vec = n_cols / VEC_SIZE;
 
     for (int i = threadIdx.x; i < n_cols_vec; i += blockDim.x) {
         float4 acc = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
@@ -272,28 +270,31 @@ extern "C" __global__ void default_rms_norm_bwd_w_bf16_bf16_kernel(
         for (int cur_row_idx = 0; cur_row_idx < rows_per_block; ++cur_row_idx) {
             const int cur_row = row_offset + cur_row_idx;
             const float cur_recip_avg = recip_avgs[cur_row_idx];
-            const int data_offset = cur_row * n_cols + i * RMS_NORM_BWD_W_VEC_SIZE;
+            const int data_offset = cur_row * n_cols + i * VEC_SIZE;
 
-            // Vectorized load of 4 bfloat16s into a float2 (8 bytes)
             const float2 dX_f2 = *((const float2*)(&upstream_dX[data_offset]));
             const float2 X_f2  = *((const float2*)(&X_inp[data_offset]));
 
             // --- FIX IS HERE ---
-            // Unpack the four bfloat16 values into four floats.
-            // We loaded 8 bytes into a float2. The .x and .y members of the float2
-            // each hold the 32 bits of two bfloat16 values. We reinterpret these
-            // float bit-patterns as __nv_bfloat162 using __nv_bfloat162_raw.
-            const __nv_bfloat162 dX_bf162_lo = __nv_bfloat162_raw(dX_f2.x);
-            const __nv_bfloat162 dX_bf162_hi = __nv_bfloat162_raw(dX_f2.y);
-            const __nv_bfloat162 X_bf162_lo  = __nv_bfloat162_raw(X_f2.x);
-            const __nv_bfloat162 X_bf162_hi  = __nv_bfloat162_raw(X_f2.y);
+            // Use a union to reinterpret the bits of the float2 members
+            F32_BF162_Caster dX_caster, X_caster;
+
+            dX_caster.f = dX_f2.x;
+            const __nv_bfloat162 dX_bf162_lo = dX_caster.b;
+            dX_caster.f = dX_f2.y;
+            const __nv_bfloat162 dX_bf162_hi = dX_caster.b;
+
+            X_caster.f = X_f2.x;
+            const __nv_bfloat162 X_bf162_lo = X_caster.b;
+            X_caster.f = X_f2.y;
+            const __nv_bfloat162 X_bf162_hi = X_caster.b;
+            // --- END FIX ---
 
             // Now, convert the __nv_bfloat162 pairs into float2 pairs
             const float2 dX_lo = __bfloat1622float2(dX_bf162_lo);
             const float2 dX_hi = __bfloat1622float2(dX_bf162_hi);
             const float2 X_lo  = __bfloat1622float2(X_bf162_lo);
             const float2 X_hi  = __bfloat1622float2(X_bf162_hi);
-            // --- END FIX ---
 
             // Accumulate the product
             acc.x += dX_lo.x * X_lo.x * cur_recip_avg;
@@ -301,8 +302,7 @@ extern "C" __global__ void default_rms_norm_bwd_w_bf16_bf16_kernel(
             acc.z += dX_hi.x * X_hi.x * cur_recip_avg;
             acc.w += dX_hi.y * X_hi.y * cur_recip_avg;
         }
-
-        // Write the final accumulated values to shared memory
+        
         ((float4*)weight_derivs)[i] = acc;
     }
     __syncthreads();
