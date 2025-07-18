@@ -15,7 +15,7 @@
 
 ## SCRIPT USAGE
 
-## sbatch <script> --mem=<specify host mem> <experiment name> <output csv filepath>
+## sbatch --mem=<specify host mem> <this script filename> <experiment name> <output csv filepath>
 
 
 python sweep_training_environments.py experiment_sweep_config.json $1 $2
