@@ -56,7 +56,7 @@ def plot_throughput(csv_filepath, device_name, output_dir):
 
     # --- Metric Definitions ---
     metric_labels = {
-        'tok_per_sec': 'Tokens/sec', 'tflops': 'TFLOPS/s',
+        'tok_per_sec': 'Tokens/sec', 'tflops': 'Model TFLOPS/sec',
         'mfu': 'MFU', 'hfu': 'HFU',
     }
     plot_positions = {
