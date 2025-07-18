@@ -15,6 +15,7 @@
 
 #define WARP_SIZE 32
 #define MAX_BLOCK_DIM 1024
+#define NUM_BANKS 32
 
 #define CONST_ZERO_FP16 0x0000U
 #define CONST_ONE_FP16 0x3C00U
