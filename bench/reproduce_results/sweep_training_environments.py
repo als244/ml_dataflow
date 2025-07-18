@@ -35,7 +35,7 @@ def run_sweep(sweep_config_filepath, experiment_name, output_filepath):
     
 
     for cur_run_num in range(start_run_ind, total_runs):
-        run = all_runs[i]
+        run = all_runs[cur_run_num]
         host_mem_size, device_mem_size, seq_len, model_size = run
         print(f"{experiment_name}: ({cur_run_num}/{total_runs}): {host_mem_size} {device_mem_size} {seq_len} {model_size}")
         exit_status = get_throughput(host_mem_size, device_mem_size, seq_len, model_size, total_steps, warmup_steps, output_filepath)
