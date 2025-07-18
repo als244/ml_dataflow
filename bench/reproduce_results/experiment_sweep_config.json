@@ -16,5 +16,14 @@
         "start_run_ind": 0,
         "total_steps": 7,
         "warmup_steps": 2
+    },
+    "a100_8b_short": {
+        "host_mem_gb": [60, 65, 70, 75],
+        "device_mem_gb": [24, 30, 40, 50, 60, 70, 78],
+        "seq_len": [512, 1024, 2048, 4096, 8192, 16384],
+        "model_size": [8],
+        "start_run_ind": 0,
+        "total_steps": 7,
+        "warmup_steps": 2
     }
 }
