@@ -119,7 +119,7 @@ python bench/reproduce_results/sweep_training_environments.py <experiment config
 
 #### Methodology
 
-To simulate realistic conditions, the first ~ 2 minutes are warmup as temperatures => clock rates are unstable. After a couple minutes the step times become very consistent. As we've configured the target step time of 1B model to be around 6 seconds this means we warmup with 20 steps and then record the next 30 and take average. For 8B (with target on order of 48 seconds), there are 2 warmup steps and then 5 steps that get recorded. The step time ends when the last updated parameter block arrives home, and immediately starts timer for the next step. (If you are profiling and looking at the markings, these are not precise but the recorded time within program is). The experiment configurations to sweep across different [machine](#machine-specs), memory, seq len, and model are in `bench/reproduce_results/experiment_sweep_config.json`. 
+To simulate realistic conditions, the first few steps (approximately 2 minutes) are ignored --- at the beginning temperature/clock rate is unstable and likely overestimates stready-state perf. After a couple minutes the step times become very consistent. As we've configured the target step time of 1B model to be around 6 seconds this means we warmup with 20 steps and then record the next 30 and take average. For 8B (with target on order of 48 seconds), there are 2 warmup steps and then the following 5 steps get recorded. The step time ends when the last parameter block (updated with optimizer) arrives home. The experiment configurations to sweep across different [machine](#machine-specs), memory, seq len, and model are in `bench/reproduce_results/experiment_sweep_config.json`. 
 
 ---
 
