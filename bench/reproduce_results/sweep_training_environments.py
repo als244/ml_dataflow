@@ -37,10 +37,10 @@ def run_sweep(sweep_config_filepath, experiment_name, output_filepath):
     for cur_run_num in range(start_run_ind, total_runs):
         run = all_runs[cur_run_num]
         host_mem_size, device_mem_size, seq_len, model_size = run
-        print(f"{experiment_name}: ({cur_run_num}/{total_runs}): {host_mem_size} {device_mem_size} {seq_len} {model_size}")
+        print(f"{experiment_name}: ({cur_run_num}/{total_runs}): {host_mem_size} {device_mem_size} {seq_len} {model_size}", flush=True)
         exit_status = get_throughput(host_mem_size, device_mem_size, seq_len, model_size, total_steps, warmup_steps, output_filepath)
         if exit_status != 0:
-            print(f"\tFailed to run...")
+            print(f"\tFailed to run...", flush=True)
             out_file = open(output_filepath, "a")
             # used_host_mem_gb, used_dev_mem_gb, chunk_size, total_home_acts, num_inp_only_saved, num_inp_attn_saved, num_full_saved, total_dev_acts, num_rounds_per_step, seqs per step, recompute pct, attn flop pct,avg. step time, tok/sec, TFLOPS, MFU, HFU
             out_file.write(f"{host_mem_size},{device_mem_size},{seq_len},{model_size},0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0\n")
