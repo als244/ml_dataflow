@@ -4,7 +4,6 @@
 #define ROPE_VEC_SIZE 8
 #define ROPE_PAIRS (ROPE_VEC_SIZE / 2)
 #define ROPE_MAX_HEAD_DIM 256
-#define ROPE_BANKED_SMEM_COLS (ROPE_MAX_HEAD_DIM / 2 + NUM_BANKS - 1) / NUM_BANKS
 
 /* * A union to convert between a float4 vector and an array of four 
  * __nv_bfloat162 ROPE_BWD_PAIRS. This facilitates efficient 16-byte memory 
@@ -160,10 +159,11 @@ extern "C" __global__ void default_rope_bf16_kernel(
     __nv_bfloat16* __restrict__ X_q,
     __nv_bfloat16* __restrict__ X_k) {
     
-    // Banked shared memory to prevent bank conflicts
-    __shared__ float smem_cos[NUM_BANKS][ROPE_BANKED_SMEM_COLS];
-    __shared__ float smem_sin[NUM_BANKS][ROPE_BANKED_SMEM_COLS];
+    // Shared memory for caching sin/cos values.
+    __shared__ float smem_cos[ROPE_MAX_HEAD_DIM / 2];
+    __shared__ float smem_sin[ROPE_MAX_HEAD_DIM / 2];
 
+    // One block per token (row)
     const int row_ind = blockIdx.x;
     if (row_ind >= num_tokens) {
         return;
@@ -172,19 +172,18 @@ extern "C" __global__ void default_rope_bf16_kernel(
     const int seq_pos = seq_positions[row_ind];
     const int num_pairs = head_dim / 2;
 
-    // --- Phase 1: Write to shared memory using the banked layout ---
+    // --- Phase 1: Pre-compute sin/cos values into shared memory ---
+    // Parallelize the calculation over the threads in the block.
     for (int i = threadIdx.x; i < num_pairs; i += blockDim.x) {
-        const int bank = i % NUM_BANKS;
-        const int col = i / NUM_BANKS;
         const float current_dim = (float)(2 * i);
         const float inv_freq = powf(theta, -current_dim / (float)head_dim);
-        sincosf((float)seq_pos * inv_freq, &smem_sin[bank][col], &smem_cos[bank][col]);
+        sincosf((float)seq_pos * inv_freq, &smem_sin[i], &smem_cos[i]);
     }
-    __syncthreads();
+    __syncthreads(); // Ensure all threads have finished writing to smem.
 
-    // --- Phase 2: Apply RoPE, reading from banked shared memory ---
+    // --- Phase 2: Apply RoPE using a grid-stride loop ---
     
-    // Process Queries
+    // --- Process Queries (X_q) ---
     const int num_q_vectors = model_dim / ROPE_VEC_SIZE;
     __nv_bfloat16* X_q_row = X_q + (uint64_t)row_ind * model_dim;
 
@@ -198,24 +197,29 @@ extern "C" __global__ void default_rope_bf16_kernel(
         #pragma unroll
         for (int i = 0; i < ROPE_PAIRS; ++i) {
             const int pair_idx = (base_dim_in_head / 2) + i;
-            // Map the pair_idx to the banked 2D layout to read
-            const int bank = pair_idx % NUM_BANKS;
-            const int col = pair_idx / NUM_BANKS;
 
             const float2 vals_fp32 = __bfloat1622float2(data.bf162[i]);
-            const float cos_val = smem_cos[bank][col];
-            const float sin_val = smem_sin[bank][col];
+            const float x_even = vals_fp32.x;
+            const float x_odd = vals_fp32.y;
 
-            const float rope_even = cos_val * vals_fp32.x - sin_val * vals_fp32.y;
-            const float rope_odd = cos_val * vals_fp32.y + sin_val * vals_fp32.x;
+            const float cos_val = smem_cos[pair_idx];
+            const float sin_val = smem_sin[pair_idx];
+
+            const float rope_even = cos_val * x_even - sin_val * x_odd;
+            const float rope_odd = cos_val * x_odd + sin_val * x_even;
 
             data.bf162[i] = __floats2bfloat162_rn(rope_even, rope_odd);
         }
         *( (float4*)(&X_q_row[vec_start_dim]) ) = data.f4;
     }
 
-    // Process Keys
-    if (!X_k) return;
+    // --- Process Keys (X_k) ---
+    if (!X_k) {
+        return;
+    }
+
+    // It's possible some threads are still working on queries.
+    // Sync to ensure all Q writes are globally visible before K processing.
     __syncthreads();
 
     const int kv_dim = num_kv_heads * head_dim;
@@ -232,15 +236,16 @@ extern "C" __global__ void default_rope_bf16_kernel(
         #pragma unroll
         for (int i = 0; i < ROPE_PAIRS; ++i) {
             const int pair_idx = (base_dim_in_head / 2) + i;
-            const int bank = pair_idx % NUM_BANKS;
-            const int col = pair_idx / NUM_BANKS;
 
             const float2 vals_fp32 = __bfloat1622float2(data.bf162[i]);
-            const float cos_val = smem_cos[bank][col];
-            const float sin_val = smem_sin[bank][col];
+            const float x_even = vals_fp32.x;
+            const float x_odd = vals_fp32.y;
             
-            const float rope_even = cos_val * vals_fp32.x - sin_val * vals_fp32.y;
-            const float rope_odd = cos_val * vals_fp32.y + sin_val * vals_fp32.x;
+            const float cos_val = smem_cos[pair_idx];
+            const float sin_val = smem_sin[pair_idx];
+
+            const float rope_even = cos_val * x_even - sin_val * x_odd;
+            const float rope_odd = cos_val * x_odd + sin_val * x_even;
 
             data.bf162[i] = __floats2bfloat162_rn(rope_even, rope_odd);
         }
