@@ -56,7 +56,8 @@ int default_rms_norm_set_launch_config(Cuda_Launch_Config * cuda_launch_config, 
 	Cuda_Device_Info * device_info = (Cuda_Device_Info *) dataflow_handle -> device_info;
 
 	int rms_max_threads_per_block = (cuda_function -> function_config).func_max_threads_per_block;
-	cuda_launch_config -> blockDimX = rms_max_threads_per_block;
+	//cuda_launch_config -> blockDimX = rms_max_threads_per_block;
+	cuda_launch_config -> blockDimX = MY_MIN(256, rms_max_threads_per_block);
 
 	int sm_count = device_info -> sm_count;
 
@@ -199,7 +200,8 @@ int default_rms_norm_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_launch_co
 	cuda_launch_config -> gridDimX = num_rows;
 
 	int rms_max_threads_per_block = (cuda_function -> function_config).func_max_threads_per_block;
-	cuda_launch_config -> blockDimX = rms_max_threads_per_block;
+	//cuda_launch_config -> blockDimX = rms_max_threads_per_block;
+	cuda_launch_config -> blockDimX = MY_MIN(256, rms_max_threads_per_block);
 
 	cuda_launch_config -> sharedMemBytes = aligned_offset;
 
