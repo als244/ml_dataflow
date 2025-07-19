@@ -10,7 +10,7 @@ You can learn more about the project's background/details [here](docs/background
 
 
 #### 6% Higher Training Throughput vs. [Nvidia Baseline](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/dgxc-benchmarking/resources/nemo-llama31-dgxc-benchmarking-g)
-- Trains Llama3 8B (BF16) with 8k sequence length at 11,300 vs ~10,680 Tok/s per H100
+- Trains Llama3 8B (BF16) with 8k sequence length at ~11,300 vs ~10,680 Tok/s per H100
     - Requires only 1 H100 to achieve such performance.
 
 ###### [Metric Definitions](#throughput-metrics)
