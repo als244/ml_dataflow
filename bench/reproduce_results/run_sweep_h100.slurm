@@ -7,8 +7,8 @@
 #SBATCH --time=23:59:00          # total run time limit (HH:MM:SS)
 #SBATCH --mail-type=all        # send email
 #SBATCH --mail-user=as1669@princeton.edu
-#SBATCH --output=logs/sweep_8B_h100.out
-#SBATCH --error=logs/sweep_8B_h100.err
+#SBATCH --output=logs/sweep_h100.out
+#SBATCH --error=logs/sweep_h100.err
 #SBATCH --account=mathos
 #SBATCH --partition=pli
 
