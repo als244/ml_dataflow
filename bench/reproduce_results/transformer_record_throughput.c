@@ -290,6 +290,7 @@
 		switch (hardware_arch_type){
 			case BACKEND_ARCH_A100:
 				PEAK_BF16_FLOPS = A100_PEAK_BF16_FLOPS;
+				MIN_CHUNK_SIZE = 16384;
 				break;
 			case BACKEND_ARCH_H100:
 				PEAK_BF16_FLOPS = H100_PEAK_BF16_FLOPS;
