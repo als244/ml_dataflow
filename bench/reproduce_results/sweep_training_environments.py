@@ -28,7 +28,6 @@ def run_sweep(sweep_config_filepath, experiment_name, output_filepath):
 
     start_run_ind = experiment_config["start_run_ind"]
     total_runs = len(host_mem_sizes) * len(device_mem_sizes) * len(seq_lens) * len(model_sizes)
-    all_runs = all_runs[start_run_ind:]
 
     total_steps = int(experiment_config["total_steps"])
     warmup_steps = int(experiment_config["warmup_steps"])

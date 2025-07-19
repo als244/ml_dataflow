@@ -2153,7 +2153,7 @@
 		}
 
 		// Shouldn't need this but calculation is going wrong somewhere off slightly...
-		uint64_t extra_host_mem = 100 * (1UL << 20);
+		uint64_t extra_host_mem = 200 * (1UL << 20);
 		uint64_t remaining_host_mem = host_size_bytes - used_host_mem - extra_host_mem;
 
 		uint64_t full_saved_size = get_seq_batch_saved_activations_buffer_size(seq_batches[0], SAVED_ACTIVATION_LEVEL_FULL);
