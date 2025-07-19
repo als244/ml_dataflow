@@ -1109,7 +1109,7 @@
 		}
 
 		if (NUM_DEV_BLOCKS == 1){
-			fprintf(stderr, "!!! WARNING !!!: not enough memory to store mulitple layers on device only holding 1 block and 1 gradient at a time...; performance may be severely impacted...\n");
+			fprintf(stderr, "!!! WARNING !!!: not enough memory to store mulitple layers on device only holding 1 block and 1 gradient at a time...; performance may be impacted...\n");
 		}
 
 		if (TO_PRINT_MEMORY_PARTITION_CONFIG){
@@ -2142,8 +2142,7 @@
 		}
 
 		// Shouldn't need this but calculation is going wrong somewhere off slightly...
-		uint64_t extra_host_mem = 200 * (1UL << 20);
-		uint64_t remaining_host_mem = host_size_bytes - used_host_mem - extra_host_mem;
+		uint64_t remaining_host_mem = host_size_bytes - used_host_mem;
 
 		uint64_t full_saved_size = get_seq_batch_saved_activations_buffer_size(seq_batches[0], SAVED_ACTIVATION_LEVEL_FULL);
 		uint64_t inp_attn_saved_size = get_seq_batch_saved_activations_buffer_size(seq_batches[0], SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY);
@@ -2330,39 +2329,43 @@
 
 		// make sure to recompute attention on the short seq portions...
 
+		int cur_inp_attn_assigned = 0;
+
 		if (only_to_assign > 0){
+			
+			int chunk_in_seq;
 
-			int only_chunks_per_layer = only_to_assign / n_layers;
-			int only_remain = only_to_assign % n_layers;
+			int full_host_layers = total_home_acts / num_chunks;
 
-			for (int k = 0; k < n_layers; k++){
+			int only_chunks_per_layer = only_to_assign / full_host_layers;
+			int only_remain = only_to_assign % full_host_layers;
+			
+			for (int k = 0; k < full_host_layers; k++){
 
 				for (int chunk_id = 0; chunk_id < only_chunks_per_layer; chunk_id++){
 					saved_activation_levels[k*num_chunks + chunk_id] = SAVED_ACTIVATION_LEVEL_INP_ONLY;
-					if (chunk_id == 0){
-						cur_inp_only_seq_len = MY_MIN(chunk_size, DEMO_SEQ_LEN);
-					}
-					else{
-						cur_inp_only_seq_len = (chunk_id + 1) * chunk_size;
-					}
-
+					chunk_in_seq = chunk_id % num_chunks_per_seq;
+					cur_inp_only_seq_len = chunk_in_seq * chunk_size + MY_MIN(chunk_size, DEMO_SEQ_LEN);
 					inp_only_seq_lens[cur_inp_only_assigned] = cur_inp_only_seq_len;
 					cur_inp_only_assigned++;
 				}
 
-				if (only_remain > 0){
-					int chunk_id = only_chunks_per_layer;
-					for (int k = 0; k < only_remain; k++){
-						saved_activation_levels[k*num_chunks + chunk_id] = SAVED_ACTIVATION_LEVEL_INP_ONLY;
+				if (k < only_remain){
+					saved_activation_levels[num_chunks * k + only_chunks_per_layer] = SAVED_ACTIVATION_LEVEL_INP_ONLY;
+					chunk_in_seq = only_chunks_per_layer % num_chunks_per_seq;
+					cur_inp_only_seq_len = chunk_in_seq * chunk_size + MY_MIN(chunk_size, DEMO_SEQ_LEN);
+					inp_only_seq_lens[cur_inp_only_assigned] = cur_inp_only_seq_len;
+					cur_inp_only_assigned++;
+				}
+			}
 
-					}
-					if (chunk_id == 0){
-						cur_inp_only_seq_len = MY_MIN(chunk_size, DEMO_SEQ_LEN);
-					}
-					else{
-						cur_inp_only_seq_len = (chunk_id + 1) * chunk_size;
-					}
-
+			
+			int final_layer_inp_only = only_to_assign - cur_inp_only_assigned;
+			if (final_layer_inp_only > 0){
+				for (int chunk_id = 0; chunk_id < final_layer_inp_only; chunk_id++){
+					saved_activation_levels[num_chunks * full_host_layers + chunk_id] = SAVED_ACTIVATION_LEVEL_INP_ONLY;
+					chunk_in_seq = chunk_id % num_chunks_per_seq;
+					cur_inp_only_seq_len = chunk_in_seq * chunk_size + MY_MIN(chunk_size, DEMO_SEQ_LEN);
 					inp_only_seq_lens[cur_inp_only_assigned] = cur_inp_only_seq_len;
 					cur_inp_only_assigned++;
 				}
@@ -2372,8 +2375,11 @@
 			for (int i = 0; i < total_home_acts; i++){
 				if (saved_activation_levels[i] == SAVED_ACTIVATION_LEVEL_NONE){
 					saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY;
+					cur_inp_attn_assigned++;
 				}
 			}
+			
+			assert(cur_inp_attn_assigned + cur_inp_only_assigned == total_home_acts);
 		}
 		// only distributing between full and inp+attn, so it doesn't really matter
 		// which chunk saves/recomputes besides for load balancing I/O.. (thus can alternate).
@@ -2428,12 +2434,6 @@
 		for (int i = total_home_acts; i < total_acts; i++){
 			saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_NONE;
 		}
-		
-		
-
-		// If we have enough remaining host mem to fit the full activations buffer for any of the chunks, then do so...
-		
-
 
 		// Saved Actviations will live on device and might be transferred back to host and retrieved prior to bwd pass...
 
@@ -2449,6 +2449,8 @@
 
 		SavedActivationLevel cur_saved_activation_level;
 
+		uint64_t act_size_host = 0;
+
 		for (int i = 0; i < num_sys_saved_activations; i++){
 
 			cur_saved_activation_level = saved_activation_levels[i];
@@ -2463,9 +2465,11 @@
 			cur_host_mem += saved_activations_buffer_size;
 			used_host_mem += saved_activations_buffer_size;
 			sys_saved_activations[i].recomputed_activations = NULL;
+
+			act_size_host += saved_activations_buffer_size;
 		}
 
-
+		//printf("act_size_host: %zu\n", act_size_host);
 
 
 		// BLOCKS OPT STATE...
