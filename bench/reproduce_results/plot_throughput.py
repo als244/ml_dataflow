@@ -142,8 +142,8 @@ def plot_throughput(csv_filepath, device_name, output_dir):
                 ax.set_ylabel('')
 
             # Set shared axis labels
-            fig.supxlabel("Device Memory (GB)")
-            fig.supylabel("Host Memory (GB)")
+            fig.supxlabel("Device Memory (GiB)")
+            fig.supylabel("Host Memory (GiB)")
 
             plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # Adjust layout for suptitle
 
