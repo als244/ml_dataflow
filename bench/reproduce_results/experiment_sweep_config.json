@@ -80,10 +80,28 @@
         "total_steps": 4,
         "warmup_steps": 1
     },
+    "rtx5090_8b_short": {
+        "host_mem_gb": [64, 72, 80, 88, 96],
+        "device_mem_gb": [18, 20, 22, 24, 26, 28, 30],
+        "seq_len": [512, 1024, 2048, 4096, 8192, 16384],
+        "model_size": [8],
+        "start_run_ind": 0,
+        "total_steps": 7,
+        "warmup_steps": 2
+    },
     "rtx5090_8b_long": {
         "host_mem_gb": [80, 96, 112, 128, 144, 160, 176],
         "device_mem_gb": [18, 20, 22, 24, 26, 28, 30],
         "seq_len": [32768, 65536, 131072, 262144],
+        "model_size": [8],
+        "start_run_ind": 0,
+        "total_steps": 7,
+        "warmup_steps": 2
+    },
+    "rtx3090_8b_short": {
+        "host_mem_gb": [64, 72, 80, 88, 96],
+        "device_mem_gb": [18, 20, 22],
+        "seq_len": [512, 1024, 2048, 4096, 8192, 16384],
         "model_size": [8],
         "start_run_ind": 0,
         "total_steps": 7,
