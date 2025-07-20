@@ -70,7 +70,7 @@ git clone git@github.com:als244/ml_dataflow.git
 make -j <NUM_PROCS>
 ```
 
-The project is built from ~10k lines of C, a few logically unique memory-bound GPU kernels (all 80%+ memory bw utilization), and wrappers over [Flash Attention](https://github.com/Dao-AILab/flash-attention) and vendor BLAS libraries (performance critical computation kernels). The only depedencies are the backend userspace driver & backend BLAS lib. For Nvidia backend it assumes that headers and libs are in standard location `/usr/local/cuda`. 
+The project is built from < 10k lines of C, a few logically unique memory-bound GPU kernels (all 80%+ memory bw utilization), and wrappers over [Flash Attention](https://github.com/Dao-AILab/flash-attention) and vendor BLAS libraries (performance critical computation kernels). The only depedencies are the backend userspace driver & backend BLAS lib. For Nvidia backend it assumes that headers and libs are in standard location `/usr/local/cuda`. 
 
 ###### Note that building the flash2 and flash3 wrapper libraries may take some time (a few hours)...using more processors will help. 
 
@@ -90,7 +90,7 @@ cd ../bench
 
 For example:
 
-`./transformerDemo 80 20 4096 8` will train the 8B model architecture (full bf16, causal attention, next token prediction, AdamW). The sequence length is set to 4096 tokens. The memory capacities are set to enforce <= 80 GB of host memory and <= 20 GB of device memory (where XXX GB is defined as XXX * 2^30 bytes).
+`./transformerDemo 80 20 4096 8` will train the 8B model architecture (full bf16, causal attention, next token prediction, AdamW). The sequence length is set to 4096 tokens. The memory capacities are set to enforce <= 80 GiB of host memory and <= 20 GiB of device memory (where XXX GiB is defined as XXX * 2^30 bytes).
 
 Profiling overviews: 
 - Low I/O Pressure (fast compute, but max device mem + attention-heavy => easier to get high MFU): [H100, 8B, 64k](docs/sample_profiling_trace_64k.md)
