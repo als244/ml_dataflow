@@ -8,6 +8,7 @@ You can learn more about the project's background/details [here](docs/background
 
 ## Highlights
 
+### State of the Art Transformer Training
 
 #### 6% Higher Training Throughput vs. [Optimized Nvidia Baseline](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/dgxc-benchmarking/resources/nemo-llama31-dgxc-benchmarking-g)
 - Trains Llama3 8B (BF16) with 8k sequence length at ~11,300 vs ~10,680 Tok/s per H100
@@ -26,13 +27,14 @@ You can learn more about the project's background/details [here](docs/background
 
 ### Example results of training 8B model with long sequence lengths on just a single-device
 
+#### RTX 5090, 128k
+
+<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-8B-131072-report.png" alt="Sample Heatmaps, RTX 5090, LLama3-8B, Seqlen 128k">
+
 #### H100, 256k
 
 <img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-8B-262144-report.png" alt="Sample Heatmaps, H100, LLama3-8B, Seqlen 256k">
 
-#### RTX 5090, 128k
-
-<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-8B-131072-report.png" alt="Sample Heatmaps, RTX 5090, LLama3-8B, Seqlen 128k">
 
 -----
 
