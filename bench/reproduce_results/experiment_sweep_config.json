@@ -70,7 +70,7 @@
         "start_run_ind": 0,
         "total_steps": 7,
         "warmup_steps": 2
-    }
+    },
     "rtx3090_8b_long": {
         "host_mem_gb": [80, 88, 96, 104, 112],
         "device_mem_gb": [18, 20, 22],
