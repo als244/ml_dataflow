@@ -6,10 +6,10 @@ To reproduce:
 
 ```shell
 cd bench
-./do_transformer_profile.sh 176 78 65536 8
+./do_transformer_profile.sh 144 78 65536 8
 ```
 
-This will create an nsys report: `bench/profiling/host_176_dev_78_seq_65536_model_8.nsys-rep` that can be loading in the Nsight Systems GUI.
+This will create an nsys report: `bench/profiling/host_144_dev_78_seq_65536_model_8.nsys-rep` that can be loading in the Nsight Systems GUI.
 
 ### Auto-configuration details
 
@@ -37,7 +37,7 @@ The lime green section at the top-ish of each image (corresponding to "SM Instru
 
 ## Training Overview
 
-![training_overview.png](../bench/reproduce_results/profiling/sample_profiling_max_mem_64k_8b_h100/training_overview.png)
+![training_overview.png](../bench/reproduce_results/profiling/h100_64k_screenshots/training_overview.png)
 
 A few words about the training overview image.
 
@@ -45,7 +45,7 @@ A few words about the training overview image.
 
 ## Step Overview
 
-![step_overview.png](../bench/reproduce_results/profiling/sample_profiling_max_mem_64k_8b_h100/step_overview.png)
+![step_overview.png](../bench/reproduce_results/profiling/h100_64k_screenshots/step_overview.png)
 
 A few words about the step overview image.
 
@@ -53,7 +53,7 @@ A few words about the step overview image.
 
 ## Round Overview
 
-![round_overview.png](../bench/reproduce_results/profiling/sample_profiling_max_mem_64k_8b_h100/round_overview.png)
+![round_overview.png](../bench/reproduce_results/profiling/h100_64k_screenshots/round_overview.png)
 
 A few words about the round overview image.
 
@@ -61,7 +61,7 @@ A few words about the round overview image.
 
 ## Forward Layers
 
-![fwd_layers.png](../bench/reproduce_results/profiling/sample_profiling_max_mem_64k_8b_h100/fwd_layers.png)
+![fwd_layers.png](../bench/reproduce_results/profiling/h100_64k_screenshots/fwd_layers.png)
 
 A few words about the forward layers image.
 
@@ -69,7 +69,7 @@ A few words about the forward layers image.
 
 ## Head
 
-![head.png](../bench/reproduce_results/profiling/sample_profiling_max_mem_64k_8b_h100/head.png)
+![head.png](../bench/reproduce_results/profiling/h100_64k_screenshots/head.png)
 
 A few words about the head image.
 
@@ -77,7 +77,7 @@ A few words about the head image.
 
 ## Backward Layers
 
-![bwd_layers.png](../bench/reproduce_results/profiling/sample_profiling_max_mem_64k_8b_h100/bwd_layers.png)
+![bwd_layers.png](../bench/reproduce_results/profiling/h100_64k_screenshots/bwd_layers.png)
 
 A few words about the backward layers image.
 
@@ -85,7 +85,7 @@ A few words about the backward layers image.
 
 ## Step Overhead
 
-![step_overhead.png](../bench/reproduce_results/profiling/sample_profiling_max_mem_64k_8b_h100/optimizer_step.png)
+![step_overhead.png](../bench/reproduce_results/profiling/h100_64k_screenshots/optimizer_step.png)
 
 A few words about the step overhead image.
 
