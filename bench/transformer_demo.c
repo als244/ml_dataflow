@@ -3277,8 +3277,6 @@
 				// pop from "Embedding"
 				dataflow_handle.profiler.range_pop();
 
-				sprintf(profile_msg, "Layers");
-				dataflow_handle.profiler.range_push(profile_msg);
 				// 2.) DOING CORE BLOCKS...
 
 				// reset what the next layer to fetch going forwards is...
@@ -3535,9 +3533,6 @@
 					// pop from added Layer %d
 					dataflow_handle.profiler.range_pop();
 				}
-
-				// pop from "Layers"
-				dataflow_handle.profiler.range_pop();
 
 				// pop from "Fwd"
 				dataflow_handle.profiler.range_pop();
