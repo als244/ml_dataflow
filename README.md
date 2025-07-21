@@ -97,15 +97,11 @@ For example:
 
 `./transformerDemo 80 20 4096 8` will train the 8B model architecture (full bf16, causal attention, next token prediction, AdamW). The sequence length is set to 4096 tokens. The memory capacities are set to enforce <= 80 GiB of host memory and <= 20 GiB of device memory (where XXX GiB is defined as XXX * 2^30 bytes).
 
-Profiling overviews: 
-- Low I/O Pressure (fast compute, but max device mem + attention-heavy => easier to get high MFU): [H100, 8B, 64k](docs/sample_profiling_trace_64k.md)
-- High I/O Pressure (fast compute + low mem + attention-light => precise overlap necessary): [H100, 8B, 8k](docs/sample_profiling_trace_8k.md)
-
 **Training Overview & Terminology**:
 
 The training is set up so that there are multiple *rounds* of forward+bwd before an optimizer step (i.e. gradient accumulation). The demo trains for 10 steps. The number of rounds per-step is set to be the minimum (lowest global batch size) that ensures the step overhead will be below a target overhead. This is achieved by setting a target duration for computation during each step (6 seconds for 1B and 48 seconds for 8B => 1-2% overhead). Within a round, there are *ordered chunks*. A minimum chunk size is set to ensure high arithmetic intensity (16k for H100, 8k for others). Each chunk is either packed with multiple sequences (if they are short) or a temporally-contiguous portion of a longer sequence. The number of chunks within a round is determined such that for a given layer, the total bytes of activations saved from the foward pass is approximately the total bytes of the layer weights (or in the case of long-context is the total number of chunks a single sequence requires). Every chunk is proccesed for a layer, before the first chunk starts upon the next layer. During backwards pass, the chunks are processed in reverse order.
 
-The input data is the first 65536 tokens of Harry Potter. If you select a sequence length longer than this than the original sequence will wrap around an repeat until your set seqlen is reached. 
+The input data is the first 65536 tokens of Harry Potter. If you select a sequence length longer than this than the original sequence will wrap around an repeat until your set seqlen is reached.
 
 4b. *Profile the training*
 
@@ -114,6 +110,10 @@ The input data is the first 65536 tokens of Harry Potter. If you select a sequen
 ```
 
 This will create a `.nsys-rep` file within `bench/profiling` that be can loaded into the Nvidia Sight Systems GUI. There are NVTX ranges that should have intuitive meanings when inspecting the report (see training terminology above). On the left side of the timeline click "CUDA HW" followed by the stream labeled "Compute". From here you can expand the NVTX to see all of the computations. There is a slight overhead when profiling, somewhere around 0.25% to 1% for this workload.
+
+Profiling overviews: 
+- Low I/O Pressure (fast compute, but max device mem + attention-heavy => easier to get high MFU): [H100, 8B, 64k](docs/sample_profiling_trace_64k.md)
+- High I/O Pressure (fast compute + low mem + attention-light => precise overlap necessary): [H100, 8B, 8k](docs/sample_profiling_trace_8k.md)
 
 
 -----
@@ -128,7 +128,7 @@ python bench/reproduce_results/sweep_training_environments.py <experiment config
 
 #### Methodology
 
-To simulate realistic conditions, the first few steps (approximately 2 minutes) are ignored --- at the beginning temperature/clock rate is unstable and likely overestimates stready-state perf. After a couple minutes the step times become very consistent. For example, as we've configured the target step time of 1B model to be around 6 seconds, this means we warmup with 20 steps and then record the next 30 and take average. For 8B (with target on order of 48 seconds), there are 2 warmup steps and then the following 5 steps get recorded. This is different for long seqs where minimum step time for 1 sequence becomes large. The step time ends when the last parameter block (updated with optimizer) arrives home. The experiment configurations to sweep across different [machine](#machine-specs), memory, seq len, and model are in `bench/reproduce_results/experiment_sweep_config.json`. 
+To simulate realistic conditions, the first few steps (approximately 2 minutes) are ignored --- at the beginning temperature/clock rate is unstable and likely overestimates stready-state perf. After a couple minutes the step times become very consistent. The step time ends when the last parameter block (after being updated with optimizer) arrives home. The experiment configurations to sweep across different [machine](#machine-specs), memory, seq len, and model are in `bench/reproduce_results/experiment_sweep_config.json`. 
 
 ---
 
