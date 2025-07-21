@@ -125,6 +125,15 @@
         "total_steps": 4,
         "warmup_steps": 1
     },
+    "rtx5090_1b_long": {
+        "host_mem_gb": [32, 64, 96, 128, 160],
+        "device_mem_gb": [16, 20, 24, 28, 30],
+        "seq_len": [65536, 131072, 262144, 524288],
+        "model_size": [1],
+        "start_run_ind": 0,
+        "total_steps": 20,
+        "warmup_steps": 5
+    },
     "rtx5090_8b_short": {
         "host_mem_gb": [64, 72, 80, 88, 96],
         "device_mem_gb": [18, 20, 22, 24, 26, 28, 30],
