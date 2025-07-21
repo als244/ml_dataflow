@@ -26,8 +26,8 @@ This will create an nsys report: `bench/profiling/host_144_dev_78_seq_65536_mode
     - Total (chunk, layer) full activation slots: 35
 
 - Host Activations ($32 * 4 - 35 = 93$ total):
-    - Fully Saved: 73
-    - Only Inp + Context + Attn: 20
+    - Fully Saved: 53
+    - Only Inp + Context + Attn: 40
     - Only Inp + Context: 0
 
 
