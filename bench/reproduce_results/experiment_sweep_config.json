@@ -8,6 +8,24 @@
         "total_steps": 50,
         "warmup_steps": 20
     },
+    "h100_1b_medium": {
+        "host_mem_gb": [16, 32, 48, 64, 80],
+        "device_mem_gb": [16, 20, 24, 28, 32, 78],
+        "seq_len": [65536, 131072, 262144],
+        "model_size": [1],
+        "start_run_ind": 0,
+        "total_steps": 30,
+        "warmup_steps": 10
+    },
+    "h100_1b_long": {
+        "host_mem_gb": [64, 96, 128, 160, 192],
+        "device_mem_gb": [16, 20, 24, 28, 32, 78],
+        "seq_len": [524288, 1048576],
+        "model_size": [1],
+        "start_run_ind": 0,
+        "total_steps": 30,
+        "warmup_steps": 10
+    },
     "h100_8b_short": {
         "host_mem_gb": [60, 65, 70, 75],
         "device_mem_gb": [24, 30, 40, 50, 60, 70, 78],
@@ -43,6 +61,33 @@
         "start_run_ind": 0,
         "total_steps": 4,
         "warmup_steps": 1
+    },
+    "a100_1b_short": {
+        "host_mem_gb": [16, 24, 32, 40],
+        "device_mem_gb": [16, 20, 24, 28, 32, 78],
+        "seq_len": [512, 1024, 2048, 4096, 8192, 16384, 32768],
+        "model_size": [1],
+        "start_run_ind": 0,
+        "total_steps": 50,
+        "warmup_steps": 20
+    },
+    "a100_1b_medium": {
+        "host_mem_gb": [16, 32, 48, 64, 80],
+        "device_mem_gb": [16, 20, 24, 28, 32, 78],
+        "seq_len": [65536, 131072, 262144],
+        "model_size": [1],
+        "start_run_ind": 0,
+        "total_steps": 30,
+        "warmup_steps": 10
+    },
+    "a100_1b_long": {
+        "host_mem_gb": [64, 96, 128, 160, 192],
+        "device_mem_gb": [16, 20, 24, 28, 32, 78],
+        "seq_len": [524288, 1048576],
+        "model_size": [1],
+        "start_run_ind": 0,
+        "total_steps": 30,
+        "warmup_steps": 10
     },
     "a100_8b_short": {
         "host_mem_gb": [60, 65, 70, 75],
