@@ -22,7 +22,7 @@ You can learn more about the project's background/details [here](docs/background
 
 ###### Comparisons to other repos at longer sequence lengths
 
-- **182% higher throughput** training 8B with 64k seqlen compared to a prior [Mosaic ML benchmark](https://github.com/mosaicml/llm-foundry/blob/main/scripts/train/benchmarking/README.md) training a smaller 7B MPT model across 8 H100's (5500 Tok/sec vs. 1950 Tok/sec per GPU)
+- **182% higher throughput** training 8B with 64k seqlen compared to a prior [Mosaic ML benchmark](https://github.com/mosaicml/llm-foundry/blob/main/scripts/train/benchmarking/README.md) training a smaller 7B MPT model across 8 H100's ([5500 Tok/sec](bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-8B-65536-report.png) vs. 1950 Tok/sec per GPU)
 - **90% higher throughput** training 8B with 512k seqlen on single H100 vs. [Snowflake benchmark](https://www.arxiv.org/pdf/2506.13996) ([950 Tok/sec](bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-8B-524288-report.png) vs. 500 Tok/sec per GPU)
 
 ### Train long-sequences or large-models on single device or at home
