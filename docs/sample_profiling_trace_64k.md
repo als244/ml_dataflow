@@ -89,3 +89,10 @@ A few words about the backward layers image.
 
 A few words about the step overhead image.
 
+-----
+
+Full Compute Breakdown (all invoked kernels with perecetage of cycles)
+
+![compute_breakdown.png](../bench/reproduce_results/profiling/h100_64k_screenshots/compute_breakdown_full_training.png)
+
+A few words about the compute breakdown image.
