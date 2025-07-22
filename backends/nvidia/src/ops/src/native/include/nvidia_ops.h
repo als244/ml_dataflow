@@ -74,7 +74,7 @@ extern "C" __global__ void default_rms_norm_fp8e5m2_kernel(int n_rows, int n_col
 extern "C" __global__ void default_rms_norm_recompute_fp32_kernel(int n_rows, int n_cols, float * rms_weight, float * rms_vals, float * X, float * out);
 extern "C" __global__ void default_rms_norm_recompute_fp16_kernel(int n_rows, int n_cols, __half * rms_weight, float * rms_vals, __half * X, __half * out);
 //extern "C" __global__ void default_rms_norm_recompute_bf16_kernel(int n_rows, int n_cols, __nv_bfloat16 * rms_weight, float * rms_vals, __nv_bfloat16 * X, __nv_bfloat16 * out);
-__global__ void default_rms_norm_recompute_bf16_kernel(
+extern "C" __global__ void default_rms_norm_recompute_bf16_kernel(
     int n_rows, 
     int n_cols, 
     const __nv_bfloat16* __restrict__ rms_weight, 
