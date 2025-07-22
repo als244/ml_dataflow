@@ -8,7 +8,7 @@ You can learn more about the project's background/details [here](docs/background
 
 ## Highlights
 
-### State of the Art Causal Transformer Training
+### State of the Art Transformer Training
 
 #### 6% Higher Training Throughput vs. [Optimized Nvidia Baseline](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/dgxc-benchmarking/resources/nemo-llama31-dgxc-benchmarking-g)
 - Trains Llama3 8B (BF16) with 8k sequence length at ~11,300 vs ~10,680 Tok/s per H100
@@ -26,6 +26,7 @@ You can learn more about the project's background/details [here](docs/background
 - **90% higher throughput** training 8B with 512k seqlen on single H100 vs. [Snowflake benchmark](https://www.arxiv.org/pdf/2506.13996) ([950 Tok/sec](bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-8B-524288-report.png) vs. 500 Tok/sec per GPU)
 
 ### Train "Long" Sequences / "Large" Models on Single Device or At Home
+##### For Casual Models
 - Automatically offloads/prefetches (parameters, activations, gradients, & optimizer state) and configures recomputation based on specified memory capacities, seqlen, and model size. Asynchronous dataflow is abundant, but the math remains the same.
 
 ##### [Try It Out Yourself](#training-performance-demo) or [See Full Benchmarking Results](#benchmarked-results)
