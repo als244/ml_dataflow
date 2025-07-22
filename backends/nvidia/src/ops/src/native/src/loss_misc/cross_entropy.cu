@@ -67,53 +67,54 @@ extern "C" __global__ void default_cross_entropy_loss_bf16_kernel(int n_rows, in
 }
 
 // LAUNCHES WITH ONLY 1 BLOCK!
-extern "C" __global__ void default_set_average_loss_kernel(int num_tokens, float * loss_vec){
+extern "C" __global__ void default_set_average_loss_kernel(int num_tokens, float * loss_vec) {
 
+    // It's good practice to use a template or an assertion to ensure
+    // blockDim.x is a multiple of 32 and does not exceed 1024.
+    // For this example, we assume blockDim.x <= 1024.
+    
+    // Size the shared memory array for the number of warps.
+    // Using a fixed size of 32 is okay if you enforce blockDim.x <= 1024.
+    __shared__ float partial_sums[32];
 
-	__shared__ float warp_loss[WARP_SIZE];
+    const unsigned int warp_id = threadIdx.x / 32;
+    const unsigned int lane_id = threadIdx.x % 32;
+    const unsigned int num_warps = blockDim.x / 32;
 
-	if (threadIdx.x < WARP_SIZE){
-		warp_loss[threadIdx.x] = 0.0f;
-	}
+    // Each thread calculates its local sum
+    float thread_loss_val = 0.0f;
+    for (int i = threadIdx.x; i < num_tokens; i += blockDim.x) {
+        thread_loss_val += loss_vec[i];
+    }
 
-	int token_start = threadIdx.x;
+    // 1. Intra-warp reduction
+    // The sum for each warp is now in its lane-0 thread
+    for (int offset = 16; offset > 0; offset >>= 1) {
+        thread_loss_val += __shfl_down_sync(0xFFFFFFFFU, thread_loss_val, offset);
+    }
 
-	float thread_loss_val = 0.0f;
+    // 2. Store partial sums from each warp into shared memory
+    if (lane_id == 0) {
+        partial_sums[warp_id] = thread_loss_val;
+    }
 
-	unsigned mask = 0xFFFFFFFFU;
+    // Wait for all warps to write to shared memory
+    __syncthreads();
 
-	int warp_id = threadIdx.x / 32;
-	int lane_id = threadIdx.x % 32;
+    // 3. Final reduction using the first warp
+    if (warp_id == 0) {
+        // Safely load the partial sums. Load 0.0f if the warp doesn't exist.
+        // This is more explicit and robust than relying on prior initialization.
+        float final_sum = (lane_id < num_warps) ? partial_sums[lane_id] : 0.0f;
 
-	for (int i = token_start; i < num_tokens; i += blockDim.x){
-		thread_loss_val += loss_vec[i];
-	}
+        // Reduce the partial sums within the first warp
+        for (int offset = 16; offset > 0; offset >>= 1) {
+            final_sum += __shfl_down_sync(0xFFFFFFFFU, final_sum, offset);
+        }
 
-	__syncwarp();
-
-	for (int offset = 16; offset > 0; offset >>= 1) {
-		thread_loss_val += __shfl_down_sync(mask, thread_loss_val, offset);
-	}
-
-	if (lane_id == 0){
-		warp_loss[warp_id] = thread_loss_val;
-	}
-
-	__syncthreads();
-
-	if (warp_id == 0){
-		thread_loss_val = warp_loss[lane_id];
-
-		for (int offset = 16; offset > 0; offset >>= 1) {
-			thread_loss_val += __shfl_down_sync(mask, thread_loss_val, offset);
-		}
-
-		// set the average loss
-		if (lane_id == 0){
-			float avg_loss = thread_loss_val / (float)num_tokens;
-			loss_vec[num_tokens] = avg_loss;
-		}
-	}
-
-	return;
+        // 4. Thread 0 writes the final average loss
+        if (lane_id == 0) {
+            loss_vec[num_tokens] = final_sum / (float)num_tokens;
+        }
+    }
 }
