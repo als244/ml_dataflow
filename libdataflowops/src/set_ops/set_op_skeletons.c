@@ -949,6 +949,11 @@ void dataflow_set_default_set_average_loss_skeleton(Op_Skeleton * skeleton) {
 	char op_nickname[MAX_OP_NICKNAME_SIZE];
 
 	sprintf(op_nickname, "%s", "default_set_average_loss");
+
+	// MAX nicknmae size is set to 255 with 256 allocated space...
+	strncpy(skeleton_header -> op_nickname, op_nickname, MAX_OP_NICKNAME_SIZE);
+	// last character must be null no matter what, if nickname is less than null bytes were added prior
+	(skeleton_header -> op_nickname)[MAX_OP_NICKNAME_SIZE] = '\0';
 	
 	int num_args = 2;
 
