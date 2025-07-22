@@ -8,11 +8,11 @@
 
 	// peak flops found in:
 	// https://images.nvidia.com/aem-dam/Solutions/geforce/blackwell/nvidia-rtx-blackwell-gpu-architecture.pdf
-	#define A100_PEAK_BF16_TFLOPS 3.12e14
-	#define H100_PEAK_BF16_TFLOPS 9.89e14
-	#define RTX_3090_PEAK_BF16_TFLOPS 7.1e13
-	#define RTX_4090_PEAK_BF16_TFLOPS 1.65e14
-	#define RTX_5090_PEAK_BF16_TFLOPS 2.095e14
+	#define A100_PEAK_BF16_FLOPS 3.12e14
+	#define H100_PEAK_BF16_FLOPS 9.89e14
+	#define RTX_3090_PEAK_BF16_FLOPS 7.1e13
+	#define RTX_4090_PEAK_BF16_FLOPS 1.65e14
+	#define RTX_5090_PEAK_BF16_FLOPS 2.095e14
 	
 
 	#define NUM_TOKENS_EXAMPLE_SEQ 65536
@@ -26,6 +26,8 @@
 	#define TARGET_DURATION_PER_STEP_S 6.0f
 	// to help determien how many rounds per step
 	#define FLOP_EFFICIENCY_ESTIMATE 0.6f
+
+	#define PCIE_LINK_EFFICIENCY 0.75f
 
 	#define NUM_STEPS 10
 
@@ -269,7 +271,7 @@
 
 		HardwareArchType hardware_arch_type = dataflow_handle.hardware_arch_type;
 
-		float PEAK_BF16_TFLOPS;
+		float PEAK_BF16_FLOPS;
 
 		// this is just for testing,.. in 
 		// reality determined dynamically...
@@ -277,24 +279,25 @@
 
 		switch (hardware_arch_type){
 			case BACKEND_ARCH_A100:
-				PEAK_BF16_TFLOPS = A100_PEAK_BF16_TFLOPS;
+				PEAK_BF16_FLOPS = A100_PEAK_BF16_FLOPS;
+				MIN_CHUNK_SIZE = 16384;
 				break;
 			case BACKEND_ARCH_H100:
-				PEAK_BF16_TFLOPS = H100_PEAK_BF16_TFLOPS;
+				PEAK_BF16_FLOPS = H100_PEAK_BF16_FLOPS;
 				MIN_CHUNK_SIZE = 16384;
 				break;
 			case BACKEND_ARCH_RTX_3090:
-				PEAK_BF16_TFLOPS = RTX_3090_PEAK_BF16_TFLOPS;
+				PEAK_BF16_FLOPS = RTX_3090_PEAK_BF16_FLOPS;
 				break;
 			case BACKEND_ARCH_RTX_4090:
-				PEAK_BF16_TFLOPS = RTX_4090_PEAK_BF16_TFLOPS;
+				PEAK_BF16_FLOPS = RTX_4090_PEAK_BF16_FLOPS;
 				break;
 			case BACKEND_ARCH_RTX_5090:
-				PEAK_BF16_TFLOPS = RTX_5090_PEAK_BF16_TFLOPS;
+				PEAK_BF16_FLOPS = RTX_5090_PEAK_BF16_FLOPS;
 				break;
 			default:
 				fprintf(stderr, "Error: unknown hardware architecture, cannot set peak bf16 tflops and record MFU...\n");
-				PEAK_BF16_TFLOPS = 0;
+				PEAK_BF16_FLOPS = 0;
 				break;
 		}
 
@@ -1107,7 +1110,7 @@
 		}
 
 		if (NUM_DEV_BLOCKS == 1){
-			fprintf(stderr, "!!! WARNING !!!: not enough memory to store mulitple layers on device only holding 1 block and 1 gradient at a time...; performance may be severely impacted...\n");
+			fprintf(stderr, "!!! WARNING !!!: not enough memory to store mulitple layers on device only holding 1 block and 1 gradient at a time...; performance may be impacted...\n");
 		}
 
 		if (TO_PRINT_MEMORY_PARTITION_CONFIG){
@@ -1611,26 +1614,26 @@
 
 				remain_tokens -= new_tokens;
 			}
-			
 		}
 
 		// ensuring we can populate the seq batch/chunk with correct amount of tokens...
-		if (num_seqs_per_chunk > 1){
-			sys_token_ids = realloc(sys_token_ids, num_tokens_example_seq * num_seqs_per_chunk * sizeof(uint32_t));
+		if (seq_len < chunk_size){
+			// we ensured chunk size is a multiple of seq len...
+			sys_token_ids = realloc(sys_token_ids, chunk_size * sizeof(uint32_t));
 			if (!sys_token_ids){
 				fprintf(stderr, "Error: failed to realloc sys_token_ids...\n");
 				return -1;
 			}
 
-			sys_labels = realloc(sys_labels, num_tokens_example_seq * num_seqs_per_chunk * sizeof(uint32_t));
+			sys_labels = realloc(sys_labels, chunk_size * sizeof(uint32_t));
 			if (!sys_labels){
 				fprintf(stderr, "Error: failed to realloc sys_labels...\n");
 				return -1;
 			}
 
-			for (int i = 1; i < num_seqs_per_chunk; i++){
-				memcpy(sys_token_ids + i * num_tokens_example_seq, sys_token_ids, num_tokens_example_seq * sizeof(uint32_t));
-				memcpy(sys_labels + i * num_tokens_example_seq, sys_labels, num_tokens_example_seq * sizeof(uint32_t));
+			for (int i = 0; i < num_seqs_per_chunk; i++){
+				memcpy(sys_token_ids + i * seq_len, sys_token_ids, seq_len * sizeof(uint32_t));
+				memcpy(sys_labels + i * seq_len, sys_labels, seq_len * sizeof(uint32_t));
 			}
 		}
 
@@ -2139,6 +2142,7 @@
 			return -1;
 		}
 
+		// Shouldn't need this but calculation is going wrong somewhere off slightly...
 		uint64_t remaining_host_mem = host_size_bytes - used_host_mem;
 
 		uint64_t full_saved_size = get_seq_batch_saved_activations_buffer_size(seq_batches[0], SAVED_ACTIVATION_LEVEL_FULL);
@@ -2146,7 +2150,7 @@
 		uint64_t inp_only_saved_size = get_seq_batch_saved_activations_buffer_size(seq_batches[0], SAVED_ACTIVATION_LEVEL_INP_ONLY);
 
 		// First ensure that we can fit all using inp only...
-		uint64_t all_inp_only_size = inp_only_saved_size * total_acts;
+		uint64_t all_inp_only_size = inp_only_saved_size * total_home_acts;
 		if (all_inp_only_size > remaining_host_mem){
 			fprintf(stderr, "Error: not enough host memory to fit all activations using inp only. Needed %.3f GB, remaining: %.3f GB...\n", (float) all_inp_only_size / (1024.0 * 1024.0 * 1024.0), (float) remaining_host_mem / (1024.0 * 1024.0 * 1024.0));
 			return -1;
@@ -2171,12 +2175,12 @@
         }
 
         // We can't upgrade more than the total number of activations
-        if (num_upgraded_to_attn > total_acts) {
-            num_upgraded_to_attn = total_acts;
+        if (num_upgraded_to_attn > total_home_acts) {
+            num_upgraded_to_attn = total_home_acts;
         }
 
         int num_inp_attn_saved = num_upgraded_to_attn;
-        int num_inp_only_saved = total_acts - num_inp_attn_saved;
+        int num_inp_only_saved = total_home_acts - num_inp_attn_saved;
 
         // Now, from the ones upgraded to inp_attn, see how many can be further upgraded to full_saved
         uint64_t current_mem_usage = (num_inp_attn_saved * inp_attn_saved_size) + (num_inp_only_saved * inp_only_saved_size);
@@ -2234,41 +2238,135 @@
 
 		int cur_inp_only_assigned = 0;
 
+		// minimum rnutime that total_dev_acts consectuive forward layers takes
+
+		float min_window_flops;
+
+		int prior_seq_len = 0;
+		int cur_seq_len = 0;
+		for (int i = 0; i < total_dev_acts; i++){
+			min_window_flops += get_chunk_block_flops(chunk_size, prior_seq_len, DEMO_SEQ_LEN, model_dim, kv_dim, is_causal, num_shared_experts, num_total_routed_experts, num_active_routed_experts, expert_dim);
+			if (chunk_size + prior_seq_len < DEMO_SEQ_LEN){
+				prior_seq_len += chunk_size;
+			}
+			else{
+				prior_seq_len = 0;
+			}
+		}
+
+		
+
+		float runtime_dev_window_sec = min_window_flops / (FLOP_EFFICIENCY_ESTIMATE * PEAK_BF16_FLOPS);
+
+		float theo_link_speed_bytes_per_sec = get_home_link_speed_bytes_per_sec(dataflow_handle.pcie_link_width, dataflow_handle.pcie_link_gen);
+
+		float link_speed_bytes_per_sec = PCIE_LINK_EFFICIENCY * theo_link_speed_bytes_per_sec;
+
+		float max_bytes_per_window_saved = runtime_dev_window_sec * link_speed_bytes_per_sec;
+
+		int full_windows_saved = total_home_acts / total_dev_acts;
+		int non_window_home_acts = total_home_acts % total_dev_acts;
+
+		// CORRECT FOR LINK CONGESTION! 
+		// potentially downgrade full saved activations to inp+attn if too much data is being transferred
+
+		int full_per_window;
+		int attn_per_window;
+		if (full_windows_saved > 0){
+			full_per_window = full_to_assign / full_windows_saved;
+			attn_per_window = attn_to_assign / full_windows_saved;
+		}
+		else{
+			full_per_window = 0;
+			attn_per_window = 0;
+		}
+
+		if (only_to_assign == 0 && (DEMO_SEQ_LEN <= chunk_size) && full_windows_saved > 0){
+			
+			// might need to downgrade full to assign based on max_bytes_per_window_saved
+
+			uint64_t full_window_attn_inp_only_size = inp_attn_saved_size * total_dev_acts;
+			if (full_window_attn_inp_only_size > max_bytes_per_window_saved){
+				// downgrade all full windows to attn
+				attn_to_assign += full_to_assign;
+				full_to_assign = 0;
+				full_per_window = 0;
+				attn_per_window = total_dev_acts;
+			}
+			else{
+				uint64_t room_for_full = max_bytes_per_window_saved - full_window_attn_inp_only_size;
+				uint64_t num_space_for_full_per_window = room_for_full / full_upgrade_cost;
+				if (num_space_for_full_per_window == 0){
+					full_to_assign = MY_MIN(full_to_assign, non_window_home_acts);
+					attn_to_assign = total_home_acts - full_to_assign;
+					full_per_window = 0;
+					attn_per_window = total_dev_acts;
+				}
+				else{
+					
+					int target_attn_to_assign = (total_dev_acts - num_space_for_full_per_window) * full_windows_saved;
+					int target_full_to_assign = total_home_acts - target_attn_to_assign;
+					
+					// now need to downgrade in order to prevent congestion (recompute is better than idle)
+					if (target_full_to_assign < full_to_assign){
+						full_to_assign = target_full_to_assign;
+						attn_to_assign = total_home_acts - full_to_assign;
+						full_per_window = num_space_for_full_per_window;
+						attn_per_window = total_dev_acts - full_per_window;
+					}
+					else{
+						full_per_window = full_to_assign / full_windows_saved;
+						attn_per_window = total_dev_acts - full_per_window;
+					}
+				}
+			}
+
+			// Reset how many of each type we are assigning...
+			num_full_saved = full_to_assign;
+			num_inp_attn_saved = attn_to_assign;
+		}
+
+		// for each of the full windows, do the same ordering
+
 		// make sure to recompute attention on the short seq portions...
 
+		int cur_inp_attn_assigned = 0;
+
 		if (only_to_assign > 0){
+			
+			int chunk_in_seq;
 
-			int only_chunks_per_layer = only_to_assign / n_layers;
-			int only_remain = only_to_assign % n_layers;
+			int full_host_layers = total_home_acts / num_chunks;
 
-			for (int k = 0; k < n_layers; k++){
+			int only_chunks_per_layer = only_to_assign / full_host_layers;
+			int only_remain = only_to_assign % full_host_layers;
+			
+			for (int k = 0; k < full_host_layers; k++){
 
 				for (int chunk_id = 0; chunk_id < only_chunks_per_layer; chunk_id++){
 					saved_activation_levels[k*num_chunks + chunk_id] = SAVED_ACTIVATION_LEVEL_INP_ONLY;
-					if (chunk_id == 0){
-						cur_inp_only_seq_len = MY_MIN(chunk_size, DEMO_SEQ_LEN);
-					}
-					else{
-						cur_inp_only_seq_len = (chunk_id + 1) * chunk_size;
-					}
-
+					chunk_in_seq = chunk_id % num_chunks_per_seq;
+					cur_inp_only_seq_len = chunk_in_seq * chunk_size + MY_MIN(chunk_size, DEMO_SEQ_LEN);
 					inp_only_seq_lens[cur_inp_only_assigned] = cur_inp_only_seq_len;
 					cur_inp_only_assigned++;
 				}
 
-				if (only_remain > 0){
-					int chunk_id = only_chunks_per_layer;
-					for (int k = 0; k < only_remain; k++){
-						saved_activation_levels[k*num_chunks + chunk_id] = SAVED_ACTIVATION_LEVEL_INP_ONLY;
+				if (k < only_remain){
+					saved_activation_levels[num_chunks * k + only_chunks_per_layer] = SAVED_ACTIVATION_LEVEL_INP_ONLY;
+					chunk_in_seq = only_chunks_per_layer % num_chunks_per_seq;
+					cur_inp_only_seq_len = chunk_in_seq * chunk_size + MY_MIN(chunk_size, DEMO_SEQ_LEN);
+					inp_only_seq_lens[cur_inp_only_assigned] = cur_inp_only_seq_len;
+					cur_inp_only_assigned++;
+				}
+			}
 
-					}
-					if (chunk_id == 0){
-						cur_inp_only_seq_len = MY_MIN(chunk_size, DEMO_SEQ_LEN);
-					}
-					else{
-						cur_inp_only_seq_len = (chunk_id + 1) * chunk_size;
-					}
-
+			
+			int final_layer_inp_only = only_to_assign - cur_inp_only_assigned;
+			if (final_layer_inp_only > 0){
+				for (int chunk_id = 0; chunk_id < final_layer_inp_only; chunk_id++){
+					saved_activation_levels[num_chunks * full_host_layers + chunk_id] = SAVED_ACTIVATION_LEVEL_INP_ONLY;
+					chunk_in_seq = chunk_id % num_chunks_per_seq;
+					cur_inp_only_seq_len = chunk_in_seq * chunk_size + MY_MIN(chunk_size, DEMO_SEQ_LEN);
 					inp_only_seq_lens[cur_inp_only_assigned] = cur_inp_only_seq_len;
 					cur_inp_only_assigned++;
 				}
@@ -2278,32 +2376,56 @@
 			for (int i = 0; i < total_home_acts; i++){
 				if (saved_activation_levels[i] == SAVED_ACTIVATION_LEVEL_NONE){
 					saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY;
+					cur_inp_attn_assigned++;
 				}
 			}
+			
+			assert(cur_inp_attn_assigned + cur_inp_only_assigned == total_home_acts);
 		}
 		// only distributing between full and inp+attn, so it doesn't really matter
 		// which chunk saves/recomputes besides for load balancing I/O.. (thus can alternate).
 		else{
 
-			for (int i = 0; i < total_home_acts; i++){
+			for (int i = 0; i < full_windows_saved; i++){
 
-				if ((i % 2 == 0) && (full_to_assign > 0)){
-					saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_FULL;
-					full_to_assign--;
-				}
-				else if ((i % 2 == 1) && (attn_to_assign > 0)){
-					saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY;
-					attn_to_assign--;
-				}
-				else{
-					if (full_to_assign > 0){
-						saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_FULL;
+				int cur_window_full_to_assign = full_per_window;
+				int cur_window_attn_to_assign = attn_per_window;
+
+				for (int j = i * total_dev_acts; j < (i + 1) * total_dev_acts; j++){
+
+					if ((i % 2 == 1) && (cur_window_full_to_assign > 0)){
+						saved_activation_levels[j] = SAVED_ACTIVATION_LEVEL_FULL;
+						cur_window_full_to_assign--;
 						full_to_assign--;
 					}
-					else{
-						saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY;
+					else if ((i % 2 == 0) && (cur_window_attn_to_assign > 0)){
+						saved_activation_levels[j] = SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY;
+						cur_window_attn_to_assign--;
 						attn_to_assign--;
 					}
+					else{
+						if (cur_window_full_to_assign > 0){
+							saved_activation_levels[j] = SAVED_ACTIVATION_LEVEL_FULL;
+							cur_window_full_to_assign--;
+							full_to_assign--;
+						}
+						else{
+							saved_activation_levels[j] = SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY;
+							cur_window_attn_to_assign--;
+							attn_to_assign--;
+						}
+					}
+				}
+			}
+
+			for (int j = full_windows_saved * total_dev_acts; j < total_home_acts; j++){
+				if (full_to_assign > 0){
+					saved_activation_levels[j] = SAVED_ACTIVATION_LEVEL_FULL;
+					full_to_assign--;
+				}
+				else{
+					saved_activation_levels[j] = SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY;
+					attn_to_assign--;
 				}
 			}
 		}
@@ -2313,12 +2435,6 @@
 		for (int i = total_home_acts; i < total_acts; i++){
 			saved_activation_levels[i] = SAVED_ACTIVATION_LEVEL_NONE;
 		}
-		
-		
-
-		// If we have enough remaining host mem to fit the full activations buffer for any of the chunks, then do so...
-		
-
 
 		// Saved Actviations will live on device and might be transferred back to host and retrieved prior to bwd pass...
 
@@ -2334,6 +2450,8 @@
 
 		SavedActivationLevel cur_saved_activation_level;
 
+		uint64_t act_size_host = 0;
+
 		for (int i = 0; i < num_sys_saved_activations; i++){
 
 			cur_saved_activation_level = saved_activation_levels[i];
@@ -2348,9 +2466,11 @@
 			cur_host_mem += saved_activations_buffer_size;
 			used_host_mem += saved_activations_buffer_size;
 			sys_saved_activations[i].recomputed_activations = NULL;
+
+			act_size_host += saved_activations_buffer_size;
 		}
 
-
+		//printf("act_size_host: %zu\n", act_size_host);
 
 
 		// BLOCKS OPT STATE...
@@ -2753,10 +2873,13 @@
 
 
 
+		float used_host_mem_gb = (float) used_host_mem / (1024.0 * 1024.0 * 1024.0);
+		float used_dev_mem_gb = (float) used_dev_mem / (1024.0 * 1024.0 * 1024.0);
+		
 		if (TO_PRINT_SETUP_CONFIG_SUMMARY){
 			printf("Setup Complete!\n\n");
 
-			printf("\nMEMORY USAGE (GB):\n\tHost: %.3f\n\tDevice: %.3f\n\n", (float) used_host_mem / (1024.0 * 1024.0 * 1024.0), (float) used_dev_mem / (1024.0 * 1024.0 * 1024.0));
+			printf("\nMEMORY USAGE (GB):\n\tHost: %.3f\n\tDevice: %.3f\n\n", used_host_mem_gb, used_dev_mem_gb);
 		}
 
 		if ((used_host_mem > host_size_bytes) || (used_dev_mem > dev_size_bytes)) {
@@ -2882,7 +3005,7 @@
 
 		float flop_efficiency_estimate = FLOP_EFFICIENCY_ESTIMATE;
 
-		float per_round_duration_s_est = flops_per_round / (flop_efficiency_estimate * PEAK_BF16_TFLOPS);
+		float per_round_duration_s_est = flops_per_round / (flop_efficiency_estimate * PEAK_BF16_FLOPS);
 
 		int num_rounds_per_step = MY_MAX(1, round(target_duration_per_step_s / per_round_duration_s_est));
 
@@ -2934,7 +3057,7 @@
 			step_throughput_op_buffers[t].expert_dim = expert_dim;
 			step_throughput_op_buffers[t].vocab_size = vocab_size;
 			step_throughput_op_buffers[t].num_layers = n_layers;
-			step_throughput_op_buffers[t].peak_hardware_flop_rate = PEAK_BF16_TFLOPS;
+			step_throughput_op_buffers[t].peak_hardware_flop_rate = PEAK_BF16_FLOPS;
 			step_throughput_op_buffers[t].to_print_metrics = TO_PRINT_THROUGHPUT_METRICS;
 			step_throughput_op_buffers[t].to_print_verbose = TO_PRINT_THROUGHPUT_METRICS_VERBOSE;
 
@@ -2965,11 +3088,24 @@
 			printf("\tSeqs per round: %d\n", seqs_per_round);
 			printf("\tSeqs per step: %d\n\n", seqs_per_step);
 
+			printf("\tDevice Memory Partitioning:\n");
+			printf("\t\tNum Model Param Blocks: %d\n", NUM_DEV_BLOCKS);
+			printf("\t\tNum Model Grad Blocks: %d\n", NUM_DEV_GRAD_BLOCKS);
+			printf("\t\tNum (Chunk, Layer) Activation Slots: %d\n\n", NUM_DEV_ACTIVATION_SLOTS);
+
+			printf("\tPCIe Connection:\n");
+			printf("\t\tLink Gen: %u\n", dataflow_handle.pcie_link_gen);
+			printf("\t\t# Lanes: %u\n", dataflow_handle.pcie_link_width);
+			printf("\t\tTheo BW: %d GB/s\n\n", (int) (theo_link_speed_bytes_per_sec / (1024.0 * 1024.0 * 1024.0)));
+
 			printf("\tHost Activations: %d\n", total_home_acts);
 			printf("\t\tNum Full Saved Activations: %d\n", num_full_saved);
 			printf("\t\tNum Inp + Attn Saved Activations: %d\n", num_inp_attn_saved);
 			printf("\t\tNum Inp Only Saved Activations: %d\n", num_inp_only_saved);
 			printf("\tDevice Activations: %d\n\n", total_dev_acts);
+
+			
+			
 
 			printf("# Model Params: %.2fB\n\n", all_model_num_els / 1e9);
 		}
@@ -3141,8 +3277,6 @@
 				// pop from "Embedding"
 				dataflow_handle.profiler.range_pop();
 
-				sprintf(profile_msg, "Layers");
-				dataflow_handle.profiler.range_push(profile_msg);
 				// 2.) DOING CORE BLOCKS...
 
 				// reset what the next layer to fetch going forwards is...
@@ -3400,9 +3534,6 @@
 					dataflow_handle.profiler.range_pop();
 				}
 
-				// pop from "Layers"
-				dataflow_handle.profiler.range_pop();
-
 				// pop from "Fwd"
 				dataflow_handle.profiler.range_pop();
 
@@ -3531,6 +3662,18 @@
 
 							if (ret){
 								fprintf(stderr, "Error: failed to submit outbound transfer for loss tracker...\n");
+								return -1;
+							}
+
+							cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, loss_stream_id);
+							if (!cur_stream_state){
+								fprintf(stderr, "Error: failed to get stream state for loss tracker...\n");
+								return -1;
+							}
+
+							ret = dataflow_handle.submit_dependency(&dataflow_handle, compute_stream_id, cur_stream_state);
+							if (ret){
+								fprintf(stderr, "Error: failed to submit dependency to for compute stream to wait on loss tracker transfers...\n");
 								return -1;
 							}
 						}
@@ -3716,7 +3859,13 @@
 									printf("\n\nSubmitting recompute for seq group #%d, chunk #%d, block #%d...\n\n", seq_group, chunk_id, k);
 								}
 
-								sprintf(profile_msg, "Recompute X: seq group #%d, chunk #%d, block #%d", seq_group, chunk_id, k);
+								if (cur_saved_activation_level == SAVED_ACTIVATION_LEVEL_INP_ONLY){
+									sprintf(profile_msg, "Recompute (full)");
+								}
+								else if (cur_saved_activation_level == SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY){
+									sprintf(profile_msg, "Recompute (partial)");
+								}
+								
 								dataflow_handle.profiler.range_push(profile_msg);
 								ret = dataflow_submit_transformer_block_recompute(&dataflow_handle, compute_stream_id, 
 												working_block,
@@ -3736,7 +3885,7 @@
 								printf("\n\nSubmitting bwd_x for seq group #%d, chunk #%d, block #%d...\n\n", seq_group, chunk_id, k);
 							}
 
-							sprintf(profile_msg, "Bwd X: seq group #%d, chunk #%d, block #%d", seq_group, chunk_id, k);
+							sprintf(profile_msg, "Bwd X");
 							dataflow_handle.profiler.range_push(profile_msg);
 
 							ret = dataflow_submit_transformer_block_bwd_x(&dataflow_handle, compute_stream_id,
@@ -3875,7 +4024,7 @@
 							// utilizing the newly populated grad_activations struct
 							// to update the grad_weights...
 
-							sprintf(profile_msg, "Bwd W: seq group #%d, chunk #%d, block #%d", seq_group, chunk_id, k);
+							sprintf(profile_msg, "Bwd W");
 							dataflow_handle.profiler.range_push(profile_msg);
 
 							// uses the same input transition as bwd_x...
@@ -4951,7 +5100,7 @@
 				dataflow_handle.profiler.range_pop();
 			}
 
-			// consider sending all the results back to host as the end of the step...
+			// only mark step as completed after all the results have been sent back to host...
 			ret = dataflow_submit_end_step_metrics_host(&dataflow_handle, outbound_stream_id, 
 													end_step_metrics, &(step_throughput_op_buffers[t - 1]));
 			if (ret){
