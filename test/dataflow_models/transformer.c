@@ -204,6 +204,43 @@
 
 	}
 
+	int sync_and_save_file(Dataflow_Handle * dataflow_handle, int stream_id, char * filename, void * dev_data, size_t data_size){
+		int ret;
+		ret = dataflow_handle.sync_stream(dataflow_handle, stream_id);
+		if (ret){
+			fprintf(stderr, "Error: failed to sync stream: %d...\n", stream_id);
+			return -1;
+		}
+
+		FILE * f = fopen(filename, "w");
+		if (!f){
+			fprintf(stderr, "Error: failed to open file: %s...\n", filename);
+			return -1;
+		}
+		
+		void * host_ptr = malloc(data_size);
+		if (!host_ptr){
+			fprintf(stderr, "Error: failed to allocate host ptr...\n");
+			return -1;
+		}
+
+		ret = (dataflow_handle -> submit_outbound_transfer)(dataflow_handle, stream_id, host_ptr, dev_data, data_size);
+		if (ret){
+			fprintf(stderr, "Error: failed to submit outbound transfer...\n");
+			return -1;
+		}
+
+		ret = dataflow_handle->sync_stream(dataflow_handle, stream_id);
+		if (ret){
+			fprintf(stderr, "Error: failed to sync stream: %d...\n", stream_id);
+			return -1;
+		}
+
+		fwrite(host_ptr, data_size, 1, f);
+		fclose(f);
+
+		return 0;
+	}
 
 	int main(int argc, char * argv[]){
 
@@ -3339,6 +3376,17 @@
 							if (ret){
 								fprintf(stderr, "Error: failed to submit transformer block for seq group #%d, chunk #%d, block #%d...\n", seq_group, chunk_id, k);
 								return -1;
+							}
+
+
+							if ((chunk_id == 0) && (r <= 1)){
+								char my_filename[256];
+								sprintf(my_filename, "test_transformer_data/round_%d/fwd/chunk_0_layer_%d_out.dat", r, k);
+								ret = sync_and_save_file(&dataflow_handle, compute_stream_id, my_filename, block_transitions[2 * chunk_id + ((k + 1) % 2)].X, block_transition_size);
+								if (ret){
+									fprintf(stderr, "Error: failed to save file for seq group #%d, chunk #%d, block #%d...\n", seq_group, chunk_id, k);
+									return -1;
+								}
 							}
 
 
