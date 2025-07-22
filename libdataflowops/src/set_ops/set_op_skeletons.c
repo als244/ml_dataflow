@@ -950,7 +950,7 @@ void dataflow_set_default_set_average_loss_skeleton(Op_Skeleton * skeleton) {
 
 	sprintf(op_nickname, "%s", "default_set_average_loss");
 	
-	int num_args = 3;
+	int num_args = 2;
 
 	skeleton_header -> num_args = num_args;
 
@@ -958,7 +958,6 @@ void dataflow_set_default_set_average_loss_skeleton(Op_Skeleton * skeleton) {
 
 	arg_dtypes[0] = DATAFLOW_INT_SCALAR;
 	arg_dtypes[1] = DATAFLOW_FP32;
-	arg_dtypes[2] = DATAFLOW_FP32;
 
 	for (int i = num_args; i < MAX_OP_ARGS; i++){
 		arg_dtypes[i] = DATAFLOW_NONE;

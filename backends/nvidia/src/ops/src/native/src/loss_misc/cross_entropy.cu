@@ -67,7 +67,7 @@ extern "C" __global__ void default_cross_entropy_loss_bf16_kernel(int n_rows, in
 }
 
 // LAUNCHES WITH ONLY 1 BLOCK!
-extern "C" __global__ void default_set_average_loss_kernel(int num_tokens, float * loss_vec, float * ret_avg_loss){
+extern "C" __global__ void default_set_average_loss_kernel(int num_tokens, float * loss_vec){
 
 
 	__shared__ float warp_loss[WARP_SIZE];
@@ -110,12 +110,8 @@ extern "C" __global__ void default_set_average_loss_kernel(int num_tokens, float
 
 		// set the average loss
 		if (lane_id == 0){
-
 			float avg_loss = thread_loss_val / (float)num_tokens;
-
-			printf("thread_loss_val: %f\n", thread_loss_val);
-			printf("avg_loss: %f\n", avg_loss);
-			ret_avg_loss[0] = avg_loss;
+			loss_vec[num_tokens] = avg_loss;
 		}
 	}
 
