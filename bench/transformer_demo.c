@@ -3111,15 +3111,15 @@
 
 		if (TO_PRINT_HYPERPARAMS){
 			printf("HYPERPARAMS:\n");
-			printf("\tRMS Norm Epsilon: %f\n", eps);
-			printf("\tRoPE Theta: %f\n", (float) theta);
+			printf("\tRMS Norm Epsilon: %.2e\n", eps);
+			printf("\tRoPE Theta: %d\n", theta);
 			printf("\tOptimizer: AdamW\n");
 			printf("\t\tLearning Rate: %f\n", lr);
 			printf("\t\tSchedule: Constant\n");
-			printf("\t\tBeta1: %f\n", beta1);
-			printf("\t\tBeta2: %f\n", beta2);
-			printf("\t\tWeight Decay: %f\n", weight_decay);
-			printf("\t\tEpsilon: %f\n\n\n", epsilon);
+			printf("\t\tBeta1: %.4f\n", beta1);
+			printf("\t\tBeta2: %.4f\n", beta2);
+			printf("\t\tWeight Decay: %.2e\n", weight_decay);
+			printf("\t\tEpsilon: %.2e\n\n\n", epsilon);
 		}
 		
 
