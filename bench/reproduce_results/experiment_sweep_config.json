@@ -158,7 +158,7 @@
         "seq_len": [65536, 131072, 262144, 524288],
         "model_size": [1],
         "start_run_ind": 0,
-        "total_steps": 7,
+        "total_steps": 5,
         "warmup_steps": 2
     },
     "rtx3090_8b_short": {
