@@ -206,7 +206,7 @@
 
 	int sync_and_save_file(Dataflow_Handle * dataflow_handle, int stream_id, char * filename, void * dev_data, size_t data_size){
 		int ret;
-		ret = dataflow_handle.sync_stream(dataflow_handle, stream_id);
+		ret = (dataflow_handle -> sync_stream)(dataflow_handle, stream_id);
 		if (ret){
 			fprintf(stderr, "Error: failed to sync stream: %d...\n", stream_id);
 			return -1;
@@ -230,7 +230,7 @@
 			return -1;
 		}
 
-		ret = dataflow_handle->sync_stream(dataflow_handle, stream_id);
+		ret = (dataflow_handle -> sync_stream)(dataflow_handle, stream_id);
 		if (ret){
 			fprintf(stderr, "Error: failed to sync stream: %d...\n", stream_id);
 			return -1;
