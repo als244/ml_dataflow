@@ -51,6 +51,8 @@
 	// config for what to print...
 
 	#define TO_PRINT_SETUP_CONFIG_SUMMARY 1
+	#define TO_PRINT_HYPERPARAMS 1
+	
 	#define TO_PRINT_MEMORY_PARTITION_CONFIG 0
 	#define TO_PRINT_MEMORY_BREAKDOWN_VERBOSE 0
 	#define TO_PRINT_MODEL_SIZING 0
@@ -3104,9 +3106,6 @@
 			printf("\t\tNum Inp Only Saved Activations: %d\n", num_inp_only_saved);
 			printf("\tDevice Activations: %d\n\n", total_dev_acts);
 
-			
-			
-
 			printf("# Model Params: %.2fB\n\n", all_model_num_els / 1e9);
 		}
 
@@ -3116,6 +3115,7 @@
 			printf("\tRoPE Theta: %f\n", theta);
 			printf("\tOptimizer: AdamW\n");
 			printf("\t\tLearning Rate: %f\n", lr);
+			printf("\t\tSchedule: Constant\n");
 			printf("\t\tBeta1: %f\n", beta1);
 			printf("\t\tBeta2: %f\n", beta2);
 			printf("\t\tWeight Decay: %f\n", weight_decay);
