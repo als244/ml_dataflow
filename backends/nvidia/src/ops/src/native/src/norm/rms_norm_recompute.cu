@@ -60,7 +60,7 @@ extern "C" __global__ void default_rms_norm_recompute_fp16_kernel(int n_rows, in
 	}
 }
 
-__global__ void default_rms_norm_recompute_bf16_kernel_c(
+__global__ void default_rms_norm_recompute_bf16_kernel(
     int n_rows, 
     int n_cols, 
     const __nv_bfloat16* __restrict__ rms_weight, 
