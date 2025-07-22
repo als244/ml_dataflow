@@ -3109,6 +3109,18 @@
 
 			printf("# Model Params: %.2fB\n\n", all_model_num_els / 1e9);
 		}
+
+		if (TO_PRINT_HYPERPARAMS){
+			printf("HYPERPARAMS:\n");
+			printf("\tRMS Norm Epsilon: %f\n", eps);
+			printf("\tRoPE Theta: %f\n", theta);
+			printf("\tOptimizer: AdamW\n");
+			printf("\t\tLearning Rate: %f\n", lr);
+			printf("\t\tBeta1: %f\n", beta1);
+			printf("\t\tBeta2: %f\n", beta2);
+			printf("\t\tWeight Decay: %f\n", weight_decay);
+			printf("\t\tEpsilon: %f\n\n\n", epsilon);
+		}
 		
 
 		int * seqlens = calloc(seqs_per_step, sizeof(int));
