@@ -3688,6 +3688,17 @@
 							return -1;
 						}
 
+						if (chunk_id == 0 && r < 2){
+
+							char loss_filename[256];
+							sprintf(loss_filename, "test_transformer_data/round_%d/chunk_0_loss_vec.dat", r);
+							ret = sync_and_save_file(&dataflow_handle, compute_stream_id, loss_filename, dev_loss_vec, (head_activations -> num_tokens + 1) * sizeof(float));
+							if (ret){
+								fprintf(stderr, "Error: failed to save loss vec file...\n");
+								return -1;
+							}
+						}
+
 
 						// save the loss tracker...
 						
