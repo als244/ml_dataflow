@@ -59,11 +59,11 @@ int dataflow_submit_default_cross_entropy_loss(Dataflow_Handle * handle, int str
 
 	dataflow_set_default_set_average_loss_skeleton(&set_average_loss_op.op_skeleton);
 
-	void ** op_args = set_average_loss_op.op_args;
+	void ** set_loss_op_args = set_average_loss_op.op_args;
 
-	op_args[0] = &n_rows;
-	op_args[1] = &loss_vec;
-	op_args[2] = &(loss_vec[n_rows]);
+	set_loss_op_args[0] = &n_rows;
+	set_loss_op_args[1] = &loss_vec;
+	set_loss_op_args[2] = &(loss_vec[n_rows]);
 
 	ret = (handle -> submit_op)(handle, &set_average_loss_op, stream_id);
 	if (ret){
