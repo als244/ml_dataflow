@@ -3114,10 +3114,10 @@
 			printf("\tRMS Norm Epsilon: %.2e\n", eps);
 			printf("\tRoPE Theta: %d\n", theta);
 			printf("\tOptimizer: AdamW\n");
-			printf("\t\tLearning Rate: %f\n", lr);
+			printf("\t\tLearning Rate: %.2e\n", lr);
 			printf("\t\tSchedule: Constant\n");
-			printf("\t\tBeta1: %.4f\n", beta1);
-			printf("\t\tBeta2: %.4f\n", beta2);
+			printf("\t\tBeta1: %.3f\n", beta1);
+			printf("\t\tBeta2: %.3f\n", beta2);
 			printf("\t\tWeight Decay: %.2e\n", weight_decay);
 			printf("\t\tEpsilon: %.2e\n\n\n", epsilon);
 		}
