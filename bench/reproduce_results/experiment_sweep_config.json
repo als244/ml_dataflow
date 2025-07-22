@@ -23,8 +23,8 @@
         "seq_len": [524288, 1048576],
         "model_size": [1],
         "start_run_ind": 0,
-        "total_steps": 30,
-        "warmup_steps": 10
+        "total_steps": 7,
+        "warmup_steps": 2
     },
     "h100_8b_short": {
         "host_mem_gb": [60, 65, 70, 75],
@@ -77,8 +77,8 @@
         "seq_len": [65536, 131072, 262144],
         "model_size": [1],
         "start_run_ind": 0,
-        "total_steps": 30,
-        "warmup_steps": 10
+        "total_steps": 8,
+        "warmup_steps": 3
     },
     "a100_1b_long": {
         "host_mem_gb": [64, 96, 128, 160, 192],
@@ -86,8 +86,8 @@
         "seq_len": [524288, 1048576],
         "model_size": [1],
         "start_run_ind": 0,
-        "total_steps": 30,
-        "warmup_steps": 10
+        "total_steps": 7,
+        "warmup_steps": 2
     },
     "a100_8b_short": {
         "host_mem_gb": [60, 65, 70, 75],
