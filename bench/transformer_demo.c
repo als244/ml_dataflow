@@ -1614,26 +1614,26 @@
 
 				remain_tokens -= new_tokens;
 			}
-			
 		}
 
 		// ensuring we can populate the seq batch/chunk with correct amount of tokens...
-		if (num_seqs_per_chunk > 1){
-			sys_token_ids = realloc(sys_token_ids, num_tokens_example_seq * num_seqs_per_chunk * sizeof(uint32_t));
+		if (seq_len < chunk_size){
+			// we ensured chunk size is a multiple of seq len...
+			sys_token_ids = realloc(sys_token_ids, chunk_size * sizeof(uint32_t));
 			if (!sys_token_ids){
 				fprintf(stderr, "Error: failed to realloc sys_token_ids...\n");
 				return -1;
 			}
 
-			sys_labels = realloc(sys_labels, num_tokens_example_seq * num_seqs_per_chunk * sizeof(uint32_t));
+			sys_labels = realloc(sys_labels, chunk_size * sizeof(uint32_t));
 			if (!sys_labels){
 				fprintf(stderr, "Error: failed to realloc sys_labels...\n");
 				return -1;
 			}
 
-			for (int i = 1; i < num_seqs_per_chunk; i++){
-				memcpy(sys_token_ids + i * num_tokens_example_seq, sys_token_ids, num_tokens_example_seq * sizeof(uint32_t));
-				memcpy(sys_labels + i * num_tokens_example_seq, sys_labels, num_tokens_example_seq * sizeof(uint32_t));
+			for (int i = 0; i < num_seqs_per_chunk; i++){
+				memcpy(sys_token_ids + i * seq_len, sys_token_ids, seq_len * sizeof(uint32_t));
+				memcpy(sys_labels + i * seq_len, sys_labels, seq_len * sizeof(uint32_t));
 			}
 		}
 
