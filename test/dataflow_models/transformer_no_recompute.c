@@ -2754,6 +2754,8 @@
 
 		int seqs_per_step = seqs_per_round * num_rounds_per_step;
 
+		float theo_link_speed_bytes_per_sec = get_home_link_speed_bytes_per_sec(dataflow_handle.pcie_link_width, dataflow_handle.pcie_link_gen);
+
 		if (TO_PRINT_SETUP_CONFIG_SUMMARY){
 			printf("SETUP CONFIG OVERVIEW:\n");
 			printf("\tKernel Workspace Bytes: %lu\n", kernelWorkspaceBytes);
@@ -2767,6 +2769,11 @@
 			printf("\tSeqlen: %d\n", MAX_SEQLEN);
 			printf("\tSeqs per round: %d\n", seqs_per_round);
 			printf("\tSeqs per step: %d\n\n", seqs_per_step);
+
+			printf("\tPCIe Connection:\n");
+			printf("\t\tLink Gen: %u\n", dataflow_handle.pcie_link_gen);
+			printf("\t\t# Lanes: %u\n", dataflow_handle.pcie_link_width);
+			printf("\t\tTheo BW: %d GB/s\n\n", (int) (theo_link_speed_bytes_per_sec / (1024.0 * 1024.0 * 1024.0)));
 
 			// this version doesn't have recomputation...
 			printf("\tHost Activations: %d\n", total_home_acts);
@@ -2817,7 +2824,7 @@
 			sprintf(profile_msg, "Step #%d", t);
 			dataflow_handle.profiler.range_push(profile_msg);
 
-			// start the metrics for this step...
+			// only mark step as completed after all the results have been sent back to host...
 			ret = dataflow_submit_start_step_metrics_host(&dataflow_handle, compute_stream_id, 
 							start_step_metrics, &(step_throughput_op_buffers[t - 1]),
 							t, seqs_per_step, seqlens);
@@ -3515,7 +3522,7 @@
 								printf("\n\nSubmitting bwd_x for seq group #%d, chunk #%d, block #%d...\n\n", seq_group, chunk_id, k);
 							}
 
-							sprintf(profile_msg, "Bwd X: seq group #%d, chunk #%d, block #%d", seq_group, chunk_id, k);
+							sprintf(profile_msg, "Bwd X");
 							dataflow_handle.profiler.range_push(profile_msg);
 
 							ret = dataflow_submit_transformer_block_bwd_x(&dataflow_handle, compute_stream_id,
@@ -3654,7 +3661,7 @@
 							// utilizing the newly populated grad_activations struct
 							// to update the grad_weights...
 
-							sprintf(profile_msg, "Bwd W: seq group #%d, chunk #%d, block #%d", seq_group, chunk_id, k);
+							sprintf(profile_msg, "Bwd W");
 							dataflow_handle.profiler.range_push(profile_msg);
 
 							// uses the same input transition as bwd_x...
