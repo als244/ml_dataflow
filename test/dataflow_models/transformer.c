@@ -3688,7 +3688,7 @@
 							return -1;
 						}
 
-						if (chunk_id == 0 && r < 2){
+						if (chunk_id == 0 && r < 10){
 
 							char loss_filename[256];
 							sprintf(loss_filename, "test_transformer_data/round_%d/chunk_0_loss_vec.dat", r);
