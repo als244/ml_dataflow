@@ -52,7 +52,7 @@
 
 	#define TO_PRINT_SETUP_CONFIG_SUMMARY 1
 	#define TO_PRINT_HYPERPARAMS 1
-	
+
 	#define TO_PRINT_MEMORY_PARTITION_CONFIG 0
 	#define TO_PRINT_MEMORY_BREAKDOWN_VERBOSE 0
 	#define TO_PRINT_MODEL_SIZING 0
@@ -3112,7 +3112,7 @@
 		if (TO_PRINT_HYPERPARAMS){
 			printf("HYPERPARAMS:\n");
 			printf("\tRMS Norm Epsilon: %f\n", eps);
-			printf("\tRoPE Theta: %f\n", theta);
+			printf("\tRoPE Theta: %f\n", (float) theta);
 			printf("\tOptimizer: AdamW\n");
 			printf("\t\tLearning Rate: %f\n", lr);
 			printf("\t\tSchedule: Constant\n");
