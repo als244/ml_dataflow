@@ -1,5 +1,6 @@
 #include "nvidia_ops.h"
 
+#define RMS_NORM_RECOMPUTE_VEC_SIZE 8
 
 extern "C" __global__ void default_rms_norm_recompute_fp32_kernel(int n_rows, int n_cols, float * rms_weight, float * rms_vals, float * X, float * out) {
 
@@ -85,7 +86,7 @@ __global__ void default_rms_norm_recompute_bf16_kernel_c(
     const float4* w_vec = (const float4*)(rms_weight);
     float4* o_vec = (float4*)(out + row_base);
 
-    const int n_cols_vec = n_cols / VEC_SIZE;
+    const int n_cols_vec = n_cols / RMS_NORM_RECOMPUTE_VEC_SIZE;
 
     // --- Vectorized Loop ---
     // Each thread processes one vector (8 elements) per iteration.
@@ -122,7 +123,7 @@ __global__ void default_rms_norm_recompute_bf16_kernel_c(
 
     // --- Tail Loop for Remainder ---
     // Handle elements if n_cols is not perfectly divisible by VEC_SIZE.
-    int tail_start = n_cols_vec * VEC_SIZE;
+    int tail_start = n_cols_vec * RMS_NORM_RECOMPUTE_VEC_SIZE;
     for (int i = tail_start + threadIdx.x; i < n_cols; i += blockDim.x) {
         float cur_row_val = __bfloat162float(X[row_base + i]);
         float rms_val = cur_row_val * cur_recip_avg;
