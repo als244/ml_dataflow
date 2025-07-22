@@ -53,8 +53,6 @@ int dataflow_submit_default_cross_entropy_loss(Dataflow_Handle * handle, int str
 		return -1;
 	}
 
-	return 0;
-
 	Op set_average_loss_op;
 
 	dataflow_set_default_set_average_loss_skeleton(&set_average_loss_op.op_skeleton);

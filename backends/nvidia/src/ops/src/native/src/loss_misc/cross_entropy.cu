@@ -97,7 +97,6 @@ extern "C" __global__ void default_set_average_loss_kernel(int num_tokens, float
 
 	if (lane_id == 0){
 		warp_loss[warp_id] = thread_loss_val;
-		printf("warp_loss[%d]: %f\n", warp_id, warp_loss[warp_id]);
 	}
 
 	__syncthreads();
