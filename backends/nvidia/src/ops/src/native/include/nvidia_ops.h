@@ -73,7 +73,14 @@ extern "C" __global__ void default_rms_norm_fp8e5m2_kernel(int n_rows, int n_col
 // Recompute forward now with "rms_vals" as input...
 extern "C" __global__ void default_rms_norm_recompute_fp32_kernel(int n_rows, int n_cols, float * rms_weight, float * rms_vals, float * X, float * out);
 extern "C" __global__ void default_rms_norm_recompute_fp16_kernel(int n_rows, int n_cols, __half * rms_weight, float * rms_vals, __half * X, __half * out);
-extern "C" __global__ void default_rms_norm_recompute_bf16_kernel(int n_rows, int n_cols, __nv_bfloat16 * rms_weight, float * rms_vals, __nv_bfloat16 * X, __nv_bfloat16 * out);
+//extern "C" __global__ void default_rms_norm_recompute_bf16_kernel(int n_rows, int n_cols, __nv_bfloat16 * rms_weight, float * rms_vals, __nv_bfloat16 * X, __nv_bfloat16 * out);
+__global__ void default_rms_norm_recompute_bf16_kernel_c(
+    int n_rows, 
+    int n_cols, 
+    const __nv_bfloat16* __restrict__ rms_weight, 
+    const float* __restrict__ rms_vals, 
+    const __nv_bfloat16* __restrict__ X, 
+    __nv_bfloat16* __restrict__ out);
 extern "C" __global__ void default_rms_norm_recompute_fp8e4m3_kernel(int n_rows, int n_cols,  __nv_fp8_e4m3 * rms_weight, float * rms_vals, __nv_fp8_e4m3 * X, __nv_fp8_e4m3 * out);
 extern "C" __global__ void default_rms_norm_recompute_fp8e5m2_kernel(int n_rows, int n_cols, __nv_fp8_e5m2 * rms_weight, float * rms_vals, __nv_fp8_e5m2 * X, __nv_fp8_e5m2 * out);
 
