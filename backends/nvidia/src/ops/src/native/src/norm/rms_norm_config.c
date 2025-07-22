@@ -116,7 +116,7 @@ int default_rms_norm_recompute_set_launch_config(Cuda_Launch_Config * cuda_launc
 	Cuda_Device_Info * device_info = (Cuda_Device_Info *) dataflow_handle -> device_info;
 
 	int rms_recompute_max_threads_per_block = (cuda_function -> function_config).func_max_threads_per_block;
-	cuda_launch_config -> blockDimX = rms_recompute_max_threads_per_block;
+	cuda_launch_config -> blockDimX = MY_MIN(256, rms_recompute_max_threads_per_block);
 
 	int sm_count = device_info -> sm_count;
 
