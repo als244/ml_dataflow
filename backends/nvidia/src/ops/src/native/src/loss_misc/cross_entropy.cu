@@ -110,7 +110,12 @@ extern "C" __global__ void default_set_average_loss_kernel(int num_tokens, float
 
 		// set the average loss
 		if (lane_id == 0){
-			*ret_avg_loss = thread_loss_val / (float)num_tokens;
+
+			float avg_loss = thread_loss_val / (float)num_tokens;
+
+			printf("thread_loss_val: %f\n", thread_loss_val);
+			printf("avg_loss: %f\n", avg_loss);
+			ret_avg_loss[0] = avg_loss;
 		}
 	}
 
