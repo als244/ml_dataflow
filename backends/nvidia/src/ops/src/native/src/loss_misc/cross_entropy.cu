@@ -78,7 +78,7 @@ extern "C" __global__ void default_set_average_loss_kernel(int num_tokens, float
 
 	int token_start = threadIdx.x;
 
-	int thread_loss_val = 0.0f;
+	float thread_loss_val = 0.0f;
 
 	unsigned mask = 0xFFFFFFFFU;
 
