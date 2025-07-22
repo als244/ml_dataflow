@@ -97,9 +97,9 @@ __global__ void default_rms_norm_recompute_bf16_kernel_c(
         float4 out_data;
 
         // Reinterpret float4 using C-style casts
-        const __nv_bfloat162_t* x_h2 = (const __nv_bfloat162_t*)(&x_data);
-        const __nv_bfloat162_t* w_h2 = (const __nv_bfloat162_t*)(&w_data);
-        __nv_bfloat162_t* o_h2 = (__nv_bfloat162_t*)(&out_data);
+        const __nv_bfloat162 * x_h2 = (const __nv_bfloat162 *)(&x_data);
+        const __nv_bfloat162 * w_h2 = (const __nv_bfloat162 *)(&w_data);
+        __nv_bfloat162 * o_h2 = (__nv_bfloat162 *)(&out_data);
 
         // 2. Process 4 pairs of bfloat16s
         #pragma unroll
