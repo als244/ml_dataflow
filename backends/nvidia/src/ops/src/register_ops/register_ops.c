@@ -112,7 +112,7 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 	char * suffix = "kernel";
 
 	int num_misc_funcs = 1;
-	char * misc_func_names[] = {"default_set_average_loss_kernel"};
+	char * misc_func_names[] = {"default_set_average_loss"};
 	char * misc_func_init_symbols[] = {NULL};
 
 
@@ -290,7 +290,7 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 	}
 
 	for (int i = 0; i < num_misc_funcs; i++){
-		sprintf(native_func_symbols[cur_func], "%s", misc_func_names[i]);
+		sprintf(native_func_symbols[cur_func], "%s_%s", misc_func_names[i], suffix);
 		sprintf(native_func_launch_symbols[cur_func], "%s_set_launch_config", misc_func_names[i]);
 		dataflow_set_op_skeleton(&native_op_skeletons[cur_func], misc_func_names[i], DATAFLOW_NONE, DATAFLOW_NONE);
 		cur_func++;
