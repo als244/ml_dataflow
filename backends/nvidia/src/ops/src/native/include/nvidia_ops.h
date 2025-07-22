@@ -224,6 +224,8 @@ extern "C" __global__ void default_cross_entropy_loss_fp32_kernel(int n_rows, in
 extern "C" __global__ void default_cross_entropy_loss_fp16_kernel(int n_rows, int n_cols, __half * pred_logits, uint32_t * labels, float * loss_vec);
 extern "C" __global__ void default_cross_entropy_loss_bf16_kernel(int n_rows, int n_cols, __nv_bfloat16 * pred_logits, uint32_t * labels, float * loss_vec);
 
+// Calculating Deterministic Avg Loss for Chunk
+extern "C" __global__ void default_set_average_loss_kernel(int num_tokens, float * loss_vec, float * ret_avg_loss);
 
 // Optimizer Ops
 

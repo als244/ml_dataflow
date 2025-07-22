@@ -61,6 +61,9 @@ int dataflow_set_op_skeleton(Op_Skeleton * skeleton, char * op_name, DataflowDat
 	else if (strcmp(op_name, "default_cross_entropy_loss") == 0) {
 		dataflow_set_default_cross_entropy_loss_skeleton(skeleton, bwd_dt);
 	}
+	else if (strcmp(op_name, "default_set_average_loss") == 0) {
+		dataflow_set_default_set_average_loss_skeleton(skeleton);
+	}
 	else {
 		// External ops (for current cuda ops implementation)
 		if (strcmp(op_name, "matmul") == 0) {
@@ -931,6 +934,31 @@ void dataflow_set_default_cross_entropy_loss_skeleton(Op_Skeleton * skeleton, Da
 	arg_dtypes[2] = bwd_datatype;
 	arg_dtypes[3] = DATAFLOW_UINT32;
 	arg_dtypes[4] = DATAFLOW_FP32;
+
+	for (int i = num_args; i < MAX_OP_ARGS; i++){
+		arg_dtypes[i] = DATAFLOW_NONE;
+	}
+
+	dataflow_do_fingerprinting(skeleton_header, sizeof(Op_Skeleton_Header), (skeleton -> identifier).fingerprint);
+}
+
+void dataflow_set_default_set_average_loss_skeleton(Op_Skeleton * skeleton) {
+
+	Op_Skeleton_Header * skeleton_header = &(skeleton -> header);
+
+	char op_nickname[MAX_OP_NICKNAME_SIZE];
+
+	sprintf(op_nickname, "%s", "default_set_average_loss");
+	
+	int num_args = 3;
+
+	skeleton_header -> num_args = num_args;
+
+	DataflowDatatype * arg_dtypes = skeleton_header -> arg_dtypes;
+
+	arg_dtypes[0] = DATAFLOW_INT_SCALAR;
+	arg_dtypes[1] = DATAFLOW_FP32;
+	arg_dtypes[2] = DATAFLOW_FP32;
 
 	for (int i = num_args; i < MAX_OP_ARGS; i++){
 		arg_dtypes[i] = DATAFLOW_NONE;
