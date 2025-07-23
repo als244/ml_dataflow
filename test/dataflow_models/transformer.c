@@ -212,7 +212,7 @@
 		int ret;
 
 		if (argc != 5){
-			fprintf(stderr, "Error. Usage: ./transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model size billions: [1 | 8]>\n");
+			fprintf(stderr, "Error. Usage: ./transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model dir path>\n");
 			return -1;
 		}
 
