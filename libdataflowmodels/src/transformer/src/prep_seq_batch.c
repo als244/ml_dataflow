@@ -95,7 +95,7 @@ Transformer_Model_Config * parse_config(char * config_path) {
         "Expert Dim: %d\n"
         "Expert MLP Type: %15s\n"
         "Rope Theta: %d\n"
-        "RMS Norm Epsilon: %f",
+        "RMS Norm Epsilon: %f\n",
         config->embed_dtype,
         config->attn_dtype,
         config->expert_dtype,
