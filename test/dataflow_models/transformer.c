@@ -23,7 +23,7 @@
 
 	// this (along with num seqs per round) modulates how frequently we will step 
 	// the optimizer...
-	#define TARGET_DURATION_PER_STEP_S 0.1f
+	#define TARGET_OPT_OVERHEAD_FRAC 0.02f
 	// to help determien how many rounds per step
 	#define FLOP_EFFICIENCY_ESTIMATE 0.6f
 
@@ -2971,7 +2971,9 @@
 
 		float flops_per_round = per_seq_flops * seqs_per_round;
 
-		float target_duration_per_step_s = TARGET_DURATION_PER_STEP_S;
+		float opt_state_inbound_time = opt_state_alias_used_size / link_speed_bytes_per_sec_gbps;
+		
+		float target_duration_per_step_s = opt_state_inbound_time / TARGET_OPT_OVERHEAD_FRAC;
 
 		float flop_efficiency_estimate = FLOP_EFFICIENCY_ESTIMATE;
 
