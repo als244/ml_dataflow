@@ -29,7 +29,7 @@
 
 	#define PCIE_LINK_EFFICIENCY 0.75f
 
-	#define NUM_STEPS 1000
+	#define NUM_STEPS 10
 
 	// num_chunks = num_chunks_per_seq * num_seq_groups_per_round
 	// num_chunks_per_seq = seqlen / chunk_size
