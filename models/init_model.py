@@ -33,6 +33,12 @@ def main(config_path, model_dir_path):
     head_dim = model_dim / n_heads
     kv_dim = int(n_kv_heads * head_dim)
 
+    if model_dim % 256 != 0:
+        raise ValueError(f"model_dim must be divisible by 256")
+    
+    if head_dim % 32 != 0:
+        raise ValueError(f"head_dim must be divisible by 32")
+
     if n_heads % n_kv_heads != 0:
         raise ValueError(f"n_heads must be divisible by n_kv_heads")
     
@@ -42,15 +48,22 @@ def main(config_path, model_dir_path):
     if model_dim % kv_dim != 0:
         raise ValueError(f"model_dim must be divisible by kv_dim")
 
+
     num_shared_experts = config['num_shared_experts']
     num_routed_experts = config['num_routed_experts']
     expert_dim = config['expert_dim']
-    expert_mlp_type = config['expert_mlp_type']
+    expert_mlp_type = config['expert_mlp_type'].lower()
+
+    if expert_mlp_type != "swiglu":
+        raise ValueError(f"Invalid expert MLP type: {expert_mlp_type}. Only swiglu is supported.")
+
+    rope_theta = config['rope_theta']
+    rms_norm_epsilon = config['rms_norm_epsilon']
 
      # create model directory
     os.makedirs(model_dir_path, exist_ok=True)
 
-    config_text = f"Data Type: {dtype_str}\nVocab Size: {vocab_size}\nNum Layers: {n_layers}\nModel Dim: {model_dim}\nNum Q Heads: {n_heads}\nNum KV Heads: {n_kv_heads}\nNum Shared Experts: {num_shared_experts}\nNum Routed Experts: {num_routed_experts}\nExpert Dim: {expert_dim}\nExpert MLP Type: {expert_mlp_type}\n"
+    config_text = f"Data Type: {dtype_str}\nVocab Size: {vocab_size}\nNum Layers: {n_layers}\nModel Dim: {model_dim}\nNum Q Heads: {n_heads}\nNum KV Heads: {n_kv_heads}\nNum Shared Experts: {num_shared_experts}\nNum Routed Experts: {num_routed_experts}\nExpert Dim: {expert_dim}\nExpert MLP Type: {expert_mlp_type}\nRope Theta: {rope_theta}\nRMS Norm Epsilon: {rms_norm_epsilon}\n"
 
     with open(f"{model_dir_path}/config.txt", "w") as f:
         f.write(config_text)

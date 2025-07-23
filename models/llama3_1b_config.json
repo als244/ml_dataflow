@@ -9,5 +9,7 @@
     "num_routed_experts": 0,
     "expert_dim": 8192,
     "expert_mlp_type": "swiglu",
+    "rope_theta": 500000,
+    "rms_norm_epsilon": 1e-5,
     "rand_seed": 42
 }
