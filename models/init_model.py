@@ -10,20 +10,20 @@ def main(config_path, model_dir_path):
     with open(config_path, 'r') as f:
         config = json.load(f)
 
-    dtype = config['dtype'].lower()
+    dtype_str = config['dtype'].lower()
 
 
-    if dtype == 'bf16':
+    if dtype_str == 'bf16':
         dtype = torch.bfloat16
         view_dtype = torch.uint16
-    elif dtype == 'fp16':
+    elif dtype_str == 'fp16':
         dtype = torch.float16
         view_dtype = torch.uint16
-    elif dtype == 'fp32':
+    elif dtype_str == 'fp32':
         dtype = torch.float32
         view_dtype = torch.float32
     else:
-        raise ValueError(f"Invalid dtype: {dtype}")
+        raise ValueError(f"Invalid dtype: {dtype_str}")
     
     vocab_size = config['vocab_size']
     n_layers = config['n_layers']
@@ -50,7 +50,7 @@ def main(config_path, model_dir_path):
      # create model directory
     os.makedirs(model_dir_path, exist_ok=True)
 
-    config_text = f"Data Type: {dtype}\nVocab Size: {vocab_size}\nNum Layers: {n_layers}\nModel Dim: {model_dim}\nNum Q Heads: {n_heads}\nNum KV Heads: {n_kv_heads}\nNum Shared Experts: {num_shared_experts}\nNum Routed Experts: {num_routed_experts}\nExpert Dim: {expert_dim}\nExpert MLP Type: {expert_mlp_type}\n"
+    config_text = f"Data Type: {dtype_str}\nVocab Size: {vocab_size}\nNum Layers: {n_layers}\nModel Dim: {model_dim}\nNum Q Heads: {n_heads}\nNum KV Heads: {n_kv_heads}\nNum Shared Experts: {num_shared_experts}\nNum Routed Experts: {num_routed_experts}\nExpert Dim: {expert_dim}\nExpert MLP Type: {expert_mlp_type}\n"
 
     with open(f"{model_dir_path}/config.txt", "w") as f:
         f.write(config_text)
