@@ -252,11 +252,11 @@ COULD USE TEMPLATE BUT THE NAME MANGLING IS A PAIN...
 // MoE Kenrels
 
 // Selection
-extern "C" __global__ void default_select_experts_fp32_kernel(int total_tokens, int n_experts, int top_k_experts,  float * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert);
-extern "C" __global__ void default_select_experts_fp16_kernel(int total_tokens, int n_experts, int top_k_experts,  __half * X_routed, __half * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert);
-extern "C" __global__ void default_select_experts_bf16_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_bfloat16 * X_routed, __nv_bfloat16 * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert);
-extern "C" __global__ void default_select_experts_fp8e4m3_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_fp8_e4m3 * X_routed, __nv_fp8_e4m3 * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert);
-extern "C" __global__ void default_select_experts_fp8e5m2_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_fp8_e5m2 * X_routed, __nv_fp8_e5m2 * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert);
+extern "C" __global__ void default_select_experts_fp32_kernel(int total_tokens, int n_experts, int top_k_experts,  float * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum);
+extern "C" __global__ void default_select_experts_fp16_kernel(int total_tokens, int n_experts, int top_k_experts,  __half * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum);
+extern "C" __global__ void default_select_experts_bf16_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_bfloat16 * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum);
+extern "C" __global__ void default_select_experts_fp8e4m3_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_fp8_e4m3 * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum);
+extern "C" __global__ void default_select_experts_fp8e5m2_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_fp8_e5m2 * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum);
 
 
 

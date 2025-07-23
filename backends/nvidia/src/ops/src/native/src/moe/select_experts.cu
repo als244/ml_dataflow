@@ -1,6 +1,6 @@
 #include "nvidia_ops.h"
 
-extern "C" __global__ void default_select_experts_fp32_kernel(int total_tokens, int n_experts, int top_k_experts,  float * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert) {
+extern "C" __global__ void default_select_experts_fp32_kernel(int total_tokens, int n_experts, int top_k_experts,  float * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum) {
 
     // DETERMINING HOW MANY TOKENS THIS THREADBLOCK IS RESPONSIBLE FOR
 
@@ -237,14 +237,12 @@ extern "C" __global__ void default_select_experts_fp32_kernel(int total_tokens, 
 
         prev_cumsum = __shfl_sync(0xFFFFFFFF, prev_cumsum + cur_expert_cnt, 31);
 
-        // reset this array before the call to route_experts
-        num_routed_by_expert[e] = 0;
     }    
 }
 
 
 
-extern "C" __global__ void default_select_experts_fp16_kernel(int total_tokens, int n_experts, int top_k_experts,  __half * X_routed, __half * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert) {
+extern "C" __global__ void default_select_experts_fp16_kernel(int total_tokens, int n_experts, int top_k_experts,  __half * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum) {
 
     // DETERMINING HOW MANY TOKENS THIS THREADBLOCK IS RESPONSIBLE FOR
 
@@ -412,7 +410,7 @@ extern "C" __global__ void default_select_experts_fp16_kernel(int total_tokens, 
                 expert_id = warp_top_k_expert_inds[warp_id * top_k_experts + k];
 
                 // set the gate value
-                token_expert_weights[(orig_token_row * (uint64_t) top_k_experts) + k] = __float2half(warp_top_k_expert_vals[warp_id * top_k_experts + k] / top_k_sum);
+                token_expert_weights[(orig_token_row * (uint64_t) top_k_experts) + k] = warp_top_k_expert_vals[warp_id * top_k_experts + k] / top_k_sum;
 
                 // add this expert to array in order for it's token to be copied
                 // into holding zone for "expert_id"
@@ -477,14 +475,11 @@ extern "C" __global__ void default_select_experts_fp16_kernel(int total_tokens, 
         expert_counts_cumsum[e] = prev_cumsum + cur_expert_cnt;
 
         prev_cumsum = __shfl_sync(0xFFFFFFFF, prev_cumsum + cur_expert_cnt, 31);
-
-        // reset this array before the call to route_experts
-        num_routed_by_expert[e] = 0;
     }    
 }
 
 
-extern "C" __global__ void default_select_experts_bf16_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_bfloat16 * X_routed, __nv_bfloat16 * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert) {
+extern "C" __global__ void default_select_experts_bf16_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_bfloat16 * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum) {
 
     // DETERMINING HOW MANY TOKENS THIS THREADBLOCK IS RESPONSIBLE FOR
 
@@ -652,7 +647,7 @@ extern "C" __global__ void default_select_experts_bf16_kernel(int total_tokens, 
                 expert_id = warp_top_k_expert_inds[warp_id * top_k_experts + k];
 
                 // set the gate value
-                token_expert_weights[(orig_token_row * (uint64_t) top_k_experts) + k] = __float2bfloat16(warp_top_k_expert_vals[warp_id * top_k_experts + k] / top_k_sum);
+                token_expert_weights[(orig_token_row * (uint64_t) top_k_experts) + k] = warp_top_k_expert_vals[warp_id * top_k_experts + k] / top_k_sum;
 
                 // add this expert to array in order for it's token to be copied
                 // into holding zone for "expert_id"
@@ -717,15 +712,12 @@ extern "C" __global__ void default_select_experts_bf16_kernel(int total_tokens, 
         expert_counts_cumsum[e] = prev_cumsum + cur_expert_cnt;
 
         prev_cumsum = __shfl_sync(0xFFFFFFFF, prev_cumsum + cur_expert_cnt, 31);
-
-        // reset this array before the call to route_experts
-        num_routed_by_expert[e] = 0;
     }    
 }
 
 
 
-extern "C" __global__ void default_select_experts_fp8e4m3_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_fp8_e4m3 * X_routed, __nv_fp8_e4m3 * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert) {
+extern "C" __global__ void default_select_experts_fp8e4m3_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_fp8_e4m3 * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert) {
 
     // DETERMINING HOW MANY TOKENS THIS THREADBLOCK IS RESPONSIBLE FOR
 
@@ -894,7 +886,7 @@ extern "C" __global__ void default_select_experts_fp8e4m3_kernel(int total_token
                 expert_id = warp_top_k_expert_inds[warp_id * top_k_experts + k];
 
                 // set the gate value
-                token_expert_weights[(orig_token_row * (uint64_t) top_k_experts) + k] = __nv_fp8_e4m3(warp_top_k_expert_vals[warp_id * top_k_experts + k] / top_k_sum);
+                token_expert_weights[(orig_token_row * (uint64_t) top_k_experts) + k] = warp_top_k_expert_vals[warp_id * top_k_experts + k] / top_k_sum;
 
                 // add this expert to array in order for it's token to be copied
                 // into holding zone for "expert_id"
@@ -966,7 +958,7 @@ extern "C" __global__ void default_select_experts_fp8e4m3_kernel(int total_token
 }
 
 
-extern "C" __global__ void default_select_experts_fp8e5m2_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_fp8_e5m2 * X_routed, __nv_fp8_e5m2 * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert) {
+extern "C" __global__ void default_select_experts_fp8e5m2_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_fp8_e5m2 * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * num_routed_by_expert) {
 
     // DETERMINING HOW MANY TOKENS THIS THREADBLOCK IS RESPONSIBLE FOR
 
@@ -1134,7 +1126,7 @@ extern "C" __global__ void default_select_experts_fp8e5m2_kernel(int total_token
                 expert_id = warp_top_k_expert_inds[warp_id * top_k_experts + k];
 
                 // set the gate value
-                token_expert_weights[(orig_token_row * (uint64_t) top_k_experts) + k] = __nv_fp8_e5m2(warp_top_k_expert_vals[warp_id * top_k_experts + k] / top_k_sum);
+                token_expert_weights[(orig_token_row * (uint64_t) top_k_experts) + k] = warp_top_k_expert_vals[warp_id * top_k_experts + k] / top_k_sum;
 
                 // add this expert to array in order for it's token to be copied
                 // into holding zone for "expert_id"

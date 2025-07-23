@@ -209,9 +209,9 @@ int dataflow_submit_default_copy_to_seq_context(Dataflow_Handle * handle, int st
 int dataflow_submit_default_select_experts(Dataflow_Handle * handle, int stream_id, 
                                 DataflowDatatype fwd_dt,
                                 int total_tokens, int n_experts, int top_k_experts,  
-                                void * X_routed, void * token_expert_weights, 
+                                void * X_routed, float * token_expert_weights, 
                                 uint16_t * chosen_experts, int * expert_counts, 
-                                int * expert_counts_cumsum, int * num_routed_by_expert_workspace);
+                                int * expert_counts_cumsum);
 						
 
 // From mlp_misc_ops.c
