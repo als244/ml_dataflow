@@ -2491,7 +2491,7 @@
 
 		uint64_t opt_state_alias_used_size = 0;
 
-		uint64_t total_opt_state_size = (uint64_t) num_layers * block_aligned_num_els * (opt_mean_dt_size + opt_var_dt_size);
+		uint64_t total_opt_state_size = (uint64_t) n_layers * block_aligned_num_els * (opt_mean_dt_size + opt_var_dt_size);
 
 		// WE ARE BINDING TO CUR OPT_STATE LOC!
 		// ENSURE THAT THIS DOESN'T COUNT TOWARDS THE CUR DEV MEM BECAUSE it is only used rarely when the parts below are not needed...
