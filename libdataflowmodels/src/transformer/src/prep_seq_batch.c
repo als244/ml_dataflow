@@ -72,7 +72,7 @@ Transformer_Model_Config * parse_config(char * config_path) {
         fprintf(stderr, "Error: Configuration string does not match the expected format.\n");
         fprintf(stderr, "Expected 18 items, but sscanf only matched %d.\n", items_scanned);
         free(config);
-        return -1; // Return an error code
+        return NULL; // Return an error code
     }
 
     return config;
