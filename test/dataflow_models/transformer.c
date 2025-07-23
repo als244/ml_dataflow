@@ -2971,7 +2971,7 @@
 
 		float flops_per_round = per_seq_flops * seqs_per_round;
 
-		float opt_state_inbound_time = opt_state_alias_used_size / link_speed_bytes_per_sec_gbps;
+		float opt_state_inbound_time = opt_state_alias_used_size / link_speed_bytes_per_sec;
 		
 		float target_duration_per_step_s = opt_state_inbound_time / TARGET_OPT_OVERHEAD_FRAC;
 
