@@ -435,10 +435,6 @@
 		int num_active_routed_experts = model_config -> top_k_routed_experts;
 		int num_total_active_experts = num_shared_experts + num_active_routed_experts;
 
-		DataflowNormalizationType norm_type = DATAFLOW_RMSNORM;
-
-		DataflowPositionEmbeddingType pos_emb_type = DATAFLOW_ROPE;
-
 		int is_causal = 1;
 
 
