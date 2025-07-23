@@ -366,7 +366,7 @@
 		size_t used_host_mem = 0;
 		size_t used_dev_mem = 0;
 
-		printf("\n\nInput Parameters:\n\tHost Mem: %d GB\n\tDevice Mem: %d GB\n\tSeqlen (Tokens): %d\n\tModel Size (B): %d\n\nPREPARING DEMO RUN...\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_CONFIG_SIZE_B);
+		printf("\n\nInput Parameters:\n\tHost Mem: %d GB\n\tDevice Mem: %d GB\n\tSeqlen (Tokens): %d\n\tModel: %s\n\nPREPARING DEMO RUN...\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_PATH);
 
 		// Preparing model...
 
@@ -2972,10 +2972,6 @@
 		float flops_per_round = per_seq_flops * seqs_per_round;
 
 		float target_duration_per_step_s = TARGET_DURATION_PER_STEP_S;
-		
-		if (MODEL_CONFIG_SIZE_B == 8){
-			target_duration_per_step_s *= 8;
-		}
 
 		float flop_efficiency_estimate = FLOP_EFFICIENCY_ESTIMATE;
 
