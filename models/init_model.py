@@ -50,7 +50,7 @@ def main(config_path, model_dir_path):
      # create model directory
     os.makedirs(model_dir_path, exist_ok=True)
 
-    config_text = f"Data Type: {dtype}\nVocab Size: {vocab_size}\nNum Layers: {n_layers}\nModel Dim: {model_dim}\nNum Q Heads: {n_heads}\nNum KV Heads: {n_kv_heads}\nNum Shared Experts: {num_shared_experts}\nNum Routed Experts: {num_routed_experts}\nExpert Dim: {expert_dim}\nExpert MLP Type: {expert_mlp_type}"
+    config_text = f"Data Type: {dtype}\nVocab Size: {vocab_size}\nNum Layers: {n_layers}\nModel Dim: {model_dim}\nNum Q Heads: {n_heads}\nNum KV Heads: {n_kv_heads}\nNum Shared Experts: {num_shared_experts}\nNum Routed Experts: {num_routed_experts}\nExpert Dim: {expert_dim}\nExpert MLP Type: {expert_mlp_type}\n"
 
     with open(f"{model_dir_path}/config.txt", "w") as f:
         f.write(config_text)
