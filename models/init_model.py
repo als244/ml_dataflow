@@ -124,11 +124,14 @@ def main(config_path, model_dir_path):
         raise ValueError(f"expert_dim not found in config")
     if "expert_mlp_type" not in config:
         raise ValueError(f"expert_mlp_type not found in config")
+    if "top_k_routed_experts" not in config:
+        raise ValueError(f"top_k_routed_experts not found in config")
 
     num_shared_experts = int(config['num_shared_experts'])
     num_routed_experts = int(config['num_routed_experts'])
     expert_dim = int(config['expert_dim'])
     expert_mlp_type = config['expert_mlp_type'].lower()
+    top_k_routed_experts = int(config['top_k_routed_experts'])
 
     if expert_mlp_type != "swiglu":
         raise ValueError(f"Invalid expert MLP type: {expert_mlp_type}. Only swiglu is supported.")
@@ -139,7 +142,7 @@ def main(config_path, model_dir_path):
      # create model directory
     os.makedirs(model_dir_path, exist_ok=True)
 
-    config_text = f"Embed Dtype: {embed_dtype_str}\nAttn Dtype: {attn_dtype_str}\nExpert Dtype: {expert_dtype_str}\nHead Dtype: {head_dtype_str}\nVocab Size: {vocab_size}\nNum Layers: {n_layers}\nModel Dim: {model_dim}\nNum Q Heads: {n_heads}\nNum KV Heads: {n_kv_heads}\nQK Norm Type: {qk_norm_type}\nQK Norm Weight Type: {qk_norm_weight_type}\nNum Shared Experts: {num_shared_experts}\nNum Routed Experts: {num_routed_experts}\nExpert Dim: {expert_dim}\nExpert MLP Type: {expert_mlp_type}\nRope Theta: {rope_theta}\nRMS Norm Epsilon: {rms_norm_epsilon}\n"
+    config_text = f"Embed Dtype: {embed_dtype_str}\nAttn Dtype: {attn_dtype_str}\nExpert Dtype: {expert_dtype_str}\nHead Dtype: {head_dtype_str}\nVocab Size: {vocab_size}\nNum Layers: {n_layers}\nModel Dim: {model_dim}\nNum Q Heads: {n_heads}\nNum KV Heads: {n_kv_heads}\nQK Norm Type: {qk_norm_type}\nQK Norm Weight Type: {qk_norm_weight_type}\nNum Shared Experts: {num_shared_experts}\nNum Routed Experts: {num_routed_experts}\nTop K Routed Experts: {top_k_routed_experts}\nExpert Dim: {expert_dim}\nExpert MLP Type: {expert_mlp_type}\nRope Theta: {rope_theta}\nRMS Norm Epsilon: {rms_norm_epsilon}\n"
 
     with open(f"{model_dir_path}/config.txt", "w") as f:
         f.write(config_text)

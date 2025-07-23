@@ -66,6 +66,27 @@ typedef struct moe_config {
 	int * local_expert_inds;
 } MoE_Config;
 
+typedef struct {
+    char embed_dtype[16];
+    char attn_dtype[16];
+    char expert_dtype[16];
+    char head_dtype[16];
+    int vocab_size;
+    int num_layers;
+    int model_dim;
+    int num_q_heads;
+    int num_kv_heads;
+    char qk_norm_type[16];
+    char qk_norm_weight_type[16];
+    int num_shared_experts;
+    int num_routed_experts;
+    int top_k_routed_experts;
+    int expert_dim;
+    char expert_mlp_type[16];
+    int rope_theta;
+    float rms_norm_epsilon;
+} Transformer_Model_Config;
+
 
 
 #endif

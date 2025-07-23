@@ -6,6 +6,7 @@
 
 #include "transformer/transformer_structs.h"
 
+Transformer_Model_Config * parse_config(char * config_path);
 
 Transformer_Block * init_transformer_block(int layer_id, DataflowDatatype block_dt, DataflowDatatype compute_dt,
 						   DataflowNormalizationType normalization_type, 

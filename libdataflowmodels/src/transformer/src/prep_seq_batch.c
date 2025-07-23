@@ -1,5 +1,83 @@
 #include "dataflow_seq_batch.h"
 
+Transformer_Model_Config * parse_config(char * config_path) {
+
+    FILE * file = fopen(config_path, "r");
+    if (!file) {
+        fprintf(stderr, "Error: failed to open config file: %s...\n", config_path);
+        return NULL;
+    }
+
+    char config_string[4096];
+    fgets(config_string, 4096, file);
+    fclose(file);
+
+    Transformer_Model_Config * config = malloc(sizeof(Transformer_Model_Config));
+    if (!config) {
+        fprintf(stderr, "Error: failed to allocate config...\n");
+        return NULL;
+    }
+
+    
+    // sscanf reads data from a string and parses it according to the format.
+    // We provide the expected static text directly in the format string.
+    // - "%s" reads a sequence of non-whitespace characters (a string).
+    // - "%d" reads a decimal integer.
+    // - "%f" reads a floating-point number (handles decimal and scientific e-notation).
+    // - The " " (space) before each format specifier handles leading whitespace,
+    //   including newlines, making the parsing robust to different line endings.
+    //
+    // The function returns the number of items successfully matched.
+    // We expect to match 18 values in total.
+    int items_scanned = sscanf(config_string,
+        "Embed Dtype: %15s\n"
+        "Attn Dtype: %15s\n"
+        "Expert Dtype: %15s\n"
+        "Head Dtype: %15s\n"
+        "Vocab Size: %d\n"
+        "Num Layers: %d\n"
+        "Model Dim: %d\n"
+        "Num Q Heads: %d\n"
+        "Num KV Heads: %d\n"
+        "QK Norm Type: %15s\n"
+        "QK Norm Weight Type: %15s\n"
+        "Num Shared Experts: %d\n"
+        "Num Routed Experts: %d\n"
+        "Top K Routed Experts: %d\n"
+        "Expert Dim: %d\n"
+        "Expert MLP Type: %15s\n"
+        "Rope Theta: %d\n"
+        "RMS Norm Epsilon: %f",
+        config->embed_dtype,
+        config->attn_dtype,
+        config->expert_dtype,
+        config->head_dtype,
+        &config->vocab_size,
+        &config->num_layers,
+        &config->model_dim,
+        &config->num_q_heads,
+        &config->num_kv_heads,
+        config->qk_norm_type,
+        config->qk_norm_weight_type,
+        &config->num_shared_experts,
+        &config->num_routed_experts,
+        &config->top_k_routed_experts,
+        &config->expert_dim,
+        config->expert_mlp_type,
+        &config->rope_theta,
+        &config->rms_norm_epsilon);
+
+    // Check if all 17 items were successfully scanned.
+    if (items_scanned != 18) {
+        fprintf(stderr, "Error: Configuration string does not match the expected format.\n");
+        fprintf(stderr, "Expected 18 items, but sscanf only matched %d.\n", items_scanned);
+        free(config);
+        return -1; // Return an error code
+    }
+
+    return config;
+}
+
 void init_seq_batch_metadata_offsets(Seq_Batch_Metadata_Offsets * metadata_offsets, int total_tokens, int num_seqs) {
 
     uint64_t cur_offset = 0;

@@ -223,16 +223,28 @@
 
 		int MAX_SEQLEN = DEMO_SEQ_LEN;
 
-		int MODEL_CONFIG_SIZE_B = atoi(argv[4]);
-		if (MODEL_CONFIG_SIZE_B != 1 && MODEL_CONFIG_SIZE_B != 8 && MODEL_CONFIG_SIZE_B != 70){
-			fprintf(stderr, "Error. Invalid model config size: %d. Choose from (1 or 8)\n", MODEL_CONFIG_SIZE_B);
+		char * MODEL_PATH = argv[4];
+
+		struct stat statbuf;
+
+		if (stat(MODEL_PATH, &statbuf) != 0) {
+			fprintf(stderr, "Error: model path does not exist: %s...\n", MODEL_PATH);
 			return -1;
 		}
 
-		
 
-		char MODEL_PATH[100];
-		sprintf(MODEL_PATH, "../models/rand_%dB", MODEL_CONFIG_SIZE_B);
+		if (!S_ISDIR(statbuf.st_mode)) {
+			fprintf(stderr, "Error: model path is not a directory: %s...\n", MODEL_PATH);
+			return -1;
+		}
+
+		char config_path[1024];
+		sprintf(config_path, "%s/config.txt", MODEL_PATH);
+		Transformer_Model_Config * model_config = parse_config(config_path);
+		if (!model_config){
+			fprintf(stderr, "Error: failed to parse model config...\n");
+			return -1;
+		}
 
 
 
@@ -406,64 +418,28 @@
 
 		DataflowActivationType activ_type = DATAFLOW_SWIGLU;
 
-		float eps = 1e-5;
-		int theta = 500000;
+		float eps = model_config -> rms_norm_epsilon;
+		int theta = model_config -> rope_theta;
 
-		int n_layers;
-		int num_q_heads;
-		int num_kv_heads;
-		int head_dim;
-		int ffn_dim;
-		int model_dim;
-		int kv_dim;
-		int vocab_size;
-		int is_causal = 1;
-
-		if (MODEL_CONFIG_SIZE_B == 70){
-		// llama3 70B config
-			n_layers = 80;
-			num_q_heads = 64;
-			num_kv_heads = 8;
-			head_dim = 128;
-			ffn_dim = 28672;
-			model_dim = num_q_heads * head_dim;
-			kv_dim = num_kv_heads * head_dim;
-			vocab_size = 128256;
-		}
-		else if (MODEL_CONFIG_SIZE_B == 8){
-			// llama3 8b config
-			n_layers = 32;
-			num_q_heads = 32;
-			num_kv_heads = 8;
-			head_dim = 128;
-			ffn_dim = 14336;
-			model_dim = num_q_heads * head_dim;
-			kv_dim = num_kv_heads * head_dim;
-			vocab_size = 128256;
-		}
-		else if (MODEL_CONFIG_SIZE_B == 1){
-			// llama3 1b config
-			n_layers = 16;
-			num_q_heads = 32;
-			num_kv_heads = 8;
-			head_dim = 64;
-			ffn_dim = 8192;
-			model_dim = num_q_heads * head_dim;
-			kv_dim = num_kv_heads * head_dim;
-			vocab_size = 128256;
-		}
-		else{
-			fprintf(stderr, "Error: invalid model config size (B): %d\n", MODEL_CONFIG_SIZE_B);
-			return -1;
-		}
-
-
-		int num_shared_experts = 1;
-		int num_total_routed_experts = 0;
-		int num_active_routed_experts = 0;
+		int n_layers = model_config -> num_layers;
+		int vocab_size = model_config -> vocab_size;
+		int model_dim = model_config -> model_dim;
+		int num_q_heads = model_config -> num_q_heads;
+		int head_dim = model_config -> model_dim / num_q_heads;
+		int num_kv_heads = model_config -> num_kv_heads;
+		int kv_dim = head_dim * num_kv_heads;
+		
+		int expert_dim = model_config -> expert_dim;
+		int num_shared_experts = model_config -> num_shared_experts;
+		int num_routed_experts = model_config -> num_routed_experts;
+		int num_active_routed_experts = model_config -> top_k_routed_experts;
 		int num_total_active_experts = num_shared_experts + num_active_routed_experts;
-		int expert_dim = ffn_dim;
 
+		DataflowNormalizationType norm_type = DATAFLOW_RMSNORM;
+
+		DataflowPositionEmbeddingType pos_emb_type = DATAFLOW_ROPE;
+
+		int is_causal = 1;
 
 
 		MoE_Config * moe_config = NULL;
@@ -529,7 +505,7 @@
 															norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
 															eps, theta,
 															num_q_heads, num_kv_heads, head_dim,
-															ffn_dim,
+															expert_dim,
 															moe_config,
 															pointer_alignment);
 
@@ -692,7 +668,7 @@
 															norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
 															eps, theta,
 															num_q_heads, num_kv_heads, head_dim,
-															ffn_dim,
+															expert_dim,
 															moe_config,
 															pointer_alignment);
 
@@ -776,7 +752,7 @@
 															norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
 															eps, theta,
 															num_q_heads, num_kv_heads, head_dim,
-															ffn_dim,
+															expert_dim,
 															moe_config,
 															pointer_alignment);
 			if (!sys_opt_mean_blocks[i]){
@@ -800,7 +776,7 @@
 															norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
 															eps, theta,
 															num_q_heads, num_kv_heads, head_dim,
-															ffn_dim,
+															expert_dim,
 															moe_config,
 															pointer_alignment);
 			if (!sys_opt_var_blocks[i]){
@@ -1008,7 +984,7 @@
 		uint64_t sticky_dev_recomputed_buffer_size = 2 * chunk_size * (uint64_t) model_dim * block_dt_size;
 		uint64_t sticky_dev_working_grad_act_size = get_chunk_activations_size(chunk_size, model_dim, kv_dim, num_total_active_experts, expert_dim, block_bwd_dt);
 		uint64_t sticky_dev_head_act_size = chunk_size * (((uint64_t) model_dim + (uint64_t) vocab_size) * block_dt_size + sizeof(float)); 
-		uint64_t sticky_act_workspace_size = chunk_size * ((uint64_t) model_dim + (uint64_t) ffn_dim) * block_dt_size;
+		uint64_t sticky_act_workspace_size = chunk_size * ((uint64_t) model_dim + (uint64_t) expert_dim) * block_dt_size;
 		// now also incoporate the other sicy buffers...
 		total_base_dev_mem += sticky_transitions_size + sticky_dev_logits_size + sticky_dev_recomputed_buffer_size + sticky_dev_working_grad_act_size + sticky_dev_head_act_size + sticky_act_workspace_size;
 		
@@ -1161,7 +1137,7 @@
 															norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
 															eps, theta,
 															num_q_heads, num_kv_heads, head_dim,
-															ffn_dim,
+															expert_dim,
 															moe_config,
 															pointer_alignment);
 			if (!blocks[i]){
@@ -1273,7 +1249,7 @@
 															norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
 															eps, theta,
 															num_q_heads, num_kv_heads, head_dim,
-															ffn_dim,
+															expert_dim,
 															moe_config,
 															pointer_alignment);
 			if (!grad_blocks[i]){
@@ -2527,7 +2503,7 @@
 															norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
 															eps, theta,
 															num_q_heads, num_kv_heads, head_dim,
-															ffn_dim,
+															expert_dim,
 															moe_config,
 															pointer_alignment);
 			if (!opt_mean_blocks[i]){
@@ -2550,7 +2526,7 @@
 															norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
 															eps, theta,
 															num_q_heads, num_kv_heads, head_dim,
-															ffn_dim,
+															expert_dim,
 															moe_config,
 															pointer_alignment);
 			if (!opt_var_blocks[i]){
