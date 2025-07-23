@@ -23,13 +23,13 @@
 
 	// this (along with num seqs per round) modulates how frequently we will step 
 	// the optimizer...
-	#define TARGET_DURATION_PER_STEP_S 6.0f
+	#define TARGET_DURATION_PER_STEP_S 0.1f
 	// to help determien how many rounds per step
 	#define FLOP_EFFICIENCY_ESTIMATE 0.6f
 
 	#define PCIE_LINK_EFFICIENCY 0.75f
 
-	#define NUM_STEPS 10
+	#define NUM_STEPS 1000
 
 	// num_chunks = num_chunks_per_seq * num_seq_groups_per_round
 	// num_chunks_per_seq = seqlen / chunk_size
@@ -232,7 +232,7 @@
 		
 
 		char MODEL_PATH[100];
-		sprintf(MODEL_PATH, "../models/%dB", MODEL_CONFIG_SIZE_B);
+		sprintf(MODEL_PATH, "../models/rand_%dB", MODEL_CONFIG_SIZE_B);
 
 
 

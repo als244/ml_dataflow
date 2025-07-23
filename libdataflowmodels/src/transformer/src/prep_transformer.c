@@ -145,13 +145,7 @@ static int set_transformer_block_weight_offsets(Transformer_Block_Config * confi
 
 	for (int i = 0; i < num_local_experts; i++){
 		set_offset(&((weight_offsets -> w_1)[i]), w_1_size, &raw_size, &aligned_size, pointer_alignment);
-	}
-
-	for (int i = 0; i < num_local_experts; i++){
 		set_offset(&((weight_offsets -> w_3)[i]), w_3_size, &raw_size, &aligned_size, pointer_alignment);
-	}
-
-	for (int i = 0; i < num_local_experts; i++){
 		set_offset(&((weight_offsets -> w_2)[i]), w_2_size, &raw_size, &aligned_size, pointer_alignment);
 	}
 
