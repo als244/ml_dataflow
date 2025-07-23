@@ -1,5 +1,50 @@
 #include "dataflow_seq_batch.h"
 
+/**
+ * @brief Reads an entire file into a dynamically allocated string.
+ *
+ * @param filename The path to the file.
+ * @return A dynamically allocated string with the file contents.
+ * The caller is responsible for freeing this memory with free().
+ * Returns NULL on error.
+ */
+ char* read_file_into_string(const char* filename) {
+    FILE* file = fopen(filename, "r");
+    if (file == NULL) {
+        perror("Error opening file");
+        return NULL;
+    }
+
+    // 1. Get the size of the file
+    fseek(file, 0, SEEK_END);      // Go to the end of the file
+    long file_size = ftell(file);  // Get the current position (the size)
+    rewind(file);                  // Go back to the beginning
+
+    // 2. Allocate a buffer to hold the contents + null terminator
+    char* buffer = (char*)malloc(file_size + 1);
+    if (buffer == NULL) {
+        fprintf(stderr, "Error: Could not allocate memory for file buffer.\n");
+        fclose(file);
+        return NULL;
+    }
+
+    // 3. Read the entire file into the buffer
+    size_t bytes_read = fread(buffer, 1, file_size, file);
+    if (bytes_read != file_size) {
+        fprintf(stderr, "Error reading file.\n");
+        fclose(file);
+        free(buffer);
+        return NULL;
+    }
+
+    // 4. Null-terminate the string
+    buffer[file_size] = '\0';
+
+    // 5. Close the file and return the buffer
+    fclose(file);
+    return buffer;
+}
+
 Transformer_Model_Config * parse_config(char * config_path) {
 
     FILE * file = fopen(config_path, "r");
@@ -8,13 +53,16 @@ Transformer_Model_Config * parse_config(char * config_path) {
         return NULL;
     }
 
-    char config_string[4096];
-    fgets(config_string, 4096, file);
-    fclose(file);
+    char * config_string = read_file_into_string(config_path);
+    if (!config_string) {
+        fprintf(stderr, "Error: failed to read config file: %s...\n", config_path);
+        return NULL;
+    }
 
     Transformer_Model_Config * config = malloc(sizeof(Transformer_Model_Config));
     if (!config) {
         fprintf(stderr, "Error: failed to allocate config...\n");
+        free(config_string);
         return NULL;
     }
 
@@ -52,25 +100,26 @@ Transformer_Model_Config * parse_config(char * config_path) {
         config->attn_dtype,
         config->expert_dtype,
         config->head_dtype,
-        &config->vocab_size,
-        &config->num_layers,
-        &config->model_dim,
-        &config->num_q_heads,
-        &config->num_kv_heads,
+        &(config->vocab_size),
+        &(config->num_layers),
+        &(config->model_dim),
+        &(config->num_q_heads),
+        &(config->num_kv_heads),
         config->qk_norm_type,
         config->qk_norm_weight_type,
-        &config->num_shared_experts,
-        &config->num_routed_experts,
-        &config->top_k_routed_experts,
-        &config->expert_dim,
+        &(config->num_shared_experts),
+        &(config->num_routed_experts),
+        &(config->top_k_routed_experts),
+        &(config->expert_dim),
         config->expert_mlp_type,
-        &config->rope_theta,
-        &config->rms_norm_epsilon);
+        &(config->rope_theta),
+        &(config->rms_norm_epsilon));
 
-    // Check if all 17 items were successfully scanned.
+    // Check if all 18 items were successfully scanned.
     if (items_scanned != 18) {
         fprintf(stderr, "Error: Configuration string does not match the expected format.\n");
         fprintf(stderr, "Expected 18 items, but sscanf only matched %d.\n", items_scanned);
+        free(config_string);
         free(config);
         return NULL; // Return an error code
     }
