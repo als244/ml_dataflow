@@ -10,8 +10,8 @@ You can learn more about the project's background/details [here](docs/background
 
 ### State of the Art Transformer Training
 
-#### 6% Higher Training Throughput vs. [Optimized Nvidia Baseline](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/dgxc-benchmarking/resources/nemo-llama31-dgxc-benchmarking-g)
-- Trains Llama3 8B (BF16) with 8k sequence length at ~11,300 vs ~10,680 Tok/s per H100
+#### 7% Higher Training Throughput vs. [Optimized Nvidia Baseline](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/dgxc-benchmarking/resources/nemo-llama31-dgxc-benchmarking-g)
+- Trains Llama3 8B (BF16) with 8k sequence length at ~11,400 vs ~10,680 Tok/s per H100
     - Requires only 1 H100 to achieve such performance and even performs near peak with as little as 24GiB of HBM
         - vs. 8xH100 = 640GB (!!!) of HBM used for Nvidia baseline.
 
