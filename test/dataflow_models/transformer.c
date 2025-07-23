@@ -3051,7 +3051,9 @@
 			printf("\tKernel Workspace Bytes: %lu\n", kernelWorkspaceBytes);
 			printf("\tChunk size: %lu\n", chunk_size);
 			printf("\tChunks per round: %d\n", num_chunks);
-			printf("\tRound tokens: %d\n", round_tokens);
+			printf("\tRound tokens: %d\n\n", round_tokens);
+
+			printf("\tTarget Step Duration: %.2f sec\n", target_duration_per_step_s);
 			printf("\tNum rounds per step: %d\n", num_rounds_per_step);
 			printf("\tTotal tokens per step: %d\n", total_pred_tokens_in_step);
 			printf("\tTotal train tokens: %d\n\n", total_train_tokens);
