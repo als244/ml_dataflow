@@ -3081,8 +3081,6 @@
 
 		if (TO_PRINT_HYPERPARAMS){
 			printf("HYPERPARAMS:\n");
-			printf("\tRMS Norm Epsilon: %.1e\n", eps);
-			printf("\tRoPE Theta: %d\n", theta);
 			printf("\tOptimizer: AdamW\n");
 			printf("\t\tLearning Rate: %.1e\n", lr);
 			printf("\t\tSchedule: Constant\n");
