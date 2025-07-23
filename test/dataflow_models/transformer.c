@@ -2219,7 +2219,7 @@
 		int prior_seq_len = 0;
 		int cur_seq_len = 0;
 		for (int i = 0; i < total_dev_acts; i++){
-			min_window_flops += get_chunk_block_flops(chunk_size, prior_seq_len, DEMO_SEQ_LEN, model_dim, kv_dim, is_causal, num_shared_experts, num_total_routed_experts, num_active_routed_experts, expert_dim);
+			min_window_flops += get_chunk_block_flops(chunk_size, prior_seq_len, DEMO_SEQ_LEN, model_dim, kv_dim, is_causal, num_shared_experts, num_routed_experts, num_active_routed_experts, expert_dim);
 			if (chunk_size + prior_seq_len < DEMO_SEQ_LEN){
 				prior_seq_len += chunk_size;
 			}
