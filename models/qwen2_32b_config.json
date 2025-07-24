@@ -1,0 +1,21 @@
+{
+    "embed_dtype": "bf16",
+    "attn_dtype": "bf16",
+    "expert_dtype": "bf16",
+    "head_dtype": "bf16",
+    "vocab_size": 152064,
+    "model_dim": 5120,
+    "n_layers": 64,
+    "n_heads": 40,
+    "n_kv_heads": 8,
+    "qk_norm_type": "none",
+    "qk_norm_weight_type": "none",
+    "num_shared_experts": 1,
+    "num_routed_experts": 0,
+    "top_k_routed_experts": 0,
+    "expert_dim": 27648,
+    "expert_mlp_type": "swiglu",
+    "rope_theta": 1000000,
+    "rms_norm_epsilon": 1e-5,
+    "rand_seed": 42
+}
