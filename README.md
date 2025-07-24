@@ -80,27 +80,29 @@ The project is built from < 10k lines of C, a few logically unique memory-bound 
 
 ###### Note that building the flash2 and flash3 wrapper libraries may take some time (a few hours)...using more processors will help. 
 
-3. *Download model checkpoints (llama3 1B and 8B instruct models in raw binary format)*:
+3. *Initialize Model*:
 
 ```shell
 cd models
-./download_llama3_model_binaries.sh
+python init_model.py <model config> <output model path>
 ```
+
+Where `model config` can be selected from one of the default ones (e.g. `python 8b_config.json my_8B_model`), or you can create your own. 
 
 4. *Test out training*:
 
 ```shell
 cd ../bench
-./transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model size billions: [1 | 8]>
+./transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen> <model path>
 ```
 
 For example:
 
-`./transformerDemo 80 20 4096 8` will train the 8B model architecture (full bf16, causal attention, next token prediction, AdamW). The sequence length is set to 4096 tokens. The memory capacities are set to enforce <= 80 GiB of host memory and <= 20 GiB of device memory (where XXX GiB is defined as XXX * 2^30 bytes).
+`./transformerDemo 80 20 4096 my_8B_model` will train the 8B model architecture (full bf16, causal attention, next token prediction, AdamW). The sequence length is set to 4096 tokens. The memory capacities are set to enforce <= 80 GiB of host memory and <= 20 GiB of device memory (where XXX GiB is defined as XXX * 2^30 bytes).
 
 **Training Overview & Terminology**:
 
-The training is set up so that there are multiple *rounds* of forward+bwd before an optimizer step (i.e. gradient accumulation). The demo trains for 10 steps. The number of rounds per-step is set to be the minimum (lowest global batch size) that ensures the step overhead will be below a target overhead. This is achieved by setting a target duration for computation during each step (6 seconds for 1B and 48 seconds for 8B => 1-2% overhead). Within a round, there are *ordered chunks*. A minimum chunk size is set to ensure high arithmetic intensity (16k for H100, 8k for others). Each chunk is either packed with multiple sequences (if they are short) or a temporally-contiguous portion of a longer sequence. The number of chunks within a round is determined such that for a given layer, the total bytes of activations saved from the foward pass is approximately the total bytes of the layer weights (or in the case of long-context is the total number of chunks a single sequence requires). Every chunk is proccesed for a layer, before the first chunk starts upon the next layer. During backwards pass, the chunks are processed in reverse order.
+The training is set up so that there are multiple *rounds* of forward+bwd before an optimizer step (i.e. gradient accumulation). The demo trains for 10 steps. The number of rounds per-step is set to be the minimum (lowest global batch size) that ensures the step overhead will be below a target overhead of 2%. Within a round, there are *ordered chunks*. A minimum chunk size is set to ensure high arithmetic intensity (16k for A100/H100, 8k for others). Each chunk is either packed with multiple sequences (if they are short) or a temporally-contiguous portion of a longer sequence. The number of chunks within a round is determined such that for a given layer, the total bytes of activations saved from the foward pass is approximately the total bytes of the layer weights (or in the case of long-context is the total number of chunks a single sequence requires). Every chunk is proccesed for a layer, before the first chunk starts upon the next layer. During backwards pass, the chunks are processed in reverse order.
 
 The input data is the first 65536 tokens of Harry Potter. Choosing a seqlen less/equal to this will just take the first seqlen tokens and repeat this sequence as the entire training set (all rounds are the same data / gradient accumulation steps in this case are pointless, but this is for performance demonstration). If you select a sequence length longer than the original 64k sequence, then the original sequence will wrap around and repeat until your set seqlen is reached, then this is also repeated every round.
 
