@@ -13,7 +13,7 @@
     "num_shared_experts": 1,
     "num_routed_experts": 0,
     "top_k_routed_experts": 0,
-    "expert_dim": 18432,
+    "expert_dim": 14336,
     "expert_mlp_type": "swiglu",
     "rope_theta": 500000,
     "rms_norm_epsilon": 1e-5,
