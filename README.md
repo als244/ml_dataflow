@@ -41,7 +41,7 @@ You can learn more about the project's background/details [here](docs/background
 
 ## Training Performance Demo
 
-You can demo training performance of canonical causal transformer under different memory environments, sequence lengths, or model sizes. The demo program expects users to specify:
+You can demo training performance of canonical causal transformer (i.e. Transformer++) under different memory environments, sequence lengths, or model sizes. The demo program expects users to specify:
 - Host Memory Capacity
 - Device Memory Capacity
 - Sequence Length
