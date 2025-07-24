@@ -286,7 +286,7 @@ Tested across 4 different machines:
 
 *The H100 and A100 are each on 2-socket NUMA systems with 8 memory controllers per socket and with speeds of 4800 MT/s and 2933 MT/s respectively. Host memory BW refers to local numa node.
 
-**Host memory capacity refers to local NUMA capacity (which is shared among 4 GPUs).
+**Host memory capacity refers to local NUMA capacity (which is shared among 4 GPUs for H100 machines and 2 for A100s).
 
 -----
 
