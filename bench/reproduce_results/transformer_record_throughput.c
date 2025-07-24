@@ -333,7 +333,7 @@
 		// from backend/nvidia/src/ops/src/register_ops/register_ops.c	
 		// handles registering external and native ops within cuda_dataflow_ops...
 		int added_funcs = dataflow_register_default_ops(&dataflow_handle);
-		printf("Registered %d default ops...\n\n", added_funcs);
+		//printf("Registered %d default ops...\n\n", added_funcs);
 
 
 
@@ -343,7 +343,7 @@
 		int host_alignment = 4096;
 		size_t host_size_bytes = HOST_MEM_GB * (1UL << 30);
 
-		printf("Allocating host memory of size: %lu...\n", host_size_bytes);
+		//printf("Allocating host memory of size: %lu...\n", host_size_bytes);
 
 		ret = posix_memalign(&host_mem, host_alignment, host_size_bytes);
 		if (ret){
@@ -353,7 +353,7 @@
 		memset(host_mem, 0, host_size_bytes);
 
 
-		printf("Registering host memory...\n\n");
+		//printf("Registering host memory...\n\n");
 
 		ret = dataflow_handle.enable_access_to_host_mem(&dataflow_handle, host_mem, host_size_bytes, 0);
 		if (ret){
@@ -366,7 +366,7 @@
 
 		int dev_alignment = 256;
 
-		printf("Allocating device memory of size: %lu...\n\n", dev_size_bytes);
+		//printf("Allocating device memory of size: %lu...\n\n", dev_size_bytes);
 
 
 		void * dev_mem = dataflow_handle.alloc_mem(&dataflow_handle, dev_size_bytes);
@@ -381,7 +381,7 @@
 		size_t used_host_mem = 0;
 		size_t used_dev_mem = 0;
 
-		printf("\n\nInput Parameters:\n\tHost Mem: %d GB\n\tDevice Mem: %d GB\n\tSeqlen (Tokens): %d\n\tModel: %s\n\nPREPARING DEMO RUN...\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_PATH);
+		//printf("\n\nInput Parameters:\n\tHost Mem: %d GB\n\tDevice Mem: %d GB\n\tSeqlen (Tokens): %d\n\tModel: %s\n\nPREPARING DEMO RUN...\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_PATH);
 
 		// Preparing model...
 
@@ -599,7 +599,7 @@
 
 		// Loading in from checkpoint...
 
-		printf("\nConfiguring Dataflow & Loading model from checkpoint: %s\n\n", MODEL_PATH);	
+		//printf("\nConfiguring Dataflow & Loading model from checkpoint: %s\n\n", MODEL_PATH);	
 
 		char layer_path[PATH_MAX];
 
