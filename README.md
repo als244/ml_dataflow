@@ -34,7 +34,7 @@ You can learn more about the project's background/details [here](docs/background
 
 ###### Training at Home (RTX 5090): 15B Model with 16k Sequence Length 
 
-<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-8B-131072-report.png" alt="Sample Heatmaps, RTX 5090, 15B, Seqlen 16k">
+<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-15B-16384-report.png" alt="Sample Heatmaps, RTX 5090, 15B, Seqlen 16k">
 
 
 -----
