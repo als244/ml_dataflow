@@ -23,7 +23,7 @@
 
 	// this (along with num seqs per round) modulates how frequently we will step 
 	// the optimizer...
-	#define TARGET_DURATION_PER_STEP_S 6.0f
+	#define TARGET_OPT_OVERHEAD_FRAC 0.02f
 	// to help determien how many rounds per step
 	#define FLOP_EFFICIENCY_ESTIMATE 0.6f
 
@@ -212,7 +212,7 @@
 		int ret;
 
 		if (argc != 5){
-			fprintf(stderr, "Error. Usage: ./transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model size billions: [1 | 8]>\n");
+			fprintf(stderr, "Error. Usage: ./transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model dir path>\n");
 			return -1;
 		}
 
@@ -223,16 +223,28 @@
 
 		int MAX_SEQLEN = DEMO_SEQ_LEN;
 
-		int MODEL_CONFIG_SIZE_B = atoi(argv[4]);
-		if (MODEL_CONFIG_SIZE_B != 1 && MODEL_CONFIG_SIZE_B != 8 && MODEL_CONFIG_SIZE_B != 70){
-			fprintf(stderr, "Error. Invalid model config size: %d. Choose from (1 or 8)\n", MODEL_CONFIG_SIZE_B);
+		char * MODEL_PATH = argv[4];
+
+		struct stat statbuf;
+
+		if (stat(MODEL_PATH, &statbuf) != 0) {
+			fprintf(stderr, "Error: model path does not exist: %s...\n", MODEL_PATH);
 			return -1;
 		}
 
-		
 
-		char MODEL_PATH[100];
-		sprintf(MODEL_PATH, "../models/%dB", MODEL_CONFIG_SIZE_B);
+		if (!S_ISDIR(statbuf.st_mode)) {
+			fprintf(stderr, "Error: model path is not a directory: %s...\n", MODEL_PATH);
+			return -1;
+		}
+
+		char config_path[1024];
+		sprintf(config_path, "%s/config.txt", MODEL_PATH);
+		Transformer_Model_Config * model_config = parse_config(config_path);
+		if (!model_config){
+			fprintf(stderr, "Error: failed to parse model config...\n");
+			return -1;
+		}
 
 
 
@@ -354,7 +366,7 @@
 		size_t used_host_mem = 0;
 		size_t used_dev_mem = 0;
 
-		printf("\n\nInput Parameters:\n\tHost Mem: %d GB\n\tDevice Mem: %d GB\n\tSeqlen (Tokens): %d\n\tModel Size (B): %d\n\nPREPARING DEMO RUN...\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_CONFIG_SIZE_B);
+		printf("\n\nInput Parameters:\n\tHost Mem: %d GB\n\tDevice Mem: %d GB\n\tSeqlen (Tokens): %d\n\tModel: %s\n\nPREPARING DEMO RUN...\n", HOST_MEM_GB, DEV_MEM_GB, DEMO_SEQ_LEN, MODEL_PATH);
 
 		// Preparing model...
 
@@ -406,64 +418,24 @@
 
 		DataflowActivationType activ_type = DATAFLOW_SWIGLU;
 
-		float eps = 1e-5;
-		int theta = 500000;
+		float eps = model_config -> rms_norm_epsilon;
+		int theta = model_config -> rope_theta;
 
-		int n_layers;
-		int num_q_heads;
-		int num_kv_heads;
-		int head_dim;
-		int ffn_dim;
-		int model_dim;
-		int kv_dim;
-		int vocab_size;
-		int is_causal = 1;
-
-		if (MODEL_CONFIG_SIZE_B == 70){
-		// llama3 70B config
-			n_layers = 80;
-			num_q_heads = 64;
-			num_kv_heads = 8;
-			head_dim = 128;
-			ffn_dim = 28672;
-			model_dim = num_q_heads * head_dim;
-			kv_dim = num_kv_heads * head_dim;
-			vocab_size = 128256;
-		}
-		else if (MODEL_CONFIG_SIZE_B == 8){
-			// llama3 8b config
-			n_layers = 32;
-			num_q_heads = 32;
-			num_kv_heads = 8;
-			head_dim = 128;
-			ffn_dim = 14336;
-			model_dim = num_q_heads * head_dim;
-			kv_dim = num_kv_heads * head_dim;
-			vocab_size = 128256;
-		}
-		else if (MODEL_CONFIG_SIZE_B == 1){
-			// llama3 1b config
-			n_layers = 16;
-			num_q_heads = 32;
-			num_kv_heads = 8;
-			head_dim = 64;
-			ffn_dim = 8192;
-			model_dim = num_q_heads * head_dim;
-			kv_dim = num_kv_heads * head_dim;
-			vocab_size = 128256;
-		}
-		else{
-			fprintf(stderr, "Error: invalid model config size (B): %d\n", MODEL_CONFIG_SIZE_B);
-			return -1;
-		}
-
-
-		int num_shared_experts = 1;
-		int num_total_routed_experts = 0;
-		int num_active_routed_experts = 0;
+		int n_layers = model_config -> num_layers;
+		int vocab_size = model_config -> vocab_size;
+		int model_dim = model_config -> model_dim;
+		int num_q_heads = model_config -> num_q_heads;
+		int head_dim = model_config -> model_dim / num_q_heads;
+		int num_kv_heads = model_config -> num_kv_heads;
+		int kv_dim = head_dim * num_kv_heads;
+		
+		int expert_dim = model_config -> expert_dim;
+		int num_shared_experts = model_config -> num_shared_experts;
+		int num_routed_experts = model_config -> num_routed_experts;
+		int num_active_routed_experts = model_config -> top_k_routed_experts;
 		int num_total_active_experts = num_shared_experts + num_active_routed_experts;
-		int expert_dim = ffn_dim;
 
+		int is_causal = 1;
 
 
 		MoE_Config * moe_config = NULL;
@@ -529,7 +501,7 @@
 															norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
 															eps, theta,
 															num_q_heads, num_kv_heads, head_dim,
-															ffn_dim,
+															expert_dim,
 															moe_config,
 															pointer_alignment);
 
@@ -692,7 +664,7 @@
 															norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
 															eps, theta,
 															num_q_heads, num_kv_heads, head_dim,
-															ffn_dim,
+															expert_dim,
 															moe_config,
 															pointer_alignment);
 
@@ -776,7 +748,7 @@
 															norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
 															eps, theta,
 															num_q_heads, num_kv_heads, head_dim,
-															ffn_dim,
+															expert_dim,
 															moe_config,
 															pointer_alignment);
 			if (!sys_opt_mean_blocks[i]){
@@ -800,7 +772,7 @@
 															norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
 															eps, theta,
 															num_q_heads, num_kv_heads, head_dim,
-															ffn_dim,
+															expert_dim,
 															moe_config,
 															pointer_alignment);
 			if (!sys_opt_var_blocks[i]){
@@ -1008,7 +980,7 @@
 		uint64_t sticky_dev_recomputed_buffer_size = 2 * chunk_size * (uint64_t) model_dim * block_dt_size;
 		uint64_t sticky_dev_working_grad_act_size = get_chunk_activations_size(chunk_size, model_dim, kv_dim, num_total_active_experts, expert_dim, block_bwd_dt);
 		uint64_t sticky_dev_head_act_size = chunk_size * (((uint64_t) model_dim + (uint64_t) vocab_size) * block_dt_size + sizeof(float)); 
-		uint64_t sticky_act_workspace_size = chunk_size * ((uint64_t) model_dim + (uint64_t) ffn_dim) * block_dt_size;
+		uint64_t sticky_act_workspace_size = chunk_size * ((uint64_t) model_dim + (uint64_t) expert_dim) * block_dt_size;
 		// now also incoporate the other sicy buffers...
 		total_base_dev_mem += sticky_transitions_size + sticky_dev_logits_size + sticky_dev_recomputed_buffer_size + sticky_dev_working_grad_act_size + sticky_dev_head_act_size + sticky_act_workspace_size;
 		
@@ -1161,7 +1133,7 @@
 															norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
 															eps, theta,
 															num_q_heads, num_kv_heads, head_dim,
-															ffn_dim,
+															expert_dim,
 															moe_config,
 															pointer_alignment);
 			if (!blocks[i]){
@@ -1273,7 +1245,7 @@
 															norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
 															eps, theta,
 															num_q_heads, num_kv_heads, head_dim,
-															ffn_dim,
+															expert_dim,
 															moe_config,
 															pointer_alignment);
 			if (!grad_blocks[i]){
@@ -2247,7 +2219,7 @@
 		int prior_seq_len = 0;
 		int cur_seq_len = 0;
 		for (int i = 0; i < total_dev_acts; i++){
-			min_window_flops += get_chunk_block_flops(chunk_size, prior_seq_len, DEMO_SEQ_LEN, model_dim, kv_dim, is_causal, num_shared_experts, num_total_routed_experts, num_active_routed_experts, expert_dim);
+			min_window_flops += get_chunk_block_flops(chunk_size, prior_seq_len, DEMO_SEQ_LEN, model_dim, kv_dim, is_causal, num_shared_experts, num_routed_experts, num_active_routed_experts, expert_dim);
 			if (chunk_size + prior_seq_len < DEMO_SEQ_LEN){
 				prior_seq_len += chunk_size;
 			}
@@ -2519,6 +2491,8 @@
 
 		uint64_t opt_state_alias_used_size = 0;
 
+		uint64_t total_opt_state_size = (uint64_t) n_layers * block_aligned_num_els * (opt_mean_dt_size + opt_var_dt_size);
+
 		// WE ARE BINDING TO CUR OPT_STATE LOC!
 		// ENSURE THAT THIS DOESN'T COUNT TOWARDS THE CUR DEV MEM BECAUSE it is only used rarely when the parts below are not needed...
 
@@ -2527,7 +2501,7 @@
 															norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
 															eps, theta,
 															num_q_heads, num_kv_heads, head_dim,
-															ffn_dim,
+															expert_dim,
 															moe_config,
 															pointer_alignment);
 			if (!opt_mean_blocks[i]){
@@ -2550,7 +2524,7 @@
 															norm_type, pos_emb_type, attn_type, mlp_type, activ_type,
 															eps, theta,
 															num_q_heads, num_kv_heads, head_dim,
-															ffn_dim,
+															expert_dim,
 															moe_config,
 															pointer_alignment);
 			if (!opt_var_blocks[i]){
@@ -2994,16 +2968,14 @@
 		// seqs per chunk = 1 if seq uses >= 1 chunks, otherwise packing multiple seqs per chunk...
 		int seqs_per_round = num_seq_groups_per_round * num_seqs_per_chunk;
 
-		float per_seq_flops = get_seq_flops(MAX_SEQLEN, vocab_size, model_dim, kv_dim, is_causal, num_shared_experts, num_total_routed_experts, num_active_routed_experts, expert_dim, n_layers, 
+		float per_seq_flops = get_seq_flops(MAX_SEQLEN, vocab_size, model_dim, kv_dim, is_causal, num_shared_experts, num_routed_experts, num_active_routed_experts, expert_dim, n_layers, 
 											NULL, NULL, NULL, NULL, NULL, NULL);
 
 		float flops_per_round = per_seq_flops * seqs_per_round;
 
-		float target_duration_per_step_s = TARGET_DURATION_PER_STEP_S;
+		float opt_state_inbound_time = total_opt_state_size / link_speed_bytes_per_sec;
 		
-		if (MODEL_CONFIG_SIZE_B == 8){
-			target_duration_per_step_s *= 8;
-		}
+		float target_duration_per_step_s = opt_state_inbound_time / TARGET_OPT_OVERHEAD_FRAC;
 
 		float flop_efficiency_estimate = FLOP_EFFICIENCY_ESTIMATE;
 
@@ -3054,7 +3026,7 @@
 			step_throughput_op_buffers[t].kv_dim = kv_dim;
 			step_throughput_op_buffers[t].is_causal = is_causal;
 			step_throughput_op_buffers[t].num_shared_experts = num_shared_experts;
-			step_throughput_op_buffers[t].num_total_routed_experts = num_total_routed_experts;
+			step_throughput_op_buffers[t].num_total_routed_experts = num_routed_experts;
 			step_throughput_op_buffers[t].num_active_routed_experts = num_active_routed_experts;
 			step_throughput_op_buffers[t].expert_dim = expert_dim;
 			step_throughput_op_buffers[t].vocab_size = vocab_size;
@@ -3081,7 +3053,9 @@
 			printf("\tKernel Workspace Bytes: %lu\n", kernelWorkspaceBytes);
 			printf("\tChunk size: %lu\n", chunk_size);
 			printf("\tChunks per round: %d\n", num_chunks);
-			printf("\tRound tokens: %d\n", round_tokens);
+			printf("\tRound tokens: %d\n\n", round_tokens);
+
+			printf("\tTarget Step Duration: %.2f sec\n", target_duration_per_step_s);
 			printf("\tNum rounds per step: %d\n", num_rounds_per_step);
 			printf("\tTotal tokens per step: %d\n", total_pred_tokens_in_step);
 			printf("\tTotal train tokens: %d\n\n", total_train_tokens);
@@ -3111,8 +3085,6 @@
 
 		if (TO_PRINT_HYPERPARAMS){
 			printf("HYPERPARAMS:\n");
-			printf("\tRMS Norm Epsilon: %.1e\n", eps);
-			printf("\tRoPE Theta: %d\n", theta);
 			printf("\tOptimizer: AdamW\n");
 			printf("\t\tLearning Rate: %.1e\n", lr);
 			printf("\t\tSchedule: Constant\n");

@@ -23,7 +23,7 @@
 
 	// this (along with num seqs per round) modulates how frequently we will step 
 	// the optimizer...
-	#define TARGET_OPT_OVERHEAD_FRAC 0.01f
+	#define TARGET_OPT_OVERHEAD_FRAC 0.02f
 	// to help determien how many rounds per step
 	#define FLOP_EFFICIENCY_ESTIMATE 0.6f
 
