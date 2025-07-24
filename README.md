@@ -89,6 +89,8 @@ python init_model.py <model config> <output model path>
 
 Where `model config` can be selected from one of the default ones (e.g. `python 8b_config.json my_8B_model`), or you can create your own. 
 
+The 1b and 8b models are the same dimensions as llama3, the 32b model is the same as qwen.
+
 4. *Test out training*:
 
 ```shell
@@ -109,7 +111,7 @@ The input data is the first 65536 tokens of Harry Potter. Choosing a seqlen less
 4b. *Profile the training*
 
 ```shell
-./do_transformer_profile.sh <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model size billions: [1 | 8]>
+./do_transformer_profile.sh <host_mem_gb> <dev_mem_gb> <seqlen> <model path>
 ```
 
 This will create a `.nsys-rep` file within `bench/profiling` that be can loaded into the Nvidia Sight Systems GUI. There are NVTX ranges that should have intuitive meanings when inspecting the report (see training terminology above). On the left side of the timeline click "CUDA HW" followed by the stream labeled "Compute". From here you can expand the NVTX to see all of the computations. There is a slight overhead when profiling, somewhere around 0.25% to 1% for this workload.

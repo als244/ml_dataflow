@@ -4,7 +4,9 @@ import time
 import json
 
 def get_throughput(host_mem_size, device_mem_size, seq_len, model_size, total_steps, warmup_steps, output_filepath):    
-    return os.system(f"./transformerRecordThroughput {host_mem_size} {device_mem_size} {seq_len} {model_size} {total_steps} {warmup_steps} {output_filepath}")
+    cwd = os.getcwd()
+    model_path = f"{cwd}/../../models/{model_size}B"
+    return os.system(f"./transformerRecordThroughput {host_mem_size} {device_mem_size} {seq_len} {model_path} {model_size} {total_steps} {warmup_steps} {output_filepath}")
     
 
 
