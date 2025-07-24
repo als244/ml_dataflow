@@ -30,7 +30,7 @@ You can learn more about the project's background/details [here](docs/background
 
 ##### [Try It Out Yourself](#training-performance-demo) or [See Full Benchmarking Results](#benchmarked-results)
 
-#### All training is done using a single GPU as computational workhorse. Training is conducted in full bfloat16 with AdamW optimizer. Total memory footprint for parameters + parameter gradients + opt state => 8 * model size bytes. 
+#### All training is done using a single GPU as computational workhorse. Training is conducted in full bfloat16 with AdamW optimizer. Total aggregate memory footprint for parameters + parameter gradients + opt state => 8 * model size bytes.
 
 ###### Training at Home (RTX 5090): 15B Model with 16k Sequence Length 
 
