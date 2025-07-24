@@ -2855,7 +2855,7 @@
 		if (TO_PRINT_SETUP_CONFIG_SUMMARY){
 			printf("Setup Complete!\n\n");
 
-			printf("\nMEMORY USAGE (GB):\n\tHost: %.3f\n\tDevice: %.3f\n\n", used_host_mem_gb, used_dev_mem_gb);
+			printf("\nMEMORY USAGE (GiB):\n\tHost: %.3f\n\tDevice: %.3f\n\n", used_host_mem_gb, used_dev_mem_gb);
 		}
 
 		if ((used_host_mem > host_size_bytes) || (used_dev_mem > dev_size_bytes)) {
