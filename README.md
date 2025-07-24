@@ -146,7 +146,7 @@ The reports display a heatmap reporting the metric under different host and devi
 ---
 
 <details>
-<summary><strong>NVIDIA H100</strong></summary>
+<summary><strong>Machine with NVIDIA H100</strong></summary>
 
 | Sequence Length |   | Model Size |   |     |     |     |
 | --------------- |:-:| ---------- |:-:|:---:|:---:|:---:|
@@ -169,7 +169,7 @@ The reports display a heatmap reporting the metric under different host and devi
 ---
 
 <details>
-<summary><strong>NVIDIA A100</strong></summary>
+<summary><strong>Machine with NVIDIA A100</strong></summary>
 
 | Sequence Length |   | Model Size |   |     |     |     |
 | --------------- |:-:| ---------- |:-:|:---:|:---:|:---:|
@@ -192,7 +192,7 @@ The reports display a heatmap reporting the metric under different host and devi
 ---
 
 <details>
-<summary><strong>NVIDIA RTX 5090</strong></summary>
+<summary><strong>Machine with NVIDIA RTX 5090</strong></summary>
 
 | Sequence Length |   | Model Size |   |     |
 | --------------- |:-:| ---------- |:-:|:---:|
@@ -215,7 +215,7 @@ The reports display a heatmap reporting the metric under different host and devi
 ---
 
 <details>
-<summary><strong>NVIDIA RTX 3090</strong></summary>
+<summary><strong>Machine with NVIDIA RTX 3090</strong></summary>
 
 | Sequence Length |   | Model Size |   |     |
 | --------------- |:-:| ---------- |:-:|:---:|
