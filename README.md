@@ -25,21 +25,16 @@ You can learn more about the project's background/details [here](docs/background
 - **182% higher throughput** training 8B with 64k seqlen compared to a prior [Mosaic ML benchmark](https://github.com/mosaicml/llm-foundry/blob/main/scripts/train/benchmarking/README.md) training a smaller 7B MPT model across 8 H100's ([5500 Tok/sec](bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-8B-65536-report.png) vs. 1950 Tok/sec per GPU)
 - **90% higher throughput** training 8B with 512k seqlen on single H100 vs. [Snowflake benchmark](https://www.arxiv.org/pdf/2506.13996) ([950 Tok/sec](bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-8B-524288-report.png) vs. 500 Tok/sec per GPU)
 
-### Train "Long" Sequences / "Large" Models on Single Device or At Home
-##### For Casual Models
+### Train Long Sequences or Large Models on Single Device or At Home
 - Automatically offloads/prefetches (parameters, activations, gradients, & optimizer state) and configures recomputation based on specified memory capacities, seqlen, and model size. Asynchronous dataflow is abundant, but the math remains the same.
 
 ##### [Try It Out Yourself](#training-performance-demo) or [See Full Benchmarking Results](#benchmarked-results)
 
-#### Example results of training 8B model with long sequence lengths on just a single-device
+#### All training is done using a single GPU as computational workhorse. Training is conducted in full bfloat16 with AdamW optimizer. Total memory footprint for parameters + parameter gradients + opt state => 8 * model size bytes. 
 
-#### RTX 5090, 128k
+###### Training at Home (RTX 5090): 15B Model with 16k Sequence Length 
 
-<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-8B-131072-report.png" alt="Sample Heatmaps, RTX 5090, LLama3-8B, Seqlen 128k">
-
-#### H100, 256k
-
-<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-8B-262144-report.png" alt="Sample Heatmaps, H100, LLama3-8B, Seqlen 256k">
+<img src="bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-8B-131072-report.png" alt="Sample Heatmaps, RTX 5090, 15B, Seqlen 16k">
 
 
 -----
@@ -144,6 +139,23 @@ Click on a GPU type to expand the table of performance reports for different mod
 The reports display a heatmap reporting the metric under different host and device memory capacities. 
 
 ---
+
+##### Machine Specs
+
+Tested across 4 different machines:
+
+| GPU Model | Advertised Peak BF16 Compute | PCIe Unidirectional BW | Server Type | Host Memory BW | Host Memory Capacity |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| H100 SXM5 | 989 TFLOPS/s | 64 GB/s | Intel Sapphire Rapids (Xeon Platinum 8468) | 307.2 GB/s<sup>*</sup> | 512<sup>**</sup> GB |
+| A100 80GB | 312.5 TFLOPS/s | 32 GB/s | Intel Ice Lake (Xeon Gold 6432) | 187.6 GB/s<sup>*</sup> | 512<sup>**</sup> GB |
+| RTX 5090 | 209.5 TFLOPS/s | 64 GB/s | Gaming PC (Intel z790, i9 13000KF) | 83.2 GB/s | 192 GB |
+| RTX 3090 | 71 TFLOPS/s | 32 GB/s | Gaming PC (AMD x570, Ryzen 5950x) | 51.2 GB/s | 128 GB |
+
+*The H100 and A100 are each on 2-socket NUMA systems with 8 memory controllers per socket and with speeds of 4800 MT/s and 2933 MT/s respectively. Host memory BW refers to local numa node.
+
+**Host memory capacity refers to local NUMA capacity (which on these systems is shared among 4 GPUs for H100 machines and 2 for A100s).
+
+-----
 
 <details>
 <summary><strong>Machine with NVIDIA H100</strong></summary>
@@ -270,23 +282,6 @@ Where the $(2 * D + 2 * K + 3 * F)$ factor is coming from Q, O, K+V and the 3 FF
 ```
 
 - HFU (Hardware Flops Utilization): A measure of processing throughput (including recomputations in numerator) relative to hardware capabilities. There are 2 levels are recomputation that occur depending on memory capacities -- the system automatically configures this and calculates the accurate metric. See the `throughput.c` file for more details. Flash Attention is employed which recomputes the attention score matrix (implicity) during the backwards pass, so by default at least $N * L * (.5 * 2 * (S * S * D))$ FLOPs are recomputed per step. Here we see that $\text{HFU}$ is strictly greater than $\text{MFU}$.
-
------
-
-##### Machine Specs
-
-Tested across 4 different machines:
-
-| GPU Model | Advertised Peak BF16 Compute | PCIe Unidirectional BW | Server Type | Host Memory BW | Host Memory Capacity |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| H100 SXM5 | 989 TFLOPS/s | 64 GB/s | Intel Sapphire Rapids (Xeon Platinum 8468) | 307.2 GB/s<sup>*</sup> | 512<sup>**</sup> GB |
-| A100 80GB | 312.5 TFLOPS/s | 32 GB/s | Intel Ice Lake (Xeon Gold 6432) | 187.6 GB/s<sup>*</sup> | 512<sup>**</sup> GB |
-| RTX 5090 | 209.5 TFLOPS/s | 64 GB/s | Gaming PC (Intel z790, i9 13000KF) | 83.2 GB/s | 192 GB |
-| RTX 3090 | 71 TFLOPS/s | 32 GB/s | Gaming PC (AMD x570, Ryzen 5950x) | 51.2 GB/s | 128 GB |
-
-*The H100 and A100 are each on 2-socket NUMA systems with 8 memory controllers per socket and with speeds of 4800 MT/s and 2933 MT/s respectively. Host memory BW refers to local numa node.
-
-**Host memory capacity refers to local NUMA capacity (which on these systems is shared among 4 GPUs for H100 machines and 2 for A100s).
 
 -----
 
