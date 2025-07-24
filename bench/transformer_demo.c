@@ -228,13 +228,13 @@
 		struct stat statbuf;
 
 		if (stat(MODEL_PATH, &statbuf) != 0) {
-			fprintf(stderr, "Error: model path does not exist: %s...\n", MODEL_PATH);
+			fprintf(stderr, "Error: model path does not exist: %s\n", MODEL_PATH);
 			return -1;
 		}
 
 
 		if (!S_ISDIR(statbuf.st_mode)) {
-			fprintf(stderr, "Error: model path is not a directory: %s...\n", MODEL_PATH);
+			fprintf(stderr, "Error: model path is not a directory: %s\n", MODEL_PATH);
 			return -1;
 		}
 
