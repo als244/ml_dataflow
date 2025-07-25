@@ -222,7 +222,7 @@ Tested across 4 different machines:
 | **131072** |   | [1B](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-1B-131072-report.png)| [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-8B-131072-report.png)| ❌ |
 | **262144** |   | [1B](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-1B-262144-report.png)| [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-8B-262144-report.png)| ❌ |
 | **524288** |   | [1B](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-1B-524288-report.png)| ❌ | ❌ |
-| **1048576** |   | [1B](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-1B-1048576-report.png)| ❌ | ❌ |
+| **1048576** |   | ❌ | ❌ | ❌ |
 
 </details>
 
@@ -245,7 +245,7 @@ Tested across 4 different machines:
 | **131072** |   | [1B](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX3090/RTX3090-1B-131072-report.png)| [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX3090/RTX3090-8B-131072-report.png)| [15B](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX3090/RTX3090-15B-131072-report.png)|
 | **262144** |   | [1B](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX3090/RTX3090-1B-262144-report.png)| ❌ | ❌ |
 | **524288** |   | [1B](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX3090/RTX3090-1B-524288-report.png) | ❌ | ❌ |
-| **1048576** |   | [1B](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX3090/RTX3090-1B-1048576-report.png)| ❌ | ❌ |
+| **1048576** |   | ❌ | ❌ | ❌ |
 
 </details>
 
