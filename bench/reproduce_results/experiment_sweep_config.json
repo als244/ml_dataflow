@@ -223,5 +223,14 @@
         "start_run_ind": 0,
         "total_steps": 3,
         "warmup_steps": 1
+    },
+    "h100_32b_long": {
+   	"host_mem_gb": [320, 352, 384, 416, 448, 480],
+	"device_mem_gb": [30, 40, 50, 60, 70, 77],
+	"seq_len": [262144, 524288],
+        "model_size": [32],
+        "start_run_ind": 0,
+        "total_steps": 3,
+        "warmup_steps": 1
     }
 }
