@@ -95,7 +95,7 @@ cd ../bench
 
 For example:
 
-`./transformerDemo 80 20 4096 my_8B_model` will train the 8B model architecture (full bf16, causal attention, next token prediction, AdamW). The sequence length is set to 4096 tokens. The memory capacities are set to enforce <= 80 GiB of host memory and <= 20 GiB of device memory (where XXX GiB is defined as XXX * 2^30 bytes).
+`./transformerDemo 80 20 4096 ../models/my_8B_model` will train the 8B model architecture (full bf16, causal attention, next token prediction, AdamW). The sequence length is set to 4096 tokens. The memory capacities are set to enforce <= 80 GiB of host memory and <= 20 GiB of device memory (where XXX GiB is defined as XXX * 2^30 bytes).
 
 **Training Overview & Terminology**:
 
