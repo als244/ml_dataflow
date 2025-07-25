@@ -30,7 +30,7 @@ You can learn more about the project's background/details [here](docs/background
 
 ##### [Try It Out Yourself](#training-performance-demo) or [See Full Benchmarking Results](#benchmarked-results)
 
-#### All training is done using a single GPU as computational workhorse. Training is conducted in full bfloat16 with AdamW optimizer. Total aggregate memory footprint for parameters + parameter gradients + opt state => 8 * model size bytes.
+#### All training is done using a single GPU as computational workhorse. Training is conducted in full bfloat16 with AdamW optimizer. Total aggregate memory footprint for Parameters + Gradients + Optimizer State => 8 * \# Model Parameters.
 
 ###### Training at Home (RTX 5090): 15B Model with 16k Sequence Length 
 
@@ -217,7 +217,7 @@ Tested across 4 different machines:
 | **16384** |   | [1B](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-1B-16384-report.png) | [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-8B-16384-report.png) | [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-15B-16384-report.png) |
 | **32768** |   | [1B](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-1B-32768-report.png) | [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-8B-32768-report.png) | [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-15B-32768-report.png) |
 | **65536** |   | [1B](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-1B-65536-report.png) | [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-8B-65536-report.png) | [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-15B-65536-report.png) |
-| **131072** |   | [1B](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-1B-131072-report.png)| [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-8B-131072-report.png)| [❌](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-15B-131072-report.png)|
+| **131072** |   | [1B](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-1B-131072-report.png)| [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-8B-131072-report.png)| ❌ |
 | **262144** |   | [1B](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-1B-262144-report.png)| [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-8B-262144-report.png)| ❌ |
 | **524288** |   | [1B](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-1B-524288-report.png)| ❌ | ❌ |
 | **1048576** |   | [1B](./bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-1B-1048576-report.png)| ❌ | ❌ |
