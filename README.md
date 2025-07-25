@@ -128,7 +128,9 @@ python bench/reproduce_results/sweep_training_environments.py <experiment config
 
 #### Methodology
 
-To simulate realistic conditions, the first few steps (approximately 2 minutes) are ignored --- at the beginning temperature/clock rate is unstable and likely overestimates stready-state perf. After a couple minutes the step times become very consistent. The step time ends when the last parameter block (after being updated with optimizer) arrives home. The experiment configurations to sweep across different [machine](#machine-specs), memory, seq len, and model are in `bench/reproduce_results/experiment_sweep_config.json`. 
+To simulate realistic conditions, the first few steps (approximately 2 minutes) are ignored --- at the beginning temperature/clock rate is unstable and slightly overestimates stready-state perf. After a couple minutes the step times become very consistent. The step time ends when the last parameter block (after being updated with optimizer) arrives home. The experiment configurations to sweep across different [machine](#machine-specs), memory, seq len, and model are in `bench/reproduce_results/experiment_sweep_config.json`.
+
+No special settings were applied to adjust clocks/power. Training on the PCs was done with graphical interface turned off. To replicate this run `sudo systemctl set-default multi-user.target`, then reboot. When you want to turn graphics back on run `sudo systemctl set-default graphical.target`.
 
 ---
 
