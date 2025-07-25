@@ -22,7 +22,7 @@
         "device_mem_gb": [16, 24, 32, 48, 64, 78],
         "seq_len": [524288, 1048576],
         "model_size": [1],
-        "start_run_ind": 0,
+        "start_run_ind": 65,
         "total_steps": 7,
         "warmup_steps": 2
     },
@@ -178,5 +178,32 @@
         "start_run_ind": 0,
         "total_steps": 4,
         "warmup_steps": 1
+    },
+    "h100_15b_short": {
+        "host_mem_gb": [80, 96, 112, 128, 160, 192],
+        "device_mem_gb": [24, 30, 40, 50, 60, 70, 77],
+        "seq_len": [512, 1024, 2048, 4096, 8192, 16384],
+        "model_size": [15],
+        "start_run_ind": 0,
+        "total_steps": 3,
+        "warmup_steps": 1
+    },
+    "h100_15b_medium": {
+        "host_mem_gb": [128, 160, 192, 224, 256],
+        "device_mem_gb": [24, 30, 40, 50, 60, 70, 77],
+        "seq_len": [32768, 65536, 131072],
+        "model_size": [15],
+        "start_run_ind": 0,
+        "total_steps": 3,
+        "warmup_steps": 1
+    },
+    "h100_32b_short": {
+    	"host_mem_gb": [224, 256, 288, 320, 356],
+	"device_mem_gb": [30, 40, 50, 60, 70, 77],
+	"seq_len": [512, 1024, 2048, 4096, 8192, 16384],
+	"model_size": [32],
+	"start_run_ind": 0,
+	"total_steps": 3,
+	"warmup_steps": 1
     }
 }
