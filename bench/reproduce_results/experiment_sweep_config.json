@@ -239,7 +239,7 @@
 	"seq_len": [262144],
         "model_size": [32],
         "start_run_ind": 0,
-        "total_steps": 3,
+        "total_steps": 2,
         "warmup_steps": 1
     }
 }
