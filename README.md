@@ -36,7 +36,7 @@ You can learn more about the project's background/details [here](docs/background
 
 <img src="bench/reproduce_results/figures/memory_throughput_heatmaps/RTX5090/RTX5090-15B-16384-report.png" alt="Sample Heatmaps, RTX 5090, 15B, Seqlen 16k">
 
-###### Peak Throughput Despite Massive Oversubscription (H100): 32B Model with 64k Sequence Length 
+###### Near-Peak Throughput Despite Massive Oversubscription (H100): 32B Model with 64k Sequence Length 
 
 <img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-32B-65536-report.png" alt="Sample Heatmaps, H100, 32B, Seqlen 64k">
 
