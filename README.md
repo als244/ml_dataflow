@@ -180,7 +180,7 @@ Tested across 4 different machines:
 | **131072** |   | [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-1B-131072-report.png)| [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-8B-131072-report.png)| [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-15B-131072-report.png)| [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-32B-131072-report.png)|
 | **262144** |   | [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-1B-262144-report.png)| [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-8B-262144-report.png)| [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-15B-262144-report.png)| [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-32B-262144-report.png)|
 | **524288** |   | [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-1B-524288-report.png)| [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-8B-524288-report.png)| [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-15B-524288-report.png)| ❌ |
-| **1048576** |   | [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-1B-1048576-report.png)| [8B](./bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-8B-1048576-report.png) | ❌ | ❌ |
+| **1048576** |   | [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-1B-1048576-report.png)| [✅](./bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-8B-1048576-report.png) | ❌ | ❌ |
 
 </details>
 
