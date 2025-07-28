@@ -30,7 +30,13 @@ You can learn more about the project's background/details [here](docs/background
 
 ##### [Try It Out Yourself](#training-performance-demo) or [See Full Benchmarking Results](#benchmarked-results)
 
-> All training is done using a single GPU as computational workhorse. Training for benchmakrs is conducted in full bfloat16 with AdamW optimizer. Thus, the total aggregate memory footprint for the model's training state (i.e. Parameters + Gradients + Optimizer State) = 8 * \# Model Parameters bytes. SSD is not utilized to preserve endurance
+> Training Notes: 
+
+> All training is done using a single GPU as computational workhorse. 
+
+> Training for benchmakrs is conducted in full bfloat16 with AdamW optimizer. Thus, the total aggregate memory footprint for the model's training state (i.e. Parameters + Gradients + Optimizer State) = 8 * \# Model Parameters bytes. 
+
+> SSD is not utilized to preserve longevity.
 
 ###### Training at Home (RTX 5090): 15B Model with 16k Sequence Length 
 
@@ -132,7 +138,7 @@ python bench/reproduce_results/sweep_training_environments.py <experiment config
 
 > **Methodology**
 
-> To simulate realistic conditions, the first few steps (approximately 2 minutes) are ignored --- at the beginning temperature/clock rate is unstable and slightly overestimates stready-state perf. After a couple minutes the step times become very consistent. The step time ends when the last parameter block (after being updated with optimizer) arrives home. The experiment configurations to sweep across different [machine](#machine-specs), memory, seq len, and model are in `bench/reproduce_results/experiment_sweep_config.json`.
+> To simulate realistic conditions, the first few steps (approximately 2 minutes) are ignored --- at the beginning temperature/clock rate is unstable and slightly overestimates stready-state perf. After a couple minutes the step times become very consistent. The step time ends when the last parameter block (after being updated with optimizer) arrives home. The experiment configurations to sweep across different machine, memory capacity, seq len, and model are in `bench/reproduce_results/experiment_sweep_config.json`.
 
 > No special settings were applied to adjust fans/clocks/power. Training on the PCs was done with graphical interface turned off. To replicate this run `sudo systemctl set-default multi-user.target`, then reboot. When you want to turn graphics back on run `sudo systemctl set-default graphical.target`.
 
