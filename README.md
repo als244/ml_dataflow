@@ -34,9 +34,7 @@ You can learn more about the project's background/details [here](docs/background
 
 > - All training is done using a single GPU as computational workhorse. 
 
-> - Training for benchmakrs is conducted in full bfloat16 with AdamW optimizer. Thus, the total aggregate memory footprint for the model's training state (i.e. Parameters + Gradients + Optimizer State) = 8 * \# Model Parameters bytes. 
-
-> - SSD is not utilized to preserve longevity.
+> - Training for benchmarks is conducted in full bfloat16 with AdamW optimizer. Thus, the total aggregate memory footprint for the model's training state (i.e. Parameters + Gradients + Optimizer State) = 8 * \# Model Parameters bytes. (SSD is not utilized to preserve longevity).
 
 ###### Training at Home (RTX 5090): 15B Model with 16k Sequence Length 
 
