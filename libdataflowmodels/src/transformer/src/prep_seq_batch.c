@@ -322,7 +322,7 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
     for (int i = 0; i < num_local_experts; i++){
         (saved_activations_offsets -> x_1)[i] = cur_offset;
     }
-    cur_offset += total_tokens * top_k_active * ffn_dim * dt_size;
+    cur_offset += total_tokens * (num_shared_experts + top_k_active) * ffn_dim * dt_size;
 
     // Align offset to 256 bytes
     cur_offset = (cur_offset + 255) & ~255UL;
@@ -334,7 +334,7 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
     for (int i = 0; i < num_local_experts; i++){
         (saved_activations_offsets -> x_3)[i] = cur_offset;
     }
-    cur_offset += total_tokens * top_k_active * ffn_dim * dt_size;
+    cur_offset += total_tokens * (num_shared_experts + top_k_active) * ffn_dim * dt_size;
 
     // Align offset to 256 bytes
     cur_offset = (cur_offset + 255) & ~255UL;
