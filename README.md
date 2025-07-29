@@ -296,7 +296,7 @@ Where the $(2 \cdot d_{\text{model}} + 2 \cdot d_{\text{ctx}} + E_{\text{routed}
 \text{MFU} = \frac{\text{Model FLOPS/sec}}{\text{Peak Hardware FLOPS/sec}}
 ```
 
-Comparing MFU between different hardware architectures typically does not make sense. Boost clock rates are used to compute the theoretical Peak Hardware FLOPs, however processors stabilize at a much lower frequency for sustained peformance ([Maximum Achievable FLOPS (MAF)](https://rocm.blogs.amd.com/software-tools-optimization/Understanding_Peak_and_Max-Achievable_FLOPS/README.html)). Vendors have different design decisions that can result in a large gap between peak and sustained (if peak flops can get especially high during bursty workloads) making MFU metric look "bad". This gap is pronounced in AMD GPUs, though MAF numbers are on-par with Nvidia.
+Comparing MFU between different hardware architectures typically does not make sense. Boost clock rates are used to compute the theoretical Peak Hardware FLOPs, however processors stabilize at a much lower frequency for sustained peformance ([Maximum Achievable FLOPS (MAF)](https://rocm.blogs.amd.com/software-tools-optimization/Understanding_Peak_and_Max-Achievable_FLOPS/README.html)). Vendors have different design decisions that can result in a large gap between peak and sustained (if peak flops can get especially high during bursty workloads) making MFU metric look "bad". This gap is pronounced in AMD Datacenter GPUs, though their MAF numbers are on-par with Nvidia.
 
 <sup> In reality it would make more sense to set the denominator as Maximum Achievable FLOPS to isolate for software efficiency in an apples-to-apples manner...</sup>
 
