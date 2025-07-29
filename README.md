@@ -286,7 +286,7 @@ Generalized transformer architecture, 3-matrices per expert, causal attention. D
 \text{TFLOPS/sec} &= \text{model step cost} / T
 \end{aligned}
 ```
-Where the $(2 \cdot d_{\text{model}} + 2 \cdot d_{\text{ctx}} + E_{\text{routed}} + 3 \cdot (E_{\text{shared}} + E_{\text{active}}) \cdot d_{\text{expert}})$ factor is coming from Q+O attn matrices, K+V attn matrices, router, and 3 expert matrices. The $.5$ factor in attn flops comes from causal variant. There are 2 matmuls in attn fwd and 4 in attn bwd. The per seq flops comes from Fwd + Bwd X + Bwd W. They all share the same matmuls, but Fwd has attn fwd and Bwd X has attn bwd. Bwd W just contains the base matmuls. The head does fwd, bwd x, and bwd w matmuls. Embedding is essentially free as it is simple memcopies (forward) or additions (backward).
+Where the $(2 \cdot d_{\text{model}} + 2 \cdot d_{\text{ctx}} + E_{\text{routed}} + 3 \cdot (E_{\text{shared}} + E_{\text{active}}) \cdot d_{\text{expert}})$ factor is coming from Q+O attn matrices, K+V attn matrices, router, and 3 matrices per expert. The $.5$ factor in attn flops comes from causal variant. There are 2 matmuls in attn fwd and 4 in attn bwd. The per seq flops comes from Fwd + Bwd X + Bwd W. They all share the same matmuls, but Fwd has attn fwd and Bwd X has attn bwd. Bwd W just contains the base matmuls. The head does fwd, bwd x, and bwd w matmuls. Embedding is essentially free as it is simple memcopies (forward) or additions (backward).
 
 - MFU (Model Flops Utilization): A measure of effective throughput relative to hardware capabilities (where TFLOPS is calculated above)
 ```math
