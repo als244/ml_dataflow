@@ -293,7 +293,7 @@ Where the $(2 \cdot d_{\text{model}} + 2 \cdot d_{\text{ctx}} + E_{\text{routed}
 
 - MFU (Model Flops Utilization): A measure of effective throughput relative to hardware capabilities (where TFLOPS is calculated above)
 ```math
-\text{MFU} = (\text{FLOPS/sec}) / \text{peak hardware FLOPS}
+\text{MFU} = (\text{FLOPS/sec}) / \text{peak hardware FLOPS/sec}
 ```
 
 - HFU (Hardware Flops Utilization): A measure of processing throughput (including recomputations in numerator) relative to hardware capabilities. There are 2 levels are recomputation that occur depending on memory capacities -- the system automatically configures this and calculates the accurate metric. See the `throughput.c` file for more details. Flash Attention is employed which recomputes the attention score matrix (implicity) during the backwards pass, so by default at least $N * L * (.5 * 2 * (S * S * D))$ FLOPs are recomputed per step. Here we see that $\text{HFU}$ is strictly greater than $\text{MFU}$.
