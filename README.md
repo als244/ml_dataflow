@@ -264,7 +264,7 @@ Tested across 4 different machines:
 The details of these calculations can be found within `backends/host/src/ops/metrics/throughput.c`.
 
 Let:
-$S$ = seqlen, $N$ = seqs per step, $T$ = step runtime, $d_{\text{vocab}}$ = vocab size, $d_{\text{model}}$ = model dim, $d_{\text{ctx}}$ = kv dim, $d_{\text{expert}}$ = per-expert hidden-dim, $E_{\text{shared}}$ = \# shared experts, $E_{\text{routed}}$ = \# routed experts, $E_{\text{active}}$ = \# of routed experts that are active (that is, $E_{\text{active}} \leq E_{\text{routed}}$), $L$ = number of layers
+$S$ = seqlen, $N$ = seqs per step, $T$ = step runtime, $d_{\text{vocab}}$ = vocab size, $d_{\text{model}}$ = model dim, $d_{\text{ctx}}$ = kv dim, $d_{\text{expert}}$ = per-expert hidden-dim, $E_{\text{shared}}$ = \# shared experts, $E_{\text{routed}}$ = \# routed experts, $E_{\text{active}}$ = \# of routed experts that are active (that is, $E_{\text{active}} \leq E_{\text{routed}}$), $L$ = \# of layers
 
 - Tokens/sec: Unambigous -- the training throughput. For a fixed model architecture and seqlen this is the cleanest metric to compare against:
 ```math
