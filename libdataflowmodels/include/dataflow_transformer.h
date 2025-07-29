@@ -3,6 +3,7 @@
 
 #include "dataflow_models.h"
 #include "dataflow_ops.h"
+#include "dataflow_seq_batch.h"
 
 #include "transformer/transformer_structs.h"
 
@@ -46,6 +47,13 @@ int dataflow_submit_transformer_embedding(Dataflow_Handle * dataflow_handle, int
 
 
 int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int compute_stream_id, 
+								Transformer_Block_Transition * block_input, 
+								Transformer_Block * transformer_block, 
+								Transformer_Block_Activations * activations, 
+								Transformer_Block_Transition * block_output);
+
+// Just keeping this a seperate function for now while we are testing...
+int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int compute_stream_id, 
 								Transformer_Block_Transition * block_input, 
 								Transformer_Block * transformer_block, 
 								Transformer_Block_Activations * activations, 

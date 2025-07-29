@@ -211,13 +211,31 @@ int dataflow_submit_default_select_experts(Dataflow_Handle * handle, int stream_
                                 int total_tokens, int n_experts, int top_k_experts,  
                                 void * X_routed, float * token_expert_weights, 
                                 uint16_t * chosen_experts, int * expert_counts, 
-                                int * expert_counts_cumsum);
+                                int * expert_counts_cumsum, 
+								int * host_expert_counts);
 
 
 int dataflow_submit_default_build_expert_mapping(Dataflow_Handle * handle, int stream_id, 
-                                int total_tokens, int num_selected_experts, 
+                                int total_tokens, int num_routed_experts, int num_selected_experts, 
                                 uint16_t * chosen_experts, int * expert_counts_cumsum,
                                 int * expert_mapping);
+
+int dataflow_submit_default_prepare_expert_zone(Dataflow_Handle * handle, int stream_id, 
+                                DataflowDatatype attn_datatype, DataflowDatatype expert_datatype,
+                                int model_dim, void * X, 
+								int expert_id, int * expert_counts, int * expert_counts_cumsum,
+                                int * expert_mapping, 
+								void * expert_zone);
+
+int dataflow_submit_default_merge_expert_result(Dataflow_Handle * handle, int stream_id, 
+								DataflowDatatype attn_datatype, DataflowDatatype expert_datatype,
+								int num_tokens, int model_dim, int top_k_experts, 
+								void * expert_zone, int expert_id, 
+								int * expert_counts_cumsum, 
+								int * expert_mapping,
+								float * token_expert_weights,
+								uint16_t * chosen_experts,
+								void * X_combined);
 
 						
 

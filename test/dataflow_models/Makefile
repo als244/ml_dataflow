@@ -30,7 +30,7 @@ ALL_INCLUDES = -I${DATAFLOW_LIB_INCLUDE_DIR} -I${CUDA_DATAFLOW_BACKEND_INCLUDE_D
 ALL_LIBS = -lm -pthread -ldl -L${DATAFLOW_LIB_DIR} -L${CUDA_DATAFLOW_BACKEND_LIB_DIR} -L${DATAFLOW_OPS_LIB_DIR} -L${DATAFLOW_MODELS_LIB_DIR} -L${HOST_OPS_LIB_DIR} ${DATAFLOW_LIB} ${CUDA_DATAFLOW_BACKEND_LIBS} ${DATAFLOW_OPS_LIB} ${DATAFLOW_MODELS_LIB} ${HOST_OPS_LIB} -Wl,-rpath,${DATAFLOW_LIB_DIR} -Wl,-rpath,${CUDA_DATAFLOW_BACKEND_LIB_DIR} -Wl,-rpath,${DATAFLOW_OPS_LIB_DIR} -Wl,-rpath,${DATAFLOW_MODELS_LIB_DIR} -Wl,-rpath,${HOST_OPS_LIB_DIR}
 
 #EXECS = naiveTransformer transformerHostAccumOpt transformerHostOpt  transformerRecompute transformer
-EXECS = transformer transformerMoE transformerNoRecompute
+EXECS = transformer transformerMoE 
 
 all: create_data_dirs ${EXECS}
 

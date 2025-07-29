@@ -2170,3 +2170,629 @@ int dataflow_submit_transformer_embedding_bwd_w(Dataflow_Handle * dataflow_handl
 
 		return 0;
 }
+
+
+int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int compute_stream_id, 
+								Transformer_Block_Transition * block_input, 
+								Transformer_Block * transformer_block, 
+								Transformer_Block_Activations * activations, 
+								Transformer_Block_Transition * block_output) {
+
+    int ret;
+
+	int layer_id = transformer_block -> layer_id;
+
+	Transformer_Block_Config * block_config = &(transformer_block -> config);
+    DataflowDatatype fwd_dt = block_config -> block_dt;
+	DataflowDatatype compute_dt = block_config -> compute_dt;
+
+	int model_dim = block_config -> model_dim;
+    int kv_dim = block_config -> kv_dim;
+    int ffn_dim = block_config -> ffn_dim;
+
+	size_t x_el_size = dataflow_sizeof_element(fwd_dt);
+
+	   
+	Seq_Batch * seq_batch = block_input -> seq_batch;
+
+	int seq_id = seq_batch -> seq_id;
+	int chunk_id = seq_batch -> chunk_id;
+
+	Seq_Batch_Attention_Config * batch_attention_config = &(seq_batch -> attention_config);
+    int num_seqs = batch_attention_config -> num_seqs;
+    int total_q = batch_attention_config -> total_q;
+    int total_k = batch_attention_config -> total_k;
+ 
+
+	Seq_Batch_Saved_Activations * working_activations = activations -> working_activations;
+	Seq_Batch_Activation_Workspace * activation_workspace = activations -> activation_workspace;
+
+    uint64_t kernelWorkspaceBytes = activation_workspace -> kernelWorkspaceBytes;
+    void * kernelWorkspace = activation_workspace -> kernelWorkspace;
+
+
+	// Assume weights are in col-major format.
+
+	// But we want to process activations in row-major
+
+	// Note that matmul interface assumes col-major storage format
+
+	// Also note that FP8 tensor cores only available in TN format
+
+	// During FWD pass we normally want:
+
+
+	// Thus to compute Y = X @ W, 
+	// we can do Y^T = W^T @ X^T
+	// where from matmul perspective ^T means we interpret as row-major
+	// However we store W as col-major so we need to transpose it.
+
+	// Also for M, K, N (assuming X: (m, k), W (k, n))
+	// we set M = n, K = k, N = m
+
+	// The BWD pass is different because if we want dX's to be in row major we need:
+
+	// dX = dY @ W^T
+	// => dX^T = W @ dY^T
+
+	// so if we store W in col-major format we shouldn't transpose it..
+
+	// Now for bwd we set
+	// M = k, K = n, N = m
+	// where m, k, n are from fwd values of X, W, and Y.
+
+	int to_transa = 1;
+	int to_transb = 0;
+
+
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_act_stream", block_input -> X, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_act_stream file...\n");
+			return -1;
+		}
+	}
+
+	if (TO_PRINT){
+		printf("Saving blocking input into activations buffer...\n");
+	}
+
+	ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, working_activations -> x_inp, block_input -> X, (uint64_t) total_q * (uint64_t) model_dim * (uint64_t) x_el_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit peer transfer for x_inp...\n");
+		return -1;
+	}
+
+
+	if (TO_PRINT){
+		printf("Submitting Attention RMS Norm...!\n");
+	}
+
+
+
+	ret = dataflow_submit_default_rms_norm(dataflow_handle, compute_stream_id, 
+						fwd_dt, 
+						total_q, model_dim, (transformer_block -> config).eps, 
+						transformer_block -> w_attn_norm, block_input -> X, activation_workspace -> x_temp, 
+						working_activations -> attn_norm_rms_vals);
+
+	if (ret){
+		fprintf(stderr, "Error: failed to submit attention norm...\n");
+		return -1;
+	}
+
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_attn_norm", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save attention nor file...\n");
+			return -1;
+		}
+	}
+
+	if (TO_PRINT){
+		printf("Submitting Q, K, V matmuls...!\n");
+	}
+
+	// Q Proj
+	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+					fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
+					compute_dt,
+					to_transa, to_transb,
+					model_dim, model_dim, total_q, 
+					1.0, 0.0,
+					transformer_block -> w_q, activation_workspace -> x_temp, NULL, working_activations -> x_q,
+					kernelWorkspaceBytes, kernelWorkspace);
+
+	if (ret){
+		fprintf(stderr, "Error: failed to submit Q matmul proj...\n");
+		return -1;
+	}
+
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_q", working_activations -> x_q, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_q file...\n");
+			return -1;
+		}
+	}
+
+	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+					fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
+					compute_dt,
+					to_transa, to_transb,
+					kv_dim, model_dim, total_q, 
+					1.0, 0.0,
+					transformer_block -> w_k, activation_workspace -> x_temp, NULL, working_activations -> x_k_local,
+					kernelWorkspaceBytes, kernelWorkspace);
+
+	if (ret){
+		fprintf(stderr, "Error: failed to submit K matmul proj...\n");
+		return -1;
+	}
+
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_k", working_activations -> x_k_local, total_q, kv_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_k file...\n");
+			return -1;
+		}
+	}
+
+	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+					fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
+					compute_dt,
+					to_transa, to_transb,
+					kv_dim, model_dim, total_q, 
+					1.0, 0.0,
+					transformer_block -> w_v, activation_workspace -> x_temp, NULL, working_activations -> x_v_local,
+					kernelWorkspaceBytes, kernelWorkspace);
+
+	if (ret){
+		fprintf(stderr, "Error: failed to submit V matmul proj...\n");
+		return -1;
+	}
+
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_v_local", working_activations -> x_v_local, total_q, kv_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_v file...\n");
+			return -1;
+		}
+	}
+
+
+	if (TO_PRINT){
+		printf("Submitting RoPE...!\n");
+	}
+
+	int num_q_heads = (transformer_block -> config).num_q_heads;
+	int num_kv_heads = (transformer_block -> config).num_kv_heads;
+	int head_dim = (transformer_block -> config).head_dim;
+
+
+	ret = dataflow_submit_default_rope(dataflow_handle, compute_stream_id, 
+						fwd_dt, 
+						total_q, model_dim, head_dim, num_kv_heads, (transformer_block -> config).theta,
+						batch_attention_config -> seq_positions, working_activations -> x_q, working_activations -> x_k_local);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit rope...\n");
+		return -1;
+	}
+
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_q_rope", working_activations -> x_q, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_q_rope file...\n");
+			return -1;
+		}
+	}
+
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_k_rope_local", working_activations -> x_k_local, total_q, kv_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_k_rope file...\n");
+			return -1;
+		}
+	}
+
+
+	if (TO_PRINT){
+		printf("Submitting Attention...!\n");
+	}
+
+	// ensure workspace is zerod out beforehand....
+	// doing this within attention kernel itself now because only some parts of workspace need to be zeroed out
+	/*
+	ret = (dataflow_handle -> set_mem)(dataflow_handle, compute_stream_id, kernelWorkspace, 0, kernelWorkspaceBytes);
+	if (ret){
+		fprintf(stderr, "Error: unable to set attention workspace mem to 0 before submitting...\n");
+		return -1;
+	}
+	*/
+
+	void * q_seq_offsets = batch_attention_config -> q_seq_offsets;
+	void * q_seq_lens = batch_attention_config -> q_seq_lens;
+	int max_seqlen_q = batch_attention_config -> max_seqlen_q;
+
+	void * k_seq_offsets = batch_attention_config -> k_seq_offsets;
+	void * k_seq_lens = batch_attention_config -> k_seq_lens;
+	int max_seqlen_k = batch_attention_config -> max_seqlen_k;
+
+	Seq_Batch_Context * context = seq_batch -> context;
+
+	void * x_k_global = working_activations -> x_k_local;
+	void * x_v_global = working_activations -> x_v_local;
+
+	if (context){
+		x_k_global = context -> x_k;
+		x_v_global = context -> x_v;
+
+		void * x_k_global_dest = x_k_global + ((uint64_t) context -> cur_tokens_populated * (uint64_t) kv_dim * (uint64_t) x_el_size);
+		void * x_v_global_dest = x_v_global + ((uint64_t) context -> cur_tokens_populated * (uint64_t) kv_dim * (uint64_t) x_el_size);
+
+		// need to copy x_k_local and x_v_local into global context...
+
+		ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, x_k_global_dest, working_activations -> x_k_local, (uint64_t) total_q * (uint64_t) kv_dim * (uint64_t) x_el_size);
+		if (ret){
+			fprintf(stderr, "Error: failed to submit peer transfer for x_k_global...\n");
+			return -1;
+		}
+
+		ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, x_v_global_dest, working_activations -> x_v_local, (uint64_t) total_q * (uint64_t) kv_dim * (uint64_t) x_el_size);
+		if (ret){
+			fprintf(stderr, "Error: failed to submit peer transfer for x_v_global...\n");
+			return -1;
+		}
+
+		context -> cur_tokens_populated += total_q;
+
+		// assert (context -> cur_tokens_populated == total_q);
+
+	}
+
+
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))) {
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_k_global_attn_inp", x_k_global, context -> cur_tokens_populated, kv_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_k_global_attn_inp file...\n");
+			return -1;
+		}
+	}
+
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_v_global_attn_inp", x_v_global, context -> cur_tokens_populated, kv_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_k_global_attn_inp file...\n");
+			return -1;
+		}
+	}
+
+
+	int is_causal = 1;
+
+	ret = dataflow_submit_attention(dataflow_handle, compute_stream_id,
+						 fwd_dt, 
+						 num_seqs, total_q, total_k,
+						 q_seq_offsets, q_seq_lens, max_seqlen_q,
+						 k_seq_offsets, k_seq_lens, max_seqlen_k,
+						 num_q_heads, num_kv_heads, head_dim,
+						 working_activations -> x_q, x_k_global, x_v_global,
+						 working_activations -> x_attn_out, working_activations -> softmax_lse, 
+						 is_causal,
+						 kernelWorkspaceBytes, kernelWorkspace);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit attention...\n");
+		return -1;
+	}
+
+
+	// reset for beginning of next layer so it can populate
+	if (context -> cur_tokens_populated == context -> total_context_tokens){
+		context -> cur_tokens_populated = 0;
+	}
+	
+
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_attn", working_activations -> x_attn_out, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_attn file...\n");
+			return -1;
+		}
+	}
+
+
+	if (TO_PRINT){
+		printf("Submitting Attention Output Matmul...!\n");
+	}
+
+
+	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+					fwd_dt, fwd_dt, fwd_dt, fwd_dt,
+					compute_dt,
+					to_transa, to_transb,
+					model_dim, model_dim, total_q, 
+					1.0, 1.0,
+					transformer_block -> w_o, working_activations -> x_attn_out, block_input -> X, working_activations -> x_o,
+					kernelWorkspaceBytes, kernelWorkspace);
+
+	if (ret){
+		fprintf(stderr, "Error: failed to submit o matmul proj...\n");
+		return -1;
+	}
+
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_attn_final_out", working_activations -> x_o, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_attn_final_out file...\n");
+			return -1;
+		}
+	}
+
+
+	if (TO_PRINT){
+		printf("Submitting FFN RMS Norm...!\n");
+	}
+
+	ret = dataflow_submit_default_rms_norm(dataflow_handle, compute_stream_id, 
+						fwd_dt, 
+						total_q, model_dim, (transformer_block -> config).eps, 
+						transformer_block -> w_ffn_norm, working_activations -> x_o, activation_workspace -> x_temp, 
+						working_activations -> ffn_norm_rms_vals);
+
+	if (ret){
+		fprintf(stderr, "Error: failed to submit ffn norm...\n");
+		return -1;
+	}
+
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_ffn_norm_out", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_attn_final_out file...\n");
+			return -1;
+		}
+	}
+
+
+
+	/* MoE STUFF! */
+
+	MoE_Config * model_moe_config = &((transformer_block -> config).moe_config);
+
+	int num_shared_experts = model_moe_config -> num_shared_experts;
+	int num_routed_experts = model_moe_config -> num_global_routed_experts;
+	int top_k_active = model_moe_config -> top_k_experts;
+
+	Seq_Batch_MoE_Config * batch_moe_config = &(seq_batch -> moe_config);
+
+	// Returned by prepare expert zone, to know what dimensions to 
+	// launch GEMM...
+	int * host_expert_counts = batch_moe_config -> host_expert_counts;
+
+	// TODO: handle matmuls of shared experts here...
+	/*
+	for (int i = 0; i < num_shared_experts; i++){
+		// handle matmuls of shared experts here...			
+	}
+	*/
+
+	// copy result of accumulatation of attn_out + shared experts into block_output -> X
+	// then each routed expert will add its corresponding weighted result...
+
+	ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, block_output -> X, working_activations -> x_o, (uint64_t) total_q * (uint64_t) model_dim * (uint64_t) x_el_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit peer transfer to copy attn out into block output...\n");
+		return -1;
+	}
+
+	// 1. Router 
+
+	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+					fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
+					compute_dt,
+					to_transa, to_transb,
+					num_routed_experts, model_dim, total_q, 
+					1.0, 0.0,
+					transformer_block -> w_router, activation_workspace -> x_temp, NULL, working_activations -> x_routed,
+					kernelWorkspaceBytes, kernelWorkspace);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit router matmul proj...\n");
+		return -1;
+	}
+	
+	
+	// 2.) Select Experts
+
+	// ensure to reset expert counts and expert counts cumsum to zeros here
+	// these are on device memory...
+
+	ret = (dataflow_handle -> set_mem)(dataflow_handle, compute_stream_id, working_activations -> expert_counts, 0, (num_routed_experts + 1) * sizeof(int));
+	if (ret){
+		fprintf(stderr, "Error: failed to set expert counts to 0...\n");
+		return -1;
+	}
+
+	ret = (dataflow_handle -> set_mem)(dataflow_handle, compute_stream_id, working_activations -> expert_counts_cumsum, 0, (num_routed_experts) * sizeof(int));
+	if (ret){
+		fprintf(stderr, "Error: failed to set expert counts cumsum to 0...\n");
+		return -1;
+	}
+
+	// Writes to populates weights, chosen experts, expert counts, expert counts cumsum
+	// Also writes directly to host memory for expert counts (bypassing D->H dma queue)
+	ret = dataflow_submit_default_select_experts(dataflow_handle, compute_stream_id, 
+                                fwd_dt,
+                                total_q, num_routed_experts, top_k_active,  
+                                working_activations -> x_routed, working_activations -> token_expert_weights, 
+                                working_activations -> chosen_experts, working_activations -> expert_counts, 
+                                working_activations -> expert_counts_cumsum,
+								host_expert_counts);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit select experts...\n");
+		return -1;
+	}
+
+	// 3.) Build Mapping
+
+	ret = dataflow_submit_default_build_expert_mapping(dataflow_handle, compute_stream_id, 
+                                total_q, num_routed_experts, top_k_active, 
+                                working_activations -> chosen_experts, working_activations -> expert_counts_cumsum,
+                                working_activations -> expert_mapping);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit build expert mapping...\n");
+		return -1;
+	}
+
+	// Sync with compute stream here to know the number of tokens in each expert...
+	// Required to know in order to correctly partition memory and make GEMM calls...
+	// this is a result from the select experts kernel...
+	ret = (dataflow_handle -> sync_stream)(dataflow_handle, compute_stream_id);
+	if (ret){
+		fprintf(stderr, "Error: failed to sync with compute stream after building expert mapping...\n");
+		return -1;
+	}
+
+	int total_routed_tokens = set_moe_working_activations_offsets(working_activations, total_q, model_dim, ffn_dim, 
+                                                                   num_shared_experts, num_routed_experts, host_expert_counts, x_el_size);
+	if (total_routed_tokens != total_q * top_k_active){
+		fprintf(stderr, "Error: total routed tokens does not match expected number of tokens. Chunk size: %d, top_k_active: %d => expected %d, got %d\n", total_q, top_k_active, total_q * top_k_active, total_routed_tokens);
+		return -1;
+	}
+
+	// 4.) Repeat for all routed experts
+
+	void * expert_zone = kernelWorkspace;
+
+	void * new_kernelWorkspace;
+	uint64_t new_kernelWorkspaceBytes;
+	uint64_t expert_zone_size;
+
+	int total_tokens = 0;
+
+	for (int i = 0; i < num_routed_experts; i++){
+
+		int cur_expert_num_tokens = host_expert_counts[i];
+		//printf("[Expert %d] Number of tokens: %d\n", i, cur_expert_num_tokens);
+		total_tokens += cur_expert_num_tokens;
+
+		expert_zone_size = (uint64_t) cur_expert_num_tokens * (uint64_t) model_dim * (uint64_t) x_el_size;
+
+		if (expert_zone_size > kernelWorkspaceBytes){
+			fprintf(stderr, "Error: expert zone size is greater than kernel workspace size for expert #%d with %d tokens...\n", i, cur_expert_num_tokens);
+			return -1;
+		}
+
+		new_kernelWorkspace = expert_zone + expert_zone_size;
+
+		new_kernelWorkspace = (void *) (((uint64_t) new_kernelWorkspace + 255) & ~255UL);
+
+		new_kernelWorkspaceBytes = kernelWorkspaceBytes - ((uint64_t) new_kernelWorkspace - (uint64_t) kernelWorkspace);
+
+		// 	a.) Prepare Expert Zone
+	
+		ret = dataflow_submit_default_prepare_expert_zone(dataflow_handle, compute_stream_id, 
+								fwd_dt, fwd_dt,
+								model_dim, activation_workspace -> x_temp, 
+								i, working_activations -> expert_counts,
+								working_activations -> expert_counts_cumsum, 
+								working_activations -> expert_mapping, 
+								expert_zone);
+		if (ret){
+			fprintf(stderr, "Error: failed to submit prepare expert zone...\n");
+			return -1;
+		}
+
+		// 	b.) Submit Matmuls, Activation, Matmul
+
+		if (TO_PRINT){
+			printf("[Expert %d] Submitting FFN w1 and w3 matmuls...!\n", i);
+		}
+
+		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+						fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
+						compute_dt,
+						to_transa, to_transb,
+						ffn_dim, model_dim, cur_expert_num_tokens, 
+						1.0, 0.0,
+						(transformer_block -> w_1)[num_shared_experts + i], expert_zone, NULL, (working_activations -> x_1)[num_shared_experts + i],
+						new_kernelWorkspaceBytes, new_kernelWorkspace);
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit w1 matmul proj for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
+			return -1;
+		}
+
+		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+						fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
+						compute_dt,
+						to_transa, to_transb,
+						ffn_dim, model_dim, cur_expert_num_tokens, 
+						1.0, 0.0,
+						(transformer_block -> w_3)[num_shared_experts + i], activation_workspace -> x_temp, NULL, (working_activations -> x_3)[num_shared_experts + i],
+						new_kernelWorkspaceBytes, new_kernelWorkspace);
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit w3 matmul proj for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
+			return -1;
+		}
+
+
+		if (TO_PRINT){
+			printf("Submitting SwiGLU Activation...!\n");
+		}
+
+
+		ret = dataflow_submit_default_swiglu(dataflow_handle, compute_stream_id, 
+							fwd_dt, 
+							cur_expert_num_tokens, ffn_dim, 
+							(working_activations -> x_1)[num_shared_experts + i], (working_activations -> x_3)[num_shared_experts + i], activation_workspace -> x_temp_mlp);
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit swiglu activation for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
+			return -1;
+		}
+
+
+		if (TO_PRINT){
+			printf("Submitting FFN w2 matmul...!\n");
+		}
+
+		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+						fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
+						compute_dt,
+						to_transa, to_transb,
+						model_dim, ffn_dim, cur_expert_num_tokens, 
+						1.0, 0.0,
+						(transformer_block -> w_2)[num_shared_experts + i], activation_workspace -> x_temp_mlp, NULL, expert_zone,
+						new_kernelWorkspaceBytes, new_kernelWorkspace);
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit w2 matmul proj for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
+			return -1;
+		}
+
+
+		// 	c.) Combine Expert Outputs
+
+		ret = dataflow_submit_default_merge_expert_result(dataflow_handle, compute_stream_id, 
+								fwd_dt, fwd_dt,
+								cur_expert_num_tokens, model_dim, top_k_active, 
+								expert_zone, i, 
+								working_activations -> expert_counts_cumsum, 
+								working_activations -> expert_mapping,
+								working_activations -> token_expert_weights,
+								working_activations -> chosen_experts,
+								block_output -> X);
+		if (ret){
+			fprintf(stderr, "Error: failed to submit combine expert outputs...\n");
+			return -1;
+		}
+
+	}
+
+	if (total_tokens != (total_q * top_k_active)){
+		fprintf(stderr, "Error: total tokens does not match expected number of tokens. Chunk size: %d, top_k_active: %d => expected %d, got %d\n", total_q, top_k_active, total_q * top_k_active, total_tokens);
+		return -1;
+	}
+
+	return 0;
+}

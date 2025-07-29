@@ -201,7 +201,12 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
     cur_offset += total_tokens * sizeof(float);
 
 
-    // CUTOFF FOR SAVING INP ONLY...
+
+    int num_local_experts = saved_activations_offsets -> num_local_experts;
+    // need to allocate space for saved activations offsets...
+    int num_shared_experts = (block_config -> moe_config).num_shared_experts;
+    int num_global_routed_experts = (block_config -> moe_config).num_global_routed_experts;
+    int top_k_active = (block_config -> moe_config).top_k_experts;
 
 
     // Align offset to 256 bytes
@@ -217,8 +222,54 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
     cur_offset += total_tokens * kv_dim * dt_size;
 
 
-    saved_activations_offsets -> inp_only_cutoff = cur_offset;
+    if (num_global_routed_experts > 0){
+        // MoE offsets of important metadata...
+        saved_activations_offsets -> x_routed = cur_offset;
+        cur_offset += total_tokens * num_global_routed_experts * dt_size;
 
+        // Align offset to 256 bytes
+        cur_offset = (cur_offset + 255) & ~255UL;
+
+        saved_activations_offsets -> chosen_experts = cur_offset;
+        cur_offset += total_tokens * top_k_active * sizeof(uint16_t);
+
+        // Align offset to 256 bytes
+        cur_offset = (cur_offset + 255) & ~255UL;
+
+        saved_activations_offsets -> token_expert_weights = cur_offset;
+        cur_offset += total_tokens * top_k_active * sizeof(float);
+
+        // Align offset to 256 bytes
+        cur_offset = (cur_offset + 255) & ~255UL;
+
+
+        // if MoE, need to allocate space for extra metadata...
+        saved_activations_offsets -> expert_counts = cur_offset;
+        cur_offset += (num_local_experts + 1) * sizeof(int);
+
+        // Align offset to 256 bytes
+        cur_offset = (cur_offset + 255) & ~255UL;
+
+        saved_activations_offsets -> expert_counts_cumsum = cur_offset;
+        cur_offset += num_local_experts * sizeof(int);
+
+        // Align offset to 256 bytes
+        cur_offset = (cur_offset + 255) & ~255UL;
+
+        saved_activations_offsets -> expert_mapping = cur_offset;
+        cur_offset += total_tokens * top_k_active * sizeof(int);
+    }
+    else{
+        saved_activations_offsets -> x_routed = cur_offset;
+        saved_activations_offsets -> chosen_experts = cur_offset;
+        saved_activations_offsets -> token_expert_weights = cur_offset;
+        saved_activations_offsets -> expert_counts = cur_offset;
+        saved_activations_offsets -> expert_counts_cumsum = cur_offset;
+        saved_activations_offsets -> expert_mapping = cur_offset;
+    }
+
+    // CUTOFF FOR SAVING INP ONLY...
+    saved_activations_offsets -> inp_only_cutoff = cur_offset;
 
     // Align offset to 256 bytes
     cur_offset = (cur_offset + 255) & ~255UL;
@@ -236,6 +287,9 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
     
     saved_activations_offsets -> inp_attn_only_cutoff = cur_offset;
 
+
+
+
     // Align offset to 256 bytes
     cur_offset = (cur_offset + 255) & ~255UL;
 
@@ -251,11 +305,7 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
     // Align offset to 256 bytes
     cur_offset = (cur_offset + 255) & ~255UL;
 
-    int num_local_experts = saved_activations_offsets -> num_local_experts;
-        // need to allocate space for saved activations offsets...
-    int num_shared_experts = (block_config -> moe_config).num_shared_experts;
-    int num_global_routed_experts = (block_config -> moe_config).num_global_routed_experts;
-    int top_k_active = (block_config -> moe_config).top_k_experts;
+  
 
     // special case for dense moe where there is no combining and w2 output
     // is exactly the same as layer output...
@@ -277,44 +327,7 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
         return;
     }
 
-    saved_activations_offsets -> x_routed = cur_offset;
-    cur_offset += total_tokens * num_global_routed_experts * dt_size;
-
-    // Align offset to 256 bytes
-    cur_offset = (cur_offset + 255) & ~255UL;
-
-    saved_activations_offsets -> chosen_experts = cur_offset;
-    cur_offset += total_tokens * top_k_active * sizeof(uint16_t);
-
-    // Align offset to 256 bytes
-    cur_offset = (cur_offset + 255) & ~255UL;
-
-    saved_activations_offsets -> token_expert_weights = cur_offset;
-    cur_offset += total_tokens * top_k_active * sizeof(float);
-
-    // Align offset to 256 bytes
-    cur_offset = (cur_offset + 255) & ~255UL;
-
-
-    // if MoE, need to allocate space for extra metadata...
-    saved_activations_offsets -> expert_counts = cur_offset;
-    cur_offset += (num_local_experts + 1) * sizeof(int);
-
-    // Align offset to 256 bytes
-    cur_offset = (cur_offset + 255) & ~255UL;
-
-    saved_activations_offsets -> expert_counts_cumsum = cur_offset;
-    cur_offset += num_local_experts * sizeof(int);
-
-    // Align offset to 256 bytes
-    cur_offset = (cur_offset + 255) & ~255UL;
-
-    saved_activations_offsets -> expert_mapping = cur_offset;
-    cur_offset += total_tokens * top_k_active * sizeof(int);
-
-    // Align offset to 256 bytes
-    cur_offset = (cur_offset + 255) & ~255UL;
-
+   
 
     // Assign x_1[0] as the start of teh workspace, we know
     // what the total size will be but not how it is partitioned
@@ -336,19 +349,38 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
     }
     cur_offset += total_tokens * (num_shared_experts + top_k_active) * ffn_dim * dt_size;
 
-    // Align offset to 256 bytes
-    cur_offset = (cur_offset + 255) & ~255UL;
-
     saved_activations_offsets -> total_size = cur_offset;
     
     return;
 }
 
-int set_moe_saved_activations_offsets(Seq_Batch_Saved_Activations * sys_saved_activations, Seq_Batch_Saved_Activations * working_activations) {
+int set_moe_working_activations_offsets(Seq_Batch_Saved_Activations * working_activations, int num_tokens, int model_dim, int expert_dim, 
+                                            int num_shared_experts, int num_routed_experts, int * host_expert_counts, size_t expert_dt_size) {
 
-    // TODO...
+    void * orig_x1 = (working_activations -> x_1)[0];
+    void * orig_x3 = (working_activations -> x_3)[0];
 
-    // PROBABLY NEED TO CHANGE THE FUNCTION INTERFACE, AND THINK ABOUT CRITICAL PATH INTERACTIONS WITH DATATRANSFERS AND WORKSPACE PARTITIONING...
+    uint64_t shared_expert_act_size = num_tokens * num_shared_experts * expert_dim * expert_dt_size;
+    
+    void * routed_x1_base = orig_x1 + shared_expert_act_size;
+    void * routed_x3_base = orig_x3 + shared_expert_act_size;
+
+    void * cur_x1 = routed_x1_base;
+    void * cur_x3 = routed_x3_base;
+
+    int total_routed_tokens = 0;
+    int cur_exp_tokens;
+
+    for (int i = 0; i < num_routed_experts; i++){
+        (working_activations -> x_1)[num_shared_experts + i] = cur_x1;
+        (working_activations -> x_3)[num_shared_experts + i] = cur_x3;
+        cur_exp_tokens = host_expert_counts[i];
+        cur_x1 += cur_exp_tokens * expert_dim * expert_dt_size;
+        cur_x3 += cur_exp_tokens * expert_dim * expert_dt_size;
+        total_routed_tokens += cur_exp_tokens;
+    }
+
+    return total_routed_tokens;
 }
     
 
@@ -448,6 +480,9 @@ int bind_seq_batch_metadata_buffer(Seq_Batch * seq_batch, void * metadata_buffer
     attention_config -> k_seq_offsets = (int *) (metadata_buffer + metadata_offsets -> k_seq_offsets);
     attention_config -> k_seq_lens = (int *) (metadata_buffer + metadata_offsets -> k_seq_lens);
 
+    Seq_Batch_MoE_Config * moe_config = &(seq_batch -> moe_config);
+    moe_config -> host_expert_counts = (int *) (metadata_buffer + metadata_offsets -> host_expert_counts);
+
     // Seq Batch Loss Config
     Seq_Batch_Loss_Config * loss_config = &(seq_batch -> loss_config);
     loss_config -> labels = (uint32_t *) (metadata_buffer + metadata_offsets -> labels);
@@ -476,7 +511,8 @@ int populate_seq_batch_metadata_buffer(Dataflow_Handle * dataflow_handle, int in
                                         uint32_t * sys_token_ids, uint32_t * sys_labels,
                                         int * sys_seq_positions, 
                                         int * sys_q_seq_offsets, int * sys_q_seq_lens,
-                                        int * sys_k_seq_offsets, int * sys_k_seq_lens) {
+                                        int * sys_k_seq_offsets, int * sys_k_seq_lens,
+                                        int * sys_host_expert_count_buffer) {
 
         
         int ret;
@@ -485,6 +521,10 @@ int populate_seq_batch_metadata_buffer(Dataflow_Handle * dataflow_handle, int in
         seq_batch -> chunk_id = chunk_id;
         seq_batch -> total_tokens = total_tokens;
         seq_batch -> num_seqs = num_seqs;
+
+        
+
+
 
         Seq_Batch_Metadata_Offsets * metadata_offsets = &(seq_batch -> metadata_offsets);
         if (sys_registered_metadata_buffer_size < metadata_offsets -> total_size){
@@ -615,7 +655,8 @@ int populate_seq_batch_metadata_buffer(Dataflow_Handle * dataflow_handle, int in
         seq_batch -> sys_token_ids = sys_token_ids;
         seq_batch -> sys_labels = sys_labels;
         seq_batch -> sys_seq_positions = sys_seq_positions;
-
+        (seq_batch -> moe_config).host_expert_counts = sys_host_expert_count_buffer;
+        
         return 0;
 }
 

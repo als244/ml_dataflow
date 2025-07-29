@@ -130,3 +130,46 @@ int default_build_expert_mapping_set_launch_config(Cuda_Launch_Config * cuda_lau
 
 
 }
+
+int default_prepare_expert_zone_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Dataflow_Handle * dataflow_handle, Cuda_Function * cuda_function, Op * op) {
+
+	Cuda_Device_Info * device_info = (Cuda_Device_Info *) dataflow_handle -> device_info;
+
+	cuda_launch_config -> gridDimY = 1;
+	cuda_launch_config -> gridDimZ = 1;
+	cuda_launch_config -> blockDimY = 1;
+	cuda_launch_config -> blockDimZ = 1;
+
+	int sm_count = device_info -> sm_count;
+	int thread_per_block = 256;
+
+	cuda_launch_config -> gridDimX = sm_count;
+	cuda_launch_config -> blockDimX = thread_per_block;
+
+	cuda_launch_config -> sharedMemBytes = 0;
+
+	return 0;
+
+}
+
+int default_merge_expert_result_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Dataflow_Handle * dataflow_handle, Cuda_Function * cuda_function, Op * op) {
+
+	int thread_per_block = 256;
+
+	int total_expert_tokens = *((int *) op -> op_args[0]);
+
+	int num_blocks = total_expert_tokens;
+
+	cuda_launch_config -> gridDimY = 1;
+	cuda_launch_config -> gridDimZ = 1;
+	cuda_launch_config -> blockDimY = 1;
+	cuda_launch_config -> blockDimZ = 1;
+
+	cuda_launch_config -> gridDimX = num_blocks;
+	cuda_launch_config -> blockDimX = thread_per_block;
+
+	cuda_launch_config -> sharedMemBytes = 0;
+
+	return 0;
+}
+

@@ -254,16 +254,22 @@ COULD USE TEMPLATE BUT THE NAME MANGLING IS A PAIN...
 // Selection
 extern "C" __global__ void default_select_experts_fp32_kernel(int total_tokens, int n_experts, int top_k_experts,  float * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum);
 extern "C" __global__ void default_select_experts_fp16_kernel(int total_tokens, int n_experts, int top_k_experts,  __half * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum);
-extern "C" __global__ void default_select_experts_bf16_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_bfloat16 * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum);
+extern "C" __global__ void default_select_experts_bf16_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_bfloat16 * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * host_expert_counts);
 extern "C" __global__ void default_select_experts_fp8e4m3_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_fp8_e4m3 * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum);
 extern "C" __global__ void default_select_experts_fp8e5m2_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_fp8_e5m2 * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum);
 
-extern "C" __global__ void default_build_expert_mapping_kernel(int num_tokens, int num_selected_experts, 
+extern "C" __global__ void default_build_expert_mapping_kernel(int num_tokens, int num_routed_experts, int num_selected_experts, 
                                         const uint16_t* chosen_experts,
                                        int* expert_counts_cumsum,
                                        int* expert_mapping);
 
 
+
+// This is where casting to expert dtype would occur...
+extern "C" __global__ void default_prepare_expert_zone_bf16_bf16_kernel(int model_dim, __nv_bfloat16 * X, int expert_id, int * expert_counts, int* expert_counts_cumsum, int* expert_mapping, __nv_bfloat16 * expert_zone);
+
+// After doing matmul with expert zone, merge the results
+extern "C" __global__ void default_merge_expert_result_bf16_bf16_kernel(int num_tokens, int model_dim, int top_k_experts, __nv_bfloat16 * expert_zone, int expert_id, int * expert_counts_cumsum, int * expert_mapping, float * token_expert_weights, uint16_t * chosen_experts, __nv_bfloat16 * X_combined);
 
 // From Attention Misc:
 /*

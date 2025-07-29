@@ -15,7 +15,7 @@
  * @param expert_mapping      The final M x K output array for row indices.
 
  */
-extern "C" __global__ void default_build_expert_mapping_kernel(int num_tokens, int num_selected_experts, 
+extern "C" __global__ void default_build_expert_mapping_kernel(int num_tokens, int num_routed_experts, int num_selected_experts, 
                                         const uint16_t* chosen_experts,
                                        int* expert_counts_cumsum,
                                        int* expert_mapping)
@@ -32,8 +32,8 @@ extern "C" __global__ void default_build_expert_mapping_kernel(int num_tokens, i
     // ========================================================================
 
     // Each thread initializes one counter in shared memory.
-    if (threadIdx.x < num_selected_experts) {
-        s_counts[threadIdx.x] = 0;
+    for (int j = threadIdx.x; j < num_routed_experts; j += blockDim.x) {
+        s_counts[j] = 0;
     }
     __syncthreads(); // Ensure all counters are zero before proceeding.
 
@@ -46,9 +46,8 @@ extern "C" __global__ void default_build_expert_mapping_kernel(int num_tokens, i
         // Each thread processes all K elements in its assigned row.
         for (int k = 0; k < num_selected_experts; ++k) {
             uint16_t val = chosen_experts[row_idx * num_selected_experts + k];
-            if (val < num_selected_experts) { // Safety check
-                atomicAdd(&s_counts[val], 1);
-            }
+            // ensure val [0, num_routed_experts)
+            atomicAdd(&s_counts[val], 1);
         }
     }
 
@@ -61,13 +60,10 @@ extern "C" __global__ void default_build_expert_mapping_kernel(int num_tokens, i
     // == PHASE 2: Reserve Global Write Space
     // ========================================================================
 
-    // A single thread from the block reserves space in the global output array.
-    if (threadIdx.x == 0) {
-        for (int j = 0; j < num_selected_experts; ++j) {
-            // Atomically get the starting position for this block's contribution
-            // and update the global head for the next block.
-            s_block_write_base[j] = atomicAdd(&expert_counts_cumsum[j], s_counts[j]);
-        }
+    for (int j = threadIdx.x; j < num_routed_experts; j += blockDim.x) {
+        // Atomically get the starting position for this block's contribution
+        // and update the global head for the next block.
+        s_block_write_base[j] = atomicAdd(&expert_counts_cumsum[j], s_counts[j]);
     }
 
     // Synchronize to make the block's base write addresses visible to all threads.
@@ -80,8 +76,8 @@ extern "C" __global__ void default_build_expert_mapping_kernel(int num_tokens, i
 
     // Repurpose s_counts to be the local write offset within the block.
     // It must be reset to zero.
-    if (threadIdx.x < num_selected_experts) {
-        s_counts[threadIdx.x] = 0;
+    for (int j = threadIdx.x; j < num_routed_experts; j += blockDim.x) {
+        s_counts[j] = 0;
     }
     __syncthreads();
 
@@ -93,16 +89,14 @@ extern "C" __global__ void default_build_expert_mapping_kernel(int num_tokens, i
     {
         for (int k = 0; k < num_selected_experts; ++k) {
             uint16_t val = chosen_experts[row_idx * num_selected_experts + k];
-            if (val < num_selected_experts) {
-                // Get a unique local offset for this value within this block.
-                int local_offset = atomicAdd(&s_counts[val], 1);
+            // Get a unique local offset for this value within this block.
+            int local_offset = atomicAdd(&s_counts[val], 1);
 
-                // Calculate the final global write position.
-                int write_pos = s_block_write_base[val] + local_offset;
+            // Calculate the final global write position.
+            int write_pos = s_block_write_base[val] + local_offset;
 
-                // Write the row index to its final sorted position.
-                expert_mapping[write_pos] = row_idx;
-            }
+            // Write the row index to its final sorted position.
+            expert_mapping[write_pos] = row_idx;
         }
     }
 }

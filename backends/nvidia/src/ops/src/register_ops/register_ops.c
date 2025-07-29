@@ -5,7 +5,9 @@
 #define OPS_ROOT_DIR "."
 #endif
 
+typedef void (*moe_base_register_skeleton_func)(Op_Skeleton * skeleton, DataflowDatatype attn_datatype, DataflowDatatype expert_datatype);
 typedef void (*opt_base_register_skeleton_func)(Op_Skeleton * skeleton, DataflowDatatype param_dt, DataflowDatatype grad_dt, DataflowDatatype mean_dt, DataflowDatatype var_dt);
+
 
 int dataflow_register_external_ops(Dataflow_Handle * dataflow_handle) {
 
@@ -115,6 +117,28 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 	char * misc_func_names[] = {"default_build_expert_mapping", "default_set_average_loss"};
 	char * misc_func_init_symbols[] = {NULL, NULL};
 
+	int num_moe_base_funcs = 2;
+	char * moe_base_names[] = {"default_prepare_expert_zone", "default_merge_expert_result"};
+
+	int num_moe_funcs_per_base[] = {1, 1};
+
+	moe_base_register_skeleton_func moe_base_register_skeleton_funcs[] = {dataflow_set_default_prepare_expert_zone_skeleton, dataflow_set_default_merge_expert_result_skeleton};
+	char * moe_init_symbols[] = {NULL, NULL};
+
+	// [base_funcs][moe_funcs_per_base[i]][2]
+	DataflowDatatype moe_dt_combos[2][1][2] = {{{DATAFLOW_BF16, DATAFLOW_BF16}}, {{DATAFLOW_BF16, DATAFLOW_BF16}}};
+
+	// [base_funcs][moe_funcs_per_base[i]]
+	char * moe_dt_str_combos[2][1] = {{"bf16_bf16"}, {"bf16_bf16"}};
+
+	char * moe_suffix = "kernel";
+
+	int total_moe_funcs = 0;
+
+	for (int i = 0; i < num_moe_base_funcs; i++){
+		total_moe_funcs += num_moe_funcs_per_base[i];
+	}
+
 
 	int num_opt_base_funcs = 1;
 	char * opt_base_names[] = {"default_adamw_step"};
@@ -130,7 +154,6 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 	char * opt_dt_str_combos[1][1] = {{"bf16_bf16_bf16_bf16"}};
 
 
-
 	
 
 	int total_opt_funcs = 0;
@@ -143,7 +166,7 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 
 
 
-	int num_funcs = num_base_funcs + num_misc_funcs + total_opt_funcs;
+	int num_funcs = num_base_funcs + num_misc_funcs + total_moe_funcs + total_opt_funcs;
 
 
 
@@ -294,6 +317,20 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 		sprintf(native_func_launch_symbols[cur_func], "%s_set_launch_config", misc_func_names[i]);
 		dataflow_set_op_skeleton(&native_op_skeletons[cur_func], misc_func_names[i], DATAFLOW_NONE, DATAFLOW_NONE);
 		cur_func++;
+	}
+
+	for (int i = 0; i < num_moe_base_funcs; i++){
+		
+		for (int j = 0; j < num_moe_funcs_per_base[i]; j++){
+			if (moe_init_symbols[i]){
+				native_func_init_symbols[cur_func] = calloc(FUNC_SYMBOL_MAX_LEN, sizeof(char));
+				sprintf(native_func_init_symbols[cur_func], "%s", moe_init_symbols[i]);
+			}
+			sprintf(native_func_symbols[cur_func], "%s_%s_%s", moe_base_names[i], moe_dt_str_combos[i][j], moe_suffix);
+			sprintf(native_func_launch_symbols[cur_func], "%s_set_launch_config", moe_base_names[i]);
+			moe_base_register_skeleton_funcs[i](&native_op_skeletons[cur_func], moe_dt_combos[i][j][0], moe_dt_combos[i][j][1]);
+			cur_func++;
+		}
 	}
 
 	for (int i = 0; i < num_opt_base_funcs; i++){

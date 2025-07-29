@@ -19,7 +19,8 @@ int default_swiglu_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Da
 	int num_rows = *((int *) op_args[0]);
 
 	cuda_launch_config -> gridDimX = num_rows;
-	cuda_launch_config -> blockDimX = max_threads_per_block;
+	//cuda_launch_config -> blockDimX = max_threads_per_block;
+	cuda_launch_config -> blockDimX = 256;
 
 	return 0;
 }
@@ -44,7 +45,8 @@ int default_swiglu_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_launch_conf
 	int num_rows = *((int *) op_args[0]);
 
 	cuda_launch_config -> gridDimX = num_rows;
-	cuda_launch_config -> blockDimX = max_threads_per_block;
+	//cuda_launch_config -> blockDimX = max_threads_per_block;
+	cuda_launch_config -> blockDimX = 256;
 
 	return 0;
 }

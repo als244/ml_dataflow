@@ -1788,6 +1788,8 @@
 					cur_sys_k_seq_lens[0] = cur_token;
 				}
 
+				void * cur_host_expert_counts_buffer = cur_host_mem;
+
 				ret = populate_seq_batch_metadata_buffer(&dataflow_handle, inbound_stream_id, 
 												seq_batches[chunk_id],
 												cur_host_mem, metadata_buffer_size,
@@ -1795,12 +1797,16 @@
 												cur_sys_token_ids, cur_sys_labels,
 												cur_sys_seq_positions, 
 												cur_sys_q_seq_offsets, cur_sys_q_seq_lens,
-												cur_sys_k_seq_offsets, cur_sys_k_seq_lens);
+												cur_sys_k_seq_offsets, cur_sys_k_seq_lens,
+												cur_host_expert_counts_buffer);
 
 				if (ret){
 					fprintf(stderr, "Error: failed to populate seq_batch metadata buffer for chunk #%d...\n", chunk_id);
 					return -1;
 				}
+
+				cur_host_mem += num_routed_experts * sizeof(int);
+				used_host_mem += num_routed_experts * sizeof(int);
 
 				ret = dataflow_handle.sync_stream(&dataflow_handle, inbound_stream_id);
 				if (ret){

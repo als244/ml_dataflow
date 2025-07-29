@@ -25,6 +25,9 @@ typedef struct seq_batch_metadata_offsets {
 	uint64_t labels;
 	uint64_t loss_vec;
 
+	// MoE Stuff
+	uint64_t host_expert_counts;
+
 	uint64_t total_size;
 } Seq_Batch_Metadata_Offsets;
 
@@ -35,6 +38,24 @@ typedef struct seq_batch_saved_activations_offsets {
 	uint64_t ffn_norm_rms_vals;
 	uint64_t x_k_local;
 	uint64_t x_v_local;
+
+	// Save these guys no matter what...
+	uint64_t x_routed;
+
+	uint64_t chosen_experts;
+	uint64_t token_expert_weights;
+
+	// of size num_local_experts + 1
+	// the +1 is used as counter for block completions within select experts kernel
+	uint64_t expert_counts;
+
+	// of size num_local_experts, excluse scan over expert counts
+	// used when building mapping from experts to tokens
+	uint64_t expert_counts_cumsum;
+
+	// of size total_tokens * top_k
+	uint64_t expert_mapping;
+
 	uint64_t inp_only_cutoff;
 	uint64_t softmax_lse;
 	uint64_t x_attn_out;
@@ -52,22 +73,6 @@ typedef struct seq_batch_saved_activations_offsets {
 	// each of these arrays are of size num_local_experts
 	int num_local_experts;
 	int top_k;
-
-	uint64_t x_routed;
-	uint64_t chosen_experts;
-	uint64_t token_expert_weights;
-
-	// of size num_local_experts + 1
-	// the +1 is used as counter for block completions within select experts kernel
-	uint64_t expert_counts;
-
-	// of size num_local_experts, excluse scan over expert counts
-	// used when building mapping from experts to tokens
-	uint64_t expert_counts_cumsum;
-
-	// of size total_tokens * top_k
-	uint64_t expert_mapping;
-	
 
 	// array of length num_local_experts
 	uint64_t * x_1;
@@ -293,6 +298,9 @@ typedef struct seq_batch_context {
 	void * x_v;
 } Seq_Batch_Context;
 
+typedef struct seq_batch_moe_config {
+	int * host_expert_counts;
+} Seq_Batch_MoE_Config;
 
 struct seq_batch {
 	
@@ -323,6 +331,7 @@ struct seq_batch {
 	Seq_Batch_Attention_Config attention_config;
 
 	// Can also add in metadata regarding MoE if needed...
+	Seq_Batch_MoE_Config moe_config;
 
 	// the loss config
 	Seq_Batch_Loss_Config loss_config;

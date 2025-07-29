@@ -22,7 +22,8 @@ int populate_seq_batch_metadata_buffer(Dataflow_Handle * dataflow_handle, int in
                                         uint32_t * sys_token_ids, uint32_t * sys_labels,
                                         int * sys_seq_positions, 
                                         int * sys_q_seq_offsets, int * sys_q_seq_lens,
-                                        int * sys_k_seq_offsets, int * sys_k_seq_lens);
+                                        int * sys_k_seq_offsets, int * sys_k_seq_lens,
+                                        int * sys_host_expert_count_buffer);
 
 
 
@@ -42,5 +43,7 @@ uint64_t get_seq_batch_activation_workspace_buffer_size(Seq_Batch * seq_batch, T
 uint64_t get_seq_batch_recomputed_activations_buffer_size(Seq_Batch * seq_batch);
 int bind_seq_batch_recomputed_activations_buffer(Seq_Batch_Recomputed_Activations_Offsets * recomputed_activations_offsets, Seq_Batch_Recomputed_Activations * recomputed_activations, void * recomputed_activations_buffer, uint64_t recomputed_activations_buffer_size);
 
+int set_moe_working_activations_offsets(Seq_Batch_Saved_Activations * working_activations, int num_tokens, int model_dim, int expert_dim, 
+                                            int num_shared_experts, int num_routed_experts, int * host_expert_counts, size_t expert_dt_size);
 
 #endif

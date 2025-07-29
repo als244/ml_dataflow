@@ -258,8 +258,11 @@
 		// In case we want to create multiple contexts per device, 
 		// higher level can create multiple instances of dataflow handles...
 		int ctx_id = 0;
-		//unsigned int ctx_flags = CU_CTX_SCHED_BLOCKING_SYNC | CU_CTX_MAP_HOST;
-		unsigned int ctx_flags = CU_CTX_SCHED_BLOCKING_SYNC;
+		
+		// Require CU_CTX_MAP_HOST in order to do the prepare zone kernel
+		// that writes to pinned host memory...
+		unsigned int ctx_flags = CU_CTX_SCHED_BLOCKING_SYNC | CU_CTX_MAP_HOST;
+		//unsigned int ctx_flags = CU_CTX_SCHED_BLOCKING_SYNC;
 
 		int num_streams = 7;
 		int opt_stream_prios[7] = {0, 0, 0, 0, 0, 0, 0};
@@ -1805,6 +1808,8 @@
 					cur_sys_k_seq_lens[0] = cur_token;
 				}
 
+				void * cur_host_expert_counts_buffer = cur_host_mem;
+
 				ret = populate_seq_batch_metadata_buffer(&dataflow_handle, inbound_stream_id, 
 												seq_batches[chunk_id],
 												cur_host_mem, metadata_buffer_size,
@@ -1812,12 +1817,16 @@
 												cur_sys_token_ids, cur_sys_labels,
 												cur_sys_seq_positions, 
 												cur_sys_q_seq_offsets, cur_sys_q_seq_lens,
-												cur_sys_k_seq_offsets, cur_sys_k_seq_lens);
+												cur_sys_k_seq_offsets, cur_sys_k_seq_lens,
+												cur_host_expert_counts_buffer);
 
 				if (ret){
 					fprintf(stderr, "Error: failed to populate seq_batch metadata buffer for chunk #%d...\n", chunk_id);
 					return -1;
 				}
+
+				cur_host_mem += num_routed_experts * sizeof(int);
+				used_host_mem += num_routed_experts * sizeof(int);
 
 				ret = dataflow_handle.sync_stream(&dataflow_handle, inbound_stream_id);
 				if (ret){
@@ -3125,7 +3134,7 @@
 
 		
 		
-		exit(0);
+		//exit(0);
 		
 
 		printf("------ STARTING TRAINING ------\n\n");
@@ -3331,7 +3340,7 @@
 							// set the context
 							seq_batches[chunk_id] -> context = fwd_context;
 
-							ret = dataflow_submit_transformer_block(&dataflow_handle, compute_stream_id, 
+							ret = dataflow_submit_transformer_moe_block(&dataflow_handle, compute_stream_id, 
 															&(block_transitions[2 * chunk_id + (k % 2)]), 
 															working_block, 
 															cur_activations, 
@@ -3715,6 +3724,33 @@
 
 				// pop from "Head"
 				dataflow_handle.profiler.range_pop();
+
+
+
+
+
+
+				ret = dataflow_handle.sync_handle(&dataflow_handle);
+				if (ret){
+					fprintf(stderr, "Error: failed to sync handle after head...\n");
+					return -1;
+				}
+
+				printf("\n\n\nHead complete!\n\nStopping profiling and exiting...\n\n");
+
+				ret = dataflow_handle.profiler.stop();
+				if (ret){
+					fprintf(stderr, "Error: failed to stop profiling...\n");
+					return -1;
+				}
+
+				exit(0);
+
+
+
+
+
+
 
 
 				// BACKWARDS PASS...
