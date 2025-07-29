@@ -296,6 +296,10 @@ Where the $(2 \cdot d_{\text{model}} + 2 \cdot d_{\text{ctx}} + E_{\text{routed}
 \text{MFU} = \frac{\text{Model FLOPS/sec}}{\text{Peak Hardware FLOPS/sec}}
 ```
 
+Comparing MFU between different hardware architectures typically does not make sense. Boost clock rates are used to compute the theoretical Peak Hardware FLOPs, however processors stabilize at a much lower frequency for sustained peformance ([Maximum Achievable FLOPS (MAF)](https://rocm.blogs.amd.com/software-tools-optimization/Understanding_Peak_and_Max-Achievable_FLOPS/README.html)). Vendors have different design decisions that can result in a large gap between peak and sustained (if peak flops can get especially high during bursty workloads) making MFU metric look "bad". This gap is pronounced in AMD GPUs, though MAF numbers are on-par with Nvidia.
+
+<sup> In reality it would make more sense to set the denominator as Maximum Achievable FLOPS to isolate for software efficiency in an apples-to-apples manner...</sup>
+
 - HFU (Hardware Flops Utilization): A measure of processing throughput (including recomputations in numerator) relative to hardware capabilities. There are 2 levels are recomputation that occur depending on memory capacities -- the system automatically configures this and calculates the accurate metric. See the `throughput.c` file for more details. Flash Attention is employed which recomputes the attention score matrix (implicity) during the backwards pass, so by default at least $N * L * (.5 * 2 * (S * S * D))$ FLOPs are recomputed per step. Here we see that $\text{HFU}$ is strictly greater than $\text{MFU}$.
 
 -----
