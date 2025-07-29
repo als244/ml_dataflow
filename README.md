@@ -275,6 +275,8 @@ $S$ = seqlen, $N$ = seqs per step, $T$ = step runtime, $d_{\text{vocab}}$ = voca
 
 Generalized transformer architecture, 3-matrices per expert, causal attention. Dense models are a special case with 1 shared expert and 0 routed experts (i.e. $d_{\text{expert}}$ = FFN hidden dim, $E_{\text{shared}} = 1$, $E_{\text{routed}} = E_{\text{active}} = 0$):
 
+> Matrix Multiplication FLOPs for (M, K) \cross (K, N) = 2 \cdot M \cdot K \cdot N
+
 ```math
 \begin{aligned}
 \text{layer matmul flops} &= 2 \cdot S \cdot d_{\text{model}} \cdot (2 \cdot d_{\text{model}} + 2 \cdot d_{\text{ctx}} + E_{\text{routed}} + 3 \cdot (E_{\text{shared}} + E_{\text{active}}) \cdot d_{\text{expert}}) \\
