@@ -259,7 +259,7 @@ Transformer_Block * init_transformer_block(int layer_id, DataflowDatatype block_
 
 	}
 
-
+	/*
 	// dont allow moe yet
 	if (mlp_type == DATAFLOW_MOE_MLP){
 		fprintf(stderr, "Error: MOE MLP not yet unsupported...\n");
@@ -267,6 +267,7 @@ Transformer_Block * init_transformer_block(int layer_id, DataflowDatatype block_
 		free(block);
 		return NULL;
 	}
+	*/
 
 	if (mlp_type == DATAFLOW_VANILLA_MLP){
 		fprintf(stderr, "Error: VANILLA MLP not yet unsupported...\n");

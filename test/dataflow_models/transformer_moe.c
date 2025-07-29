@@ -3125,7 +3125,7 @@
 
 		
 		
-		
+		exit(0);
 		
 
 		printf("------ STARTING TRAINING ------\n\n");
