@@ -53,20 +53,21 @@ typedef struct seq_batch_saved_activations_offsets {
 	int num_local_experts;
 	int top_k;
 
+	uint64_t x_routed;
+	uint64_t chosen_experts;
+	uint64_t token_expert_weights;
 
-	// of size num_local_experts
-	uint64_t num_tokens_per_expert;
+	// of size num_local_experts + 1
+	// the +1 is used as counter for block completions within select experts kernel
+	uint64_t expert_counts;
+
+	// of size num_local_experts, excluse scan over expert counts
+	// used when building mapping from experts to tokens
+	uint64_t expert_counts_cumsum;
 
 	// of size total_tokens * top_k
-	uint64_t token_to_experts_mapping;
-	// of size max_total_local_expert_tokens, 
-	// it is dymically paritioned among the experts
-	// using offsets from num_tokens_per_expert
-	// within this parition each value is an index from
-	// original token batch corresponding to row 
-	// within the x_1, x_3, x_2 buffers...
-	uint64_t experts_to_tokens_mapping;
-
+	uint64_t expert_mapping;
+	
 
 	// array of length num_local_experts
 	uint64_t * x_1;
@@ -244,19 +245,22 @@ typedef struct seq_batch_saved_activations {
 	void * x_o;
 	
 
+	void * x_routed;
+	uint16_t * chosen_experts;
+	float * token_expert_weights;
 
 	// MoE specific stuff
 	
     // if MoE, then this should be sent immediately after the select experts call
 	// (after processing router)
 	// and is needed to dynamically partition the expert workspace
-	// of size num_local_experts
-	int * num_tokens_per_expert;
+	// of size num_local_experts + 1
+	int * expert_counts;
 
 	// these should also be sent immediately after the select experts call...
-	int * token_to_experts_mapping;
+	int * expert_counts_cumsum;
 	// num_tokens_per_expert result determines the boundaries of each expert...
-	int * experts_to_tokens_mapping;
+	int * expert_mapping;
 
 	// of size num_local_experts
 

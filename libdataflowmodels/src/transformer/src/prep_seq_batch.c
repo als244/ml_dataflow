@@ -255,16 +255,11 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
         // need to allocate space for saved activations offsets...
     int num_shared_experts = (block_config -> moe_config).num_shared_experts;
     int num_global_routed_experts = (block_config -> moe_config).num_global_routed_experts;
+    int top_k_active = (block_config -> moe_config).top_k_experts;
 
     // special case for dense moe where there is no combining and w2 output
     // is exactly the same as layer output...
     if ((num_shared_experts == 1) && (num_local_experts == 1) && (num_global_routed_experts == 0)){
-
-        // we do not need to allocate space for these...
-        saved_activations_offsets -> num_tokens_per_expert = cur_offset;
-        saved_activations_offsets -> token_to_experts_mapping = cur_offset;
-        saved_activations_offsets -> experts_to_tokens_mapping = cur_offset;
-
 
         (saved_activations_offsets -> x_1)[0] = cur_offset;
         cur_offset += total_tokens * ffn_dim * dt_size;
@@ -282,46 +277,64 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
         return;
     }
 
-    // if MoE, need to allocate space for extra metadata...
+    saved_activations_offsets -> x_routed = cur_offset;
+    cur_offset += total_tokens * num_global_routed_experts * dt_size;
 
-    // if MoE, need to dynamically partition then workspaces based on router...
-    // but can still set minimum size for workspace based on max total local expert tokens...
-    // this includes num_shared_experts * total_tokens + top_k * total_tokens
-    uint64_t max_total_local_expert_tokens = (uint64_t) (saved_activations_offsets -> max_total_local_expert_tokens);
-   
-    // import for this to be part of saved activations so the memory is pinned
-    // and we can quickly recieve results in order to dynamically partition
-    // expert workspaces...
-    saved_activations_offsets -> num_tokens_per_expert = cur_offset;
+    // Align offset to 256 bytes
+    cur_offset = (cur_offset + 255) & ~255UL;
+
+    saved_activations_offsets -> chosen_experts = cur_offset;
+    cur_offset += total_tokens * top_k_active * sizeof(uint16_t);
+
+    // Align offset to 256 bytes
+    cur_offset = (cur_offset + 255) & ~255UL;
+
+    saved_activations_offsets -> token_expert_weights = cur_offset;
+    cur_offset += total_tokens * top_k_active * sizeof(float);
+
+    // Align offset to 256 bytes
+    cur_offset = (cur_offset + 255) & ~255UL;
+
+
+    // if MoE, need to allocate space for extra metadata...
+    saved_activations_offsets -> expert_counts = cur_offset;
+    cur_offset += (num_local_experts + 1) * sizeof(int);
+
+    // Align offset to 256 bytes
+    cur_offset = (cur_offset + 255) & ~255UL;
+
+    saved_activations_offsets -> expert_counts_cumsum = cur_offset;
     cur_offset += num_local_experts * sizeof(int);
 
     // Align offset to 256 bytes
     cur_offset = (cur_offset + 255) & ~255UL;
 
-    saved_activations_offsets -> token_to_experts_mapping = cur_offset;
-    cur_offset += max_total_local_expert_tokens * sizeof(int);
-
-    // Align offset to 256 bytes
-    cur_offset = (cur_offset + 255) & ~255UL;
-
-    saved_activations_offsets -> experts_to_tokens_mapping = cur_offset;
-    cur_offset += max_total_local_expert_tokens * sizeof(int);
+    saved_activations_offsets -> expert_mapping = cur_offset;
+    cur_offset += total_tokens * top_k_active * sizeof(int);
 
     // Align offset to 256 bytes
     cur_offset = (cur_offset + 255) & ~255UL;
 
 
-    // Now cannot pre-parition the expert workspaces...
-    // but can still get an upper bound on the size of the workspaces
-    // based on max_total_local_expert_tokens...
-
-
-    cur_offset += 2 * max_total_local_expert_tokens * ffn_dim * dt_size;
+    // Assign x_1[0] as the start of teh workspace, we know
+    // what the total size will be but not how it is partitioned
+    // until dynamically selected by the router...
+    for (int i = 0; i < num_local_experts; i++){
+        (saved_activations_offsets -> x_1)[i] = cur_offset;
+    }
+    cur_offset += total_tokens * top_k_active * ffn_dim * dt_size;
 
     // Align offset to 256 bytes
     cur_offset = (cur_offset + 255) & ~255UL;
 
-    cur_offset += max_total_local_expert_tokens * model_dim * dt_size;
+    // Assign x_3[0] as the start of the workspace, we know
+    // what the total size will be but not how it is partitioned
+    // until dynamically selected by the router...
+
+    for (int i = 0; i < num_local_experts; i++){
+        (saved_activations_offsets -> x_3)[i] = cur_offset;
+    }
+    cur_offset += total_tokens * top_k_active * ffn_dim * dt_size;
 
     // Align offset to 256 bytes
     cur_offset = (cur_offset + 255) & ~255UL;
@@ -693,15 +706,24 @@ int bind_seq_batch_saved_activations_buffer(Seq_Batch * seq_batch, Seq_Batch_Sav
         return -1;
     }
 
-    if (saved_activations_offsets -> num_tokens_per_expert != saved_activations_offsets -> token_to_experts_mapping){
-        fprintf(stderr, "Error: cannot handle MoE for now...\n");
-        return -1;
-    }
+    saved_activations -> x_routed = NULL;
+    saved_activations -> chosen_experts = NULL;
+    saved_activations -> token_expert_weights = NULL;
+    saved_activations -> expert_counts = NULL;
+    saved_activations -> expert_counts_cumsum = NULL;
+    saved_activations -> expert_mapping = NULL;
 
-    // for non-MoE, these are not needed...
-    saved_activations -> num_tokens_per_expert = NULL;
-    saved_activations -> token_to_experts_mapping = NULL;
-    saved_activations -> experts_to_tokens_mapping = NULL;
+    if (saved_activations_offsets -> num_local_experts > 1){
+        
+        saved_activations -> x_routed = (void *) (saved_activations_buffer + saved_activations_offsets -> x_routed);
+        saved_activations -> chosen_experts = (uint16_t *) (saved_activations_buffer + saved_activations_offsets -> chosen_experts);
+        saved_activations -> token_expert_weights = (float *) (saved_activations_buffer + saved_activations_offsets -> token_expert_weights);
+
+        // for non-MoE, these are not needed...
+        saved_activations -> expert_counts = (void *) (saved_activations_buffer + saved_activations_offsets -> expert_counts);
+        saved_activations -> expert_counts_cumsum = (void *) (saved_activations_buffer + saved_activations_offsets -> expert_counts_cumsum);
+        saved_activations -> expert_mapping = (void *) (saved_activations_buffer + saved_activations_offsets -> expert_mapping);
+    }
 
     // only save if full...
     if (saved_activation_level == SAVED_ACTIVATION_LEVEL_FULL) {

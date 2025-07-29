@@ -447,7 +447,7 @@
 		moe_config -> top_k_experts = num_active_routed_experts;
 		moe_config -> num_shared_experts = num_shared_experts;
 		moe_config -> num_global_routed_experts = num_routed_experts;
-		moe_config -> num_local_experts = num_routed_experts;
+		moe_config -> num_local_experts = num_shared_experts + num_routed_experts;
 		moe_config -> local_expert_inds = malloc((num_shared_experts + num_routed_experts) * sizeof(int));
 		if (!moe_config -> local_expert_inds){
 			fprintf(stderr, "Error: failed to allocate local_expert_inds...\n");
