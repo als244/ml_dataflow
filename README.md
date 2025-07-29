@@ -286,14 +286,14 @@ Generalized transformer architecture, 3-matrices per expert, causal attention. D
 \text{per seq flops} &= L \cdot (3 \cdot \text{layer matmul flops} + \text{attn fwd flops} + \text{attn bwd flops}) + \text{head flops} \\
 \text{model step cost} &= N \cdot \text{per seq flops} \\
 \text{FLOPS/sec} &= \text{model step cost} / T \\
-\text{TFLOPS/sec} &= \text{FLOPS/sec} / 10^{12} \\
+\text{TFLOPS/sec} &= (\text{FLOPS/sec}) / 10^{12} \\
 \end{aligned}
 ```
 Where the $(2 \cdot d_{\text{model}} + 2 \cdot d_{\text{ctx}} + E_{\text{routed}} + 3 \cdot (E_{\text{shared}} + E_{\text{active}}) \cdot d_{\text{expert}})$ factor is coming from Q+O attn matrices, K+V attn matrices, router, and 3 matrices per expert. The $.5$ factor in attn flops comes from causal variant. There are 2 matmuls in attn fwd and 4 in attn bwd. The $3$ factor in head comes from fwd, bwd x, and bwd w matmuls. The $3 \cdot \text{layer matmul flops}$ within per seq flops comes from Fwd + Bwd X + Bwd W. They all share the same matmuls, but Fwd has attn fwd and Bwd X has attn bwd. Bwd W just contains the base matmuls. Embedding is essentially free as it is simple memcopies (forward) or additions (backward).
 
 - MFU (Model Flops Utilization): A measure of effective throughput relative to hardware capabilities (where TFLOPS is calculated above)
 ```math
-\text{MFU} = \text{FLOPS} / \text{peak hardware FLOPS}
+\text{MFU} = (\text{FLOPS/sec}) / \text{peak hardware FLOPS}
 ```
 
 - HFU (Hardware Flops Utilization): A measure of processing throughput (including recomputations in numerator) relative to hardware capabilities. There are 2 levels are recomputation that occur depending on memory capacities -- the system automatically configures this and calculates the accurate metric. See the `throughput.c` file for more details. Flash Attention is employed which recomputes the attention score matrix (implicity) during the backwards pass, so by default at least $N * L * (.5 * 2 * (S * S * D))$ FLOPs are recomputed per step. Here we see that $\text{HFU}$ is strictly greater than $\text{MFU}$.
