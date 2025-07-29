@@ -273,7 +273,7 @@ $S$ = seqlen, $N$ = seqs per step, $T$ = step runtime, $d_{\text{vocab}}$ = voca
 
 - Model TFLOPS/sec: Effective throughput of processing (model flops / runtime). There is ambiguity among different frameworks about the proper "cost" of the model, so this number is hard to compare apples-to-apples if formulas are not given. It is common for codebases to over-report Model TFLOPS/MFU for causal models (not accounting for the fact that only half of the attention scores need to be calculated) -- the model cost should be implementation agnostic. The TFLOP numbers in the performance reports above are derived from the formula below. 
 
-Generalized transformer architecture, 3-matrices per expert, causal attention. Dense models have 1 shared expert and 0 routed experts (i.e. $d_{\text{expert}}$ = FFN hidden dim, $E_{\text{shared}} = 1$, $E_{\text{routed}} = E_{\text{active}} = 0$):
+Generalized transformer architecture, 3-matrices per expert, causal attention. Dense models are a special case with 1 shared expert and 0 routed experts (i.e. $d_{\text{expert}}$ = FFN hidden dim, $E_{\text{shared}} = 1$, $E_{\text{routed}} = E_{\text{active}} = 0$):
 
 ```math
 \begin{aligned}
