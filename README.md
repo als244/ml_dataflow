@@ -264,27 +264,29 @@ Tested across 4 different machines:
 The details of these calculations can be found within `backends/host/src/ops/metrics/throughput.c`.
 
 Let:
-$S$ = seqlen, $N$ = seqs per step, $T$ = step runtime, $D$ = model dim, $K$ = kv dim, $F$ = feed forward dimension, $V$ = vocab size, $L$= number of layers
+$S$ = seqlen, $N$ = seqs per step, $T$ = step runtime, $d_{\text{model}}$ = model dim, $d_{\text{ctx}}$ = kv dim, $d_{\text{expert}}$ = per-expert hidden-dim, $E_{\text{shared}}$ = \# shared experts, $E_{\text{routed}}$ = \# routed experts $E_{\text{active}}$ = \# of routed experts that are active. $V$ = vocab size, $L$= number of layers
 
 - Tokens/sec: Unambigous -- the training throughput. For a fixed model architecture and seqlen this is the cleanest metric to compare against:
 ```math
 \text{Tokens per second} = (N * S) / T
 ```
 
-- Model TFLOPS/sec: Effective throughput of processing (model flops / runtime). There is ambiguity among different frameworks about the proper "cost" of the model, so this number is hard to compare apples-to-apples if formulas are not given. It is common for codebases to over-report Model TFLOPS/MFU for causal models (not accounting for the fact that only half of the attention scores need to be calculated) -- the model cost should be implementation agnostic. The TFLOP numbers in the performance reports above are derived from the formula below (Llama3 model architecture, causal attention):
+- Model TFLOPS/sec: Effective throughput of processing (model flops / runtime). There is ambiguity among different frameworks about the proper "cost" of the model, so this number is hard to compare apples-to-apples if formulas are not given. It is common for codebases to over-report Model TFLOPS/MFU for causal models (not accounting for the fact that only half of the attention scores need to be calculated) -- the model cost should be implementation agnostic. The TFLOP numbers in the performance reports above are derived from the formula below. 
+
+Generalized transformer architecture, 3-matrices per expert, causal attention. Dense models have 1 shared expert and 0 routed experts (i.e. $d_{\text{model}}$ = FFN dim, $E_{\text{shared}} = 1$, $E_{\text{routed}} = E_{\text{active}} = 0$):
+
 ```math
 \begin{aligned}
-\text{layer matmul flops} &= 2 * S * D * (2 * D + 2 * K + 3 * F) \\
-\text{attn fwd flops} &= .5 * 2 * (2 * S * S * D) \\
-\text{attn bwd flops} &= .5 * 4 * (2 * S * S * D) \\
-\text{head flops} &= 3 * (2 * S * D * V) \\
+\text{layer matmul flops} &= 2 * S * d_{\text{model}} * (2 * d_{\text{model}} + 2 * d_{\text{ctx}} + E_{\text{routed}} + 3 * (E_{\text{shared}} + E_{\text{active}}) * d_{\text{expert}}) \\
+\text{attn fwd flops} &= .5 * 2 * (2 * S * S * d_{\text{model}}) \\
+\text{attn bwd flops} &= .5 * 4 * (2 * S * S * d_{\text{model}}) \\
+\text{head flops} &= 3 * (2 * S * d_{\text{model}} * V) \\
 \text{per seq flops} &= L * (3 * \text{layer matmul flops} + \text{attn fwd flops} + \text{attn bwd flops}) + \text{head flops} \\
 \text{model step cost} &= N * \text{per seq flops} \\
-&= N * (L * (6 * S * D * (2 * D + 2 * K + 3 * F) + 6 * S * S * D) + 6 * S * D * V) \\ 
 \text{TFLOPS/sec} &= \text{model step cost} / T
 \end{aligned}
 ```
-Where the $(2 * D + 2 * K + 3 * F)$ factor is coming from Q, O, K+V and the 3 FFN matrices within each block. The $.5$ factor in attn flops comes from causal variant. There are 2 matmuls in attn fwd and 4 in attn bwd. The per seq flops comes from Fwd + Bwd X + Bwd W. They all share the same matmuls, but Fwd has attn fwd and Bwd X has attn bwd. Bwd W just contains the base matmuls. The head does fwd, bwd x, and bwd w matmuls. Embedding is essentially free as it is simple memcopies (forward) or additions (backward).
+Where the $(2 * d_{\text{model}} + 2 * d_{\text{ctx}} + E_{\text{routed}} + 3 * (E_{\text{shared}} + E_{\text{active}}) * d_{\text{expert}})$ factor is coming from Q+O attn matrices, K+V attn matrices, router, and 3 expert matrices. The $.5$ factor in attn flops comes from causal variant. There are 2 matmuls in attn fwd and 4 in attn bwd. The per seq flops comes from Fwd + Bwd X + Bwd W. They all share the same matmuls, but Fwd has attn fwd and Bwd X has attn bwd. Bwd W just contains the base matmuls. The head does fwd, bwd x, and bwd w matmuls. Embedding is essentially free as it is simple memcopies (forward) or additions (backward).
 
 - MFU (Model Flops Utilization): A measure of effective throughput relative to hardware capabilities (where TFLOPS is calculated above)
 ```math
