@@ -414,7 +414,7 @@
 
 		DataflowAttentionType attn_type = DATAFLOW_EXACT_ATTENTION;
 
-		DataflowMLPType mlp_type = DATAFLOW_GATED_MLP;
+		DataflowMLPType mlp_type = DATAFLOW_MOE_MLP;
 
 		DataflowActivationType activ_type = DATAFLOW_SWIGLU;
 
@@ -438,8 +438,25 @@
 		int is_causal = 1;
 
 
-		MoE_Config * moe_config = NULL;
+		MoE_Config * moe_config = malloc(sizeof(MoE_Config));
+		if (!moe_config){
+			fprintf(stderr, "Error: failed to allocate moe_config...\n");
+			return -1;
+		}
 
+		moe_config -> top_k_experts = num_active_routed_experts;
+		moe_config -> num_shared_experts = num_shared_experts;
+		moe_config -> num_global_routed_experts = num_routed_experts;
+		moe_config -> num_local_experts = num_routed_experts;
+		moe_config -> local_expert_inds = malloc((num_shared_experts + num_routed_experts) * sizeof(int));
+		if (!moe_config -> local_expert_inds){
+			fprintf(stderr, "Error: failed to allocate local_expert_inds...\n");
+			return -1;
+		}
+
+		for (int i = 0; i < num_shared_experts + num_routed_experts; i++){
+			moe_config -> local_expert_inds[i] = i;
+		}
 
 		// setting to host page size.
 		// really needs to be 256 in order to use tensor cores
