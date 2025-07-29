@@ -277,12 +277,12 @@ Generalized transformer architecture, 3-matrices per expert, causal attention. D
 
 ```math
 \begin{aligned}
-\text{layer matmul flops} &= 2 * S * d_{\text{model}} * (2 * d_{\text{model}} + 2 * d_{\text{ctx}} + E_{\text{routed}} + 3 * (E_{\text{shared}} + E_{\text{active}}) * d_{\text{expert}}) \\
-\text{attn fwd flops} &= .5 * 2 * (2 * S * S * d_{\text{model}}) =  2 * S^2 * d_{\text{model}} \\
-\text{attn bwd flops} &= .5 * 4 * (2 * S * S * d_{\text{model}}) =  4 * S^2 * d_{\text{model}} \\
-\text{head flops} &= 3 * (2 * S * d_{\text{model}} * d_{\text{vocab}}) = 6 * S * d_{\text{model}} * d_{\text{vocab}} \\
-\text{per seq flops} &= L * (3 * \text{layer matmul flops} + \text{attn fwd flops} + \text{attn bwd flops}) + \text{head flops} \\
-\text{model step cost} &= N * \text{per seq flops} \\
+\text{layer matmul flops} &= 2 \cdot S \cdot d_{\text{model}} \cdot (2 \cdot d_{\text{model}} + 2 \cdot d_{\text{ctx}} + E_{\text{routed}} + 3 \cdot (E_{\text{shared}} + E_{\text{active}}) \cdot d_{\text{expert}}) \\
+\text{attn fwd flops} &= .5 \cdot 2 \cdot (2 \cdot S \cdot S \cdot d_{\text{model}}) =  2 \cdot S^2 \cdot d_{\text{model}} \\
+\text{attn bwd flops} &= .5 \cdot 4 \cdot (2 \cdot S \cdot S \cdot d_{\text{model}}) =  4 \cdot S^2 \cdot d_{\text{model}} \\
+\text{head flops} &= 3 \cdot (2 \cdot S \cdot d_{\text{model}} \cdot d_{\text{vocab}}) = 6 \cdot S \cdot d_{\text{model}} \cdot d_{\text{vocab}} \\
+\text{per seq flops} &= L \cdot (3 \cdot \text{layer matmul flops} + \text{attn fwd flops} + \text{attn bwd flops}) + \text{head flops} \\
+\text{model step cost} &= N \cdot \text{per seq flops} \\
 \text{TFLOPS/sec} &= \text{model step cost} / T
 \end{aligned}
 ```
