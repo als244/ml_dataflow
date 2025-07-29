@@ -264,7 +264,7 @@ Tested across 4 different machines:
 The details of these calculations can be found within `backends/host/src/ops/metrics/throughput.c`.
 
 Let:
-$S$ = seqlen, $N$ = seqs per step, $T$ = step runtime, $d_{\text{model}}$ = model dim, $d_{\text{ctx}}$ = kv dim, $d_{\text{expert}}$ = per-expert hidden-dim, $E_{\text{shared}}$ = \# shared experts, $E_{\text{routed}}$ = \# routed experts, $E_{\text{active}}$ = \# of routed experts that are active, $V$ = vocab size, $L$= number of layers
+$S$ = seqlen, $N$ = seqs per step, $T$ = step runtime, $d_{\text{vocab}}$ = vocab size, $d_{\text{model}}$ = model dim, $d_{\text{ctx}}$ = kv dim, $d_{\text{expert}}$ = per-expert hidden-dim, $E_{\text{shared}}$ = \# shared experts, $E_{\text{routed}}$ = \# routed experts, $E_{\text{active}}$ = \# of routed experts that are active, $L$ = number of layers
 
 - Tokens/sec: Unambigous -- the training throughput. For a fixed model architecture and seqlen this is the cleanest metric to compare against:
 ```math
@@ -278,9 +278,9 @@ Generalized transformer architecture, 3-matrices per expert, causal attention. D
 ```math
 \begin{aligned}
 \text{layer matmul flops} &= 2 * S * d_{\text{model}} * (2 * d_{\text{model}} + 2 * d_{\text{ctx}} + E_{\text{routed}} + 3 * (E_{\text{shared}} + E_{\text{active}}) * d_{\text{expert}}) \\
-\text{attn fwd flops} &= .5 * 2 * (2 * S * S * d_{\text{model}}) \\
-\text{attn bwd flops} &= .5 * 4 * (2 * S * S * d_{\text{model}}) \\
-\text{head flops} &= 3 * (2 * S * d_{\text{model}} * V) \\
+\text{attn fwd flops} &= .5 * 2 * (2 * S^2 * d_{\text{model}}) =  2 * S^2 * d_{\text{model}} \\
+\text{attn bwd flops} &= .5 * 4 * (2 * S^2 * d_{\text{model}}) =  4 * S^2 * d_{\text{model}} \\
+\text{head flops} &= 3 * (2 * S * d_{\text{model}} * d_{\text{vocab}}) = 6 * S * d_{\text{model}} * d_{\text{vocab}} \\
 \text{per seq flops} &= L * (3 * \text{layer matmul flops} + \text{attn fwd flops} + \text{attn bwd flops}) + \text{head flops} \\
 \text{model step cost} &= N * \text{per seq flops} \\
 \text{TFLOPS/sec} &= \text{model step cost} / T
