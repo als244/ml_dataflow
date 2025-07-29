@@ -212,6 +212,13 @@ int dataflow_submit_default_select_experts(Dataflow_Handle * handle, int stream_
                                 void * X_routed, float * token_expert_weights, 
                                 uint16_t * chosen_experts, int * expert_counts, 
                                 int * expert_counts_cumsum);
+
+
+int dataflow_submit_default_build_expert_mapping(Dataflow_Handle * handle, int stream_id, 
+                                int total_tokens, int num_selected_experts, 
+                                uint16_t * chosen_experts, int * expert_counts_cumsum,
+                                int * expert_mapping);
+
 						
 
 // From mlp_misc_ops.c

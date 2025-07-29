@@ -19,6 +19,7 @@
 #include "optimizer/adamw_step.cu"
 
 #include "moe/select_experts.cu"
+#include "moe/build_expert_mapping.cu"
 
 #include "activations/swiglu.cu"
 #include "activations/swiglu_bwd_x.cu"

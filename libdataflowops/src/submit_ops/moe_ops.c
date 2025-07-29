@@ -33,3 +33,33 @@ int dataflow_submit_default_select_experts(Dataflow_Handle * handle, int stream_
 
     return 0;
 }
+
+
+int dataflow_submit_default_build_expert_mapping(Dataflow_Handle * handle, int stream_id, 
+                                int total_tokens, int num_selected_experts, 
+                                uint16_t * chosen_experts, int * expert_counts_cumsum,
+                                int * expert_mapping) {
+
+    int ret;
+
+    Op build_expert_mapping_op;
+
+    dataflow_set_default_build_expert_mapping_skeleton(&build_expert_mapping_op.op_skeleton);
+
+    void ** op_args = build_expert_mapping_op.op_args;
+
+    op_args[0] = &total_tokens;
+    op_args[1] = &num_selected_experts;
+    op_args[2] = &chosen_experts;
+    op_args[3] = &expert_counts_cumsum;
+    op_args[4] = &expert_mapping;
+
+    ret = (handle -> submit_op)(handle, &build_expert_mapping_op, stream_id);
+    if (ret){
+        fprintf(stderr, "Error: failed to submit build expert mapping op...\n");
+        return -1;
+    }
+
+    return 0;
+
+}

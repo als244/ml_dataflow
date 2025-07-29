@@ -111,9 +111,9 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 
 	char * suffix = "kernel";
 
-	int num_misc_funcs = 1;
-	char * misc_func_names[] = {"default_set_average_loss"};
-	char * misc_func_init_symbols[] = {NULL};
+	int num_misc_funcs = 2;
+	char * misc_func_names[] = {"default_build_expert_mapping", "default_set_average_loss"};
+	char * misc_func_init_symbols[] = {NULL, NULL};
 
 
 	int num_opt_base_funcs = 1;

@@ -57,13 +57,16 @@ int default_select_experts_set_launch_config(Cuda_Launch_Config * cuda_launch_co
 
 	int sm_count = device_info -> sm_count;
 
-	// NOTE: NEEDS TO BE LESS THAN OR EQUAL TO SM_COUNT
-	// BECAUSE BLOCK IDX 0 IS BLOCKING UNTIL ALL OTHER BLOCKS FINISH!
-	// thus all blocks need an sm to run on otherwise block 0 is waiting...
+
+	int total_tokens = *((int *) op -> op_args[0]);
+
+	//cuda_launch_config -> gridDimX = MY_MIN(sm_count, total_tokens);
 	cuda_launch_config -> gridDimX = sm_count;
 
 	int num_experts = *((int *) op -> op_args[1]);
 	int top_k_experts = *((int *) op -> op_args[2]);
+
+		
 
 	// need to determine the number of warps per block!
 
@@ -103,4 +106,27 @@ int default_select_experts_set_launch_config(Cuda_Launch_Config * cuda_launch_co
 
 	cuda_launch_config -> blockDimX = select_experts_chosen_warps * WARP_SIZE;
 	return 0;
+}
+
+int default_build_expert_mapping_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Dataflow_Handle * dataflow_handle, Cuda_Function * cuda_function, Op * op) {
+
+	int thread_per_block = 256;
+
+	int total_tokens = *((int *) op -> op_args[0]);
+
+	int num_blocks = MY_CEIL(total_tokens, thread_per_block);
+
+	cuda_launch_config -> gridDimY = 1;
+	cuda_launch_config -> gridDimZ = 1;
+	cuda_launch_config -> blockDimY = 1;
+	cuda_launch_config -> blockDimZ = 1;
+
+	cuda_launch_config -> gridDimX = num_blocks;
+	cuda_launch_config -> blockDimX = thread_per_block;
+
+	cuda_launch_config -> sharedMemBytes = 0;
+
+	return 0;
+
+
 }

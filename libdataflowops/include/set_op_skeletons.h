@@ -55,5 +55,7 @@ void dataflow_set_default_adamw_step_skeleton(Op_Skeleton * skeleton, DataflowDa
 
 // moE kernels underway...
 void dataflow_set_default_select_experts_skeleton(Op_Skeleton * skeleton, DataflowDatatype fwd_datatype);
+void dataflow_set_default_build_expert_mapping_skeleton(Op_Skeleton * skeleton);
+
 
 #endif
