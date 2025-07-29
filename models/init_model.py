@@ -86,8 +86,8 @@ def main(config_path, model_dir_path):
     qk_norm_type = config['qk_norm_type'].lower()
     qk_norm_weight_type = config['qk_norm_weight_type'].lower()
 
-    if model_dim % 256 != 0:
-        raise ValueError(f"model_dim must be divisible by 256")
+    if model_dim % 128 != 0:
+        raise ValueError(f"model_dim must be divisible by 128")
     
     if head_dim % 32 != 0:
         raise ValueError(f"head_dim must be divisible by 32")
