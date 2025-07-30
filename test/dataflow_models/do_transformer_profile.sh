@@ -1,1 +1,1 @@
-nsys profile -t cuda,nvtx,cublas,osrt --capture-range cudaProfilerApi --capture-range-end stop --cuda-event-trace=false --gpu-metrics-devices=all --force-overwrite true -o profiling/$1_$2_$3_$4 ./transformer $1 $2 $3 $4
+nsys profile -t cuda,nvtx,cublas,osrt --capture-range cudaProfilerApi --capture-range-end stop --cuda-event-trace=false --gpu-metrics-devices=all --force-overwrite true -o profiling/$5 ./transformer $1 $2 $3 $4
