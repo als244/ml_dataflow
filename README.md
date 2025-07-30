@@ -44,86 +44,6 @@ You can learn more about the project's background/details [here](docs/background
 
 <img src="bench/reproduce_results/figures/memory_throughput_heatmaps/H100/H100-32B-65536-report.png" alt="Sample Heatmaps, H100, 32B, Seqlen 64k">
 
-
------
-
-## Training Performance Demo
-
-You can demo training performance of canonical causal transformer (i.e. Transformer++) under different memory environments, sequence lengths, or model sizes. The demo program expects users to specify:
-- Host Memory Capacity
-- Device Memory Capacity
-- Sequence Length
-- Model
-
-
-#### Installation & Usage
-
-##### System Requirements (for now)
-- OS: 
-    - Linux
-- Compiler:
-    - gcc13+
-- Backends:
-    - Nvidia GPUs
-        - sm80+ (Ampere/Ada, Hopper, Blackwell)
-
-1. *Download this repo*: 
-
-```shell
-git clone git@github.com:als244/ml_dataflow.git
-```
-
-2. *Build from source*:
-
-```shell
-make -j <NUM_PROCS>
-```
-
-The project is built from < 10k lines of C, a few logically unique memory-bound GPU kernels, and wrappers over [Flash Attention](https://github.com/Dao-AILab/flash-attention) and vendor BLAS libraries (performance critical computation kernels). The only dependencies are the backend userspace driver, backend BLAS lib, & OpenSSL (typically pre-installed). For Nvidia backend it assumes that headers and libs are in standard location `/usr/local/cuda`. 
-
-###### Note that building the flash2 and flash3 wrapper libraries may take some time (a few hours)...using more processors will help. 
-
-3. *Initialize Model*:
-
-```shell
-cd models
-python init_model.py <model config> <output model path>
-```
-
-Where `model config` can be selected from one of the default ones (e.g. `python init_model.py 8b_config.json my_8B_model`), or you can create your own following the same structure. (The QK Norm and MoE features are not implemented yet, however).
-
-The 1b and 8b models are the same dimensions as llama3, the 32b model is the same as qwen.
-
-4. *Test out training*:
-
-```shell
-cd ../bench
-./transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen> <model path>
-```
-
-For example:
-
-`./transformerDemo 80 20 4096 ../models/my_8B_model` will train the 8B model architecture (full bf16, causal attention, next token prediction, AdamW). The sequence length is set to 4096 tokens. The memory capacities are set to enforce <= 80 GiB of host memory and <= 20 GiB of device memory (where XXX GiB is defined as XXX * 2^30 bytes).
-
-**Training Overview & Terminology**:
-
-The training is set up so that there are multiple *rounds* of forward+bwd before an optimizer step (i.e. gradient accumulation). The demo trains for 10 steps. The number of rounds per-step is set to be the minimum (lowest global batch size) that ensures the step overhead will be below a target overhead of 2%. Within a round, there are *ordered chunks*. A minimum chunk size is set to ensure high arithmetic intensity. Each chunk is either packed with multiple sequences (if they are short) or a temporally-contiguous portion of a longer sequence. The number of chunks within a round is determined such that for a given layer, the total bytes of activations saved from the foward pass is approximately the total bytes of the layer weights (or in the case of long-context is the total number of chunks a single sequence requires). Every chunk is proccesed for a layer, before the first chunk starts upon the next layer. During backwards pass, the chunks are processed in reverse order.
-
-The input data is the first 65536 tokens of Harry Potter. Choosing a seqlen less/equal to this will just take the first seqlen tokens and repeat this sequence as the entire training set (all rounds are the same data / gradient accumulation steps in this case are pointless, but this is for performance demonstration). If you select a sequence length longer than the original 64k sequence, then the original sequence will wrap around and repeat until your set seqlen is reached, then this is also repeated every round.
-
-4b. *Profile the training*
-
-```shell
-./do_transformer_profile.sh <host_mem_gb> <dev_mem_gb> <seqlen> <model path>
-```
-
-This will create a `.nsys-rep` file within `bench/profiling` that be can loaded into the Nvidia Sight Systems GUI. There are NVTX ranges that should have intuitive meanings when inspecting the report (see training terminology above). On the left side of the timeline click "CUDA HW" followed by the stream labeled "Compute". From here you can expand the NVTX to see all of the computations. There is a slight overhead when profiling, somewhere around 0.25% to 1% for this workload.
-
-Profiling overviews: 
-- Low I/O Pressure (fast compute, but max device mem + attention-heavy => easier to get high MFU): [H100, 8B, 64k](docs/sample_profiling_trace_64k.md)
-- High I/O Pressure (fast compute + low mem + attention-light => precise overlap necessary): [H100, 8B, 8k](docs/sample_profiling_trace_8k.md)
-
-
 -----
 
 ## Benchmarked Results
@@ -147,23 +67,6 @@ python bench/reproduce_results/sweep_training_environments.py <experiment config
 Click on a GPU type to expand the table of performance reports for different model sizes and sequence lengths. Each cell contains links to reports for Tokens per second (**Tok/s**), Model TFLOPs per second (**Model TFLOPS/sec**), Model FLOPs Utilization (**MFU**), and Hardware FLOPs Utilization (**HFU**). Metric definitions are below. 
 
 The reports display a heatmap reporting the metric under different host and device memory capacities. 
-
----
-
-##### Machine Specs
-
-Tested across 4 different machines:
-
-| GPU Model | Marketed Peak BF16 Compute | PCIe Unidirectional BW | Server Type | Host Memory BW | Host Memory Capacity |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| H100 SXM5 | 989 TFLOPS/s | 64 GB/s | Intel Sapphire Rapids (Xeon Platinum 8468) | 307.2 GB/s<sup>*</sup> | 512<sup>**</sup> GB |
-| A100 80GB | 312.5 TFLOPS/s | 32 GB/s | Intel Ice Lake (Xeon Gold 6432) | 187.6 GB/s<sup>*</sup> | 512<sup>**</sup> GB |
-| RTX 5090 | 209.5 TFLOPS/s | 64 GB/s | Gaming PC (Intel z790, i9 13000KF) | 83.2 GB/s | 192 GB |
-| RTX 3090 | 71 TFLOPS/s | 32 GB/s | Gaming PC (AMD x570, Ryzen 5950x) | 51.2 GB/s | 128 GB |
-
-*The H100 and A100 are each on 2-socket NUMA systems with 8 memory controllers per socket and with speeds of 4800 MT/s and 2933 MT/s respectively. Host memory BW refers to local numa node.
-
-**Host memory capacity refers to local NUMA capacity (which on these systems is typically shared among 4 GPUs for H100 machines and 2 for A100s).
 
 -----
 
@@ -257,6 +160,88 @@ Tested across 4 different machines:
 
 </details>
 
+
+-----
+
+## Training Performance Demo
+
+You can demo training performance of canonical causal transformer (i.e. Transformer++) under different memory environments, sequence lengths, or model sizes. The demo program expects users to specify:
+- Host Memory Capacity
+- Device Memory Capacity
+- Sequence Length
+- Model
+
+
+#### Installation & Usage
+
+##### System Requirements (for now)
+- OS: 
+    - Linux
+- Compiler:
+    - gcc13+
+- Backends:
+    - Nvidia GPUs
+        - sm80+ (Ampere/Ada, Hopper, Blackwell)
+
+1. *Download this repo*: 
+
+```shell
+git clone git@github.com:als244/ml_dataflow.git
+```
+
+2. *Build from source*:
+
+```shell
+make -j <NUM_PROCS>
+```
+
+The project is built from < 10k lines of C, a few logically unique memory-bound GPU kernels, and wrappers over [Flash Attention](https://github.com/Dao-AILab/flash-attention) and vendor BLAS libraries (performance critical computation kernels). The only dependencies are the backend userspace driver, backend BLAS lib, & OpenSSL (typically pre-installed). For Nvidia backend it assumes that headers and libs are in standard location `/usr/local/cuda`. 
+
+###### Note that building the flash2 and flash3 wrapper libraries may take some time (a few hours)...using more processors will help. 
+
+3. *Initialize Model*:
+
+```shell
+cd models
+python init_model.py <model config> <output model path>
+```
+
+Where `model config` can be selected from one of the default ones (e.g. `python init_model.py 8b_config.json my_8B_model`), or you can create your own following the same structure. (The QK Norm and MoE features are not implemented yet, however).
+
+The 1b and 8b models are the same dimensions as llama3, the 32b model is the same as qwen.
+
+4. *Test out training*:
+
+```shell
+cd ../bench
+./transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen> <model path>
+```
+
+For example:
+
+`./transformerDemo 80 20 4096 ../models/my_8B_model` will train the 8B model architecture (full bf16, causal attention, next token prediction, AdamW). The sequence length is set to 4096 tokens. The memory capacities are set to enforce <= 80 GiB of host memory and <= 20 GiB of device memory (where XXX GiB is defined as XXX * 2^30 bytes).
+
+**Training Overview & Terminology**:
+
+The training is set up so that there are multiple *rounds* of forward+bwd before an optimizer step (i.e. gradient accumulation). The demo trains for 10 steps. The number of rounds per-step is set to be the minimum (lowest global batch size) that ensures the step overhead will be below a target overhead of 2%. Within a round, there are *ordered chunks*. A minimum chunk size is set to ensure high arithmetic intensity. Each chunk is either packed with multiple sequences (if they are short) or a temporally-contiguous portion of a longer sequence. The number of chunks within a round is determined such that for a given layer, the total bytes of activations saved from the foward pass is approximately the total bytes of the layer weights (or in the case of long-context is the total number of chunks a single sequence requires). Every chunk is proccesed for a layer, before the first chunk starts upon the next layer. During backwards pass, the chunks are processed in reverse order.
+
+The input data is the first 65536 tokens of Harry Potter. Choosing a seqlen less/equal to this will just take the first seqlen tokens and repeat this sequence as the entire training set (all rounds are the same data / gradient accumulation steps in this case are pointless, but this is for performance demonstration). If you select a sequence length longer than the original 64k sequence, then the original sequence will wrap around and repeat until your set seqlen is reached, then this is also repeated every round.
+
+4b. *Profile the training*
+
+```shell
+./do_transformer_profile.sh <host_mem_gb> <dev_mem_gb> <seqlen> <model path>
+```
+
+This will create a `.nsys-rep` file within `bench/profiling` that be can loaded into the Nvidia Sight Systems GUI. There are NVTX ranges that should have intuitive meanings when inspecting the report (see training terminology above). On the left side of the timeline click "CUDA HW" followed by the stream labeled "Compute". From here you can expand the NVTX to see all of the computations. There is a slight overhead when profiling, somewhere around 0.25% to 1% for this workload.
+
+Profiling overviews: 
+- Low I/O Pressure (fast compute, but max device mem + attention-heavy => easier to get high MFU): [H100, 8B, 64k](docs/sample_profiling_trace_64k.md)
+- High I/O Pressure (fast compute + low mem + attention-light => precise overlap necessary): [H100, 8B, 8k](docs/sample_profiling_trace_8k.md)
+
+
+
+
 ---
 
 ### Throughput Metrics
@@ -303,6 +288,23 @@ Comparing MFU between different hardware architectures typically does not make s
 - HFU (Hardware Flops Utilization): A measure of processing throughput (including recomputations in numerator) relative to hardware capabilities. This system currently has 2 levels of recomputation that occur depending on memory capacities -- the system automatically configures this and calculates the accurate metric. See the `throughput.c` file for more details. Flash Attention is employed which recomputes the attention score matrix (implicity) during the backwards pass, so by default at least $N * L * (.5 * 2 * (S * S * D))$ FLOPs are recomputed per step. Here we see that $\text{HFU}$ is strictly greater than $\text{MFU}$.
 
 -----
+
+##### Machine Specs
+
+Tested across 4 different machines:
+
+| GPU Model | Marketed Peak BF16 Compute | PCIe Unidirectional BW | Server Type | Host Memory BW | Host Memory Capacity |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| H100 SXM5 | 989 TFLOPS/s | 64 GB/s | Intel Sapphire Rapids (Xeon Platinum 8468) | 307.2 GB/s<sup>*</sup> | 512<sup>**</sup> GB |
+| A100 80GB | 312.5 TFLOPS/s | 32 GB/s | Intel Ice Lake (Xeon Gold 6432) | 187.6 GB/s<sup>*</sup> | 512<sup>**</sup> GB |
+| RTX 5090 | 209.5 TFLOPS/s | 64 GB/s | Gaming PC (Intel z790, i9 13000KF) | 83.2 GB/s | 192 GB |
+| RTX 3090 | 71 TFLOPS/s | 32 GB/s | Gaming PC (AMD x570, Ryzen 5950x) | 51.2 GB/s | 128 GB |
+
+*The H100 and A100 are each on 2-socket NUMA systems with 8 memory controllers per socket and with speeds of 4800 MT/s and 2933 MT/s respectively. Host memory BW refers to local numa node.
+
+**Host memory capacity refers to local NUMA capacity (which on these systems is typically shared among 4 GPUs for H100 machines and 2 for A100s).
+
+---
 
 **Practical note**: The training demo source code is quite messy! This is not the intended usage, there are some missing pieces... Critical upstream functionality (*data ingestion*, *model/loss/optimizer customization*, *model saving/loading*, *multi-worker training*, & *a wider set of common kernels such as attention variants, other normalizations, optimizers, convolutions, and MoE selecting/routing/combining*) is underway.
 
