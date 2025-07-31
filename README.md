@@ -230,7 +230,7 @@ The input data is the first 65536 tokens of Harry Potter. Choosing a seqlen less
 4b. *Profile the training*
 
 ```shell
-./do_transformer_profile.sh <host_mem_gb> <dev_mem_gb> <seqlen> <model path>
+./do_transformer_profile.sh <host_mem_gb> <dev_mem_gb> <seqlen> <model path> <output report name>
 ```
 
 This will create a `.nsys-rep` file within `bench/profiling` that be can loaded into the Nvidia Sight Systems GUI. There are NVTX ranges that should have intuitive meanings when inspecting the report (see training terminology above). On the left side of the timeline click "CUDA HW" followed by the stream labeled "Compute". From here you can expand the NVTX to see all of the computations. There is a slight overhead when profiling, somewhere around 0.25% to 1% for this workload.
