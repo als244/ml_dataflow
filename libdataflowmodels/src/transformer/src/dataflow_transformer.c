@@ -696,7 +696,17 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 	int total_tokens = head_activations -> num_tokens;
 
 	DataflowDatatype fwd_dt = transformer_head -> fwd_dt;
+
+	uint64_t fwd_dt_size = dataflow_sizeof_element(fwd_dt);
+
 	DataflowDatatype bwd_dt = transformer_head -> bwd_dt;
+
+	uint64_t bwd_dt_size = dataflow_sizeof_element(bwd_dt);
+
+	int prev_processed_tokens = model_output -> batch_prev_processed_tokens;
+
+	void * head_inp_X = block_input -> X + ((uint64_t) prev_processed_tokens * (uint64_t) embedding_size * (uint64_t) fwd_dt_size);
+	void * head_out_X = grad_stream -> X + ((uint64_t) prev_processed_tokens * (uint64_t) embedding_size * (uint64_t) bwd_dt_size);
 
 
 	if (TO_SAVE_DATA && TO_SAVE_HEAD){
@@ -717,7 +727,7 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
                          head_activations -> num_tokens,
                          embedding_size, transformer_head -> eps,
                          transformer_head -> w_head_norm,
-                         block_input -> X,
+                         head_inp_X,
                          head_activations -> head_norm_out,
                          head_activations -> head_norm_rms_vals);
     if (ret) {
@@ -822,6 +832,14 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
 		printf("Submitting Head Cross Entropy Loss...\n");
 	}
 
+	float * base_loss_vec = (seq_batch -> loss_config).loss_vec;
+	uint32_t * base_labels = (seq_batch -> loss_config).labels;
+
+	
+
+	uint32_t * labels = base_labels + prev_processed_tokens;
+	float * loss_vec = base_loss_vec + prev_processed_tokens;
+
 	// STARTING BACKPROP HERE!
 
 	// compute cross entropy loss
@@ -834,8 +852,8 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
                                   head_activations -> num_tokens,  // Number of rows (tokens)
                                   vocab_size,                      // Number of columns (vocab size)
                                   model_output -> logits,         // Predicted logits
-                                  (seq_batch -> loss_config).labels,  // Ground truth labels
-								  (seq_batch -> loss_config).loss_vec);       // per token loss + avg loss as last el
+                                  labels,  // Ground truth labels
+								  loss_vec);       // per token loss + avg loss as last el
        
 	if (ret){
 	    fprintf(stderr, "Error: Failed to submit cross entropy loss in transformer head backward...\n");
@@ -957,9 +975,9 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
                                transformer_head -> eps,
                                head_activations -> head_norm_rms_vals,
                                transformer_head -> w_head_norm,
-                               block_input -> X,         // Original input
+                               head_inp_X,         // Original input
                                head_activations -> head_norm_out,      // Upstream gradient
-                               grad_stream -> X, 
+                               head_out_X, 
 							   NULL);
 	if (ret) {
         fprintf(stderr, "Error: Failed to submit bwd x rms norm in transformer head...\n");
@@ -985,7 +1003,7 @@ int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int comp
                                embedding_size,
                                grad_transformer_head -> eps,
                                head_activations -> head_norm_rms_vals,  // RMS values from forward pass
-                               block_input -> X,           				// Original input
+                               head_inp_X,           				// Original input
                                head_activations -> head_norm_out,         // Upstream gradient
                                grad_transformer_head -> w_head_norm,
 							   head_activations -> kernelWorkspaceBytes, head_activations -> kernelWorkspace);   // Output gradient

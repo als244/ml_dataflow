@@ -148,6 +148,7 @@ typedef struct transformer_model_input {
 
 typedef struct transformer_model_output {
 	Seq_Batch * seq_batch;
+	int batch_prev_processed_tokens;
 	void * logits;
 } Transformer_Model_Output;
 

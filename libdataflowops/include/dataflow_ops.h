@@ -265,6 +265,7 @@ int dataflow_submit_default_cross_entropy_loss(Dataflow_Handle * handle, int str
 								int n_rows, int n_cols,
 								void * pred_logits, uint32_t * labels, float * loss_vec);
 
+int dataflow_submit_default_set_average_loss(Dataflow_Handle * handle, int stream_id, int n_tokens, float * loss_vec);
 
 int dataflow_submit_default_adamw_step(Dataflow_Handle * handle, int stream_id,
 						DataflowDatatype param_dt, DataflowDatatype grad_dt, 

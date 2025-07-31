@@ -19,7 +19,9 @@
 	#define TOKEN_IDS_PATH "../data/65536_token_ids_uint32.dat"
 	#define TOKEN_LABELS_PATH "../data/65536_labels_uint32.dat"
 
-	#define DEFAULT_MIN_CHUNK_SIZE 16384
+	#define DEFAULT_MIN_CHUNK_SIZE 32768
+
+	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 2048
 
 	// this (along with num seqs per round) modulates how frequently we will step 
 	// the optimizer...
@@ -293,7 +295,7 @@
 		// this is just for testing,.. in 
 		// reality determined dynamically...
 		int MIN_CHUNK_SIZE = DEFAULT_MIN_CHUNK_SIZE;
-
+		int MIN_HEAD_CHUNK_SIZE = DEFAULT_MIN_HEAD_CHUNK_SIZE;
 		switch (hardware_arch_type){
 			case BACKEND_ARCH_A100:
 				PEAK_BF16_FLOPS = A100_PEAK_BF16_FLOPS;
@@ -866,7 +868,7 @@
 		int seq_len = DEMO_SEQ_LEN;
 		int max_seqlen = seq_len;
 		uint64_t min_chunk_size = MIN_CHUNK_SIZE;
-
+		uint64_t min_head_chunk_size = MIN_HEAD_CHUNK_SIZE;
 		uint64_t chunk_size;
 
 		// If seq_len is greater than min_chunk_size, find the smallest
@@ -893,6 +895,21 @@
 			}
 		}
 
+		int head_chunk_size = min_head_chunk_size;
+
+		for (int i = min_head_chunk_size; i <= chunk_size; i++) {
+        	// Check if i is a factor of chunk_size.
+        	if (chunk_size % i == 0) {
+            	// Since we are iterating from low to high, the first factor
+            	// we find will be the smallest one in the desired range.
+            	head_chunk_size = i;
+            	break;
+        	}
+    	}
+		
+		
+		
+		
 		int max_tokens_per_chunk = chunk_size;
 
 		int num_chunks_per_seq;
@@ -996,10 +1013,15 @@
 		uint64_t total_base_dev_mem = kernelWorkspaceBytes + total_sticky_context_size + total_sticky_embedding_size + total_sticky_head_size;
 
 		uint64_t sticky_transitions_size = 2 * (uint64_t) num_chunks * chunk_size * (uint64_t) model_dim * block_dt_size;
-		uint64_t sticky_dev_logits_size = chunk_size * (uint64_t) vocab_size * block_bwd_dt_size;
+		
+		// head processing
+		uint64_t sticky_dev_logits_size = head_chunk_size * (uint64_t) vocab_size * block_bwd_dt_size;
+		uint64_t sticky_dev_head_act_size = head_chunk_size * (((uint64_t) model_dim + (uint64_t) vocab_size) * block_dt_size + sizeof(float)); 
+		
+		
 		uint64_t sticky_dev_recomputed_buffer_size = 2 * chunk_size * (uint64_t) model_dim * block_dt_size;
 		uint64_t sticky_dev_working_grad_act_size = get_chunk_activations_size(chunk_size, model_dim, kv_dim, num_total_active_experts, expert_dim, block_bwd_dt);
-		uint64_t sticky_dev_head_act_size = chunk_size * (((uint64_t) model_dim + (uint64_t) vocab_size) * block_dt_size + sizeof(float)); 
+		
 		uint64_t sticky_act_workspace_size = chunk_size * ((uint64_t) model_dim + (uint64_t) expert_dim) * block_dt_size;
 		// now also incoporate the other sicy buffers...
 		total_base_dev_mem += sticky_transitions_size + sticky_dev_logits_size + sticky_dev_recomputed_buffer_size + sticky_dev_working_grad_act_size + sticky_dev_head_act_size + sticky_act_workspace_size;
@@ -2798,21 +2820,21 @@
 		
 		head_activations -> buffer = cur_dev_mem;
 		head_activations -> head_norm_out = head_activations -> buffer;
-		uint64_t head_norm_out_size = (uint64_t) max_tokens_per_chunk * (uint64_t) model_dim * (uint64_t) block_dt_size;
+		uint64_t head_norm_out_size = (uint64_t) head_chunk_size * (uint64_t) model_dim * (uint64_t) block_dt_size;
 		cur_dev_mem += head_norm_out_size;
 		used_dev_mem += head_norm_out_size;
 		// ensure alignment for matmuls..
 		used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 		head_activations -> head_norm_rms_vals = cur_dev_mem;
-		uint64_t head_norm_rms_vals_size = (uint64_t) max_tokens_per_chunk * (uint64_t) sizeof(float);
+		uint64_t head_norm_rms_vals_size = (uint64_t) head_chunk_size * (uint64_t) sizeof(float);
 		cur_dev_mem += head_norm_rms_vals_size;
 		used_dev_mem += head_norm_rms_vals_size;
 		// ensure alignment for matmuls..
 		used_dev_mem += 256 - ((uint64_t) cur_dev_mem % 256);
 		cur_dev_mem = (void *) ((uint64_t)(cur_dev_mem + 255) & ~255UL);
 		head_activations -> head_out = cur_dev_mem;
-		uint64_t head_out_size = (uint64_t) max_tokens_per_chunk * (uint64_t) vocab_size * (uint64_t) block_dt_size;
+		uint64_t head_out_size = (uint64_t) head_chunk_size * (uint64_t) vocab_size * (uint64_t) block_dt_size;
 		cur_dev_mem += head_out_size;
 		used_dev_mem += head_out_size;
 		// ensure alignment for matmuls..
@@ -2831,7 +2853,7 @@
 
 
 		// in case we want to save the logits...
-		uint64_t logits_size = (uint64_t) max_tokens_per_chunk * (uint64_t) vocab_size * block_bwd_dt_size;
+		uint64_t logits_size = (uint64_t) head_chunk_size * (uint64_t) vocab_size * block_bwd_dt_size;
 
 		/*
 		void * sys_logits = cur_host_mem;
@@ -3078,6 +3100,7 @@
 			printf("SETUP CONFIG OVERVIEW:\n");
 			printf("\tKernel Workspace Bytes: %lu\n", kernelWorkspaceBytes);
 			printf("\tChunk size: %lu\n", chunk_size);
+			printf("\t\tHead Chunk Size: %d\n", head_chunk_size);
 			printf("\tChunks per round: %d\n", num_chunks);
 			printf("\tRound tokens: %d\n\n", round_tokens);
 
@@ -3584,6 +3607,7 @@
 					next_grad_block_id = n_layers - 1 - num_dev_grad_blocks;
 				}
 
+
 				sprintf(profile_msg, "Head");
 				dataflow_handle.profiler.range_push(profile_msg);
 
@@ -3623,20 +3647,37 @@
 							return -1;
 						}
 
-						model_output -> seq_batch = seq_batches[chunk_id];
-						head_activations -> num_tokens = seq_batches[chunk_id] -> total_tokens;
-						head_activations -> total_pred_tokens_in_step = total_pred_tokens_in_step;
+						// SPLIT CHUNK INTO HEAD CHUNKS...
 
+						model_output -> seq_batch = seq_batches[chunk_id];
+						model_output -> batch_prev_processed_tokens = 0;
 						dev_loss_vec = (model_output -> seq_batch -> loss_config).loss_vec;
+						int this_chunk_num_tokens = seq_batches[chunk_id] -> total_tokens;
+						
 
 						// ensure prior loss is zeroed out...
-						ret = dataflow_handle.set_mem(&dataflow_handle, compute_stream_id, dev_loss_vec, 0, (head_activations -> num_tokens + 1) * sizeof(float));
+						ret = dataflow_handle.set_mem(&dataflow_handle, compute_stream_id, dev_loss_vec, 0, (this_chunk_num_tokens + 1) * sizeof(float));
 						if (ret){
 							fprintf(stderr, "Error: failed to zero out loss vec for seq group #%d, chunk #%d before head...\n", seq_group, chunk_id);
 							return -1;
 						}
 
-						ret = dataflow_submit_transformer_head(&dataflow_handle, compute_stream_id,
+						
+						int remain_tokens_for_head = this_chunk_num_tokens;
+
+						int head_round = 0;
+
+						while (remain_tokens_for_head > 0){
+
+							sprintf(profile_msg, "Head Sub-Chunk: %d", head_round);
+							dataflow_handle.profiler.range_push(profile_msg);
+
+							int cur_head_chunk_size = MY_MIN(head_chunk_size, remain_tokens_for_head);
+
+							head_activations -> num_tokens = cur_head_chunk_size;
+							head_activations -> total_pred_tokens_in_step = total_pred_tokens_in_step;
+
+							ret = dataflow_submit_transformer_head(&dataflow_handle, compute_stream_id,
 																final_block_output_transition, head,
 																head_activations, 
 																model_output,
@@ -3644,12 +3685,26 @@
 																grad_head,
 																grad_stream_from_head);
 
+							if (ret){
+								fprintf(stderr, "Error: failed to submit transformer head...\n");
+								return -1;
+							}
 
-						if (ret){
-							fprintf(stderr, "Error: failed to submit transformer head...\n");
-							return -1;
+							dataflow_handle.profiler.range_pop();
+
+							model_output -> batch_prev_processed_tokens += cur_head_chunk_size;
+							remain_tokens_for_head -= cur_head_chunk_size;
+							head_round++;
 						}
 
+						
+
+						ret = dataflow_submit_default_set_average_loss(&dataflow_handle, compute_stream_id, 
+																		this_chunk_num_tokens, dev_loss_vec);
+						if (ret){
+							fprintf(stderr, "Error: failed to submit set average loss...\n");
+							return -1;
+						}
 
 						// save the loss tracker...
 						
@@ -3668,7 +3723,7 @@
 
 							
 
-							ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, loss_stream_id, &(sys_loss_tracker[(t - 1) * num_rounds_per_step * num_chunks + r * num_chunks + chunk_id]), &(dev_loss_vec[head_activations -> num_tokens]), sizeof(float));
+							ret = dataflow_handle.submit_outbound_transfer(&dataflow_handle, loss_stream_id, &(sys_loss_tracker[(t - 1) * num_rounds_per_step * num_chunks + r * num_chunks + chunk_id]), &(dev_loss_vec[this_chunk_num_tokens]), sizeof(float));
 
 							if (ret){
 								fprintf(stderr, "Error: failed to submit outbound transfer for loss tracker...\n");
@@ -3692,7 +3747,7 @@
 
 							ret = dataflow_submit_print_chunk_loss_host(&dataflow_handle, loss_stream_id,
 													&print_chunk_loss_host, &(print_chunk_loss_op_buffer[(t - 1) * num_rounds_per_step * num_chunks + r * num_chunks + chunk_id]),
-													t, r, seq_group, chunk_id, head_activations -> num_tokens, &(sys_loss_tracker[(t - 1) * num_rounds_per_step * num_chunks + r * num_chunks + chunk_id]));
+													t, r, seq_group, chunk_id, this_chunk_num_tokens, &(sys_loss_tracker[(t - 1) * num_rounds_per_step * num_chunks + r * num_chunks + chunk_id]));
 
 							if (ret){
 								fprintf(stderr, "Error: failed to submit print loss host...\n");
