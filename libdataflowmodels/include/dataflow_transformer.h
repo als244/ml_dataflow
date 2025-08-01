@@ -52,13 +52,6 @@ int dataflow_submit_transformer_block(Dataflow_Handle * dataflow_handle, int com
 								Transformer_Block_Activations * activations, 
 								Transformer_Block_Transition * block_output);
 
-// Just keeping this a seperate function for now while we are testing...
-int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int compute_stream_id, 
-								Transformer_Block_Transition * block_input, 
-								Transformer_Block * transformer_block, 
-								Transformer_Block_Activations * activations, 
-								Transformer_Block_Transition * block_output);
-
 int dataflow_submit_transformer_head(Dataflow_Handle * dataflow_handle, int compute_stream_id,
                         Transformer_Block_Transition * block_input, Transformer_Head * transformer_head,
                         Transformer_Head_Activations * head_activations, 
@@ -86,7 +79,8 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 								Seq_Batch_Saved_Activations * fwd_activations, Seq_Batch_Context * fwd_context,
 								Transformer_Block_Activations * grad_activations,
 								Transformer_Block * grad_weights,
-								Transformer_Block_Transition * next_grad_stream);
+								Transformer_Block_Transition * next_grad_stream);;
+
 
 int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, int compute_stream_id,
                                 Transformer_Block_Transition * grad_stream,
@@ -95,9 +89,42 @@ int dataflow_submit_transformer_block_bwd_w(Dataflow_Handle * dataflow_handle, i
                                 Transformer_Block * grad_weights);
 
 
+
 int dataflow_submit_transformer_embedding_bwd_w(Dataflow_Handle * dataflow_handle, int compute_stream_id,
 											Transformer_Block_Transition * grad_stream,
 											Transformer_Embedding_Table * grad_embedding_table);
+
+
+// Just keeping these as seperate functions for now while we are testing...
+int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int compute_stream_id, 
+		Transformer_Block_Transition * block_input, 
+		Transformer_Block * transformer_block, 
+		Transformer_Block_Activations * activations, 
+		Transformer_Block_Transition * block_output);
+
+
+int dataflow_submit_transformer_moe_block_recompute(Dataflow_Handle * dataflow_handle, int compute_stream_id, 
+			Transformer_Block * transformer_block,
+			Seq_Batch * seq_batch,
+			SavedActivationLevel saved_activation_level,
+			Seq_Batch_Saved_Activations * working_activations, Seq_Batch_Context * fwd_context,
+			Seq_Batch_Activation_Workspace * activation_workspace);
+
+
+int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handle, int compute_stream_id,
+		Transformer_Block * transformer_block, 
+		Transformer_Block_Transition * inp_grad_stream, 
+		Seq_Batch_Saved_Activations * fwd_activations, Seq_Batch_Context * fwd_context,
+		Transformer_Block_Activations * grad_activations,
+		Transformer_Block * grad_weights,
+		Transformer_Block_Transition * next_grad_stream);
+
+
+int dataflow_submit_transformer_moe_block_bwd_w(Dataflow_Handle * dataflow_handle, int compute_stream_id,
+		Transformer_Block_Transition * grad_stream,
+		Seq_Batch_Saved_Activations * fwd_activations, 
+		Transformer_Block_Activations * grad_activations, 
+		Transformer_Block * grad_weights);
 
 
 #endif

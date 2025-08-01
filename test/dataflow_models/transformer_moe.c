@@ -3784,7 +3784,8 @@
 
 
 
-
+				/* TESTING FOR REAL NOW...!
+				
 				ret = dataflow_handle.sync_handle(&dataflow_handle);
 				if (ret){
 					fprintf(stderr, "Error: failed to sync handle after head...\n");
@@ -3800,6 +3801,7 @@
 				}
 
 				exit(0);
+				*/
 
 
 
@@ -3959,7 +3961,7 @@
 								}
 								
 								dataflow_handle.profiler.range_push(profile_msg);
-								ret = dataflow_submit_transformer_block_recompute(&dataflow_handle, compute_stream_id, 
+								ret = dataflow_submit_transformer_moe_block_recompute(&dataflow_handle, compute_stream_id, 
 												working_block,
 												seq_batches[chunk_id],
 												cur_saved_activation_level,
@@ -3980,7 +3982,7 @@
 							sprintf(profile_msg, "Bwd X");
 							dataflow_handle.profiler.range_push(profile_msg);
 
-							ret = dataflow_submit_transformer_block_bwd_x(&dataflow_handle, compute_stream_id,
+							ret = dataflow_submit_transformer_moe_block_bwd_x(&dataflow_handle, compute_stream_id,
 												working_block, 
 												&(block_transitions[2 * chunk_id + (k % 2)]), 
 												cur_fwd_activations, fwd_context,
@@ -4120,7 +4122,7 @@
 							dataflow_handle.profiler.range_push(profile_msg);
 
 							// uses the same input transition as bwd_x...
-							ret = dataflow_submit_transformer_block_bwd_w(&dataflow_handle, compute_stream_id,
+							ret = dataflow_submit_transformer_moe_block_bwd_w(&dataflow_handle, compute_stream_id,
 												&(block_transitions[2 * chunk_id + (k % 2)]),
 												cur_fwd_activations, 
 												grad_activations, 

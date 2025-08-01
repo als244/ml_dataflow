@@ -2190,6 +2190,20 @@ int dataflow_submit_transformer_embedding_bwd_w(Dataflow_Handle * dataflow_handl
 }
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int compute_stream_id, 
 								Transformer_Block_Transition * block_input, 
 								Transformer_Block * transformer_block, 
@@ -2970,6 +2984,287 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 }
 
 
+int dataflow_submit_transformer_moe_block_recompute(Dataflow_Handle * dataflow_handle, int compute_stream_id, 
+	Transformer_Block * transformer_block,
+	Seq_Batch * seq_batch,
+	SavedActivationLevel saved_activation_level,
+	Seq_Batch_Saved_Activations * working_activations, Seq_Batch_Context * fwd_context,
+	Seq_Batch_Activation_Workspace * activation_workspace) {
+
+	int ret;
+
+	if (saved_activation_level == SAVED_ACTIVATION_LEVEL_FULL){
+		return 0;
+	}
+
+	if (saved_activation_level == SAVED_ACTIVATION_LEVEL_NONE){
+		fprintf(stderr, "Error: cannot recompute with no block input...\n");
+		return -1;
+	}
+
+	Transformer_Block_Config * fwd_block_config = &(transformer_block -> config);
+	DataflowDatatype fwd_dt = fwd_block_config -> block_dt;
+	DataflowDatatype compute_dt = fwd_block_config -> compute_dt;
+
+	int model_dim = fwd_block_config -> model_dim;
+	int ffn_dim = fwd_block_config -> ffn_dim;
+	int theta = fwd_block_config -> theta;
+
+
+	uint64_t kernelWorkspaceBytes = activation_workspace -> kernelWorkspaceBytes;
+	void * kernelWorkspace = activation_workspace -> kernelWorkspace;
+
+	int num_q_heads = (transformer_block -> config).num_q_heads;
+	int num_kv_heads = (transformer_block -> config).num_kv_heads;
+	int head_dim = (transformer_block -> config).head_dim;
+
+	Seq_Batch_Attention_Config * batch_attention_config = &(seq_batch -> attention_config);
+	int num_seqs = batch_attention_config -> num_seqs;
+	int total_q = batch_attention_config -> total_q;
+	int total_k = batch_attention_config -> total_k;
+
+	int is_causal = 1;
+
+	void * q_seq_offsets = batch_attention_config -> q_seq_offsets;
+	void * q_seq_lens = batch_attention_config -> q_seq_lens;
+	int max_seqlen_q = batch_attention_config -> max_seqlen_q;
+
+	void * k_seq_offsets = batch_attention_config -> k_seq_offsets;
+	void * k_seq_lens = batch_attention_config -> k_seq_lens;
+	int max_seqlen_k = batch_attention_config -> max_seqlen_k;
+
+	int total_tokens = total_q;
+
+	// In forward pass mode!
+	int to_transa = 1;
+	int to_transb = 0;
+
+	// recompute the queries regardless
+	if ((saved_activation_level == SAVED_ACTIVATION_LEVEL_INP_ONLY) || (saved_activation_level == SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY)){
+		// need to recompute queries
+
+		ret = dataflow_submit_default_rms_norm_recompute(dataflow_handle, compute_stream_id, 
+														fwd_dt, 
+														total_q, model_dim,
+														transformer_block -> w_attn_norm, 
+														working_activations -> attn_norm_rms_vals,
+														working_activations -> x_inp,
+														activation_workspace -> x_temp);
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit rms norm recompute for input of attention norm...\n");
+			return ret;
+		}
+
+		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+								fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
+								compute_dt,
+								to_transa, to_transb,
+								model_dim, model_dim, total_q, 
+								1.0, 0.0,
+								transformer_block -> w_q, activation_workspace -> x_temp, NULL, working_activations -> x_q,
+								kernelWorkspaceBytes, kernelWorkspace);
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit matmul for q proj during recompute...\n");
+			return ret;
+		}
+
+		// now do rope, (only for x_q)
+		ret = dataflow_submit_default_rope(dataflow_handle, compute_stream_id, 
+											fwd_dt, 
+											total_q, model_dim, head_dim, num_kv_heads, theta,
+											batch_attention_config -> seq_positions, working_activations -> x_q, NULL);
+		if (ret){
+			fprintf(stderr, "Error: failed to submit rope for q during recompute...\n");
+			return ret;
+		}
+	}
+
+	// recompoute attention if needed
+	if (saved_activation_level == SAVED_ACTIVATION_LEVEL_INP_ONLY){
+		// need to recompute attention
+
+		// forward context already has the correct x_k_rope and x_v for this chunk already populated...
+		ret = dataflow_submit_attention(dataflow_handle, compute_stream_id,
+										fwd_dt, 
+										num_seqs, total_q, total_k,
+										q_seq_offsets, q_seq_lens, max_seqlen_q,
+										k_seq_offsets, k_seq_lens, max_seqlen_k,
+										num_q_heads, num_kv_heads, head_dim,
+										working_activations -> x_q, fwd_context -> x_k, fwd_context -> x_v,
+										working_activations -> x_attn_out, working_activations -> softmax_lse, 
+										is_causal,
+										kernelWorkspaceBytes, kernelWorkspace);
+		if (ret){
+			fprintf(stderr, "Error: failed to submit attention during recompute...\n");
+			return -1;
+		}
+	}
+
+	// now do the output projection and ffn no matter what...
+
+	MoE_Config * model_moe_config = &((transformer_block -> config).moe_config);
+	int num_shared_experts = model_moe_config -> num_shared_experts;
+	int num_routed_experts = model_moe_config -> num_global_routed_experts;
+	int top_k_active = model_moe_config -> top_k_experts;
+
+	int * host_expert_counts = batch_moe_config -> host_expert_counts + layer_id * num_routed_experts;
+
+	int total_routed_tokens = set_moe_working_activations_offsets(working_activations, total_q, model_dim, ffn_dim, 
+											num_shared_experts, num_routed_experts, host_expert_counts, x_el_size);
+	
+	if (total_routed_tokens != total_q * top_k_active){
+			fprintf(stderr, "Error: total routed tokens does not match expected number of tokens. Chunk size: %d, top_k_active: %d => expected %d, got %d\n", total_q, top_k_active, total_q * top_k_active, total_routed_tokens);
+			return -1;
+	}
+
+	if ((saved_activation_level == SAVED_ACTIVATION_LEVEL_INP_ONLY) || (saved_activation_level == SAVED_ACTIVATION_LEVEL_INP_ATTN_ONLY)){
+
+		// add result to the block input..
+		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+									fwd_dt, fwd_dt, fwd_dt, fwd_dt,
+									compute_dt,
+									to_transa, to_transb,
+									model_dim, model_dim, total_q, 
+									1.0, 1.0,
+									transformer_block -> w_o, working_activations -> x_attn_out, working_activations -> x_inp, working_activations -> x_o,
+									kernelWorkspaceBytes, kernelWorkspace);
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit o matmul proj during recompute...\n");
+			return -1;
+		}
+
+		ret = dataflow_submit_default_rms_norm_recompute(dataflow_handle, compute_stream_id, 
+														fwd_dt, 
+														total_q, model_dim,
+														transformer_block -> w_ffn_norm, 
+														working_activations -> ffn_norm_rms_vals,
+														working_activations -> x_o,
+														activation_workspace -> x_temp);
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit rms norm recompute for input of ffn norm...\n");
+			return ret;
+		}
+
+
+		// redo all the experts...
+
+		// Shared experts...
+		for (int i = 0; i < num_shared_experts; i++){
+			
+			ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+										fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
+										compute_dt,
+										to_transa, to_transb,
+										ffn_dim, model_dim, total_q, 
+										1.0, 0.0,
+										(transformer_block -> w_1)[i], activation_workspace -> x_temp, NULL, (working_activations -> x_1)[i],
+										kernelWorkspaceBytes, kernelWorkspace);
+
+			if (ret){
+				fprintf(stderr, "Error: failed to submit w1 matmul proj during recompute...\n");
+				return -1;
+			}
+
+			ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+										fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
+										compute_dt,
+										to_transa, to_transb,
+										ffn_dim, model_dim, total_q, 
+										1.0, 0.0,
+										(transformer_block -> w_3)[i], activation_workspace -> x_temp, NULL, (working_activations -> x_3)[i],
+										kernelWorkspaceBytes, kernelWorkspace);
+			if (ret){
+				fprintf(stderr, "Error: failed to submit w3 matmul proj during recompute...\n");
+				return -1;
+			}
+
+			// only fill up to x_1 and x_3, don't need to recompute swiglu or 2nd matmul...
+		}
+
+		// Routed experts...
+		for (int i = 0; i < num_routed_experts; i++){
+
+			// 1.) retrieve expert zone
+			int cur_expert_num_tokens = host_expert_counts[i];
+			//printf("[Expert %d] Number of tokens: %d\n", i, cur_expert_num_tokens);
+			total_tokens += cur_expert_num_tokens;
+
+			expert_zone_size = (uint64_t) cur_expert_num_tokens * (uint64_t) model_dim * (uint64_t) x_el_size;
+
+			if (expert_zone_size > kernelWorkspaceBytes){
+				fprintf(stderr, "Error: expert zone size is greater than kernel workspace size for expert #%d with %d tokens...\n", i, cur_expert_num_tokens);
+				return -1;
+			}
+
+			new_kernelWorkspace = expert_zone + expert_zone_size;
+
+			new_kernelWorkspace = (void *) (((uint64_t) new_kernelWorkspace + 255) & ~255UL);
+
+			new_kernelWorkspaceBytes = kernelWorkspaceBytes - ((uint64_t) new_kernelWorkspace - (uint64_t) kernelWorkspace);
+
+			// 	a.) Prepare Expert Zone
+		
+			ret = dataflow_submit_default_prepare_expert_zone(dataflow_handle, compute_stream_id, 
+									fwd_dt, fwd_dt,
+									model_dim, activation_workspace -> x_temp, 
+									i, working_activations -> expert_counts,
+									working_activations -> expert_counts_cumsum, 
+									working_activations -> expert_mapping, 
+									expert_zone);
+			if (ret){
+				fprintf(stderr, "Error: failed to submit prepare expert zone...\n");
+				return -1;
+			}
+
+			// 	b.) Submit Matmuls, Activation, Matmul
+
+			if (TO_PRINT){
+				printf("[Expert %d] Submitting FFN w1 and w3 matmuls...!\n", i);
+			}
+
+			ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+							fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
+							compute_dt,
+							to_transa, to_transb,
+							ffn_dim, model_dim, cur_expert_num_tokens, 
+							1.0, 0.0,
+							(transformer_block -> w_1)[num_shared_experts + i], expert_zone, NULL, (working_activations -> x_1)[num_shared_experts + i],
+							new_kernelWorkspaceBytes, new_kernelWorkspace);
+
+			if (ret){
+				fprintf(stderr, "Error: failed to submit w1 matmul proj for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
+				return -1;
+			}
+
+			ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+							fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
+							compute_dt,
+							to_transa, to_transb,
+							ffn_dim, model_dim, cur_expert_num_tokens, 
+							1.0, 0.0,
+							(transformer_block -> w_3)[num_shared_experts + i], activation_workspace -> x_temp, NULL, (working_activations -> x_3)[num_shared_experts + i],
+							new_kernelWorkspaceBytes, new_kernelWorkspace);
+
+			if (ret){
+				fprintf(stderr, "Error: failed to submit w3 matmul proj for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
+				return -1;
+			}
+
+			// only fill up to x_1 and x_3, don't need to recompute swiglu or 2nd matmul...
+		}
+		
+	}
+
+	return 0;
+
+
+}
+
+
 int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handle, int compute_stream_id,
 	Transformer_Block * transformer_block, 
 	Transformer_Block_Transition * inp_grad_stream, 
@@ -3046,6 +3341,23 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		fprintf(stderr, "Error: failed to set router derivs to 0...\n");
 		return -1;
 	}
+
+	int seen_tokens = set_moe_working_activations_offsets(working_activations, total_q, model_dim, ffn_dim, 
+		num_shared_experts, num_routed_experts, host_expert_counts, x_el_bwd_size);
+
+	if (seen_tokens != total_q * top_k_active){
+		fprintf(stderr, "Error: seen tokens (%d) != total q (%d) * top k (%d) in bwd_w...\n", seen_tokens, total_q, top_k_active);
+		return -1;
+	}
+
+	seen_tokens = set_moe_working_activations_offsets(fwd_activations, total_q, model_dim, ffn_dim, 
+		num_shared_experts, num_routed_experts, host_expert_counts, x_el_bwd_size);
+
+	if (seen_tokens != total_q * top_k_active){
+		fprintf(stderr, "Error: seen tokens (%d) != total q (%d) * top k (%d) in bwd_w...\n", seen_tokens, total_q, top_k_active);
+		return -1;
+	}
+
 
 	// 1. Backprop through each expert
 
@@ -3519,5 +3831,173 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 	}
 
 	// now all gradients should be computed and saved within grad_activations -> working_activations...!!!
+	return 0;
+}
+
+
+int dataflow_submit_transformer_moe_block_bwd_w(Dataflow_Handle * dataflow_handle, int compute_stream_id,
+	Transformer_Block_Transition * grad_stream,
+	Seq_Batch_Saved_Activations * fwd_activations, 
+	Transformer_Block_Activations * grad_activations, 
+	Transformer_Block * grad_weights) {
+
+	int ret;
+
+	int layer_id = grad_weights -> layer_id;
+
+	DataflowDatatype bwd_dt = (grad_weights -> config).block_dt;
+	// just assume same for now...
+	DataflowDatatype fwd_dt = bwd_dt;
+
+	DataflowDatatype compute_dt = (grad_weights -> config).compute_dt;
+
+	Seq_Batch * seq_batch = grad_stream -> seq_batch;
+	int seq_id = seq_batch -> seq_id;
+	int chunk_id = seq_batch -> chunk_id;
+
+	Seq_Batch_Attention_Config * batch_attention_config = &(seq_batch -> attention_config);
+	int num_seqs = seq_batch -> attention_config.num_seqs;
+	int total_q = seq_batch -> attention_config.total_q;
+	int total_k = seq_batch -> attention_config.total_k;
+
+	int model_dim = (grad_weights -> config).model_dim;
+	int kv_dim = (grad_weights -> config).kv_dim;
+	int ffn_dim = (grad_weights -> config).ffn_dim;
+
+	Seq_Batch_Saved_Activations * bwd_activations = grad_activations -> working_activations;
+	Seq_Batch_Activation_Workspace * activation_workspace = grad_activations -> activation_workspace;
+
+	uint64_t kernelWorkspaceBytes = activation_workspace -> kernelWorkspaceBytes;
+	void * kernelWorkspace = activation_workspace -> kernelWorkspace;
+
+	// Need 0,1 for transa, transb if both input matrices are row major
+	// and we want a col-major output...
+	int to_transa = 0;
+	int to_transb = 1;
+
+	MoE_Config * model_moe_config = &((transformer_block -> config).moe_config);
+
+	int num_shared_experts = model_moe_config -> num_shared_experts;
+	int num_routed_experts = model_moe_config -> num_global_routed_experts;
+	int top_k_active = model_moe_config -> top_k_experts;
+
+	Seq_Batch_MoE_Config * batch_moe_config = &(seq_batch -> moe_config);
+
+	// Returned by prepare expert zone, to know what dimensions to 
+	// launch GEMM...
+	int * host_expert_counts = batch_moe_config -> host_expert_counts + layer_id * num_routed_experts;
+
+	
+	int cur_expert_num_tokens;
+	for (int i = 0; i < num_shared_experts + num_routed_experts; i++){
+		
+		if (i < num_shared_experts){
+			cur_expert_num_tokens = total_q;
+		} else {
+			cur_expert_num_tokens = host_expert_counts[i - num_shared_experts];
+		}
+
+		// 1.) w2 gradients have been calculated in bwd_x already...
+
+		// 2.) do w1 and w3
+
+		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+								fwd_dt, bwd_dt, bwd_dt, bwd_dt,
+								compute_dt,
+								to_transa, to_transb,
+								ffn_dim, cur_expert_num_tokens, ffn_dim, 
+								1.0, 1.0,  // Accumulate gradients
+								bwd_activations -> recomputed_activations -> recomputed_ffn_norm, (bwd_activations -> x_1)[i], (grad_weights -> w_1)[i], (grad_weights -> w_1)[i],
+								kernelWorkspaceBytes, kernelWorkspace);
+		if (ret) {
+			fprintf(stderr, "Error: failed to submit w1 weight gradient computation...\n");
+			return -1;
+		}
+
+		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+			fwd_dt, bwd_dt, bwd_dt, bwd_dt,
+			compute_dt,
+			to_transa, to_transb,
+			ffn_dim, cur_expert_num_tokens, ffn_dim, 
+			1.0, 1.0,  // Accumulate gradients
+			bwd_activations -> recomputed_activations -> recomputed_ffn_norm, (bwd_activations -> x_3)[i], (grad_weights -> w_3)[i], (grad_weights -> w_3)[i],
+			kernelWorkspaceBytes, kernelWorkspace);
+		
+		if (ret) {
+			fprintf(stderr, "Error: failed to submit w1 weight gradient computation...\n");
+			return -1;
+		}
+	}
+
+
+	// Router gate bwd w 
+
+
+
+	// 3. FFN RMS Norm weight gradients -- already done in bwd_x while we hda correct streaming grad
+
+	if (TO_PRINT){
+		printf("Submitting Matmul to get dW_o..\n");
+	}
+
+
+	// 4. Attention output projection weight gradients
+	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+								fwd_dt, bwd_dt, bwd_dt, bwd_dt,
+								compute_dt,
+								to_transa, to_transb,
+								model_dim, total_q, model_dim, 
+								1.0, 1.0,  // Accumulate gradients
+								fwd_activations -> x_attn_out, bwd_activations -> x_o, grad_weights -> w_o, grad_weights -> w_o,
+								kernelWorkspaceBytes, kernelWorkspace);
+	if (ret) {
+		fprintf(stderr, "Error: failed to submit attention output weight gradient computation...\n");
+		return -1;
+	}
+
+	// 5. Q, K, V projection weight gradients
+
+	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+							fwd_dt, bwd_dt, bwd_dt, bwd_dt,
+							compute_dt,
+							to_transa, to_transb,
+							model_dim, total_q, kv_dim,
+							1.0, 1.0,  // Accumulate gradients
+							bwd_activations -> recomputed_activations -> recomputed_attn_norm, bwd_activations -> x_v_local, grad_weights -> w_v, grad_weights -> w_v,
+							kernelWorkspaceBytes, kernelWorkspace);
+	if (ret) {
+		fprintf(stderr, "Error: failed to submit V projection weight gradient computation...\n");
+		return -1;
+	}
+
+	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+								fwd_dt, bwd_dt, bwd_dt, bwd_dt,
+								compute_dt,
+								to_transa, to_transb,
+								model_dim, total_q, kv_dim,
+								1.0, 1.0,  // Accumulate gradients
+								bwd_activations -> recomputed_activations -> recomputed_attn_norm, bwd_activations -> x_k_local, grad_weights -> w_k, grad_weights -> w_k,
+								kernelWorkspaceBytes, kernelWorkspace);
+	if (ret) {
+		fprintf(stderr, "Error: failed to submit K projection weight gradient computation...\n");
+		return -1;
+	}
+
+	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+								fwd_dt, bwd_dt, bwd_dt, bwd_dt,
+								compute_dt,
+								to_transa, to_transb,
+								model_dim, total_q, model_dim,
+								1.0, 1.0,  // Accumulate gradients
+								bwd_activations -> recomputed_activations -> recomputed_attn_norm, bwd_activations -> x_q, grad_weights -> w_q, grad_weights -> w_q,
+								kernelWorkspaceBytes, kernelWorkspace);
+	if (ret) {
+		fprintf(stderr, "Error: failed to submit Q projection weight gradient computation...\n");
+		return -1;
+	}
+
+	// 6. Attention RMS Norm weight gradients
+	// -- already done in bwd_x while we had the correct streaming grad
+
 	return 0;
 }
