@@ -140,7 +140,7 @@ int default_prepare_expert_zone_set_launch_config(Cuda_Launch_Config * cuda_laun
 	cuda_launch_config -> blockDimY = 1;
 	cuda_launch_config -> blockDimZ = 1;
 
-	int sm_count = device_info -> sm_count;
+	int sm_count = device_info -> sm_count * 64;
 	int thread_per_block = 256;
 
 	cuda_launch_config -> gridDimX = sm_count;
