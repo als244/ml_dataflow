@@ -2622,7 +2622,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 						kernelWorkspaceBytes, kernelWorkspace);
 
 		if (ret){
-			fprintf(stderr, "Error: failed to submit w3 matmul proj for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
+			fprintf(stderr, "Error: failed to submit w3 matmul proj for expert #%d. (# tokens: %d)...\n", i, total_q);
 			return -1;
 		}
 
@@ -2638,7 +2638,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 							(working_activations -> x_1)[i], (working_activations -> x_3)[i], activation_workspace -> x_temp_mlp);
 
 		if (ret){
-			fprintf(stderr, "Error: failed to submit swiglu activation for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
+			fprintf(stderr, "Error: failed to submit swiglu activation for expert #%d. (# tokens: %d)...\n", i, total_q);
 			return -1;
 		}
 
