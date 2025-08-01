@@ -184,9 +184,9 @@ int default_router_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_launch_conf
 	cuda_launch_config -> blockDimY = 1;
 	cuda_launch_config -> blockDimZ = 1;
 
-	int sm_count = device_info -> sm_count;
+	int cur_expert_num_tokens = *((int *) op -> op_args[0]);
 
-	int num_blocks = sm_count * 64;
+	int num_blocks = cur_expert_num_tokens;
 	int thread_per_block = 256;
 
 	cuda_launch_config -> gridDimX = num_blocks;

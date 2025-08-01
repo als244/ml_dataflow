@@ -9,21 +9,14 @@ extern "C" __global__ void default_router_bwd_x_bf16_bf16_kernel(int num_tokens,
                                                 __nv_bfloat16 * dX_routed,
                                                 __nv_bfloat16 * dX_expert_out){
 
-    int num_tokens;
-    if (expert_id == 0){
-        num_tokens = expert_counts_cumsum[expert_id];
-    }
-    else{
-        num_tokens = expert_counts_cumsum[expert_id] - expert_counts_cumsum[expert_id - 1];
-    }
-
-    int expert_base_ind = expert_counts_cumsum[expert_id] - num_tokens;
 
     int new_row_ind = blockIdx.x;
 
     if (new_row_ind >= num_tokens){
         return;
     }
+
+    int expert_base_ind = expert_counts_cumsum[expert_id] - num_tokens;
 
     float thread_sum = 0;
     
