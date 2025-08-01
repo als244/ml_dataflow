@@ -28,7 +28,7 @@ extern "C" __global__ void default_router_bwd_x_bf16_bf16_kernel(int num_tokens,
     float thread_sum = 0;
     
     __shared__ float warp_sums[32];
-`
+
     __shared__ float smem_token_weight;
 
       // could load the upstream_dX into shared memory for efficiency as we need to copy it to dX_expert_out...
