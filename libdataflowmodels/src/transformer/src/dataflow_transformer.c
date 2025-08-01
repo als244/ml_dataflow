@@ -2608,7 +2608,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 						kernelWorkspaceBytes, kernelWorkspace);
 
 		if (ret){
-			fprintf(stderr, "Error: failed to submit w1 matmul proj for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
+			fprintf(stderr, "Error: failed to submit w1 matmul proj for expert #%d. (# tokens: %d)...\n", i, total_q);
 			return -1;
 		}
 
@@ -2976,7 +2976,7 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 	int * host_expert_counts = batch_moe_config -> host_expert_counts + layer_id * num_routed_experts;
 
 	// make sure set router derivs to 0...
-	ret = (dataflow_handle -> set_mem)(dataflow_handle, compute_stream_id, working_activations -> X_routed, 0, (uint64_t) total_q * (uint64_t) num_routed_experts * (uint64_t) x_el_bwd_size);
+	ret = (dataflow_handle -> set_mem)(dataflow_handle, compute_stream_id, working_activations -> x_routed, 0, (uint64_t) total_q * (uint64_t) num_routed_experts * (uint64_t) x_el_bwd_size);
 	if (ret){
 		fprintf(stderr, "Error: failed to set router derivs to 0...\n");
 		return -1;
@@ -3058,6 +3058,7 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		// Responsible for computeing the dot produc of each expert's output and the respective loss..
 		// additionally re-populates the expert_zone with the gradient (times router weight) instead of forward out...
 
+		/* NEED TO IMPLEMENT!!!
 		ret = dataflow_submit_router_bwd_x(dataflow_handle, compute_stream_id,
 								fwd_dt, bwd_dt, i,
 								cur_expert_num_tokens, model_dim, num_routed_experts, top_k_active,
@@ -3065,12 +3066,13 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 								fwd_activations -> expert_counts_cumsum,
 								fwd_activations -> expert_mapping,
 								fwd_activations -> chosen_experts,
-								working_activations -> X_routed, // populating column [i] of router derivs with dot product of expert output and loss gradient corresponding to tokens selected by this expert
+								working_activations -> x_routed, // populating column [i] of router derivs with dot product of expert output and loss gradient corresponding to tokens selected by this expert
 								expert_zone); // repopulating with the rows from inp_grad_stream -> X corresponding to this expert...
 		if (ret){
 			fprintf(stderr, "Error: failed to submit router backward...\n");
 			return -1;
 		}
+		*/
 
 
 
@@ -3165,7 +3167,7 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		to_transa, to_transb,
 		model_dim, num_routed_experts, total_q, 
 		1.0, 1.0,
-		(transformer_block -> w_router), (working_activations -> X_routed), (activation_workspace -> x_temp_mlp), (activation_workspace -> x_temp_mlp),
+		(transformer_block -> w_router), (working_activations -> x_routed), (activation_workspace -> x_temp_mlp), (activation_workspace -> x_temp_mlp),
 		kernelWorkspaceBytes, kernelWorkspace);
 		if (ret) {
 		fprintf(stderr, "Error: failed to submit w2 backward matmul...\n");
