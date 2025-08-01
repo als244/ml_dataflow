@@ -136,3 +136,46 @@ int dataflow_submit_default_merge_expert_result(Dataflow_Handle * handle, int st
 
     return 0;
 }
+
+int	dataflow_submit_router_bwd_x(Dataflow_Handle * handle, int stream_id,
+                            DataflowDatatype attn_datatype, DataflowDatatype expert_datatype,
+                            int num_tokens, int model_dim, int num_routed_experts, int top_k_active,
+                            int expert_id,
+                            int * expert_counts_cumsum,
+                            int * expert_mapping,
+                            uint16_t * chosen_experts,
+                            float * token_expert_weights,
+                            void * expert_out, void * upstream_dX,
+                            void * dX_routed, // populating column [i] of router derivs with dot product of expert output and loss gradient corresponding to tokens selected by this expert
+                            void * dX_expert_out) { // repopulating with the rows from inp_grad_stream -> X corresponding to this expert...
+
+    int ret;
+
+    Op router_bwd_x_op;
+
+    dataflow_set_default_router_bwd_x_skeleton(&router_bwd_x_op.op_skeleton, attn_datatype, expert_datatype);
+
+    void ** op_args = router_bwd_x_op.op_args;
+
+    op_args[0] = &num_tokens;
+    op_args[1] = &model_dim;
+    op_args[2] = &num_routed_experts;
+    op_args[3] = &top_k_active;
+    op_args[4] = &expert_id;
+    op_args[5] = &expert_counts_cumsum;
+    op_args[6] = &expert_mapping;
+    op_args[7] = &chosen_experts;
+    op_args[8] = &token_expert_weights;
+    op_args[9] = &expert_out;
+    op_args[10] = &upstream_dX;
+    op_args[11] = &dX_routed;
+    op_args[12] = &dX_expert_out;
+
+    ret = (handle -> submit_op)(handle, &router_bwd_x_op, stream_id);
+    if (ret){
+        fprintf(stderr, "Error: failed to submit router bwd x op...\n");
+        return -1;
+    }
+
+    return 0;
+}

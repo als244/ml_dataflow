@@ -271,6 +271,16 @@ extern "C" __global__ void default_prepare_expert_zone_bf16_bf16_kernel(int mode
 // After doing matmul with expert zone, merge the results
 extern "C" __global__ void default_merge_expert_result_bf16_bf16_kernel(int num_tokens, int model_dim, int top_k_experts, __nv_bfloat16 * expert_zone, int expert_id, int * expert_counts_cumsum, int * expert_mapping, float * token_expert_weights, uint16_t * chosen_experts, __nv_bfloat16 * X_combined);
 
+
+
+extern "C" __global__ void default_router_bwd_x_bf16_bf16_kernel(int num_tokens, int model_dim, int num_routed_experts, int top_k_active,
+                                                                    int expert_id, int * expert_counts_cumsum, int * expert_mapping, 
+                                                                    uint16_t * chosen_experts, float * token_expert_weights,
+                                                                    __nv_bfloat16 * expert_out, __nv_bfloat16 * upstream_dX,
+                                                                    __nv_bfloat16 * dX_routed,
+                                                                    __nv_bfloat16 * dX_expert_out); 
+
+
 // From Attention Misc:
 /*
 extern "C" __global__ void default_copy_to_seq_context_fp32_kernel(uint64_t N, int total_tokens, int kv_dim, float * keys, float * values, int * seq_positions, uint64_t * seq_context_ptrs, int * seq_context_sizes);

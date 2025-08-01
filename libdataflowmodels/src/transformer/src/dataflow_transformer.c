@@ -2965,7 +2965,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 
 	exit(0);
 	*/
-	
+
 	return 0;
 }
 
@@ -3123,21 +3123,22 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		// Responsible for computeing the dot produc of each expert's output and the respective loss..
 		// additionally re-populates the expert_zone with the gradient (times router weight) instead of forward out...
 
-		/* NEED TO IMPLEMENT!!!
+		// NEED TO IMPLEMENT!!!
 		ret = dataflow_submit_router_bwd_x(dataflow_handle, compute_stream_id,
-								fwd_dt, bwd_dt, i,
+								fwd_dt, bwd_dt,
 								cur_expert_num_tokens, model_dim, num_routed_experts, top_k_active,
-								expert_zone, inp_grad_stream -> X,
+								i,
 								fwd_activations -> expert_counts_cumsum,
 								fwd_activations -> expert_mapping,
 								fwd_activations -> chosen_experts,
+								fwd_activations -> token_expert_weights,
+								expert_zone, inp_grad_stream -> X,
 								working_activations -> x_routed, // populating column [i] of router derivs with dot product of expert output and loss gradient corresponding to tokens selected by this expert
 								expert_zone); // repopulating with the rows from inp_grad_stream -> X corresponding to this expert...
 		if (ret){
 			fprintf(stderr, "Error: failed to submit router backward...\n");
 			return -1;
 		}
-		*/
 
 		// Doing BWD W of w2 matmul through HERE because alreay have two matrices that are needed
 		// (input to expert's w2 (swiglu output in [activation_workspace -> x_temp_mlp] and
@@ -3222,7 +3223,7 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		// Merge result into the upstream gradient (activation_workspace -> x_temp)
 
 		ret = dataflow_submit_default_merge_expert_result(dataflow_handle, compute_stream_id, 
-			fwd_dt, fwd_dt,
+			bwd_dt, bwd_dt,
 			cur_expert_num_tokens, model_dim, top_k_active, 
 			expert_zone, i, 
 			fwd_activations -> expert_counts_cumsum, 
@@ -3238,6 +3239,10 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 	}
 
 	// Also merge all the shared experts into the upstream gradient...
+
+	for (int i = 0; i < num_shared_experts; i++){
+		// TODO: Implement...
+	}
 	
 
 
@@ -3249,7 +3254,7 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		to_transa, to_transb,
 		model_dim, num_routed_experts, total_q, 
 		1.0, 1.0,
-		(transformer_block -> w_router), (working_activations -> x_routed), (activation_workspace -> x_temp_mlp), (activation_workspace -> x_temp_mlp),
+		(transformer_block -> w_router), (working_activations -> x_routed), (activation_workspace -> x_temp), (activation_workspace -> x_temp),
 		kernelWorkspaceBytes, kernelWorkspace);
 		if (ret) {
 		fprintf(stderr, "Error: failed to submit w2 backward matmul...\n");

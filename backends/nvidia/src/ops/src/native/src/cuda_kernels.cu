@@ -22,7 +22,7 @@
 #include "moe/build_expert_mapping.cu"
 #include "moe/prepare_expert_zone.cu"
 #include "moe/merge_expert_result.cu"
-
+#include "moe/router_bwd_x.cu"
 
 #include "activations/swiglu.cu"
 #include "activations/swiglu_bwd_x.cu"

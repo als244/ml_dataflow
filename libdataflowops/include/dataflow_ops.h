@@ -237,6 +237,19 @@ int dataflow_submit_default_merge_expert_result(Dataflow_Handle * handle, int st
 								uint16_t * chosen_experts,
 								void * X_combined);
 
+
+int	dataflow_submit_router_bwd_x(Dataflow_Handle * handle, int stream_id,
+								DataflowDatatype attn_datatype, DataflowDatatype expert_datatype,
+								int num_tokens, int model_dim, int num_routed_experts, int top_k_active,
+								int expert_id,
+								int * expert_counts_cumsum,
+								int * expert_mapping,
+								uint16_t * chosen_experts,
+								float * token_expert_weights,
+								void * expert_out, void * upstream_dX,
+								void * dX_routed, // populating column [expert_id] of router derivs with dot product of expert output and loss gradient corresponding to tokens selected by this expert
+								void * dX_expert_out); // repopulating with the rows from inp_grad_stream -> X * weight assoicated with this expert (for each token)...
+
 						
 
 // From mlp_misc_ops.c

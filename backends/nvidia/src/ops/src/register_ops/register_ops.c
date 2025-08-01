@@ -117,19 +117,19 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 	char * misc_func_names[] = {"default_build_expert_mapping", "default_set_average_loss"};
 	char * misc_func_init_symbols[] = {NULL, NULL};
 
-	int num_moe_base_funcs = 2;
-	char * moe_base_names[] = {"default_prepare_expert_zone", "default_merge_expert_result"};
+	int num_moe_base_funcs = 3;
+	char * moe_base_names[] = {"default_prepare_expert_zone", "default_merge_expert_result", "default_router_bwd_x"};
 
-	int num_moe_funcs_per_base[] = {1, 1};
+	int num_moe_funcs_per_base[] = {1, 1, 1};
 
-	moe_base_register_skeleton_func moe_base_register_skeleton_funcs[] = {dataflow_set_default_prepare_expert_zone_skeleton, dataflow_set_default_merge_expert_result_skeleton};
-	char * moe_init_symbols[] = {NULL, NULL};
+	moe_base_register_skeleton_func moe_base_register_skeleton_funcs[] = {dataflow_set_default_prepare_expert_zone_skeleton, dataflow_set_default_merge_expert_result_skeleton, dataflow_set_default_router_bwd_x_skeleton};
+	char * moe_init_symbols[] = {NULL, NULL, NULL};
 
 	// [base_funcs][moe_funcs_per_base[i]][2]
-	DataflowDatatype moe_dt_combos[2][1][2] = {{{DATAFLOW_BF16, DATAFLOW_BF16}}, {{DATAFLOW_BF16, DATAFLOW_BF16}}};
+	DataflowDatatype moe_dt_combos[3][1][2] = {{{DATAFLOW_BF16, DATAFLOW_BF16}}, {{DATAFLOW_BF16, DATAFLOW_BF16}}, {{DATAFLOW_BF16, DATAFLOW_BF16}}};
 
 	// [base_funcs][moe_funcs_per_base[i]]
-	char * moe_dt_str_combos[2][1] = {{"bf16_bf16"}, {"bf16_bf16"}};
+	char * moe_dt_str_combos[3][1] = {{"bf16_bf16"}, {"bf16_bf16"}, {"bf16_bf16"}};
 
 	char * moe_suffix = "kernel";
 

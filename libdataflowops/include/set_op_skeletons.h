@@ -60,4 +60,6 @@ void dataflow_set_default_build_expert_mapping_skeleton(Op_Skeleton * skeleton);
 void dataflow_set_default_prepare_expert_zone_skeleton(Op_Skeleton * skeleton, DataflowDatatype attn_datatype, DataflowDatatype expert_datatype);
 void dataflow_set_default_merge_expert_result_skeleton(Op_Skeleton * skeleton, DataflowDatatype attn_datatype, DataflowDatatype expert_datatype);
 
+void dataflow_set_default_router_bwd_x_skeleton(Op_Skeleton * skeleton, DataflowDatatype attn_datatype, DataflowDatatype expert_datatype);
+
 #endif
