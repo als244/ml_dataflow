@@ -2756,7 +2756,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		return -1;
 	}
 
-	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_expert_weights", working_activations -> token_expert_weights, total_q, num_routed_experts, DATAFLOW_FP32);
+	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_expert_weights", working_activations -> token_expert_weights, total_q, top_k_active, DATAFLOW_FP32);
 	if (ret){
 		fprintf(stderr, "Error: failed to save x_expert_weights file...\n");
 		return -1;
