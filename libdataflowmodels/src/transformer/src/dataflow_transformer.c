@@ -2691,6 +2691,12 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		}
 	}
 
+	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_ffn_norm_out", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
+	if (ret){
+		fprintf(stderr, "Error: failed to save x_ffn_norm_out file...\n");
+		return -1;
+	}
+
 	// 1. Router 
 
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
@@ -2703,6 +2709,12 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 					kernelWorkspaceBytes, kernelWorkspace);
 	if (ret){
 		fprintf(stderr, "Error: failed to submit router matmul proj...\n");
+		return -1;
+	}
+
+	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_router_out", working_activations -> x_routed, total_q, num_routed_experts, fwd_dt);
+	if (ret){
+		fprintf(stderr, "Error: failed to save x_router_out file...\n");
 		return -1;
 	}
 	
@@ -2738,6 +2750,30 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		return -1;
 	}
 
+	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_chosen_experts", working_activations -> chosen_experts, total_q, top_k_active, DATAFLOW_UINT16);
+	if (ret){
+		fprintf(stderr, "Error: failed to save x_chosen_experts file...\n");
+		return -1;
+	}
+
+	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_expert_weights", working_activations -> token_expert_weights, total_q, num_routed_experts, DATAFLOW_FP32);
+	if (ret){
+		fprintf(stderr, "Error: failed to save x_expert_weights file...\n");
+		return -1;
+	}
+
+	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_expert_counts", working_activations -> expert_counts, num_routed_experts, 1, DATAFLOW_INT);
+	if (ret){
+		fprintf(stderr, "Error: failed to save x_expert_counts file...\n");
+		return -1;
+	}
+
+	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_expert_counts_cumsum", working_activations -> expert_counts_cumsum, num_routed_experts, 1, DATAFLOW_INT);
+	if (ret){
+		fprintf(stderr, "Error: failed to save x_expert_counts_cumsum file...\n");
+		return -1;
+	}
+
 	// 3.) Build Mapping
 
 	ret = dataflow_submit_default_build_expert_mapping(dataflow_handle, compute_stream_id, 
@@ -2746,6 +2782,18 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
                                 working_activations -> expert_mapping);
 	if (ret){
 		fprintf(stderr, "Error: failed to submit build expert mapping...\n");
+		return -1;
+	}
+
+	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_expert_mapping", working_activations -> expert_mapping, total_q * top_k_active, 1, DATAFLOW_INT);
+	if (ret){
+		fprintf(stderr, "Error: failed to save x_expert_mapping file...\n");
+		return -1;
+	}
+
+	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_orig_block_output", block_output -> X, total_q, model_dim, fwd_dt);
+	if (ret){
+		fprintf(stderr, "Error: failed to save x_orig_block_output file...\n");
 		return -1;
 	}
 
@@ -2898,6 +2946,12 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 
 	if (total_tokens != (total_q * top_k_active)){
 		fprintf(stderr, "Error: total tokens does not match expected number of tokens. Chunk size: %d, top_k_active: %d => expected %d, got %d\n", total_q, top_k_active, total_q * top_k_active, total_tokens);
+		return -1;
+	}
+
+	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_final_block_output", block_output -> X, total_q, model_dim, fwd_dt);
+	if (ret){
+		fprintf(stderr, "Error: failed to save x_final_block_output file...\n");
 		return -1;
 	}
 
