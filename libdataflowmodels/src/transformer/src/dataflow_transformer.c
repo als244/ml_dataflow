@@ -2691,11 +2691,13 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		}
 	}
 
+	/*
 	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_ffn_norm_out", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
 	if (ret){
 		fprintf(stderr, "Error: failed to save x_ffn_norm_out file...\n");
 		return -1;
 	}
+	*/
 
 	// 1. Router 
 
@@ -2712,11 +2714,12 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		return -1;
 	}
 
+	/*
 	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_router_out", working_activations -> x_routed, total_q, num_routed_experts, fwd_dt);
 	if (ret){
 		fprintf(stderr, "Error: failed to save x_router_out file...\n");
 		return -1;
-	}
+	*/
 	
 	
 	// 2.) Select Experts
@@ -2750,6 +2753,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		return -1;
 	}
 
+	/*
 	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_chosen_experts", working_activations -> chosen_experts, total_q, top_k_active, DATAFLOW_UINT16);
 	if (ret){
 		fprintf(stderr, "Error: failed to save x_chosen_experts file...\n");
@@ -2773,6 +2777,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		fprintf(stderr, "Error: failed to save x_expert_counts_cumsum file...\n");
 		return -1;
 	}
+	*/
 
 	// 3.) Build Mapping
 
@@ -2785,6 +2790,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		return -1;
 	}
 
+	/*
 	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_expert_mapping", working_activations -> expert_mapping, total_q * top_k_active, 1, DATAFLOW_INT);
 	if (ret){
 		fprintf(stderr, "Error: failed to save x_expert_mapping file...\n");
@@ -2796,6 +2802,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		fprintf(stderr, "Error: failed to save x_orig_block_output file...\n");
 		return -1;
 	}
+	*/
 
 	// Sync with compute stream here to know the number of tokens in each expert...
 	// Required to know in order to correctly partition memory and make GEMM calls...
@@ -2949,6 +2956,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		return -1;
 	}
 
+	/*
 	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_final_block_output", block_output -> X, total_q, model_dim, fwd_dt);
 	if (ret){
 		fprintf(stderr, "Error: failed to save x_final_block_output file...\n");
@@ -2956,7 +2964,8 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 	}
 
 	exit(0);
-
+	*/
+	
 	return 0;
 }
 
