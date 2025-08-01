@@ -3074,6 +3074,23 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		}
 		*/
 
+		// Doing BWD W of w2 matmul through HERE because alreay have two matrices that are needed
+		// (input to expert's w2 (swiglu output in [activation_workspace -> x_temp_mlp] and
+		// the upstream gradient corresponding to this expert's output [expert_zone])...
+
+		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+			fwd_dt, bwd_dt, bwd_dt, bwd_dt,
+			compute_dt,
+			0, 1, // 0, 1 for bwd W
+			ffn_dim, cur_expert_num_tokens, model_dim, 
+			1.0, 1.0,  // Accumulate gradients
+			activation_workspace -> x_temp_mlp, expert_zone, (grad_weights -> w_2)[num_shared_experts + i], (grad_weights -> w_2)[num_shared_experts + i],
+			new_kernelWorkspaceBytes, new_kernelWorkspace);
+		
+		if (ret) {
+			fprintf(stderr, "Error: failed to submit bwd W of w2 matmul within bwd x...\n");
+			return -1;
+		}
 
 
 		// c.) start backprop through expert...`
