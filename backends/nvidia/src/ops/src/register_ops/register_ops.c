@@ -122,7 +122,7 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 
 	int num_moe_funcs_per_base[] = {1, 1, 1, 1};
 
-	moe_base_register_skeleton_func moe_base_register_skeleton_funcs[] = {dataflow_set_default_prepare_expert_zone_skeleton, dataflow_set_default_merge_expert_result_skeleton, dataflow_set_default_router_bwd_x_skeleton, default_router_gate_bwd_x_set_launch_config};
+	moe_base_register_skeleton_func moe_base_register_skeleton_funcs[] = {dataflow_set_default_prepare_expert_zone_skeleton, dataflow_set_default_merge_expert_result_skeleton, dataflow_set_default_router_bwd_x_skeleton, dataflow_set_default_router_gate_bwd_x_skeleton};
 	char * moe_init_symbols[] = {NULL, NULL, NULL, NULL};
 
 	// [base_funcs][moe_funcs_per_base[i]][2]
