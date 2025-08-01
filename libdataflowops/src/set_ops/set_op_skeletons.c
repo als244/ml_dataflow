@@ -1202,3 +1202,37 @@ void dataflow_set_default_router_bwd_x_skeleton(Op_Skeleton * skeleton, Dataflow
 
 	dataflow_do_fingerprinting(skeleton_header, sizeof(Op_Skeleton_Header), (skeleton -> identifier).fingerprint);
 }
+
+
+void dataflow_set_default_router_gate_bwd_x_skeleton(Op_Skeleton * skeleton, DataflowDatatype attn_datatype, DataflowDatatype expert_datatype) {
+
+	Op_Skeleton_Header * skeleton_header = &(skeleton -> header);
+
+	char op_nickname[MAX_OP_NICKNAME_SIZE];
+
+	sprintf(op_nickname, "%s_%s_%s", "default_router_gate_bwd_x", dataflow_datatype_as_string(attn_datatype), dataflow_datatype_as_string(expert_datatype));
+
+	// MAX nicknmae size is set to 255 with 256 allocated space...
+	strncpy(skeleton_header -> op_nickname, op_nickname, MAX_OP_NICKNAME_SIZE);
+	// last character must be null no matter what, if nickname is less than null bytes were added prior
+	(skeleton_header -> op_nickname)[MAX_OP_NICKNAME_SIZE] = '\0';
+
+	int num_args = 6;
+
+	skeleton_header -> num_args = num_args;
+
+	DataflowDatatype * arg_dtypes = skeleton_header -> arg_dtypes;
+
+	arg_dtypes[0] = DATAFLOW_INT_SCALAR;
+	arg_dtypes[1] = DATAFLOW_INT_SCALAR;
+	arg_dtypes[2] = DATAFLOW_INT_SCALAR;
+	arg_dtypes[3] = DATAFLOW_UINT16;
+	arg_dtypes[4] = DATAFLOW_FP32;
+	arg_dtypes[5] = attn_datatype;
+
+	for (int i = num_args; i < MAX_OP_ARGS; i++){
+		arg_dtypes[i] = DATAFLOW_NONE;
+	}
+
+	dataflow_do_fingerprinting(skeleton_header, sizeof(Op_Skeleton_Header), (skeleton -> identifier).fingerprint);
+}

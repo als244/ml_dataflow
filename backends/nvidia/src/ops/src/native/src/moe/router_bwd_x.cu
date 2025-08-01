@@ -2,7 +2,7 @@
 
 
 // TODO: vectorize this kernel, think about if block-per row is ideal, and handle smem more efficiently...
-extern "C" __global__ void default_router_bwd_x_bf16_bf16_kernel(int num_tokens, int model_dim, int num_routed_experts, int top_k_active,
+extern "C" __global__ void default_router_bwd_x_bf16_bf16_kernel(int num_expert_tokens, int model_dim, int num_routed_experts, int top_k_active,
                                                 int expert_id, int * expert_counts_cumsum, int * expert_mapping, 
                                                 uint16_t * chosen_experts, float * token_expert_weights,
                                                 __nv_bfloat16 * expert_out, __nv_bfloat16 * upstream_dX,
@@ -12,11 +12,11 @@ extern "C" __global__ void default_router_bwd_x_bf16_bf16_kernel(int num_tokens,
 
     int new_row_ind = blockIdx.x;
 
-    if (new_row_ind >= num_tokens){
+    if (new_row_ind >= num_expert_tokens){
         return;
     }
 
-    int expert_base_ind = expert_counts_cumsum[expert_id] - num_tokens;
+    int expert_base_ind = expert_counts_cumsum[expert_id] - num_expert_tokens;
 
     float thread_sum = 0;
     
@@ -33,7 +33,7 @@ extern "C" __global__ void default_router_bwd_x_bf16_bf16_kernel(int num_tokens,
     int warp_id = threadIdx.x / 32;
     int lane_id = threadIdx.x % 32;
 
-    while (new_row_ind < num_tokens){
+    while (new_row_ind < num_expert_tokens){
 
         if (threadIdx.x < 32){
             warp_sums[threadIdx.x] = 0;

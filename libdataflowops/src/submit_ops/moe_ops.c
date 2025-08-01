@@ -179,3 +179,34 @@ int	dataflow_submit_router_bwd_x(Dataflow_Handle * handle, int stream_id,
 
     return 0;
 }
+
+int dataflow_submit_router_gate_bwd_x(Dataflow_Handle * handle, int stream_id,
+                                DataflowDatatype attn_datatype, DataflowDatatype expert_datatype,
+                                int num_tokens, int num_routed_experts, int top_k_active,
+                                uint16_t * chosen_experts,
+                                float * token_expert_weights,
+                                void * dX_routed){
+
+    int ret;
+
+    Op router_gate_bwd_x_op;
+
+    dataflow_set_default_router_gate_bwd_x_skeleton(&router_gate_bwd_x_op.op_skeleton, attn_datatype, expert_datatype);
+
+    void ** op_args = router_gate_bwd_x_op.op_args;
+
+    op_args[0] = &num_tokens;
+    op_args[1] = &num_routed_experts;
+    op_args[2] = &top_k_active;
+    op_args[3] = &chosen_experts;
+    op_args[4] = &token_expert_weights;
+    op_args[5] = &dX_routed;
+
+    ret = (handle -> submit_op)(handle, &router_gate_bwd_x_op, stream_id);
+    if (ret){
+        fprintf(stderr, "Error: failed to submit router gate bwd x op...\n");
+        return -1;
+    }
+
+    return 0;
+}

@@ -3245,6 +3245,19 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 	}
 	
 
+	// Backprop through the router gate (softmax default)
+	// Updates in place
+	ret = dataflow_submit_router_gate_bwd_x(dataflow_handle, compute_stream_id,
+											bwd_dt, bwd_dt,
+											total_q, num_routed_experts, top_k_active,
+											fwd_activations -> chosen_experts,
+											fwd_activations -> token_expert_weights,
+											working_activations -> x_routed);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit router gate backward...\n");
+		return -1;
+	}
+
 
 	// Add results of router path to the upstream gradient...
 	

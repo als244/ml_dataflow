@@ -250,7 +250,13 @@ int	dataflow_submit_router_bwd_x(Dataflow_Handle * handle, int stream_id,
 								void * dX_routed, // populating column [expert_id] of router derivs with dot product of expert output and loss gradient corresponding to tokens selected by this expert
 								void * dX_expert_out); // repopulating with the rows from inp_grad_stream -> X * weight assoicated with this expert (for each token)...
 
-						
+
+int dataflow_submit_router_gate_bwd_x(Dataflow_Handle * handle, int stream_id,
+								DataflowDatatype attn_datatype, DataflowDatatype expert_datatype,
+								int num_tokens, int num_routed_experts, int top_k_active,
+								uint16_t * chosen_experts,
+								float * token_expert_weights,
+								void * dX_routed);
 
 // From mlp_misc_ops.c
 

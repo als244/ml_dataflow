@@ -273,12 +273,18 @@ extern "C" __global__ void default_merge_expert_result_bf16_bf16_kernel(int num_
 
 
 
-extern "C" __global__ void default_router_bwd_x_bf16_bf16_kernel(int num_tokens, int model_dim, int num_routed_experts, int top_k_active,
+extern "C" __global__ void default_router_bwd_x_bf16_bf16_kernel(int num_expert_tokens, int model_dim, int num_routed_experts, int top_k_active,
                                                                     int expert_id, int * expert_counts_cumsum, int * expert_mapping, 
                                                                     uint16_t * chosen_experts, float * token_expert_weights,
                                                                     __nv_bfloat16 * expert_out, __nv_bfloat16 * upstream_dX,
                                                                     __nv_bfloat16 * dX_routed,
-                                                                    __nv_bfloat16 * dX_expert_out); 
+                                                                    __nv_bfloat16 * dX_expert_out);
+                                                                    
+
+extern "C" __global__ void default_router_gate_bwd_x_bf16_bf16_kernel(int num_tokens, int num_routed_experts, int top_k_active,
+                                                            uint16_t * chosen_experts, float * token_expert_weights,
+                                                            __nv_bfloat16 * dX_routed);
+
 
 
 // From Attention Misc:
