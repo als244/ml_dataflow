@@ -2584,22 +2584,111 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 
 	// Returned by prepare expert zone, to know what dimensions to 
 	// launch GEMM...
-	int * host_expert_counts = batch_moe_config -> host_expert_counts;
+	int * host_expert_counts = batch_moe_config -> host_expert_counts + layer_id * num_routed_experts;
 
 	// TODO: handle matmuls of shared experts here...
-	/*
+	
 	for (int i = 0; i < num_shared_experts; i++){
-		// handle matmuls of shared experts here...			
+		// handle matmuls of shared experts here...	
+	
+
+		// 	a.) Submit Matmuls, Activation, Matmul
+
+		if (TO_PRINT){
+			printf("[Expert %d] Submitting FFN w1 and w3 matmuls...!\n", i);
+		}
+
+		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+						fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
+						compute_dt,
+						to_transa, to_transb,
+						ffn_dim, model_dim, total_q, 
+						1.0, 0.0,
+						(transformer_block -> w_1)[i], activation_workspace -> x_temp, NULL, (working_activations -> x_1)[i],
+						kernelWorkspaceBytes, kernelWorkspace);
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit w1 matmul proj for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
+			return -1;
+		}
+
+		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+						fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
+						compute_dt,
+						to_transa, to_transb,
+						ffn_dim, model_dim, total_q, 
+						1.0, 0.0,
+						(transformer_block -> w_3)[i], activation_workspace -> x_temp, NULL, (working_activations -> x_3)[i],
+						kernelWorkspaceBytes, kernelWorkspace);
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit w3 matmul proj for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
+			return -1;
+		}
+
+
+		if (TO_PRINT){
+			printf("Submitting SwiGLU Activation...!\n");
+		}
+
+
+		ret = dataflow_submit_default_swiglu(dataflow_handle, compute_stream_id, 
+							fwd_dt, 
+							total_q, ffn_dim, 
+							(working_activations -> x_1)[i], (working_activations -> x_3)[i], activation_workspace -> x_temp_mlp);
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit swiglu activation for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
+			return -1;
+		}
+
+
+		if (TO_PRINT){
+			printf("Submitting FFN w2 matmul...!\n");
+		}
+
+		if (i == 0){
+			ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+							fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
+							compute_dt,
+							to_transa, to_transb,
+							model_dim, ffn_dim, total_q, 
+							1.0, 0.0,
+							(transformer_block -> w_2)[i], activation_workspace -> x_temp_mlp, working_activations -> x_o, block_output -> X,
+							kernelWorkspaceBytes, kernelWorkspace);
+
+			if (ret){
+				fprintf(stderr, "Error: failed to submit w2 matmul proj for shared expert #%d. (# tokens: %d)...\n", i, total_q);
+				return -1;
+			}
+		}
+		else{
+			ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+				fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
+				compute_dt,
+				to_transa, to_transb,
+				model_dim, ffn_dim, total_q, 
+				1.0, 0.0,
+				(transformer_block -> w_2)[i], activation_workspace -> x_temp_mlp, NULL, block_output -> X,
+				kernelWorkspaceBytes, kernelWorkspace);
+				
+			if (ret){
+				fprintf(stderr, "Error: failed to submit w2 matmul proj for shared expert #%d. (# tokens: %d)...\n", i, total_q);
+				return -1;
+			}
+		}
 	}
-	*/
 
 	// copy result of accumulatation of attn_out + shared experts into block_output -> X
 	// then each routed expert will add its corresponding weighted result...
 
-	ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, block_output -> X, working_activations -> x_o, (uint64_t) total_q * (uint64_t) model_dim * (uint64_t) x_el_size);
-	if (ret){
-		fprintf(stderr, "Error: failed to submit peer transfer to copy attn out into block output...\n");
-		return -1;
+	// if we had a shared expert then this was already added to output
+	if (num_shared_experts == 0){
+		ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, block_output -> X, working_activations -> x_o, (uint64_t) total_q * (uint64_t) model_dim * (uint64_t) x_el_size);
+		if (ret){
+			fprintf(stderr, "Error: failed to submit peer transfer to copy attn out into block output...\n");
+			return -1;
+		}
 	}
 
 	// 1. Router 
@@ -2812,5 +2901,521 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		return -1;
 	}
 
+	return 0;
+}
+
+
+int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handle, int compute_stream_id,
+	Transformer_Block * transformer_block, 
+	Transformer_Block_Transition * inp_grad_stream, 
+	Seq_Batch_Saved_Activations * fwd_activations, Seq_Batch_Context * fwd_context,
+	Transformer_Block_Activations * grad_activations,
+	Transformer_Block * grad_weights,
+	Transformer_Block_Transition * next_grad_stream) {
+
+	int ret;
+
+	int layer_id = transformer_block -> layer_id;
+
+	Transformer_Block_Config * fwd_block_config = &(transformer_block -> config);
+	DataflowDatatype fwd_dt = fwd_block_config -> block_dt;
+
+	Transformer_Block_Config * bwd_block_config = &(grad_weights -> config);
+	DataflowDatatype bwd_dt = bwd_block_config -> block_dt;
+	DataflowDatatype compute_dt = bwd_block_config -> compute_dt;
+
+	int model_dim = bwd_block_config -> model_dim;
+	int kv_dim = bwd_block_config -> kv_dim;
+	int ffn_dim = bwd_block_config -> ffn_dim;
+
+	size_t x_el_size = dataflow_sizeof_element(fwd_dt);
+	size_t x_el_bwd_size = dataflow_sizeof_element(bwd_dt);
+
+
+	Seq_Batch * seq_batch = inp_grad_stream -> seq_batch;
+	Seq_Batch_Attention_Config * batch_attention_config = &(seq_batch -> attention_config);
+	int num_seqs = batch_attention_config -> num_seqs;
+	int total_q = batch_attention_config -> total_q;
+	int total_k = batch_attention_config -> total_k;
+
+
+	Seq_Batch_Saved_Activations * working_activations = grad_activations -> working_activations;
+	Seq_Batch_Activation_Workspace * activation_workspace = grad_activations -> activation_workspace;
+
+	uint64_t kernelWorkspaceBytes = activation_workspace -> kernelWorkspaceBytes;
+	void * kernelWorkspace = activation_workspace -> kernelWorkspace;
+
+	// context gradients being accumulated
+	Seq_Batch_Context * bwd_context = seq_batch -> context;
+
+	int seq_id = seq_batch -> seq_id;
+	int chunk_id = seq_batch -> chunk_id;
+
+
+	int to_transa = 0;
+	int to_transb = 0;
+
+	// Will be modifying the input gradient stream (adding to it, but need to save it for the bwd_w pass, so make a copy and put it in the next gradient stream)
+
+	ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, next_grad_stream -> X, inp_grad_stream -> X, (uint64_t) total_q * (uint64_t) model_dim * (uint64_t) x_el_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit memcpy to update the the working gradient stream...\n");
+		return -1;
+	}
+
+	MoE_Config * model_moe_config = &((transformer_block -> config).moe_config);
+
+	int num_shared_experts = model_moe_config -> num_shared_experts;
+	int num_routed_experts = model_moe_config -> num_global_routed_experts;
+	int top_k_active = model_moe_config -> top_k_experts;
+
+	Seq_Batch_MoE_Config * batch_moe_config = &(seq_batch -> moe_config);
+
+	// Returned by prepare expert zone, to know what dimensions to 
+	// launch GEMM...
+	int * host_expert_counts = batch_moe_config -> host_expert_counts + layer_id * num_routed_experts;
+
+	// make sure set router derivs to 0...
+	ret = (dataflow_handle -> set_mem)(dataflow_handle, compute_stream_id, working_activations -> X_routed, 0, (uint64_t) total_q * (uint64_t) num_routed_experts * (uint64_t) x_el_bwd_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to set router derivs to 0...\n");
+		return -1;
+	}
+
+	// 1. Backprop through each expert
+
+	// Forward: [num_tokens, ffn_dim] @ [ffn_dim, model_dim] -> [num_tokens, model_dim]
+	// Backward: dX = dY @ W^T
+	// M = output rows of dX = ffn_dim
+	// K = output cols of dX = model_dim
+	// N = batch dim = num_tokens
+
+	void * expert_zone = kernelWorkspace;
+
+	void * new_kernelWorkspace;
+	uint64_t new_kernelWorkspaceBytes;
+	uint64_t expert_zone_size;
+
+	int total_tokens = 0;
+
+	for (int i = 0; i < num_routed_experts; i++){
+
+		// a.) prepare expert zone, now where the gradients are being populated
+		// within each zone in order to correctly backpop...
+
+		int cur_expert_num_tokens = host_expert_counts[i];
+		//printf("[Expert %d] Number of tokens: %d\n", i, cur_expert_num_tokens);
+		total_tokens += cur_expert_num_tokens;
+
+		expert_zone_size = (uint64_t) cur_expert_num_tokens * (uint64_t) model_dim * (uint64_t) x_el_size;
+
+		if (expert_zone_size > kernelWorkspaceBytes){
+			fprintf(stderr, "Error: expert zone size is greater than kernel workspace size for expert #%d with %d tokens...\n", i, cur_expert_num_tokens);
+			return -1;
+		}
+
+		new_kernelWorkspace = expert_zone + expert_zone_size;
+
+		new_kernelWorkspace = (void *) (((uint64_t) new_kernelWorkspace + 255) & ~255UL);
+
+		new_kernelWorkspaceBytes = kernelWorkspaceBytes - ((uint64_t) new_kernelWorkspace - (uint64_t) kernelWorkspace);
+	
+		// a.) compute expert output dot product with dLoss in order to correctly obtain
+		// gradients with respect to router...
+
+
+		/* START: FWD RECOMPUTE*/
+
+		// need to recompute the expert output (fwd_expert_out)...
+		ret = dataflow_submit_default_swiglu(dataflow_handle, compute_stream_id, 
+			fwd_dt, 
+			cur_expert_num_tokens, ffn_dim, 
+			(fwd_activations -> x_1)[num_shared_experts + i], (fwd_activations -> x_3)[num_shared_experts + i], activation_workspace -> x_temp_mlp);
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit swiglu activation for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
+			return -1;
+		}
+
+		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+				fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
+				compute_dt,
+				1, 0,
+				model_dim, ffn_dim, cur_expert_num_tokens, 
+				1.0, 0.0,
+				(transformer_block -> w_2)[num_shared_experts + i], activation_workspace -> x_temp_mlp, NULL, expert_zone,
+				new_kernelWorkspaceBytes, new_kernelWorkspace);
+
+		if (ret){
+			fprintf(stderr, "Error: failed to submit w2 matmul proj for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
+			return -1;
+		}
+
+		/* END: FWD RECOMPUTE*/
+
+	
+
+		// Responsible for computeing the dot produc of each expert's output and the respective loss..
+		// additionally re-populates the expert_zone with the gradient (times router weight) instead of forward out...
+
+		ret = dataflow_submit_router_bwd_x(dataflow_handle, compute_stream_id,
+								fwd_dt, bwd_dt, i,
+								cur_expert_num_tokens, model_dim, num_routed_experts, top_k_active,
+								expert_zone, inp_grad_stream -> X,
+								fwd_activations -> expert_counts_cumsum,
+								fwd_activations -> expert_mapping,
+								fwd_activations -> chosen_experts,
+								working_activations -> X_routed, // populating column [i] of router derivs with dot product of expert output and loss gradient corresponding to tokens selected by this expert
+								expert_zone); // repopulating with the rows from inp_grad_stream -> X corresponding to this expert...
+		if (ret){
+			fprintf(stderr, "Error: failed to submit router backward...\n");
+			return -1;
+		}
+
+
+
+		// c.) start backprop through expert...`
+
+		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+							fwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
+							compute_dt,
+							to_transa, to_transb,
+							ffn_dim, model_dim, cur_expert_num_tokens,
+							1.0, 0.0,
+							(transformer_block -> w_2)[num_shared_experts + i], expert_zone, NULL, (activation_workspace -> x_temp_mlp),
+							kernelWorkspaceBytes, kernelWorkspace);
+		if (ret) {
+			fprintf(stderr, "Error: failed to submit w2 backward matmul...\n");
+			return -1;
+		}
+
+		// 2. Backprop through SwiGLU
+
+		ret = dataflow_submit_default_swiglu_bwd_x(dataflow_handle, compute_stream_id,
+									fwd_dt, bwd_dt,
+									cur_expert_num_tokens, ffn_dim,
+									(fwd_activations -> x_1)[num_shared_experts + i], (fwd_activations -> x_3)[num_shared_experts + i],
+									activation_workspace -> x_temp_mlp,
+									(working_activations -> x_1)[num_shared_experts + i], (working_activations -> x_3)[num_shared_experts + i]);
+		if (ret) {
+			fprintf(stderr, "Error: failed to submit swiglu backward...\n");
+			return -1;
+		}
+
+		// 3. Backprop through w1 and w3 matmuls
+		// Forward: [num_tokens, model_dim] @ [model_dim, ffn_dim] -> [num_tokens, ffn_dim]
+		// Backward: dX = dY @ W^T
+		// M = output rows of dX = model_dim
+		// K = output cols of dX = ffn_dim
+		// N = batch dim = num_tokens
+
+		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+								fwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
+								compute_dt,
+								to_transa, to_transb,
+								model_dim, ffn_dim, cur_expert_num_tokens,  // M = model_dim, K = ffn_dim, N = num_tokens
+								1.0, 0.0,
+								(transformer_block -> w_1)[num_shared_experts + i], (working_activations -> x_1)[num_shared_experts + i], NULL, expert_zone,
+								kernelWorkspaceBytes, kernelWorkspace);
+		if (ret) {
+			fprintf(stderr, "Error: failed to submit w1 backward matmul...\n");
+			return -1;
+		}
+
+		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+								fwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
+								compute_dt,
+								to_transa, to_transb,
+								model_dim, ffn_dim, cur_expert_num_tokens,  // M = model_dim, K = ffn_dim, N = num_tokens
+								1.0, 1.0,  // Add to previous gradient
+								(transformer_block -> w_3)[num_shared_experts + i], (working_activations -> x_3)[num_shared_experts + i], expert_zone, expert_zone,
+								kernelWorkspaceBytes, kernelWorkspace);
+		if (ret) {
+			fprintf(stderr, "Error: failed to submit w3 backward matmul...\n");
+			return -1;
+		}
+
+		// Merge result into the upstream gradient (activation_workspace -> x_temp)
+
+		ret = dataflow_submit_default_merge_expert_result(dataflow_handle, compute_stream_id, 
+			fwd_dt, fwd_dt,
+			cur_expert_num_tokens, model_dim, top_k_active, 
+			expert_zone, i, 
+			fwd_activations -> expert_counts_cumsum, 
+			fwd_activations -> expert_mapping,
+			fwd_activations -> token_expert_weights,
+			fwd_activations -> chosen_experts,
+			activation_workspace -> x_temp);
+		
+		if (ret){
+			fprintf(stderr, "Error: failed to submit combine expert outputs...\n");
+			return -1;
+		}
+	}
+
+	// Also merge all the shared experts into the upstream gradient...
+	
+
+
+	// Add results of router path to the upstream gradient...
+	
+	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+		fwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
+		compute_dt,
+		to_transa, to_transb,
+		model_dim, num_routed_experts, total_q, 
+		1.0, 1.0,
+		(transformer_block -> w_router), (working_activations -> X_routed), (activation_workspace -> x_temp_mlp), (activation_workspace -> x_temp_mlp),
+		kernelWorkspaceBytes, kernelWorkspace);
+		if (ret) {
+		fprintf(stderr, "Error: failed to submit w2 backward matmul...\n");
+		return -1;
+		}
+
+	// 4. Backprop through FFN RMS Norm
+
+	// save the recomputed norm value because will need it for bwd_w pass...
+	void * ffn_norm_recomputed = working_activations -> recomputed_activations -> recomputed_ffn_norm;
+
+	ret = dataflow_submit_default_rms_norm_bwd_x(dataflow_handle, compute_stream_id,
+							bwd_dt, bwd_dt,
+							total_q, model_dim, (transformer_block -> config).eps,
+							fwd_activations -> ffn_norm_rms_vals,
+							transformer_block -> w_ffn_norm,
+							fwd_activations -> x_o,  // Input to norm
+							activation_workspace -> x_temp,  // Upstream gradient
+							next_grad_stream -> X,
+							ffn_norm_recomputed); // Saving the result into the working activations -> x_o);                    
+	if (ret) {
+		fprintf(stderr, "Error: failed to submit ffn norm backward...\n");
+		return -1;
+	}
+
+	// ensure to save ths gradient flowing out of the ffn norm (and into the attn out proj...)
+	ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, working_activations -> x_o, next_grad_stream -> X, (uint64_t) total_q * (uint64_t) model_dim * (uint64_t) x_el_bwd_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit memcpy to update the the working gradient stream...\n");
+		return -1;
+	}
+
+	// 5. Now that we have the correct upstream gradient also do bwd_w for ffn norm
+
+	ret = dataflow_submit_default_rms_norm_bwd_w(dataflow_handle, compute_stream_id,
+									bwd_dt, bwd_dt,
+									total_q, model_dim, (transformer_block -> config).eps,
+									fwd_activations -> ffn_norm_rms_vals,
+									fwd_activations -> x_o,
+									activation_workspace -> x_temp,
+									grad_weights -> w_ffn_norm,
+									kernelWorkspaceBytes, kernelWorkspace);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit ffn norm weight gradient computation during bwd_x...\n");
+		return -1;
+	}
+
+	// 6. Backprop through attention output projection
+	// Forward: [num_tokens, model_dim] @ [model_dim, model_dim] -> [num_tokens, model_dim]
+	// Backward: dX = dY @ W^T
+	// M = output rows of dX = model_dim
+	// K = output cols of dX = model_dim
+	// N = batch dim = num_tokens
+
+	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+						bwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
+						compute_dt,
+						to_transa, to_transb,
+						model_dim, model_dim, total_q,  // M = model_dim, K = model_dim, N = num_tokens
+						1.0, 0.0,
+						transformer_block -> w_o, working_activations -> x_o, NULL, activation_workspace -> x_temp,
+						kernelWorkspaceBytes, kernelWorkspace);
+	if (ret) {
+		fprintf(stderr, "Error: failed to submit attention output backward matmul...\n");
+		return -1;
+	}
+
+
+	int is_causal = 1;
+	// 7. Backprop through attention
+	ret = dataflow_submit_attention_bwd(dataflow_handle, compute_stream_id,
+							bwd_dt,
+							num_seqs, total_q, total_k,
+							batch_attention_config -> q_seq_offsets,
+							batch_attention_config -> q_seq_lens,
+							batch_attention_config -> max_seqlen_q,
+							batch_attention_config -> k_seq_offsets,
+							batch_attention_config -> k_seq_lens,
+							batch_attention_config -> max_seqlen_k,
+							(transformer_block -> config).num_q_heads,
+							(transformer_block -> config).num_kv_heads,
+							(transformer_block -> config).head_dim,
+							fwd_activations -> x_q,       // Q input
+							fwd_context -> x_k,  // K input (full context input keys)
+							fwd_context -> x_v,  // V input (full context input values)
+							fwd_activations -> x_attn_out,     // Attention output
+							fwd_activations -> softmax_lse,// Softmax scaling factors
+							activation_workspace -> x_temp,// Upstream gradient
+							working_activations -> x_q,   // dQ output
+							bwd_context -> x_k,  // dK output (full context key grads)
+							bwd_context -> x_v, // dV output (full context grads)
+							is_causal,
+							kernelWorkspaceBytes, kernelWorkspace);
+	if (ret) {
+		fprintf(stderr, "Error: failed to submit attention backward...\n");
+		return -1;
+	}
+
+
+
+	// Now need to copy the correct parts of bwd_context -> x_k and bwd_context -> x_v to the correct locations in working_activations -> x_k_local and working_activations -> x_v_local!...
+
+	uint64_t start_local_token_ind = (bwd_context -> total_context_tokens - bwd_context -> cur_tokens_populated) - total_q;
+	void * x_k_global_src = bwd_context -> x_k + ((uint64_t) start_local_token_ind * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
+	void * x_v_global_src = bwd_context -> x_v + ((uint64_t) start_local_token_ind * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
+
+	// need to copy gradients from global ctx into local...
+
+	ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, working_activations -> x_k_local, x_k_global_src, (uint64_t) total_q * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit peer transfer for x_k_global...\n");
+		return -1;
+	}
+
+	ret = (dataflow_handle -> submit_peer_transfer)(dataflow_handle, compute_stream_id, working_activations -> x_v_local, x_v_global_src, (uint64_t) total_q * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit peer transfer for x_v_global...\n");
+		return -1;
+	}
+
+	// ensure that we zero out the graidnet context before the next layer...
+	ret = (dataflow_handle -> set_mem)(dataflow_handle, compute_stream_id, x_k_global_src, 0, (uint64_t) total_q * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to zero out k grad context for layer #%d...\n", layer_id);
+		return -1;
+	}
+
+	ret = (dataflow_handle -> set_mem)(dataflow_handle, compute_stream_id, x_v_global_src, 0, (uint64_t) total_q * (uint64_t) kv_dim * (uint64_t) x_el_bwd_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to zero out v grad context for layer #%d...\n", layer_id);
+		return -1;
+	}
+
+	// Update the cur_tokens_populated...
+	bwd_context -> cur_tokens_populated += total_q;
+
+	if (bwd_context -> cur_tokens_populated == bwd_context -> total_context_tokens){
+		bwd_context -> cur_tokens_populated = 0;
+	}
+
+
+
+	// Now workng_activations -> x_k_locat should be pointer within bwd_context -> x_k
+	// with the correct accumulated gradients...
+
+	// 8. Backprop through RoPE
+
+	ret = dataflow_submit_default_rope_bwd_x(dataflow_handle, compute_stream_id,
+								bwd_dt,
+								total_q,
+								model_dim,
+								(transformer_block -> config).head_dim,
+								(transformer_block -> config).num_kv_heads,
+								(transformer_block -> config).theta,
+								batch_attention_config -> seq_positions,
+								working_activations -> x_q,
+								working_activations -> x_k_local);
+	if (ret) {
+		fprintf(stderr, "Error: failed to submit rope backward...\n");
+		return -1;
+	}
+
+	// 9. Backprop through Q, K, V projections
+	// Q Forward: [num_tokens, model_dim] @ [model_dim, model_dim] -> [num_tokens, model_dim]
+	// Backward: dX = dY @ W^T
+	// For Q:
+	// M = output rows of dX = model_dim
+	// K = output cols of dX = model_dim
+	// N = batch dim = num_tokens
+	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+							bwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
+							compute_dt,
+							to_transa, to_transb,
+							model_dim, model_dim, total_q,  // M = model_dim, K = model_dim, N = num_tokens
+							1.0, 0.0,
+							transformer_block -> w_q, working_activations -> x_q, NULL, activation_workspace -> x_temp,
+							kernelWorkspaceBytes, kernelWorkspace);
+	if (ret) {
+		fprintf(stderr, "Error: failed to submit Q projection backward matmul...\n");
+		return -1;
+	}
+
+	// For K/V:
+	// Forward: [num_tokens, model_dim] @ [model_dim, kv_dim] -> [num_tokens, kv_dim]
+	// Backward: dX = dY @ W^T
+	// M = output rows of dX = model_dim
+	// K = output cols of dX = kv_dim
+	// N = batch dim = num_tokens
+	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+							bwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
+							compute_dt,
+							to_transa, to_transb,
+							model_dim, kv_dim, total_q,  // M = model_dim, K = kv_dim, N = num_tokens
+							1.0, 1.0,  // Add to previous gradient
+							transformer_block -> w_k, working_activations -> x_k_local, activation_workspace -> x_temp, activation_workspace -> x_temp,
+							kernelWorkspaceBytes, kernelWorkspace);
+	if (ret) {
+		fprintf(stderr, "Error: failed to submit K projection backward matmul...\n");
+		return -1;
+	}
+
+
+	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+							bwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
+							compute_dt,
+							to_transa, to_transb,
+							model_dim, kv_dim, total_q,  // M = model_dim, K = kv_dim, N = num_tokens
+							1.0, 1.0,  // Add to previous gradient
+							transformer_block -> w_v, working_activations -> x_v_local, activation_workspace -> x_temp, activation_workspace -> x_temp,
+							kernelWorkspaceBytes, kernelWorkspace);
+	if (ret) {
+		fprintf(stderr, "Error: failed to submit V projection backward matmul...\n");
+		return -1;
+	}
+
+	// 10. Finally backprop through attention RMS norm
+
+	// save the recomputed norm value because will need it for bwd_w pass...
+	void * attn_norm_recomputed = working_activations -> recomputed_activations -> recomputed_attn_norm;
+
+
+	ret = dataflow_submit_default_rms_norm_bwd_x(dataflow_handle, compute_stream_id,
+								bwd_dt, bwd_dt,
+								total_q, model_dim, (transformer_block -> config).eps,
+								fwd_activations -> attn_norm_rms_vals,
+								transformer_block -> w_attn_norm,
+								fwd_activations -> x_inp,  // Input to norm
+								activation_workspace -> x_temp,  // Upstream gradient
+								next_grad_stream -> X,
+								attn_norm_recomputed);                    // Final output gradient
+	if (ret) {
+		fprintf(stderr, "Error: failed to submit attention norm backward...\n");
+		return -1;
+	}
+
+	// While we have the correct upstream gradient, also do bwd_w for attn norm
+
+	ret = dataflow_submit_default_rms_norm_bwd_w(dataflow_handle, compute_stream_id,
+		bwd_dt, bwd_dt,
+		total_q, model_dim, (transformer_block -> config).eps,
+		fwd_activations -> attn_norm_rms_vals,
+		fwd_activations -> x_inp,
+		activation_workspace -> x_temp,
+		grad_weights -> w_attn_norm,
+		kernelWorkspaceBytes, kernelWorkspace);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit attention norm weight gradient computation during bwd_w...\n");
+		return -1;
+	}
+
+	// now all gradients should be computed and saved within grad_activations -> working_activations...!!!
 	return 0;
 }

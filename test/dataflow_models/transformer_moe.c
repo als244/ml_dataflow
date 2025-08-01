@@ -1847,8 +1847,8 @@
 					return -1;
 				}
 
-				cur_host_mem += num_routed_experts * sizeof(int);
-				used_host_mem += num_routed_experts * sizeof(int);
+				cur_host_mem += num_routed_experts * n_layers * sizeof(int);
+				used_host_mem += num_routed_experts * n_layers * sizeof(int);
 
 				ret = dataflow_handle.sync_stream(&dataflow_handle, inbound_stream_id);
 				if (ret){
