@@ -2955,6 +2955,8 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		return -1;
 	}
 
+	exit(0);
+
 	return 0;
 }
 
