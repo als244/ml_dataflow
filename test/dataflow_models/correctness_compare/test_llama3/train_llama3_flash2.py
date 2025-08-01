@@ -31,7 +31,7 @@ torch.manual_seed(SEED)
 np.random.seed(SEED)
 random.seed(SEED)
 
-MAX_SEQ_LEN = 2048
+MAX_SEQ_LEN = 8192
 MAX_BATCH_SIZE = 1
 
 MODEL_PATH = "./models/1B_inst/"
@@ -70,8 +70,8 @@ print(f"Finished Initialized Model!\n\tRuntime: {time_ms} ms\n")
 
 device = torch.device("cuda:0")
 
-token_id_file = "2048_token_ids_uint32.dat"
-token_labels_file = "2048_labels_uint32.dat"
+token_id_file = "65536_token_ids_uint32.dat"
+token_labels_file = "65536_labels_uint32.dat"
 np_inp_tokens = np.fromfile(token_id_file, dtype=np.uint32)[:MAX_SEQ_LEN]
 np_labels = np.fromfile(token_labels_file, dtype=np.uint32)[:MAX_SEQ_LEN]
 
@@ -108,10 +108,10 @@ optimizer = optim.Adam(
 
 optimizer = optim.AdamW(
     model.parameters(), # Pass all model parameters to the optimizer
-    lr=1e-4,
+    lr=2e-5,
     betas=(0.9, 0.999), # (beta1, beta2)
     eps=1e-8,           # epsilon
-    weight_decay=1e-3
+    weight_decay=1e-5
 )
 
 
@@ -177,7 +177,7 @@ for i in range(1, n_repeats + 1):
     optimizer.step() # Apply gradients to model parameters, updating them
 
     # --- 3. Save Optimizer State Values and Updated Parameters (After Optimizer Step) ---
-    if (i == 6) or (TO_SAVE_OPT_STATE):
+    if TO_SAVE_OPT_STATE:
         print(f"[Step {i}] Saving optimizer state values and updated model parameters after step...")
         optimizer_states_after_step = {}
         # The optimizer.state is a dict where keys are parameters and values are their state (e.g., exp_avg)

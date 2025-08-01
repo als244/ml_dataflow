@@ -19,7 +19,7 @@ import time
 import pickle
 from flash_attn import flash_attn_varlen_func
 
-
+TO_SAVE = False
 SAVE_DIR = "/mnt/storage/research/ml_dataflow/correct_transformer_data"
 
 @dataclass
@@ -136,8 +136,9 @@ class Attention(nn.Module):
     ):
         
         bsz, seqlen, _ = x.shape
-
-        torch.save(x.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_x.pt")
+        
+        if TO_SAVE:
+            torch.save(x.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_x.pt")
 
         xq, xk, xv = self.wq(x), self.wk(x), self.wv(x)
 
@@ -159,10 +160,11 @@ class Attention(nn.Module):
             causal=True
         )
 
-        torch.save(xq.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_q.pt")
-        torch.save(xk.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_k.pt")
-        torch.save(xv.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_v.pt")
-        torch.save(output.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_out.pt")
+        if TO_SAVE:
+            torch.save(xq.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_q.pt")
+            torch.save(xk.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_k.pt")
+            torch.save(xv.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_v.pt")
+            torch.save(output.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_out.pt")
 
         output = output.view(bsz, seqlen, -1)
 
