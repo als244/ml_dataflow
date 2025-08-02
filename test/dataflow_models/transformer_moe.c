@@ -3729,6 +3729,18 @@
 								fprintf(stderr, "Error: failed to submit outbound transfer for loss tracker...\n");
 								return -1;
 							}
+
+							cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, loss_stream_id);
+							if (!cur_stream_state){
+								fprintf(stderr, "Error: failed to get stream state for loss tracker...\n");
+								return -1;
+							}
+
+							ret = dataflow_handle.submit_dependency(&dataflow_handle, compute_stream_id, cur_stream_state);
+							if (ret){
+								fprintf(stderr, "Error: failed to submit dependency to for compute stream to wait on loss tracker transfers...\n");
+								return -1;
+							}
 						}
 
 						if (TO_PRINT_CHUNK_LOSS) {
@@ -3979,10 +3991,33 @@
 												working_grad_block,
 												&(block_transitions[2 * chunk_id + ((k + 1) % 2)]));
 
+							
+							
+							
 							if (ret){
 								fprintf(stderr, "Error: failed to submit transformer block bwd_x for seq group #%d, chunk #%d, block #%d...\n", seq_group, chunk_id, k);
 								return -1;
 							}
+
+							ret = dataflow_handle.sync_handle(&dataflow_handle);
+							if (ret){
+								fprintf(stderr, "Error: failed to sync handle after head...\n");
+								return -1;
+							}
+
+							printf("\n\n\nHead complete!\n\nStopping profiling and exiting...\n\n");
+
+							ret = dataflow_handle.profiler.stop();
+							if (ret){
+								fprintf(stderr, "Error: failed to stop profiling...\n");
+								return -1;
+							}
+
+							exit(0);
+
+
+
+
 
 							dataflow_handle.profiler.range_pop();
 
