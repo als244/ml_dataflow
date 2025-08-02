@@ -174,7 +174,7 @@ class Attention(nn.Module):
             deterministic=True,
             causal=True
         )
-        
+
         output = output.view(bsz, seqlen, -1)
 
         """
@@ -295,6 +295,7 @@ class TransformerBlock(nn.Module):
         step_num: int,
     ):
         if TO_SAVE:
+            print(f"[Step {step_num}] Saving block inp for layer {self.layer_id}...")
             torch.save(x.cpu().view(-1, self.model_dim), f"{SAVE_DIR}/layers_fwd/{self.layer_id}/block_inp.pt")
 
         norm = self.attention_norm(x)
@@ -308,6 +309,7 @@ class TransformerBlock(nn.Module):
         out = h + ffn_out
 
         if TO_SAVE:
+            print(f"[Step {step_num}] Saving block out for layer {self.layer_id}...\n")
             torch.save(ffn_norm.cpu().view(-1, self.model_dim), f"{SAVE_DIR}/layers_fwd/{self.layer_id}/block_out.pt")
 
         return out
@@ -361,6 +363,7 @@ class MoETransformer(nn.Module):
         output = self.output(h)
 
         if TO_SAVE:
+            print(f"[Step {step_num}] Saving final head output...\n")
             torch.save(output.cpu().view(-1, self.vocab_size), f"{SAVE_DIR}/head_fwd/final_out.pt")
 
         return output
