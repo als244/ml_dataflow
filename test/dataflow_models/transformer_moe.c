@@ -19,9 +19,9 @@
 	#define TOKEN_IDS_PATH "../data/65536_token_ids_uint32.dat"
 	#define TOKEN_LABELS_PATH "../data/65536_labels_uint32.dat"
 
-	#define DEFAULT_MIN_CHUNK_SIZE 32768
+	#define DEFAULT_MIN_CHUNK_SIZE 262144
 
-	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 2048
+	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 8192
 
 	// this (along with num seqs per round) modulates how frequently we will step 
 	// the optimizer...
