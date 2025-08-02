@@ -3396,12 +3396,13 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 
 	for (int i = 0; i < num_routed_experts; i++){
 
-		printf("Submitting bwd_x for expert #%d...\n", i);
-
 		// a.) prepare expert zone, now where the gradients are being populated
 		// within each zone in order to correctly backpop...
 
 		int cur_expert_num_tokens = host_expert_counts[i];
+
+		printf("Submitting bwd_x for expert #%d (%d tokens)...\n", i, cur_expert_num_tokens);
+		
 		//printf("[Expert %d] Number of tokens: %d\n", i, cur_expert_num_tokens);
 		total_tokens += cur_expert_num_tokens;
 
