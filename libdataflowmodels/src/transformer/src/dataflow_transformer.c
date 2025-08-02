@@ -2864,6 +2864,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		new_kernelWorkspaceBytes = kernelWorkspaceBytes - ((uint64_t) new_kernelWorkspace - (uint64_t) kernelWorkspace);
 
 		// 	a.) Prepare Expert Zone
+		
 	
 		ret = dataflow_submit_default_prepare_expert_zone(dataflow_handle, compute_stream_id, 
 								fwd_dt, fwd_dt,
@@ -3427,6 +3428,8 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 
 		/* START: FWD RECOMPUTE*/
 
+		printf("Submitting fwd recompute expert output...\n");
+		
 		// need to recompute the expert output (fwd_expert_out)...
 		ret = dataflow_submit_default_swiglu(dataflow_handle, compute_stream_id, 
 			fwd_dt, 
@@ -3456,7 +3459,9 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 
 	
 
-		// Responsible for computeing the dot produc of each expert's output and the respective loss..
+		printf("Submitting router bwd_x...\n");
+
+		// Responsible for computeing the dot product of each expert's output and the respective loss..
 		// additionally re-populates the expert_zone with the gradient (times router weight) instead of forward out...
 
 		// NEED TO IMPLEMENT!!!
@@ -3476,6 +3481,8 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 			return -1;
 		}
 
+
+		printf("Submitting bwd W of w2 matmul...\n");
 		// Doing BWD W of w2 matmul through HERE because alreay have two matrices that are needed
 		// (input to expert's w2 (swiglu output in [activation_workspace -> x_temp_mlp] and
 		// the upstream gradient corresponding to this expert's output [expert_zone])...
@@ -3497,6 +3504,8 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 
 		// c.) start backprop through expert...`
 
+		printf("Submitting bwd X of w2 matmul...\n");
+
 		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
 							fwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
 							compute_dt,
@@ -3511,6 +3520,8 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		}
 
 		// 2. Backprop through SwiGLU
+
+		printf("Submitting swiglu bwd_x...\n");
 
 		ret = dataflow_submit_default_swiglu_bwd_x(dataflow_handle, compute_stream_id,
 									fwd_dt, bwd_dt,
@@ -3530,6 +3541,8 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		// K = output cols of dX = ffn_dim
 		// N = batch dim = num_tokens
 
+		printf("Submitting bwd X of w1 matmul...\n");
+
 		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
 								fwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
 								compute_dt,
@@ -3543,6 +3556,8 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 			return -1;
 		}
 
+		printf("Submitting bwd X of w3 matmul...\n");
+
 		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
 								fwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
 								compute_dt,
@@ -3555,6 +3570,8 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 			fprintf(stderr, "Error: failed to submit w3 backward matmul...\n");
 			return -1;
 		}
+
+		printf("Submitting merge expert outputs...\n");
 
 		// Merge result into the upstream gradient (activation_workspace -> x_temp)
 
