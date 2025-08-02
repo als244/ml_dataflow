@@ -19,8 +19,8 @@ import time
 import pickle
 from flash_attn import flash_attn_varlen_func
 
-TO_SAVE = False
-SAVE_DIR = "/mnt/storage/research/ml_dataflow/correct_transformer_data"
+TO_SAVE = True
+SAVE_DIR = "/home/shein/Documents/grad_school/research/ml_dataflow_stuff/ml_dataflow/test/dataflow_models/correct_transformer_data"
 
 @dataclass
 class ModelArgs:
@@ -135,8 +135,8 @@ class Attention(nn.Module):
         
         bsz, seqlen, _ = x.shape
         
-        if TO_SAVE:
-            torch.save(x.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_x.pt")
+        # if TO_SAVE:
+        #     torch.save(x.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_x.pt")
 
         xq, xk, xv = self.wq(x), self.wk(x), self.wv(x)
 
@@ -158,11 +158,11 @@ class Attention(nn.Module):
             causal=True
         )
 
-        if TO_SAVE:
-            torch.save(xq.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_q.pt")
-            torch.save(xk.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_k.pt")
-            torch.save(xv.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_v.pt")
-            torch.save(output.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_out.pt")
+        # if TO_SAVE:
+        #     torch.save(xq.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_q.pt")
+        #     torch.save(xk.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_k.pt")
+        #     torch.save(xv.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_v.pt")
+        #     torch.save(output.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_out.pt")
 
         output = output.view(bsz, seqlen, -1)
 
@@ -279,7 +279,9 @@ class TransformerBlock(nn.Module):
         mask: Optional[torch.Tensor],
         step_num: int,
     ):
-        
+        if TO_SAVE:
+            torch.save(x.cpu().view(-1, self.model_dim), f"{SAVE_DIR}/layers_fwd/{self.layer_id}/block_inp.pt")
+
         norm = self.attention_norm(x)
 
         h = x + self.attention(norm, freqs_cis, seqlens_info, mask, step_num)
@@ -289,6 +291,9 @@ class TransformerBlock(nn.Module):
         ffn_out, router_logits = self.feed_forward(ffn_norm)
 
         out = h + ffn_out
+
+        if TO_SAVE:
+            torch.save(ffn_norm.cpu().view(-1, self.model_dim), f"{SAVE_DIR}/layers_fwd/{self.layer_id}/block_out.pt")
 
         return out
 
@@ -339,5 +344,8 @@ class MoETransformer(nn.Module):
         
         h = self.norm(h)
         output = self.output(h)
+
+        if TO_SAVE:
+            torch.save(output.cpu().view(-1, self.vocab_size), f"{SAVE_DIR}/head_fwd/final_out.pt")
 
         return output

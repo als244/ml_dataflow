@@ -71,7 +71,7 @@ optimizer = optim.AdamW(
 )
 
 
-n_repeats = 1000
+n_repeats = 1
 
 for i in range(1, n_repeats + 1):
 
