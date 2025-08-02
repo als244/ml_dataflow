@@ -4005,7 +4005,7 @@ int dataflow_submit_transformer_moe_block_bwd_w(Dataflow_Handle * dataflow_handl
 								fwd_dt, bwd_dt, bwd_dt, bwd_dt,
 								compute_dt,
 								to_transa, to_transb,
-								model_dim, total_q, ffn_dim, 
+								model_dim, cur_expert_num_tokens, ffn_dim, 
 								1.0, 1.0,  // Accumulate gradients
 								expert_zone, (bwd_activations -> x_1)[num_shared_experts + i], (grad_weights -> w_1)[num_shared_experts + i], (grad_weights -> w_1)[num_shared_experts + i],
 								new_kernelWorkspaceBytes, new_kernelWorkspace);
@@ -4018,7 +4018,7 @@ int dataflow_submit_transformer_moe_block_bwd_w(Dataflow_Handle * dataflow_handl
 								fwd_dt, bwd_dt, bwd_dt, bwd_dt,
 								compute_dt,
 								to_transa, to_transb,
-								model_dim, total_q, ffn_dim, 
+								model_dim, cur_expert_num_tokens, ffn_dim, 
 								1.0, 1.0,  // Accumulate gradients
 								expert_zone, (bwd_activations -> x_3)[num_shared_experts + i], (grad_weights -> w_3)[num_shared_experts + i], (grad_weights -> w_3)[num_shared_experts + i],
 								new_kernelWorkspaceBytes, new_kernelWorkspace);
