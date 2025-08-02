@@ -4121,14 +4121,13 @@
 							sprintf(profile_msg, "Bwd W");
 							dataflow_handle.profiler.range_push(profile_msg);
 
-							/*
+						
 							// uses the same input transition as bwd_x...
 							ret = dataflow_submit_transformer_moe_block_bwd_w(&dataflow_handle, compute_stream_id,
 												&(block_transitions[2 * chunk_id + (k % 2)]),
 												cur_fwd_activations, 
 												grad_activations, 
 												working_grad_block);
-							*/
 
 							if (ret){
 								fprintf(stderr, "Error: failed to submit transformer block bwd_w for seq group #%d, chunk #%d, block #%d...\n", seq_group, chunk_id, k);
