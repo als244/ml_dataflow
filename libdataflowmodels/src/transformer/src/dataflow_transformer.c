@@ -3006,6 +3006,10 @@ int dataflow_submit_transformer_moe_block_recompute(Dataflow_Handle * dataflow_h
 	DataflowDatatype fwd_dt = fwd_block_config -> block_dt;
 	DataflowDatatype compute_dt = fwd_block_config -> compute_dt;
 
+	size_t x_el_size = dataflow_sizeof_element(fwd_dt);
+
+	int layer_id = transformer_block -> layer_id;
+
 	int model_dim = fwd_block_config -> model_dim;
 	int ffn_dim = fwd_block_config -> ffn_dim;
 	int theta = fwd_block_config -> theta;
@@ -3890,7 +3894,7 @@ int dataflow_submit_transformer_moe_block_bwd_w(Dataflow_Handle * dataflow_handl
 	int to_transa = 0;
 	int to_transb = 1;
 
-	MoE_Config * model_moe_config = &((transformer_block -> config).moe_config);
+	MoE_Config * model_moe_config = &((grad_weights -> config).moe_config);
 
 	int num_shared_experts = model_moe_config -> num_shared_experts;
 	int num_routed_experts = model_moe_config -> num_global_routed_experts;
