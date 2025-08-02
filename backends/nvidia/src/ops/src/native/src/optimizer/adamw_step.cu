@@ -62,12 +62,12 @@ extern "C" __global__ void default_adamw_step_bf16_bf16_bf16_bf16_kernel(uint64_
         var[i] = __float2bfloat16(v_t);
 
         if (isnan(param_out)){
-            printf("AdamW Step ERROR: param_out is nan at index %lu\n", i);
+            printf("AdamW Step ERROR: param_out is nan at index %lu. Prev param: %f, grad: %f, mean: %f, var: %f\n", i, param_val, grad_val, mean_val, var_val);
             return;
         }
 
         if (isinf(param_out)){
-            printf("AdamW Step ERROR: param_out is inf at index %lu\n", i);
+            printf("AdamW Step ERROR: param_out is inf at index %lu. Prev param: %f, grad: %f, mean: %f, var: %f\n", i, param_val, grad_val, mean_val, var_val);
             return;
         }
     }
