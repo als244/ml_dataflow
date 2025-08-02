@@ -2847,6 +2847,11 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 	for (int i = 0; i < num_routed_experts; i++){
 
 		int cur_expert_num_tokens = host_expert_counts[i];
+		
+		if (cur_expert_num_tokens == 0){
+			continue;
+		}
+
 		//printf("[Expert %d] Number of tokens: %d\n", i, cur_expert_num_tokens);
 		total_tokens += cur_expert_num_tokens;
 
@@ -3206,6 +3211,9 @@ int dataflow_submit_transformer_moe_block_recompute(Dataflow_Handle * dataflow_h
 			// 1.) retrieve expert zone
 			int cur_expert_num_tokens = host_expert_counts[i];
 
+			if (cur_expert_num_tokens == 0){
+				continue;
+			}
 	
 			//printf("[Expert %d] Number of tokens: %d\n", i, cur_expert_num_tokens);
 			total_tokens += cur_expert_num_tokens;
@@ -3403,6 +3411,10 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		// within each zone in order to correctly backpop...
 
 		int cur_expert_num_tokens = host_expert_counts[i];
+
+		if (cur_expert_num_tokens == 0){
+			continue;
+		}
 
 		//printf("[Expert %d] Number of tokens: %d\n", i, cur_expert_num_tokens);
 		total_tokens += cur_expert_num_tokens;
@@ -3967,6 +3979,10 @@ int dataflow_submit_transformer_moe_block_bwd_w(Dataflow_Handle * dataflow_handl
 
 		// 1.) retrieve expert zone
 		int cur_expert_num_tokens = host_expert_counts[i];
+
+		if (cur_expert_num_tokens == 0){
+			continue;
+		}
 
 	
 		//printf("[Expert %d] Number of tokens: %d\n", i, cur_expert_num_tokens);
