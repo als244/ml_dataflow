@@ -1,6 +1,8 @@
 #include "nvidia_ops.h"
 
 
+// SHOULD HAVE A GRADIENT CLIPPING FUNCTION BEFORE PASSING INTO THIS KERNEL FOR SAFETY...!
+
 extern "C" __global__ void default_adamw_step_bf16_bf16_bf16_bf16_kernel(uint64_t num_els, int step_num, float lr, float beta1, float beta2, float weight_decay, float epsilon, 
                                                                                 __nv_bfloat16 * param, __nv_bfloat16 * grad, __nv_bfloat16 * mean, __nv_bfloat16 * var){
 
@@ -60,15 +62,5 @@ extern "C" __global__ void default_adamw_step_bf16_bf16_bf16_bf16_kernel(uint64_
         param[i] = __float2bfloat16(param_out);
         mean[i] = __float2bfloat16(m_t);
         var[i] = __float2bfloat16(v_t);
-
-        if (isnan(param_out)){
-            printf("AdamW Step ERROR: param_out is nan at index %lu. Prev param: %f, grad: %f, mean: %f, var: %f\n", i, param_val, grad_val, mean_val, var_val);
-            return;
-        }
-
-        if (isinf(param_out)){
-            printf("AdamW Step ERROR: param_out is inf at index %lu. Prev param: %f, grad: %f, mean: %f, var: %f\n", i, param_val, grad_val, mean_val, var_val);
-            return;
-        }
     }
 }
