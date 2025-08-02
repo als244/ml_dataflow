@@ -3465,6 +3465,7 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		// additionally re-populates the expert_zone with the gradient (times router weight) instead of forward out...
 
 		// NEED TO IMPLEMENT!!!
+		/*
 		ret = dataflow_submit_router_bwd_x(dataflow_handle, compute_stream_id,
 								fwd_dt, bwd_dt,
 								cur_expert_num_tokens, model_dim, num_routed_experts, top_k_active,
@@ -3480,6 +3481,7 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 			fprintf(stderr, "Error: failed to submit router backward...\n");
 			return -1;
 		}
+		*/
 
 
 		printf("Submitting bwd W of w2 matmul...\n");
