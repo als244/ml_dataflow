@@ -3571,7 +3571,7 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 			return -1;
 		}
 
-		ret = dataflow_handle.sync_handle(&dataflow_handle);
+		ret = (dataflow_handle -> sync_handle)(dataflow_handle);
 		if (ret){
 			fprintf(stderr, "Error: failed to sync handle after head...\n");
 			return -1;
@@ -3579,7 +3579,7 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 
 		printf("\n\n\nExpert complete!\n\nStopping profiling and exiting...\n\n");
 
-		ret = dataflow_handle.profiler.stop();
+		ret = (dataflow_handle -> profiler).stop();
 		if (ret){
 			fprintf(stderr, "Error: failed to stop profiling...\n");
 			return -1;
