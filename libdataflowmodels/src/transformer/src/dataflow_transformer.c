@@ -3109,6 +3109,8 @@ int dataflow_submit_transformer_moe_block_recompute(Dataflow_Handle * dataflow_h
 	int num_routed_experts = model_moe_config -> num_global_routed_experts;
 	int top_k_active = model_moe_config -> top_k_experts;
 
+	Seq_Batch_MoE_Config * batch_moe_config = &(seq_batch -> moe_config);
+
 	int * host_expert_counts = batch_moe_config -> host_expert_counts + layer_id * num_routed_experts;
 
 	int total_routed_tokens = set_moe_working_activations_offsets(working_activations, total_q, model_dim, ffn_dim, 
@@ -3185,6 +3187,14 @@ int dataflow_submit_transformer_moe_block_recompute(Dataflow_Handle * dataflow_h
 			// only fill up to x_1 and x_3, don't need to recompute swiglu or 2nd matmul...
 		}
 
+		void * expert_zone = kernelWorkspace;
+
+		void * new_kernelWorkspace;
+		uint64_t new_kernelWorkspaceBytes;
+		uint64_t expert_zone_size;
+
+		int total_tokens = 0;
+
 		// Routed experts...
 		for (int i = 0; i < num_routed_experts; i++){
 
@@ -3255,6 +3265,11 @@ int dataflow_submit_transformer_moe_block_recompute(Dataflow_Handle * dataflow_h
 			}
 
 			// only fill up to x_1 and x_3, don't need to recompute swiglu or 2nd matmul...
+		}
+
+		if (total_tokens != total_q * top_k_active){
+			fprintf(stderr, "Error: total routed tokens does not match expected number of tokens. Chunk size: %d, top_k_active: %d => expected %d, got %d\n", total_q, top_k_active, total_q * top_k_active, total_tokens);
+			return -1;
 		}
 		
 	}
