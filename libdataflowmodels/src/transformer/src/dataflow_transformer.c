@@ -2847,7 +2847,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 	for (int i = 0; i < num_routed_experts; i++){
 
 		int cur_expert_num_tokens = host_expert_counts[i];
-		printf("[Expert %d] Number of tokens: %d\n", i, cur_expert_num_tokens);
+		//printf("[Expert %d] Number of tokens: %d\n", i, cur_expert_num_tokens);
 		total_tokens += cur_expert_num_tokens;
 
 		expert_zone_size = (uint64_t) cur_expert_num_tokens * (uint64_t) model_dim * (uint64_t) x_el_size;
@@ -3404,8 +3404,6 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 
 		int cur_expert_num_tokens = host_expert_counts[i];
 
-		printf("Submitting bwd_x for expert #%d (%d tokens)...\n", i, cur_expert_num_tokens);
-
 		//printf("[Expert %d] Number of tokens: %d\n", i, cur_expert_num_tokens);
 		total_tokens += cur_expert_num_tokens;
 
@@ -3427,8 +3425,6 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 
 
 		/* START: FWD RECOMPUTE*/
-
-		printf("Submitting fwd recompute expert output...\n");
 		
 		// need to recompute the expert output (fwd_expert_out)...
 		ret = dataflow_submit_default_swiglu(dataflow_handle, compute_stream_id, 
@@ -3457,15 +3453,10 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 
 		/* END: FWD RECOMPUTE*/
 
-	
-
-		printf("Submitting router bwd_x...\n");
-
 		// Responsible for computeing the dot product of each expert's output and the respective loss..
 		// additionally re-populates the expert_zone with the gradient (times router weight) instead of forward out...
 
 		// NEED TO IMPLEMENT!!!
-		/*
 		ret = dataflow_submit_router_bwd_x(dataflow_handle, compute_stream_id,
 								fwd_dt, bwd_dt,
 								cur_expert_num_tokens, model_dim, num_routed_experts, top_k_active,
@@ -3481,10 +3472,8 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 			fprintf(stderr, "Error: failed to submit router backward...\n");
 			return -1;
 		}
-		*/
 
 
-		printf("Submitting bwd W of w2 matmul...\n");
 		// Doing BWD W of w2 matmul through HERE because alreay have two matrices that are needed
 		// (input to expert's w2 (swiglu output in [activation_workspace -> x_temp_mlp] and
 		// the upstream gradient corresponding to this expert's output [expert_zone])...
@@ -3506,8 +3495,6 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 
 		// c.) start backprop through expert...`
 
-		printf("Submitting bwd X of w2 matmul...\n");
-
 		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
 							fwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
 							compute_dt,
@@ -3522,8 +3509,6 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		}
 
 		// 2. Backprop through SwiGLU
-
-		printf("Submitting swiglu bwd_x...\n");
 
 		ret = dataflow_submit_default_swiglu_bwd_x(dataflow_handle, compute_stream_id,
 									fwd_dt, bwd_dt,
@@ -3543,8 +3528,6 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		// K = output cols of dX = ffn_dim
 		// N = batch dim = num_tokens
 
-		printf("Submitting bwd X of w1 matmul...\n");
-
 		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
 								fwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
 								compute_dt,
@@ -3558,8 +3541,6 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 			return -1;
 		}
 
-		printf("Submitting bwd X of w3 matmul...\n");
-
 		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
 								fwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
 								compute_dt,
@@ -3572,8 +3553,6 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 			fprintf(stderr, "Error: failed to submit w3 backward matmul...\n");
 			return -1;
 		}
-
-		printf("Submitting merge expert outputs...\n");
 
 		// Merge result into the upstream gradient (activation_workspace -> x_temp)
 
@@ -3592,7 +3571,6 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 			return -1;
 		}
 
-		fflush(stdout);
 	}
 
 	if (total_tokens != total_q * top_k_active){
@@ -3602,12 +3580,11 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 
 	// Also merge all the shared experts into the upstream gradient...
 
+	/*
 	for (int i = 0; i < num_shared_experts; i++){
-		// TODO: Implement...
 	}
+	*/
 	
-	printf("Submitting bwd_x for router gate...\n");
-
 	// Backprop through the router gate (softmax default)
 	// Updates in place
 	ret = dataflow_submit_router_gate_bwd_x(dataflow_handle, compute_stream_id,
@@ -3621,8 +3598,6 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		return -1;
 	}
 
-	printf("Submitting bwd_x to apply router bwd x path...\n");
-	
 	// Add results of router path to the upstream gradient...
 	
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
