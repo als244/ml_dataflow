@@ -100,7 +100,7 @@ if "config" in conversion_dict:
 print("Converting weights...\n")
 
 if "embedding" in conversion_dict:
-    print("\tEmbedding...\n")
+    print("\tEmbedding...")
     os.makedirs(f"{output_dir}/embed", exist_ok=True)
     embedding_key = conversion_dict["embedding"]
     vocab_size, model_dim = orig_model_dict[embedding_key].shape
@@ -108,7 +108,7 @@ if "embedding" in conversion_dict:
     
 
 if "layers" in conversion_dict:
-    print("\tLayers...\n")
+    print("\tLayers...")
     os.makedirs(f"{output_dir}/layers", exist_ok=True)
     for k in range(len(conversion_dict["layers"])):
         print(f"\t\tLayer {k}...")
