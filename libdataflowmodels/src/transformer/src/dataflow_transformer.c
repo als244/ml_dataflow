@@ -3396,6 +3396,8 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 
 	for (int i = 0; i < num_routed_experts; i++){
 
+		printf("Submitting bwd_x for expert #%d...\n", i);
+
 		// a.) prepare expert zone, now where the gradients are being populated
 		// within each zone in order to correctly backpop...
 
@@ -3569,12 +3571,18 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		}
 	}
 
+	if (total_tokens != total_q * top_k_active){
+		fprintf(stderr, "Error: total routed tokens does not match expected number of tokens. Chunk size: %d, top_k_active: %d => expected %d, got %d\n", total_q, top_k_active, total_q * top_k_active, total_tokens	);
+		return -1;
+	}
+
 	// Also merge all the shared experts into the upstream gradient...
 
 	for (int i = 0; i < num_shared_experts; i++){
 		// TODO: Implement...
 	}
 	
+	printf("Submitting bwd_x for router gate...\n");
 
 	// Backprop through the router gate (softmax default)
 	// Updates in place
@@ -3589,7 +3597,8 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		return -1;
 	}
 
-
+	printf("Submitting bwd_x to apply router bwd x path...\n");
+	
 	// Add results of router path to the upstream gradient...
 	
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
