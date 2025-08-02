@@ -3,15 +3,12 @@ import torch.nn as nn
 import glob
 import json
 
-from llama3_tokenizer import Tokenizer
-from llama3_model_flash2 import ModelArgs, Transformer, TransformerBlock, Attention, FeedForward, SeqlensInfo
+from moe_model_flash2 import ModelArgs, MoETransformer, SeqlensInfo
 
 import torch.optim as optim
 
 import time
-import functools
 import numpy as np
-import random
 import os
 
 
@@ -25,7 +22,7 @@ MODEL_PATH = "./full_model.pth"
 
 TRAIN_SEQ_LEN = 8192
 
-model = torch.load(MODEL_PATH)
+model = torch.load(MODEL_PATH, weights_only=False)
 
 device = torch.device("cuda:0")
 

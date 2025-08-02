@@ -286,7 +286,9 @@ class TransformerBlock(nn.Module):
 
         ffn_norm = self.ffn_norm(h)
 
-        out = h + self.feed_forward(ffn_norm)
+        ffn_out, router_logits = self.feed_forward(ffn_norm)
+
+        out = h + ffn_out
 
         return out
 
