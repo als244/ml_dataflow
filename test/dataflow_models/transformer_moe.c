@@ -71,7 +71,7 @@
 	#define TO_PRINT_IS_STEP 0
 	#define TO_PRINT_POST_STEP_RELOADING 0
 
-	#define TO_PRINT_SUBMITTING 0
+	#define TO_PRINT_SUBMITTING 1
 
 	#define TO_PRINT_FWD_WAITING 0
 	#define TO_PRINT_BWD_WAITING 0
@@ -3785,7 +3785,7 @@
 
 
 				/* TESTING FOR REAL NOW...!
-				
+
 				ret = dataflow_handle.sync_handle(&dataflow_handle);
 				if (ret){
 					fprintf(stderr, "Error: failed to sync handle after head...\n");
