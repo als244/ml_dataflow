@@ -742,6 +742,8 @@ extern "C" {
                                     (void *) &dummy_ptr, (float *) &dummy_ptr,
                                     is_causal);
 
+        params.deterministic = true;
+
         if (ret) {
             fprintf(stderr, "Error: unable to get flash3_get_bwd_workspace_size\n");
             return -1;
