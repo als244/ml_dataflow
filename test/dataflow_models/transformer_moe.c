@@ -943,7 +943,7 @@
 
 		ret = dataflow_get_attention_workspace_size(&dataflow_handle, block_dt, is_training,
 													num_q_heads, num_kv_heads, head_dim,
-													max_tokens_per_chunk, max_seqlen, max_seqs_in_chunk,
+													max_tokens_per_chunk, MY_MAX(max_seqlen, chunk_size), max_seqs_in_chunk,
 													is_causal,
 													&required_attn_workspace);
 		if (ret){
