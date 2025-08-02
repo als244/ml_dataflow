@@ -3589,6 +3589,8 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 			fprintf(stderr, "Error: failed to submit combine expert outputs...\n");
 			return -1;
 		}
+
+		fflush(stdout);
 	}
 
 	if (total_tokens != total_q * top_k_active){
