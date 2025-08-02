@@ -986,14 +986,15 @@
 		}
 		*/
 
-		int num_seq_groups_per_round = MY_MAX(1, round(num_chunks_equal_data_weights / num_chunks_per_seq));
+		int num_seq_groups_per_round = MY_MIN(MAX_SEQ_GROUPS_PER_ROUND, MY_MAX(1, round(num_chunks_equal_data_weights / num_chunks_per_seq)));
 
 		// the old #define still laying around even though auto-cofig'ed
-		int NUM_SEQ_GROUPS_PER_ROUND = MY_MIN(num_seq_groups_per_round, MAX_SEQ_GROUPS_PER_ROUND);
+		int NUM_SEQ_GROUPS_PER_ROUND = num_seq_groups_per_round;
 
-
+		
 		int num_chunks = num_chunks_per_seq * num_seq_groups_per_round;
 
+		
 
 		uint64_t context_tokens = MY_MAX(max_tokens_per_chunk, max_seqlen);
 
