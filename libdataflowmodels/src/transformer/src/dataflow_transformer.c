@@ -3879,6 +3879,8 @@ int dataflow_submit_transformer_moe_block_bwd_w(Dataflow_Handle * dataflow_handl
 
 	DataflowDatatype compute_dt = (grad_weights -> config).compute_dt;
 
+	size_t x_el_size = dataflow_sizeof_element(fwd_dt);
+
 	Seq_Batch * seq_batch = grad_stream -> seq_batch;
 	int seq_id = seq_batch -> seq_id;
 	int chunk_id = seq_batch -> chunk_id;
@@ -3915,17 +3917,10 @@ int dataflow_submit_transformer_moe_block_bwd_w(Dataflow_Handle * dataflow_handl
 	// launch GEMM...
 	int * host_expert_counts = batch_moe_config -> host_expert_counts + layer_id * num_routed_experts;
 
-	
-	int cur_expert_num_tokens;
-	for (int i = 0; i < num_shared_experts + num_routed_experts; i++){
+	;
+	for (int i = 0; i < num_shared_experts; i++){
 		
-		if (i < num_shared_experts){
-			cur_expert_num_tokens = total_q;
-		} else {
-			cur_expert_num_tokens = host_expert_counts[i - num_shared_experts];
-		}
-
-		// 1.) w2 gradients have been calculated in bwd_x already...
+		// TODO: Deal with recomputing swiglu and handling w2 gradients...
 
 		// 2.) do w1 and w3
 
@@ -3933,7 +3928,7 @@ int dataflow_submit_transformer_moe_block_bwd_w(Dataflow_Handle * dataflow_handl
 								fwd_dt, bwd_dt, bwd_dt, bwd_dt,
 								compute_dt,
 								to_transa, to_transb,
-								ffn_dim, cur_expert_num_tokens, ffn_dim, 
+								model_dim, total_q, ffn_dim, 
 								1.0, 1.0,  // Accumulate gradients
 								bwd_activations -> recomputed_activations -> recomputed_ffn_norm, (bwd_activations -> x_1)[i], (grad_weights -> w_1)[i], (grad_weights -> w_1)[i],
 								kernelWorkspaceBytes, kernelWorkspace);
@@ -3946,7 +3941,7 @@ int dataflow_submit_transformer_moe_block_bwd_w(Dataflow_Handle * dataflow_handl
 			fwd_dt, bwd_dt, bwd_dt, bwd_dt,
 			compute_dt,
 			to_transa, to_transb,
-			ffn_dim, cur_expert_num_tokens, ffn_dim, 
+			model_dim, total_q, ffn_dim, 
 			1.0, 1.0,  // Accumulate gradients
 			bwd_activations -> recomputed_activations -> recomputed_ffn_norm, (bwd_activations -> x_3)[i], (grad_weights -> w_3)[i], (grad_weights -> w_3)[i],
 			kernelWorkspaceBytes, kernelWorkspace);
@@ -3957,8 +3952,103 @@ int dataflow_submit_transformer_moe_block_bwd_w(Dataflow_Handle * dataflow_handl
 		}
 	}
 
+	void * expert_zone = kernelWorkspace;
 
-	// Router gate bwd w 
+	void * new_kernelWorkspace;
+	uint64_t new_kernelWorkspaceBytes;
+	uint64_t expert_zone_size;
+
+	int total_tokens = 0;
+
+	// Routed experts...
+	for (int i = 0; i < num_routed_experts; i++){
+
+		// 0.) already did w2 gradients in bwd_x...
+
+		// 1.) retrieve expert zone
+		int cur_expert_num_tokens = host_expert_counts[i];
+
+	
+		//printf("[Expert %d] Number of tokens: %d\n", i, cur_expert_num_tokens);
+		total_tokens += cur_expert_num_tokens;
+
+		expert_zone_size = (uint64_t) cur_expert_num_tokens * (uint64_t) model_dim * (uint64_t) x_el_size;
+
+		if (expert_zone_size > kernelWorkspaceBytes){
+			fprintf(stderr, "Error: expert zone size is greater than kernel workspace size for expert #%d with %d tokens...\n", i, cur_expert_num_tokens);
+			return -1;
+		}
+
+		new_kernelWorkspace = expert_zone + expert_zone_size;
+
+		new_kernelWorkspace = (void *) (((uint64_t) new_kernelWorkspace + 255) & ~255UL);
+
+		new_kernelWorkspaceBytes = kernelWorkspaceBytes - ((uint64_t) new_kernelWorkspace - (uint64_t) kernelWorkspace);
+
+		// 	a.) Prepare Expert Zone
+		
+		ret = dataflow_submit_default_prepare_expert_zone(dataflow_handle, compute_stream_id, 
+									fwd_dt, fwd_dt,
+									model_dim, bwd_activations -> recomputed_activations -> recomputed_ffn_norm, 
+									i, fwd_activations -> expert_counts,
+									fwd_activations -> expert_counts_cumsum, 
+									fwd_activations -> expert_mapping, 
+									expert_zone);
+		if (ret){
+			fprintf(stderr, "Error: failed to submit prepare expert zone...\n");
+			return -1;
+		}
+
+		// b.) do w1 and w3 gradients...
+
+		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+								fwd_dt, bwd_dt, bwd_dt, bwd_dt,
+								compute_dt,
+								to_transa, to_transb,
+								model_dim, total_q, ffn_dim, 
+								1.0, 1.0,  // Accumulate gradients
+								expert_zone, (bwd_activations -> x_1)[num_shared_experts + i], (grad_weights -> w_1)[num_shared_experts + i], (grad_weights -> w_1)[num_shared_experts + i],
+								new_kernelWorkspaceBytes, new_kernelWorkspace);
+		if (ret) {
+			fprintf(stderr, "Error: failed to submit w1 weight gradient computation...\n");
+			return -1;
+		}
+
+		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+								fwd_dt, bwd_dt, bwd_dt, bwd_dt,
+								compute_dt,
+								to_transa, to_transb,
+								model_dim, total_q, ffn_dim, 
+								1.0, 1.0,  // Accumulate gradients
+								expert_zone, (bwd_activations -> x_3)[num_shared_experts + i], (grad_weights -> w_3)[num_shared_experts + i], (grad_weights -> w_3)[num_shared_experts + i],
+								new_kernelWorkspaceBytes, new_kernelWorkspace);
+		if (ret) {
+			fprintf(stderr, "Error: failed to submit w3 weight gradient computation...\n");
+			return -1;
+		}
+	}
+
+	if (total_tokens != total_q * top_k_active){
+		fprintf(stderr, "Error: total tokens does not match expected number of tokens for routed experts...\n");
+		return -1;
+	}
+
+
+
+	// Router gate bwd w
+
+	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+								fwd_dt, bwd_dt, bwd_dt, bwd_dt,
+								compute_dt,
+								to_transa, to_transb,
+								model_dim, total_q, num_routed_experts, 
+								1.0, 1.0,  // Accumulate gradients
+								bwd_activations -> recomputed_activations -> recomputed_ffn_norm, bwd_activations -> x_routed, (grad_weights -> w_router), (grad_weights -> w_router),
+								kernelWorkspaceBytes, kernelWorkspace);
+	if (ret) {
+		fprintf(stderr, "Error: failed to submit w3 weight gradient computation...\n");
+		return -1;
+	} 
 
 
 
