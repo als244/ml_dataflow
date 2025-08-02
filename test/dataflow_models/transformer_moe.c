@@ -19,9 +19,12 @@
 	#define TOKEN_IDS_PATH "../data/65536_token_ids_uint32.dat"
 	#define TOKEN_LABELS_PATH "../data/65536_labels_uint32.dat"
 
-	#define DEFAULT_MIN_CHUNK_SIZE 262144
+	#define DEFAULT_MIN_CHUNK_SIZE 8192
 
 	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 8192
+
+	#define MAX_SEQ_GROUPS_PER_ROUND 1
+	#define MAX_ROUNDS_PER_STEP 1
 
 	// this (along with num seqs per round) modulates how frequently we will step 
 	// the optimizer...
@@ -986,7 +989,7 @@
 		int num_seq_groups_per_round = MY_MAX(1, round(num_chunks_equal_data_weights / num_chunks_per_seq));
 
 		// the old #define still laying around even though auto-cofig'ed
-		int NUM_SEQ_GROUPS_PER_ROUND = num_seq_groups_per_round;
+		int NUM_SEQ_GROUPS_PER_ROUND = MY_MIN(num_seq_groups_per_round, MAX_SEQ_GROUPS_PER_ROUND);
 
 
 		int num_chunks = num_chunks_per_seq * num_seq_groups_per_round;
@@ -3029,7 +3032,7 @@
 
 		float per_round_duration_s_est = flops_per_round / (flop_efficiency_estimate * PEAK_BF16_FLOPS);
 
-		int num_rounds_per_step = MY_MAX(1, round(target_duration_per_step_s / per_round_duration_s_est));
+		int num_rounds_per_step = MY_MIN(MAX_ROUNDS_PER_STEP, MY_MAX(1, round(target_duration_per_step_s / per_round_duration_s_est)));
 
 		uint64_t loss_tracker_size = num_steps * num_rounds_per_step * num_chunks * sizeof(float);
 		float * sys_loss_tracker = (float *) cur_host_mem;
