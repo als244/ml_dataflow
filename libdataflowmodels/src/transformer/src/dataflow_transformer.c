@@ -3502,7 +3502,7 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 							ffn_dim, model_dim, cur_expert_num_tokens,
 							1.0, 0.0,
 							(transformer_block -> w_2)[num_shared_experts + i], expert_zone, NULL, (activation_workspace -> x_temp_mlp),
-							kernelWorkspaceBytes, kernelWorkspace);
+							new_kernelWorkspaceBytes, new_kernelWorkspace);
 		if (ret) {
 			fprintf(stderr, "Error: failed to submit w2 backward matmul...\n");
 			return -1;
@@ -3535,7 +3535,7 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 								model_dim, ffn_dim, cur_expert_num_tokens,  // M = model_dim, K = ffn_dim, N = num_tokens
 								1.0, 0.0,
 								(transformer_block -> w_1)[num_shared_experts + i], (working_activations -> x_1)[num_shared_experts + i], NULL, expert_zone,
-								kernelWorkspaceBytes, kernelWorkspace);
+								new_kernelWorkspaceBytes, new_kernelWorkspace);
 		if (ret) {
 			fprintf(stderr, "Error: failed to submit w1 backward matmul...\n");
 			return -1;
@@ -3548,7 +3548,7 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 								model_dim, ffn_dim, cur_expert_num_tokens,  // M = model_dim, K = ffn_dim, N = num_tokens
 								1.0, 1.0,  // Add to previous gradient
 								(transformer_block -> w_3)[num_shared_experts + i], (working_activations -> x_3)[num_shared_experts + i], expert_zone, expert_zone,
-								kernelWorkspaceBytes, kernelWorkspace);
+								new_kernelWorkspaceBytes, new_kernelWorkspace);
 		if (ret) {
 			fprintf(stderr, "Error: failed to submit w3 backward matmul...\n");
 			return -1;
