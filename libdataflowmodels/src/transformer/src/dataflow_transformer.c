@@ -2753,6 +2753,8 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		return -1;
 	}
 
+	printf("Layer %d\n\tExpert Counts: %p\n\n", layer_id, working_activations -> expert_counts);
+
 	// Writes to populates weights, chosen experts, expert counts, expert counts cumsum
 	// Also writes directly to host memory for expert counts (bypassing D->H dma queue)
 	ret = dataflow_submit_default_select_experts(dataflow_handle, compute_stream_id, 
