@@ -17,6 +17,8 @@ model_args.rope_theta = 500000
 model_args.norm_eps = 1e-5
 model_args.max_seq_len = 1048576
 
+torch.set_default_tensor_type(torch.cuda.BFloat16Tensor)
+
 moe_model = MoETransformer(model_args)
 
 SEED = 42
