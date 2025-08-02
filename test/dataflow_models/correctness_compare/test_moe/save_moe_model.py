@@ -5,7 +5,7 @@ from moe_model_flash2 import MoETransformer, ModelArgs
 
 model_args = ModelArgs()
 
-model_args.dim = 1536
+model_args.model_dim = 1536
 model_args.expert_dim = 768
 model_args.n_layers = 8
 model_args.n_heads = 24
@@ -15,8 +15,9 @@ model_args.num_experts_per_tok = 4
 model_args.vocab_size = 128256
 model_args.rope_theta = 500000
 model_args.norm_eps = 1e-5
+model_args.max_seq_len = 1048576
 
-moe_model = MoETransformer(ModelArgs())
+moe_model = MoETransformer(model_args)
 
 SEED = 42
 

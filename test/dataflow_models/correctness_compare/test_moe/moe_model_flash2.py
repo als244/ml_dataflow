@@ -24,7 +24,7 @@ SAVE_DIR = "/mnt/storage/research/ml_dataflow/correct_transformer_data"
 
 @dataclass
 class ModelArgs:
-    dim: int = 1536
+    model_dim: int = 1536
     expert_dim: int = 768
     n_layers: int = 8
     n_heads: int = 24
@@ -34,7 +34,7 @@ class ModelArgs:
     vocab_size: int = 128256
     norm_eps: float = 1e-5
     rope_theta: float = 500000
-
+    max_seq_len: int = 1048576
 
 class SeqlensInfo:
     def __init__(self, seqlens_q_np, seqlens_k_np, device):
@@ -112,13 +112,13 @@ class Attention(nn.Module):
         self.n_local_heads = args.n_heads
         self.n_local_kv_heads = self.n_kv_heads
         self.n_rep = self.n_local_heads // self.n_local_kv_heads
-        self.head_dim = args.dim // args.n_heads
+        self.head_dim = args.model_dim // args.n_heads
 
-        self.wq = nn.Linear(args.dim, args.n_heads * self.head_dim, bias=False)
-        self.wk = nn.Linear(args.dim, self.n_kv_heads * self.head_dim, bias=False)
-        self.wv = nn.Linear(args.dim, self.n_kv_heads * self.head_dim, bias=False)
+        self.wq = nn.Linear(args.model_dim, args.n_heads * self.head_dim, bias=False)
+        self.wk = nn.Linear(args.model_dim, self.n_kv_heads * self.head_dim, bias=False)
+        self.wv = nn.Linear(args.model_dim, self.n_kv_heads * self.head_dim, bias=False)
         
-        self.wo = nn.Linear(args.n_heads * self.head_dim, args.dim, bias=False)
+        self.wo = nn.Linear(args.n_heads * self.head_dim, args.model_dim, bias=False)
 
         self.layer_id = layer_id
 
@@ -194,14 +194,11 @@ class Attention(nn.Module):
         return final_out
     
 class MLP(nn.Module):
-    def __init__(self, config, intermediate_size=None):
+    def __init__(self, model_dim, expert_dim):
         super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.gate_proj = nn.Linear(model_dim, expert_dim, bias=False)
+        self.up_proj = nn.Linear(model_dim, expert_dim, bias=False)
+        self.down_proj = nn.Linear(expert_dim, model_dim, bias=False)
 
     def forward(self, x):
         down_proj = self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))
@@ -264,13 +261,13 @@ class TransformerBlock(nn.Module):
     def __init__(self, layer_id: int, args: ModelArgs):
         super().__init__()
         self.n_heads = args.n_heads
-        self.dim = args.dim
-        self.head_dim = args.dim // args.n_heads
+        self.model_dim = args.model_dim
+        self.head_dim = args.model_dim // args.n_heads
         self.attention = Attention(layer_id, args)
-        self.feed_forward = MoEMLP(args.num_experts, args.num_experts_per_tok, args.dim, args.expert_dim)
+        self.feed_forward = MoEMLP(args.num_experts, args.num_experts_per_tok, args.model_dim, args.expert_dim)
         self.layer_id = layer_id
-        self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
-        self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
+        self.attention_norm = RMSNorm(args.model_dim, eps=args.norm_eps)
+        self.ffn_norm = RMSNorm(args.model_dim, eps=args.norm_eps)
 
         self.layer_save_dir = SAVE_DIR + f"/layers_fwd/{layer_id}"
 
@@ -301,18 +298,18 @@ class MoETransformer(nn.Module):
         self.vocab_size = params.vocab_size
         self.n_layers = params.n_layers
 
-        self.tok_embeddings = nn.Embedding(params.vocab_size, params.dim)
+        self.tok_embeddings = nn.Embedding(params.vocab_size, params.model_dim)
 
         self.layers = torch.nn.ModuleList()
         for layer_id in range(params.n_layers):
             self.layers.append(TransformerBlock(layer_id, params))
 
-        self.norm = RMSNorm(params.dim, eps=params.norm_eps)
+        self.norm = RMSNorm(params.model_dim, eps=params.norm_eps)
 
-        self.output = nn.Linear(params.dim, params.vocab_size, bias=False)
+        self.output = nn.Linear(params.model_dim, params.vocab_size, bias=False)
 
         self.freqs_cis = precompute_freqs_cis(
-            params.dim // params.n_heads,
+            params.model_dim // params.n_heads,
             params.max_seq_len * 2,
             params.rope_theta,
         )
