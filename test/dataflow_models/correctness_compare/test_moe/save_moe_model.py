@@ -2,22 +2,36 @@ import torch
 import numpy as np
 import random
 from moe_model_flash2 import MoETransformer, ModelArgs
+import sys
+
+if len(sys.argv) != 2:
+    print("Usage: python save_moe_model.py <model_path>")
+    sys.exit(1)
+
+MODEL_PATH = sys.argv[1]
 
 model_args = ModelArgs()
 
-model_args.model_dim = 1536
-model_args.expert_dim = 768
-model_args.n_layers = 8
-model_args.n_heads = 24
-model_args.n_kv_heads = 3
-model_args.num_experts = 64
-model_args.num_experts_per_tok = 4
+model_args.embed_dtype = "bf16"
+model_args.attn_dtype = "bf16"
+model_args.expert_dtype = "bf16"
+model_args.head_dtype = "bf16"
 model_args.vocab_size = 128256
+model_args.num_layers = 8
+model_args.model_dim = 1536
+model_args.num_q_heads = 24
+model_args.num_kv_heads = 3
+model_args.qk_norm_type = None
+model_args.qk_norm_weight_type = None
+model_args.num_shared_experts = 0
+model_args.num_routed_experts = 64
+model_args.top_k_routed_experts = 4
+model_args.expert_dim = 768
+model_args.expert_mlp_type = "swiglu"
 model_args.rope_theta = 500000
-model_args.norm_eps = 1e-5
+model_args.rms_norm_epsilon = 1e-5
 model_args.max_seq_len = 1048576
 
-torch.set_default_tensor_type(torch.cuda.BFloat16Tensor)
 
 moe_model = MoETransformer(model_args)
 
@@ -29,4 +43,4 @@ np.random.seed(SEED)
 random.seed(SEED)
 
 
-torch.save(moe_model, 'full_model.pth')
+torch.save(moe_model, MODEL_PATH)

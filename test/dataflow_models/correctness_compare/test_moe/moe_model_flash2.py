@@ -5,14 +5,8 @@ import math
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
-import fairscale.nn.model_parallel.initialize as fs_init
 import torch
 import torch.nn.functional as F
-from fairscale.nn.model_parallel.layers import (
-    ColumnParallelLinear,
-    RowParallelLinear,
-    VocabParallelEmbedding,
-)
 from torch import nn
 import numpy as np
 import time
@@ -22,19 +16,39 @@ from flash_attn import flash_attn_varlen_func
 TO_SAVE = True
 SAVE_DIR = "/home/shein/Documents/grad_school/research/ml_dataflow_stuff/ml_dataflow/test/dataflow_models/correct_transformer_data"
 
+
 @dataclass
 class ModelArgs:
-    model_dim: int = 1536
-    expert_dim: int = 768
-    n_layers: int = 8
-    n_heads: int = 24
-    n_kv_heads: Optional[int] = 3
-    num_experts: int = 64
-    num_experts_per_tok: int = 4
+    embed_dtype: str = "bf16"
+    attn_dtype: str = "bf16"
+    expert_dtype: str = "bf16"
+    head_dtype: str = "bf16"
     vocab_size: int = 128256
-    norm_eps: float = 1e-5
+    num_layers: int = 8
+    model_dim: int = 1536
+    num_q_heads: int = 24
+    num_kv_heads: int = 3
+    qk_norm_type: str = None
+    qk_norm_weight_type: str = None
+    num_shared_experts: int = 0
+    num_routed_experts: int = 64
+    top_k_routed_experts: int = 4
+    expert_dim: int = 768
+    expert_mlp_type: str = "swiglu"
     rope_theta: float = 500000
+    rms_norm_epsilon: float = 1e-5
     max_seq_len: int = 1048576
+
+
+def dtype_to_torch_dtype(dtype: str):
+    if dtype == "bf16":
+        return torch.bfloat16
+    elif dtype == "fp16":
+        return torch.float16
+    elif dtype == "fp32":
+        return torch.float32
+    else:
+        raise ValueError(f"Invalid dtype: {dtype}")
 
 class SeqlensInfo:
     def __init__(self, seqlens_q_np, seqlens_k_np, device):
@@ -50,10 +64,11 @@ class SeqlensInfo:
         self.max_seqlen_k = np.max(seqlens_k_np)
 
 class RMSNorm(torch.nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, dim: int, eps: float = 1e-6, dtype: torch.dtype = torch.bfloat16):
         super().__init__()
         self.eps = eps
-        self.weight = nn.Parameter(torch.ones(dim))
+        self.dtype = dtype
+        self.weight = nn.Parameter(torch.ones(dim, dtype=dtype))
 
     def _norm(self, x):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
@@ -95,30 +110,32 @@ def apply_rotary_emb(
 
 def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
     """torch.repeat_interleave(x, dim=2, repeats=n_rep)"""
-    bs, slen, n_kv_heads, head_dim = x.shape
+    bs, slen, num_kv_heads, head_dim = x.shape
     if n_rep == 1:
         return x
     return (
         x[:, :, :, None, :]
-        .expand(bs, slen, n_kv_heads, n_rep, head_dim)
-        .reshape(bs, slen, n_kv_heads * n_rep, head_dim)
+        .expand(bs, slen, num_kv_heads, n_rep, head_dim)
+        .reshape(bs, slen, num_kv_heads * n_rep, head_dim)
     )
 
 
 class Attention(nn.Module):
     def __init__(self, layer_id, args: ModelArgs):
         super().__init__()
-        self.n_kv_heads = args.n_heads if args.n_kv_heads is None else args.n_kv_heads
-        self.n_local_heads = args.n_heads
-        self.n_local_kv_heads = self.n_kv_heads
+        self.num_kv_heads = args.num_q_heads if args.num_kv_heads is None else args.num_kv_heads
+        self.n_local_heads = args.num_q_heads
+        self.n_local_kv_heads = self.num_kv_heads
         self.n_rep = self.n_local_heads // self.n_local_kv_heads
-        self.head_dim = args.model_dim // args.n_heads
+        self.head_dim = args.model_dim // args.num_q_heads
 
-        self.wq = nn.Linear(args.model_dim, args.n_heads * self.head_dim, bias=False)
-        self.wk = nn.Linear(args.model_dim, self.n_kv_heads * self.head_dim, bias=False)
-        self.wv = nn.Linear(args.model_dim, self.n_kv_heads * self.head_dim, bias=False)
+        self.attn_dtype = dtype_to_torch_dtype(args.attn_dtype)
+
+        self.wq = nn.Linear(args.model_dim, args.num_q_heads * self.head_dim, bias=False, dtype=self.attn_dtype)
+        self.wk = nn.Linear(args.model_dim, self.num_kv_heads * self.head_dim, bias=False, dtype=self.attn_dtype)
+        self.wv = nn.Linear(args.model_dim, self.num_kv_heads * self.head_dim, bias=False, dtype=self.attn_dtype)
         
-        self.wo = nn.Linear(args.n_heads * self.head_dim, args.model_dim, bias=False)
+        self.wo = nn.Linear(args.num_q_heads * self.head_dim, args.model_dim, bias=False, dtype=self.attn_dtype)
 
         self.layer_id = layer_id
 
@@ -157,17 +174,11 @@ class Attention(nn.Module):
             deterministic=True,
             causal=True
         )
-
-        # if TO_SAVE:
-        #     torch.save(xq.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_q.pt")
-        #     torch.save(xk.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_k.pt")
-        #     torch.save(xv.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_v.pt")
-        #     torch.save(output.cpu().view(bsz * seqlen, -1), f"flash_layers/{self.layer_id}/step_{step_num}_fwd_attn_out.pt")
-
+        
         output = output.view(bsz, seqlen, -1)
 
         """
-        # repeat k/v heads if n_kv_heads < n_heads
+        # repeat k/v heads if num_kv_heads < num_q_heads
         keys = repeat_kv(
             xk, self.n_rep
         )  # (bs, cache_len + seqlen, n_local_heads, head_dim)
@@ -194,11 +205,12 @@ class Attention(nn.Module):
         return final_out
     
 class MLP(nn.Module):
-    def __init__(self, model_dim, expert_dim):
+    def __init__(self, model_dim, expert_dim, expert_dtype=torch.bfloat16):
         super().__init__()
-        self.gate_proj = nn.Linear(model_dim, expert_dim, bias=False)
-        self.up_proj = nn.Linear(model_dim, expert_dim, bias=False)
-        self.down_proj = nn.Linear(expert_dim, model_dim, bias=False)
+        self.expert_dtype = expert_dtype
+        self.gate_proj = nn.Linear(model_dim, expert_dim, bias=False, dtype=expert_dtype)
+        self.up_proj = nn.Linear(model_dim, expert_dim, bias=False, dtype=expert_dtype)
+        self.down_proj = nn.Linear(expert_dim, model_dim, bias=False, dtype=expert_dtype)
 
     def forward(self, x):
         down_proj = self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))
@@ -206,15 +218,17 @@ class MLP(nn.Module):
 
 
 class MoEMLP(nn.Module):
-    def __init__(self, num_experts, top_k, model_dim, expert_dim):
+    def __init__(self, num_experts, top_k, model_dim, expert_dim, router_dtype=torch.bfloat16, expert_dtype=torch.bfloat16):
         super().__init__()
         self.num_experts = num_experts
         self.top_k = top_k
+        self.router_dtype = router_dtype
+        self.expert_dtype = expert_dtype
 
         # gating
-        self.gate = nn.Linear(model_dim, num_experts, bias=False)
+        self.gate = nn.Linear(model_dim, num_experts, bias=False, dtype=router_dtype)
         self.experts = nn.ModuleList(
-            [MLP(model_dim, expert_dim) for _ in range(self.num_experts)]
+            [MLP(model_dim, expert_dim, expert_dtype) for _ in range(self.num_experts)]
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -260,14 +274,15 @@ class MoEMLP(nn.Module):
 class TransformerBlock(nn.Module):
     def __init__(self, layer_id: int, args: ModelArgs):
         super().__init__()
-        self.n_heads = args.n_heads
+        self.num_q_heads = args.num_q_heads
         self.model_dim = args.model_dim
-        self.head_dim = args.model_dim // args.n_heads
+        self.head_dim = args.model_dim // args.num_q_heads
         self.attention = Attention(layer_id, args)
-        self.feed_forward = MoEMLP(args.num_experts, args.num_experts_per_tok, args.model_dim, args.expert_dim)
+        self.feed_forward = MoEMLP(args.num_routed_experts, args.top_k_routed_experts, args.model_dim, args.expert_dim, 
+                                   router_dtype=dtype_to_torch_dtype(args.attn_dtype), expert_dtype=dtype_to_torch_dtype(args.expert_dtype))
         self.layer_id = layer_id
-        self.attention_norm = RMSNorm(args.model_dim, eps=args.norm_eps)
-        self.ffn_norm = RMSNorm(args.model_dim, eps=args.norm_eps)
+        self.attention_norm = RMSNorm(args.model_dim, eps=args.rms_norm_epsilon, dtype=dtype_to_torch_dtype(args.attn_dtype))
+        self.ffn_norm = RMSNorm(args.model_dim, eps=args.rms_norm_epsilon, dtype=dtype_to_torch_dtype(args.attn_dtype))
 
         self.layer_save_dir = SAVE_DIR + f"/layers_fwd/{layer_id}"
 
@@ -303,20 +318,20 @@ class MoETransformer(nn.Module):
         super().__init__()
         self.params = params
         self.vocab_size = params.vocab_size
-        self.n_layers = params.n_layers
+        self.num_layers = params.num_layers
 
-        self.tok_embeddings = nn.Embedding(params.vocab_size, params.model_dim)
+        self.tok_embeddings = nn.Embedding(params.vocab_size, params.model_dim, dtype=dtype_to_torch_dtype(params.embed_dtype))
 
         self.layers = torch.nn.ModuleList()
-        for layer_id in range(params.n_layers):
+        for layer_id in range(params.num_layers):
             self.layers.append(TransformerBlock(layer_id, params))
 
-        self.norm = RMSNorm(params.model_dim, eps=params.norm_eps)
+        self.norm = RMSNorm(params.model_dim, eps=params.rms_norm_epsilon, dtype=dtype_to_torch_dtype(params.head_dtype))
 
-        self.output = nn.Linear(params.model_dim, params.vocab_size, bias=False)
+        self.output = nn.Linear(params.model_dim, params.vocab_size, bias=False, dtype=dtype_to_torch_dtype(params.head_dtype))
 
         self.freqs_cis = precompute_freqs_cis(
-            params.model_dim // params.n_heads,
+            params.model_dim // params.num_q_heads,
             params.max_seq_len * 2,
             params.rope_theta,
         )
