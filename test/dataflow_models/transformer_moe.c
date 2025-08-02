@@ -19,9 +19,9 @@
 	#define TOKEN_IDS_PATH "../data/65536_token_ids_uint32.dat"
 	#define TOKEN_LABELS_PATH "../data/65536_labels_uint32.dat"
 
-	#define DEFAULT_MIN_CHUNK_SIZE 8192
+	#define DEFAULT_MIN_CHUNK_SIZE 32768
 
-	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 8192
+	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 2048
 
 	// this (along with num seqs per round) modulates how frequently we will step 
 	// the optimizer...
@@ -3623,7 +3623,7 @@
 					sprintf(profile_msg, "Seq Group: %d", seq_group);
 					dataflow_handle.profiler.range_push(profile_msg);
 
-					for (int c = num_chunks_per_seq -1; c >= 0; c--){
+					for (int c = num_chunks_per_seq -1; c >= 0; c--) {
 
 						chunk_id = seq_group * num_chunks_per_seq + c;
 
@@ -3727,18 +3727,6 @@
 
 							if (ret){
 								fprintf(stderr, "Error: failed to submit outbound transfer for loss tracker...\n");
-								return -1;
-							}
-
-							cur_stream_state = dataflow_handle.get_stream_state(&dataflow_handle, loss_stream_id);
-							if (!cur_stream_state){
-								fprintf(stderr, "Error: failed to get stream state for loss tracker...\n");
-								return -1;
-							}
-
-							ret = dataflow_handle.submit_dependency(&dataflow_handle, compute_stream_id, cur_stream_state);
-							if (ret){
-								fprintf(stderr, "Error: failed to submit dependency to for compute stream to wait on loss tracker transfers...\n");
 								return -1;
 							}
 						}
