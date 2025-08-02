@@ -205,6 +205,11 @@ extern "C" __global__ void default_select_experts_bf16_kernel(int total_tokens, 
                 // into holding zone for "expert_id"
                 chosen_experts[(orig_token_row * (uint64_t) top_k_experts) + k] = expert_id;
 
+                if (expert_id >= n_experts || expert_id < 0){
+                    printf("SELECT EXPERTS ERROR: Row ID: %d, k: %d, expert_id: %d, raw val: %f, max_val_top_k: %f\n", orig_token_row, k, expert_id, warp_top_k_expert_vals[warp_id * top_k_experts + k], max_val_top_k);
+                    return;
+                }
+
                 // assert expert_id < n_experts
                 atomicAdd(&(block_expert_counts[expert_id]), 1);
             }
