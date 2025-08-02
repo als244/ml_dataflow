@@ -3207,7 +3207,7 @@ int dataflow_submit_transformer_moe_block_recompute(Dataflow_Handle * dataflow_h
 			int cur_expert_num_tokens = host_expert_counts[i];
 
 	
-			printf("[Expert %d] Number of tokens: %d\n", i, cur_expert_num_tokens);
+			//printf("[Expert %d] Number of tokens: %d\n", i, cur_expert_num_tokens);
 			total_tokens += cur_expert_num_tokens;
 
 			expert_zone_size = (uint64_t) cur_expert_num_tokens * (uint64_t) model_dim * (uint64_t) x_el_size;
