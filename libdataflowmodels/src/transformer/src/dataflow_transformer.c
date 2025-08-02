@@ -3571,7 +3571,15 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 			return -1;
 		}
 
-		ret = (dataflow_handle -> sync_handle)(dataflow_handle);
+
+	}
+
+	if (total_tokens != total_q * top_k_active){
+		fprintf(stderr, "Error: total routed tokens does not match expected number of tokens. Chunk size: %d, top_k_active: %d => expected %d, got %d\n", total_q, top_k_active, total_q * top_k_active, total_tokens	);
+		return -1;
+	}
+
+	ret = (dataflow_handle -> sync_handle)(dataflow_handle);
 		if (ret){
 			fprintf(stderr, "Error: failed to sync handle after head...\n");
 			return -1;
@@ -3586,13 +3594,6 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		}
 
 		exit(0);
-
-	}
-
-	if (total_tokens != total_q * top_k_active){
-		fprintf(stderr, "Error: total routed tokens does not match expected number of tokens. Chunk size: %d, top_k_active: %d => expected %d, got %d\n", total_q, top_k_active, total_q * top_k_active, total_tokens	);
-		return -1;
-	}
 
 	// Also merge all the shared experts into the upstream gradient...
 
