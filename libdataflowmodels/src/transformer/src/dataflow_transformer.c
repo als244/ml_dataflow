@@ -3614,7 +3614,7 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 	// Add results of router path to the upstream gradient...
 	
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
-		fwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
+		fwd_dt, bwd_dt, bwd_dt, bwd_dt,
 		compute_dt,
 		to_transa, to_transb,
 		model_dim, num_routed_experts, total_q, 
