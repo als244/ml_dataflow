@@ -41,6 +41,8 @@
 #define ROUND_UP_TO_MULTIPLE(x, multiple) (((x + multiple - 1) / multiple) * multiple)
 
 
+extern "C" __global__ void default_cast_bf16_fp32_kernel(uint64_t num_els, __nv_bfloat16 * src, float * dst);
+extern "C" __global__ void default_cast_and_add_fp32_bf16_bf16_kernel(int64_t num_elements, float alpha, float * A, float beta, __nv_bfloat16 * B, __nv_bfloat16 * C);
 
 
 // Embedding
@@ -252,7 +254,7 @@ COULD USE TEMPLATE BUT THE NAME MANGLING IS A PAIN...
 // MoE Kenrels
 
 // Selection
-extern "C" __global__ void default_select_experts_fp32_kernel(int total_tokens, int n_experts, int top_k_experts,  float * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum);
+extern "C" __global__ void default_select_experts_fp32_kernel(int total_tokens, int n_experts, int top_k_experts,  float * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * host_expert_counts);
 extern "C" __global__ void default_select_experts_fp16_kernel(int total_tokens, int n_experts, int top_k_experts,  __half * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum);
 extern "C" __global__ void default_select_experts_bf16_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_bfloat16 * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum, int * host_expert_counts);
 extern "C" __global__ void default_select_experts_fp8e4m3_kernel(int total_tokens, int n_experts, int top_k_experts,  __nv_fp8_e4m3 * X_routed, float * token_expert_weights, uint16_t * chosen_experts, int * expert_counts, int * expert_counts_cumsum);

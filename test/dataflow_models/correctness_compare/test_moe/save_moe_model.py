@@ -3,7 +3,7 @@ import numpy as np
 import random
 from moe_model_flash2 import MoETransformer, ModelArgs
 import sys
-
+import pickle
 if len(sys.argv) != 2:
     print("Usage: python save_moe_model.py <model_path>")
     sys.exit(1)
@@ -14,6 +14,7 @@ model_args = ModelArgs()
 
 model_args.embed_dtype = "bf16"
 model_args.attn_dtype = "bf16"
+model_args.router_dtype = "fp32"
 model_args.expert_dtype = "bf16"
 model_args.head_dtype = "bf16"
 model_args.vocab_size = 128256
@@ -32,9 +33,6 @@ model_args.rope_theta = 500000
 model_args.rms_norm_epsilon = 1e-5
 model_args.max_seq_len = 1048576
 
-
-moe_model = MoETransformer(model_args)
-
 SEED = 42
 
 torch.manual_seed(SEED)
@@ -42,5 +40,8 @@ torch.cuda.manual_seed(SEED)
 np.random.seed(SEED)
 random.seed(SEED)
 
+moe_model = MoETransformer(model_args)
 
-torch.save(moe_model, MODEL_PATH)
+pickle.dump(model_args, open(f"{MODEL_PATH}_config.pkl", "wb"))
+
+torch.save(moe_model.state_dict(), f"{MODEL_PATH}.pt")

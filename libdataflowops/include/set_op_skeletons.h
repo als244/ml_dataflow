@@ -12,7 +12,11 @@
 int dataflow_set_op_skeleton(Op_Skeleton * skeleton, char * op_name, DataflowDatatype fwd_dt, DataflowDatatype bwd_dt);
 
 
+
 // During op submission, the function should directly call the appropriate setter...
+
+void dataflow_set_default_cast_skeleton(Op_Skeleton * skeleton, DataflowDatatype A_dt, DataflowDatatype B_dt, DataflowDatatype C_dt);
+void dataflow_set_default_cast_and_add_skeleton(Op_Skeleton * skeleton, DataflowDatatype A_dt, DataflowDatatype B_dt, DataflowDatatype C_dt);
 
 // Matmul Helper
 void dataflow_set_matmul_skeleton(Op_Skeleton * skeleton);

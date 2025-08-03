@@ -21,6 +21,7 @@ SAVE_DIR = "/home/shein/Documents/grad_school/research/ml_dataflow_stuff/ml_data
 class ModelArgs:
     embed_dtype: str = "bf16"
     attn_dtype: str = "bf16"
+    router_dtype: str = "fp32"
     expert_dtype: str = "bf16"
     head_dtype: str = "bf16"
     vocab_size: int = 128256
@@ -64,7 +65,7 @@ class SeqlensInfo:
         self.max_seqlen_k = np.max(seqlens_k_np)
 
 class RMSNorm(torch.nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6, dtype: torch.dtype = torch.bfloat16):
+    def __init__(self, dim: int, eps: float = 1e-5, dtype: torch.dtype = torch.bfloat16):
         super().__init__()
         self.eps = eps
         self.dtype = dtype
@@ -74,8 +75,8 @@ class RMSNorm(torch.nn.Module):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
 
     def forward(self, x):
-        output = self._norm(x.float()).type_as(x)
-        return output * self.weight
+        output = self._norm(x.float())
+        return (output * self.weight.float()).type_as(x)
 
 
 def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0):
@@ -205,44 +206,185 @@ class Attention(nn.Module):
         return final_out
     
 class MLP(nn.Module):
-    def __init__(self, model_dim, expert_dim, expert_dtype=torch.bfloat16):
+    def __init__(self, model_dim, expert_dim, expert_id, layer_id, expert_dtype=torch.bfloat16):
         super().__init__()
         self.expert_dtype = expert_dtype
+        self.model_dim = model_dim
+        self.expert_dim = expert_dim
+        self.layer_id = layer_id
+        self.expert_id = expert_id
         self.gate_proj = nn.Linear(model_dim, expert_dim, bias=False, dtype=expert_dtype)
         self.up_proj = nn.Linear(model_dim, expert_dim, bias=False, dtype=expert_dtype)
         self.down_proj = nn.Linear(expert_dim, model_dim, bias=False, dtype=expert_dtype)
 
-    def forward(self, x):
+    def forward(self, x, step_num):
         down_proj = self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
 
+        if TO_SAVE and self.layer_id == 0:
+            print(f"[Step {step_num}] Saving MLP inp for layer {self.layer_id} and expert {self.expert_id}...")
+            torch.save(x.cpu().view(-1, self.model_dim), f"{SAVE_DIR}/layers_fwd/{self.layer_id}/expert_{self.expert_id}_inp.pt")
+        
+            print(f"[Step {step_num}] Saving MLP out for layer {self.layer_id} and expert {self.expert_id}...")
+            torch.save(down_proj.cpu().view(-1, self.model_dim), f"{SAVE_DIR}/layers_fwd/{self.layer_id}/expert_{self.expert_id}_out.pt")
+
+        return down_proj
+    
+
+def deterministic_topk(input_tensor: torch.Tensor, k: int, dim: int = -1, largest: bool = True) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    A robust and deterministic implementation of torch.topk that tie-breaks by
+    choosing the element with the lower index.
+
+    This version is numerically stable and handles broadcasting correctly.
+
+    Args:
+        input_tensor (torch.Tensor): The input tensor.
+        k (int): The number of top elements to retrieve.
+        dim (int, optional): The dimension along which to find the top elements. Defaults to -1.
+        largest (bool, optional): If True, finds the k largest elements.
+                                  If False, finds the k smallest elements. Defaults to True.
+
+    Returns:
+        tuple[torch.Tensor, torch.Tensor]: A tuple containing the top-k values and their indices.
+    """
+    # Ensure the dimension is non-negative
+    if dim < 0:
+        dim = input_tensor.dim() + dim
+
+    # Promote to a higher-precision float for the composite key calculation
+    input_float = input_tensor.to(torch.float32)
+    
+    # Create the indices tensor and shape it for broadcasting
+    n = input_tensor.shape[dim]
+    view_shape = [1] * input_tensor.dim()
+    view_shape[dim] = n
+    indices = torch.arange(n, device=input_tensor.device).view(view_shape)
+
+    # --- Create the composite key ---
+    # We add a tiny epsilon scaled by the index to break ties.
+    # Epsilon must be small enough not to affect the original value order.
+    epsilon = 1e-6
+
+    if largest:
+        # For largest=True, we want to minimize (-value + index * epsilon)
+        composite_key = -input_float + indices * epsilon
+    else:
+        # For smallest=True, we want to minimize (value + index * epsilon)
+        composite_key = input_float + indices * epsilon
+
+    # Find the top-k elements of the composite key.
+    # Since a "better" element always has a smaller key in our scheme,
+    # we always use largest=False.
+    _, topk_indices = torch.topk(composite_key, k, dim=dim, largest=False)
+
+    # Gather the original values using the final, deterministic indices
+    topk_values = torch.gather(input_tensor, dim, topk_indices)
+
+    return topk_values, topk_indices
+
+
+def create_fourier_feature_matrix(in_features, out_features, normalize=True):
+    """
+    Creates a matrix using Fourier feature initialization, with an option to normalize columns.
+    """
+    position = np.arange(in_features).reshape(-1, 1)
+    d_model_term = np.arange(0, out_features, 2)
+    div_term = 1 / (10000**(d_model_term / out_features))
+
+    M = np.zeros((in_features, out_features))
+    
+    M[:, 0::2] = np.sin(position * div_term)
+    M[:, 1::2] = np.cos(position * div_term)
+    
+    if normalize:
+        # Normalize each column to have a unit L2 norm
+        norms = np.linalg.norm(M, axis=0)
+        M = M / norms
+    
+    return M
+
+def create_scaled_qr_matrix(in_features, out_features, std_dev=1):
+    """
+    Creates an orthogonal matrix with a custom element-wise standard deviation.
+
+    Args:
+        in_features (int): The number of rows (e.g., model_dim).
+        out_features (int): The number of columns (e.g., num_experts).
+        std_dev (float): The desired standard deviation of the matrix elements.
+
+    Returns:
+        np.ndarray: An orthogonal matrix of shape (D, d) with the specified std dev.
+    """
+    # 1. Create the orthonormal matrix Q from a random Gaussian matrix.
+    # The columns of Q are perfectly orthogonal and have a unit norm.
+    random_matrix = np.random.randn(in_features, out_features)
+    q_matrix, _ = np.linalg.qr(random_matrix, mode="reduced")
+
+    # 2. Calculate the scaling factor needed to achieve the target std_dev.
+    # The elements of q_matrix have a variance of ~1/D. To get a variance
+    # of std_dev**2, we need to scale the matrix by std_dev * sqrt(in_features).
+    scale_factor = std_dev * np.sqrt(in_features)
+
+    # 3. Apply the scaling factor to the orthonormal matrix.
+    scaled_q_matrix = q_matrix * scale_factor
+
+    return scaled_q_matrix
 
 class MoEMLP(nn.Module):
-    def __init__(self, num_experts, top_k, model_dim, expert_dim, router_dtype=torch.bfloat16, expert_dtype=torch.bfloat16):
+    def __init__(self, num_experts, top_k, model_dim, expert_dim, layer_id, router_dtype=torch.float32, expert_dtype=torch.bfloat16):
         super().__init__()
         self.num_experts = num_experts
         self.top_k = top_k
         self.router_dtype = router_dtype
         self.expert_dtype = expert_dtype
+        self.layer_id = layer_id
 
         # gating
         self.gate = nn.Linear(model_dim, num_experts, bias=False, dtype=router_dtype)
+
+        ## give more std for the router than usual
+        
+        ## default init would be:
+        #torch.nn.init.uniform_(self.gate.weight, -1 / math.sqrt(model_dim), 1 / math.sqrt(model_dim))
+
+        with torch.no_grad():
+            # Create the matrix with shape (model_dim, num_experts)
+            qr_matrix = create_scaled_qr_matrix(model_dim, num_experts, std_dev=1)
+            
+            # The gate weight requires shape (num_experts, model_dim), so we transpose.
+            # Convert the NumPy array to a PyTorch tensor with the correct dtype.
+            gate_weight = torch.from_numpy(qr_matrix).T.to(dtype=self.router_dtype)
+            
+            # Assign the new weights to the gate layer.
+            self.gate.weight.copy_(gate_weight)
+
         self.experts = nn.ModuleList(
-            [MLP(model_dim, expert_dim, expert_dtype) for _ in range(self.num_experts)]
+            [MLP(model_dim, expert_dim, expert_id, self.layer_id, expert_dtype) for expert_id in range(self.num_experts)]
         )
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, step_num: int) -> torch.Tensor:
         """ """
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
         # router_logits: (batch * sequence_length, n_experts)
         router_logits = self.gate(hidden_states)
 
-        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        # we cast back to the input dtype
-        routing_weights = routing_weights.to(hidden_states.dtype)
+        #routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+        #routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+        #routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+        
+        routing_weights, selected_experts = deterministic_topk(router_logits, self.top_k, dim=-1)
+        routing_weights = F.softmax(routing_weights.float(), dim=-1)
+
+        if TO_SAVE:
+            print(f"[Step {step_num}] Saving router logits for layer {self.layer_id}...")
+            torch.save(router_logits.cpu().view(-1, self.num_experts), f"{SAVE_DIR}/layers_fwd/{self.layer_id}/router_logits.pt")
+        
+            print(f"[Step {step_num}] Saving selected experts for layer {self.layer_id}...")
+            torch.save(selected_experts.cpu().view(-1, self.top_k), f"{SAVE_DIR}/layers_fwd/{self.layer_id}/selected_experts.pt")
+
+            print(f"[Step {step_num}] Saving routing weights for layer {self.layer_id}...")
+            torch.save(routing_weights.cpu().view(-1, self.top_k), f"{SAVE_DIR}/layers_fwd/{self.layer_id}/routing_weights.pt")
 
         final_hidden_states = torch.zeros(
             (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
@@ -258,11 +400,15 @@ class MoEMLP(nn.Module):
             expert_layer = self.experts[expert_idx]
             idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
 
+            if TO_SAVE and self.layer_id == 0:
+                print(f"[Step {step_num}] Saving chosen tokens for layer {self.layer_id} and expert {expert_idx}...")
+                torch.save(top_x.cpu().view(-1), f"{SAVE_DIR}/layers_fwd/{self.layer_id}/expert_{expert_idx.item()}_chosen_tokens.pt")
+
             # Index the correct hidden states and compute the expert hidden state for
             # the current expert. We need to make sure to multiply the output hidden
             # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
             current_state = hidden_states[None, top_x].reshape(-1, hidden_dim)
-            current_hidden_states = expert_layer(current_state) * routing_weights[top_x, idx, None]
+            current_hidden_states = (expert_layer(current_state, step_num).float() * routing_weights[top_x, idx, None]).to(hidden_states.dtype)
 
             # However `index_add_` only support torch tensors for indexing so we'll use
             # the `top_x` tensor here.
@@ -278,8 +424,8 @@ class TransformerBlock(nn.Module):
         self.model_dim = args.model_dim
         self.head_dim = args.model_dim // args.num_q_heads
         self.attention = Attention(layer_id, args)
-        self.feed_forward = MoEMLP(args.num_routed_experts, args.top_k_routed_experts, args.model_dim, args.expert_dim, 
-                                   router_dtype=dtype_to_torch_dtype(args.attn_dtype), expert_dtype=dtype_to_torch_dtype(args.expert_dtype))
+        self.feed_forward = MoEMLP(args.num_routed_experts, args.top_k_routed_experts, args.model_dim, args.expert_dim, layer_id, 
+                                   router_dtype=dtype_to_torch_dtype(args.router_dtype), expert_dtype=dtype_to_torch_dtype(args.expert_dtype))
         self.layer_id = layer_id
         self.attention_norm = RMSNorm(args.model_dim, eps=args.rms_norm_epsilon, dtype=dtype_to_torch_dtype(args.attn_dtype))
         self.ffn_norm = RMSNorm(args.model_dim, eps=args.rms_norm_epsilon, dtype=dtype_to_torch_dtype(args.attn_dtype))
@@ -304,12 +450,16 @@ class TransformerBlock(nn.Module):
 
         ffn_norm = self.ffn_norm(h)
 
-        ffn_out, router_logits = self.feed_forward(ffn_norm)
+        if TO_SAVE:
+            print(f"[Step {step_num}] Saving FFN Norm out for layer {self.layer_id}...")
+            torch.save(ffn_norm.cpu().view(-1, self.model_dim), f"{SAVE_DIR}/layers_fwd/{self.layer_id}/ffn_norm_out.pt")
+
+        ffn_out, router_logits = self.feed_forward(ffn_norm, step_num)
 
         out = h + ffn_out
 
         if TO_SAVE:
-            print(f"[Step {step_num}] Saving block out for layer {self.layer_id}...\n")
+            print(f"[Step {step_num}] Saving block out for layer {self.layer_id}...\n\n\n")
             torch.save(ffn_norm.cpu().view(-1, self.model_dim), f"{SAVE_DIR}/layers_fwd/{self.layer_id}/block_out.pt")
 
         return out
@@ -363,7 +513,7 @@ class MoETransformer(nn.Module):
         output = self.output(h)
 
         if TO_SAVE:
-            print(f"[Step {step_num}] Saving final head output...\n")
+            print(f"[Step {step_num}] Saving final head output...\n\n\n")
             torch.save(output.cpu().view(-1, self.vocab_size), f"{SAVE_DIR}/head_fwd/final_out.pt")
 
         return output

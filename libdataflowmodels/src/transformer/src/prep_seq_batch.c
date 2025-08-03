@@ -225,7 +225,8 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
     if (num_global_routed_experts > 0){
         // MoE offsets of important metadata...
         saved_activations_offsets -> x_routed = cur_offset;
-        cur_offset += total_tokens * num_global_routed_experts * dt_size;
+        // USING FLOAT FOR ROUTED OUTPUT...
+        cur_offset += total_tokens * num_global_routed_experts * sizeof(float);
 
         // Align offset to 256 bytes
         cur_offset = (cur_offset + 255) & ~255UL;

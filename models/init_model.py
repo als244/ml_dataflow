@@ -15,6 +15,9 @@ def get_torch_dtype_and_view_dtype(dtype_str):
     elif dtype_str == 'fp32':
         dtype = torch.float32
         view_dtype = torch.float32
+    elif dtype_str == 'none':
+        dtype = torch.float32
+        view_dtype = torch.float32
     else:
         dtype = None
         view_dtype = None
@@ -32,9 +35,12 @@ def main(config_path, model_dir_path):
         raise ValueError(f"expert_dtype not found in config")
     if "head_dtype" not in config:
         raise ValueError(f"head_dtype not found in config")
+    if "router_dtype" not in config:
+        raise ValueError(f"router_dtype not found in config")
 
     embed_dtype_str = config['embed_dtype'].lower()
     attn_dtype_str = config['attn_dtype'].lower()
+    router_dtype_str = config['router_dtype'].lower()
     expert_dtype_str = config['expert_dtype'].lower()
     head_dtype_str = config['head_dtype'].lower()
 
@@ -46,6 +52,10 @@ def main(config_path, model_dir_path):
     attn_dtype, attn_view_dtype = get_torch_dtype_and_view_dtype(attn_dtype_str)
     if attn_dtype is None or attn_view_dtype is None:
         raise ValueError(f"Invalid attn_dtype: {attn_dtype_str}")
+
+    router_dtype, router_view_dtype = get_torch_dtype_and_view_dtype(router_dtype_str)
+    if router_dtype is None or router_view_dtype is None:
+        raise ValueError(f"Invalid router_dtype: {router_dtype_str}")
 
     expert_dtype, expert_view_dtype = get_torch_dtype_and_view_dtype(expert_dtype_str)
     if expert_dtype is None or expert_view_dtype is None:
@@ -142,7 +152,7 @@ def main(config_path, model_dir_path):
      # create model directory
     os.makedirs(model_dir_path, exist_ok=True)
 
-    config_text = f"Embed Dtype: {embed_dtype_str}\nAttn Dtype: {attn_dtype_str}\nExpert Dtype: {expert_dtype_str}\nHead Dtype: {head_dtype_str}\nVocab Size: {vocab_size}\nNum Layers: {n_layers}\nModel Dim: {model_dim}\nNum Q Heads: {n_heads}\nNum KV Heads: {n_kv_heads}\nQK Norm Type: {qk_norm_type}\nQK Norm Weight Type: {qk_norm_weight_type}\nNum Shared Experts: {num_shared_experts}\nNum Routed Experts: {num_routed_experts}\nTop K Routed Experts: {top_k_routed_experts}\nExpert Dim: {expert_dim}\nExpert MLP Type: {expert_mlp_type}\nRope Theta: {rope_theta}\nRMS Norm Epsilon: {rms_norm_epsilon}\n"
+    config_text = f"Embed Dtype: {embed_dtype_str}\nAttn Dtype: {attn_dtype_str}\nRouter Dtype: {router_dtype_str}\nExpert Dtype: {expert_dtype_str}\nHead Dtype: {head_dtype_str}\nVocab Size: {vocab_size}\nNum Layers: {n_layers}\nModel Dim: {model_dim}\nNum Q Heads: {n_heads}\nNum KV Heads: {n_kv_heads}\nQK Norm Type: {qk_norm_type}\nQK Norm Weight Type: {qk_norm_weight_type}\nNum Shared Experts: {num_shared_experts}\nNum Routed Experts: {num_routed_experts}\nTop K Routed Experts: {top_k_routed_experts}\nExpert Dim: {expert_dim}\nExpert MLP Type: {expert_mlp_type}\nRope Theta: {rope_theta}\nRMS Norm Epsilon: {rms_norm_epsilon}\n"
 
     with open(f"{model_dir_path}/config.txt", "w") as f:
         f.write(config_text)
@@ -256,7 +266,8 @@ def main(config_path, model_dir_path):
 
         ## touter
         if num_routed_experts > 0:
-            router_proj = torch.empty((num_routed_experts, model_dim), dtype=attn_dtype).uniform_(-recip_model_sqrt, recip_model_sqrt).view(attn_view_dtype).numpy()
+
+            router_proj = torch.empty((num_routed_experts, model_dim), dtype=router_dtype).uniform_(-recip_model_sqrt, recip_model_sqrt).view(router_view_dtype).numpy()
 
             all_weights.append(router_proj.reshape(-1))
 

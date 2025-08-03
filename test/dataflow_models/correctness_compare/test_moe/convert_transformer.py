@@ -38,9 +38,10 @@ conversion_dict_path = sys.argv[2]
 output_dir = sys.argv[3]
 
 
-orig_model = torch.load(orig_model_path, weights_only=False).cpu()
+orig_model_dict = torch.load(orig_model_path)
 
-orig_model_dict = orig_model.state_dict()
+for k, v in orig_model_dict.items():
+    orig_model_dict[k] = v.cpu()
 
 with open(conversion_dict_path, "rb") as f:
     conversion_dict = pickle.load(f)

@@ -4,6 +4,13 @@
 #include "dataflow.h"
 #include "set_op_skeletons.h"
 
+int dataflow_submit_cast(Dataflow_Handle *handle, int stream_id, DataflowDatatype src_dt, DataflowDatatype dst_dt, uint64_t num_elements, void *src, void *dst);
+
+// C = alpha * A + beta * B
+int dataflow_submit_cast_and_add(Dataflow_Handle * handle, int stream_id,
+		DataflowDatatype A_dt, DataflowDatatype B_dt, DataflowDatatype C_dt,
+		uint64_t num_els,
+		float alpha, void * A, float beta, void * B, void * C);
 
 // CORE COMPUTE FUNCTIONS!
 //	- these end up calling external library implementations...

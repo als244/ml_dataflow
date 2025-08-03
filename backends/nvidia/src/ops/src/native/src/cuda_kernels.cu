@@ -1,6 +1,8 @@
 
 // Making all functions available within one cubin file...
 
+#include "cast/cast.cu"
+
 #include "preprocess/embedding_table.cu"
 #include "preprocess/embedding_table_bwd_w.cu"
 

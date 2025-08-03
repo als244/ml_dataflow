@@ -36,7 +36,7 @@ int default_select_experts_set_launch_config(Cuda_Launch_Config * cuda_launch_co
 	DataflowDatatype * arg_dtypes = op_skeleton_header -> arg_dtypes;
 
 
-	DataflowDatatype temp_dt = DATAFLOW_FP32;
+	DataflowDatatype temp_dt = arg_dtypes[3];
 
 	DataflowDatatype top_k_dt = arg_dtypes[5];
 

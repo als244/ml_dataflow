@@ -34,7 +34,7 @@
 
 	#define PCIE_LINK_EFFICIENCY 0.75f
 
-	#define NUM_STEPS 10
+	#define NUM_STEPS 1
 
 	// num_chunks = num_chunks_per_seq * num_seq_groups_per_round
 	// num_chunks_per_seq = seqlen / chunk_size
@@ -2948,7 +2948,7 @@
 		float lr = 2e-5;
 		float beta1 = 0.9;
 		float beta2 = 0.999;
-		float weight_decay = 1e-4;
+		float weight_decay = 1e-5;
 		float epsilon = 1e-8;
 
 

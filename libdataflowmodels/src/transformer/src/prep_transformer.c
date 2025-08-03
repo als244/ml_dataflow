@@ -84,6 +84,10 @@ static int set_transformer_block_weight_offsets(Transformer_Block_Config * confi
 	uint64_t w_2_size;
 	uint64_t w_3_size;
 
+	// router_dtype_size = el_size
+	// Make router use fp32
+	uint64_t router_dtype_size = sizeof(float);
+
 	switch (config -> mlp_type){
 		case DATAFLOW_GATED_MLP:
 			w_router_size = 0;
@@ -98,7 +102,7 @@ static int set_transformer_block_weight_offsets(Transformer_Block_Config * confi
 			w_3_size = 0;
 			break;
 		case DATAFLOW_MOE_MLP:
-			w_router_size = model_dim * num_global_routed_experts * el_size;
+			w_router_size = model_dim * num_global_routed_experts * router_dtype_size;
 			w_1_size = model_dim * ffn_dim * el_size;
 			w_2_size = ffn_dim * model_dim * el_size;
 			w_3_size = model_dim * ffn_dim * el_size;

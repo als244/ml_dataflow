@@ -10,7 +10,7 @@ import torch.optim as optim
 import time
 import numpy as np
 import os
-
+import pickle
 
 BWD_SAVE_DIR = "../correct_transformer_data"
 
@@ -18,11 +18,15 @@ TO_SAVE_PREDS = False
 TO_SAVE_OPT_STATE = False
 TO_SAVE_PARAM_GRADS = False
 
-MODEL_PATH = "./full_model.pth"
+MODEL_PATH = "./pytorch_test_moe"
 
 TRAIN_SEQ_LEN = 8192
 
-model = torch.load(MODEL_PATH, weights_only=False)
+model_args = pickle.load(open(f"{MODEL_PATH}_config.pkl", "rb"))
+
+model = MoETransformer(model_args)
+
+model.load_state_dict(torch.load(f"{MODEL_PATH}.pt"))
 
 device = torch.device("cuda:0")
 

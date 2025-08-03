@@ -5,6 +5,7 @@
 #define OPS_ROOT_DIR "."
 #endif
 
+typedef void (*cast_register_skeleton_func)(Op_Skeleton * skeleton, DataflowDatatype A_dt, DataflowDatatype B_dt, DataflowDatatype C_dt);
 typedef void (*moe_base_register_skeleton_func)(Op_Skeleton * skeleton, DataflowDatatype attn_datatype, DataflowDatatype expert_datatype);
 typedef void (*opt_base_register_skeleton_func)(Op_Skeleton * skeleton, DataflowDatatype param_dt, DataflowDatatype grad_dt, DataflowDatatype mean_dt, DataflowDatatype var_dt);
 
@@ -164,9 +165,28 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 
 	char * opt_suffix = "kernel";
 
+	int num_cast_base_funcs = 2;
+
+	char * cast_base_names[] = {"default_cast", "default_cast_and_add"};
+	cast_register_skeleton_func cast_base_register_skeleton_funcs[] = {dataflow_set_default_cast_skeleton, dataflow_set_default_cast_and_add_skeleton};
+	char * cast_init_symbols[] = {NULL, NULL};
+
+	int num_cast_funcs_per_base[] = {1, 1};
+
+	DataflowDatatype cast_dt_combos[2][1][3] = {{{DATAFLOW_BF16, DATAFLOW_FP32, DATAFLOW_NONE}}, {{DATAFLOW_FP32, DATAFLOW_BF16, DATAFLOW_BF16}}};
+	char * cast_dt_str_combos[2][1] = {{"bf16_fp32"}, {"fp32_bf16_bf16"}};
+
+	char * cast_suffix = "kernel";
+
+	int total_cast_funcs = 0;
+
+	for (int i = 0; i < num_cast_base_funcs; i++){
+		total_cast_funcs += num_cast_funcs_per_base[i];
+	}
 
 
-	int num_funcs = num_base_funcs + num_misc_funcs + total_moe_funcs + total_opt_funcs;
+
+	int num_funcs = num_base_funcs + num_misc_funcs + total_moe_funcs + total_opt_funcs + total_cast_funcs;
 
 
 
@@ -343,6 +363,20 @@ int dataflow_register_native_ops(Dataflow_Handle * dataflow_handle) {
 			sprintf(native_func_symbols[cur_func], "%s_%s_%s", opt_base_names[i], opt_dt_str_combos[i][j], opt_suffix);
 			sprintf(native_func_launch_symbols[cur_func], "%s_set_launch_config", opt_base_names[i]);
 			opt_base_register_skeleton_funcs[i](&native_op_skeletons[cur_func], opt_dt_combos[i][j][0], opt_dt_combos[i][j][1], opt_dt_combos[i][j][2], opt_dt_combos[i][j][3]);
+			cur_func++;
+		}
+	}
+
+	for (int i = 0; i < num_cast_base_funcs; i++){
+		
+		for (int j = 0; j < num_cast_funcs_per_base[i]; j++){
+			if (cast_init_symbols[i]){
+				native_func_init_symbols[cur_func] = calloc(FUNC_SYMBOL_MAX_LEN, sizeof(char));
+				sprintf(native_func_init_symbols[cur_func], "%s", cast_init_symbols[i]);
+			}
+			sprintf(native_func_symbols[cur_func], "%s_%s_%s", cast_base_names[i], cast_dt_str_combos[i][j], cast_suffix);
+			sprintf(native_func_launch_symbols[cur_func], "%s_set_launch_config", cast_base_names[i]);
+			cast_base_register_skeleton_funcs[i](&native_op_skeletons[cur_func], cast_dt_combos[i][j][0], cast_dt_combos[i][j][1], cast_dt_combos[i][j][2]);
 			cur_func++;
 		}
 	}
