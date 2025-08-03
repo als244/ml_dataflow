@@ -113,6 +113,7 @@ conversion_dict["config"] = {}
 config_dict = {}
 config_dict["embed_dtype"] = "bf16"
 config_dict["attn_dtype"] = "bf16"
+config_dict["router_dtype"] = "fp32"
 config_dict["expert_dtype"] = "bf16"
 config_dict["head_dtype"] = "bf16"
 config_dict["vocab_size"] = model_args.vocab_size

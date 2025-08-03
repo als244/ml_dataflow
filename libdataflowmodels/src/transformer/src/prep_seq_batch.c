@@ -80,6 +80,7 @@ Transformer_Model_Config * parse_config(char * config_path) {
     int items_scanned = sscanf(config_string,
         "Embed Dtype: %15s\n"
         "Attn Dtype: %15s\n"
+        "Router Dtype: %15s\n"
         "Expert Dtype: %15s\n"
         "Head Dtype: %15s\n"
         "Vocab Size: %d\n"
@@ -98,6 +99,7 @@ Transformer_Model_Config * parse_config(char * config_path) {
         "RMS Norm Epsilon: %f\n",
         config->embed_dtype,
         config->attn_dtype,
+        config->router_dtype,
         config->expert_dtype,
         config->head_dtype,
         &(config->vocab_size),

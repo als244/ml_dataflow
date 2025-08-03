@@ -77,6 +77,7 @@ if "config" in conversion_dict:
 
     config_text = f"Embed Dtype: {config_dict['embed_dtype']}\n"
     config_text += f"Attn Dtype: {config_dict['attn_dtype']}\n"
+    config_text += f"Router Dtype: {config_dict['router_dtype']}\n"
     config_text += f"Expert Dtype: {config_dict['expert_dtype']}\n"
     config_text += f"Head Dtype: {config_dict['head_dtype']}\n"
     config_text += f"Vocab Size: {config_dict['vocab_size']}\n"

@@ -69,6 +69,7 @@ typedef struct moe_config {
 typedef struct {
     char embed_dtype[16];
     char attn_dtype[16];
+    char router_dtype[16];
     char expert_dtype[16];
     char head_dtype[16];
     int vocab_size;
