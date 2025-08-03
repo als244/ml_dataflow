@@ -2312,13 +2312,21 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		return -1;
 	}
 
-	// if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-	// 	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_attn_norm", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
-	// 	if (ret){
-	// 		fprintf(stderr, "Error: failed to save attention nor file...\n");
-	// 		return -1;
-	// 	}
-	// }
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_attn_norm", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save attention nor file...\n");
+			return -1;
+		}
+	}
+
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "attn_norm_w", transformer_block -> w_attn_norm, model_dim, 1, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save attention nor file...\n");
+			return -1;
+		}
+	}
 
 	if (TO_PRINT){
 		printf("Submitting Q, K, V matmuls...!\n");
@@ -2339,13 +2347,13 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		return -1;
 	}
 
-	// if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-	// 	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_q", working_activations -> x_q, total_q, model_dim, fwd_dt);
-	// 	if (ret){
-	// 		fprintf(stderr, "Error: failed to save x_q file...\n");
-	// 		return -1;
-	// 	}
-	// }
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_q", working_activations -> x_q, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_q file...\n");
+			return -1;
+		}
+	}
 
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
 					fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
@@ -2361,13 +2369,13 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		return -1;
 	}
 
-	// if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-	// 	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_k", working_activations -> x_k_local, total_q, kv_dim, fwd_dt);
-	// 	if (ret){
-	// 		fprintf(stderr, "Error: failed to save x_k file...\n");
-	// 		return -1;
-	// 	}
-	// }
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_k", working_activations -> x_k_local, total_q, kv_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_k file...\n");
+			return -1;
+		}
+	}
 
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
 					fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
@@ -2383,13 +2391,13 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		return -1;
 	}
 
-	// if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-	// 	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_v_local", working_activations -> x_v_local, total_q, kv_dim, fwd_dt);
-	// 	if (ret){
-	// 		fprintf(stderr, "Error: failed to save x_v file...\n");
-	// 		return -1;
-	// 	}
-	// }
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_v_local", working_activations -> x_v_local, total_q, kv_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_v file...\n");
+			return -1;
+		}
+	}
 
 
 	if (TO_PRINT){
@@ -2523,13 +2531,13 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 	}
 	
 
-	// if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-	// 	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_attn", working_activations -> x_attn_out, total_q, model_dim, fwd_dt);
-	// 	if (ret){
-	// 		fprintf(stderr, "Error: failed to save x_attn file...\n");
-	// 		return -1;
-	// 	}
-	// }
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_attn", working_activations -> x_attn_out, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_attn file...\n");
+			return -1;
+		}
+	}
 
 
 	if (TO_PRINT){
@@ -2551,13 +2559,13 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		return -1;
 	}
 
-	// if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-	// 	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_attn_final_out", working_activations -> x_o, total_q, model_dim, fwd_dt);
-	// 	if (ret){
-	// 		fprintf(stderr, "Error: failed to save x_attn_final_out file...\n");
-	// 		return -1;
-	// 	}
-	// }
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_attn_final_out", working_activations -> x_o, total_q, model_dim, fwd_dt);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_attn_final_out file...\n");
+			return -1;
+		}
+	}
 
 
 	if (TO_PRINT){
@@ -2738,6 +2746,14 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		return -1;
 	}
 
+	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_pre_router", x_temp_fp32, total_q, model_dim, DATAFLOW_FP32);
+		if (ret){
+			fprintf(stderr, "Error: failed to save x_attn_final_out file...\n");
+			return -1;
+		}
+	}
+
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
 					DATAFLOW_FP32, DATAFLOW_FP32, DATAFLOW_NONE, DATAFLOW_FP32,
 					compute_dt,
@@ -2752,7 +2768,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_router_logits", working_activations -> x_routed, total_q, num_routed_experts, fwd_dt);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_router_logits", working_activations -> x_routed, total_q, num_routed_experts, DATAFLOW_FP32);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_attn_final_out file...\n");
 			return -1;
@@ -2889,6 +2905,8 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 
 	int total_tokens = 0;
 
+	char exp_inp_name[256];
+
 	for (int i = 0; i < num_routed_experts; i++){
 
 		int cur_expert_num_tokens = host_expert_counts[i];
@@ -2930,7 +2948,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 
 		if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
 
-			char exp_inp_name[256];
+			
 			sprintf(exp_inp_name, "x_expert_%d_inp", i);
 			
 			ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, exp_inp_name, expert_zone, cur_expert_num_tokens, model_dim, fwd_dt);
@@ -2960,6 +2978,18 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 			return -1;
 		}
 
+		if (i == 0 && TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+
+			
+			sprintf(exp_inp_name, "x_expert_0_w1", i);
+			
+			ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, exp_inp_name, (working_activations -> x_1)[num_shared_experts + i], cur_expert_num_tokens, ffn_dim, fwd_dt);
+			if (ret){
+				fprintf(stderr, "Error: failed to save x_selected_experts file...\n");
+				return -1;
+			}
+		}
+
 		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
 						fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
 						compute_dt,
@@ -2972,6 +3002,24 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		if (ret){
 			fprintf(stderr, "Error: failed to submit w3 matmul proj for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
 			return -1;
+		}
+
+		if (i == 0 && TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+
+			
+			sprintf(exp_inp_name, "x_expert_0_w3", i);
+			
+			ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, exp_inp_name, (working_activations -> x_3)[num_shared_experts + i], cur_expert_num_tokens, ffn_dim, fwd_dt);
+			if (ret){
+				fprintf(stderr, "Error: failed to save x_selected_experts file...\n");
+				return -1;
+			}
+
+			ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "exp0_w3", (transformer_block -> w_3)[num_shared_experts + i], model_dim, ffn_dim, fwd_dt);
+			if (ret){
+				fprintf(stderr, "Error: failed to save x_selected_experts file...\n");
+				return -1;
+			}
 		}
 
 
@@ -2988,6 +3036,18 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		if (ret){
 			fprintf(stderr, "Error: failed to submit swiglu activation for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
 			return -1;
+		}
+
+		if (i == 0 && TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
+
+	
+			sprintf(exp_inp_name, "x_expert_0_swiglu", i);
+			
+			ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, exp_inp_name, activation_workspace -> x_temp_mlp, cur_expert_num_tokens, ffn_dim, fwd_dt);
+			if (ret){
+				fprintf(stderr, "Error: failed to save x_selected_experts file...\n");
+				return -1;
+			}
 		}
 
 

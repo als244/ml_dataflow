@@ -21,8 +21,9 @@ def convert_to_numpy(torch_tensor):
     return torch_tensor
 
 def combine_layer_weights(layer_weights):
-    flattened_weights = [x.reshape(-1) for x in layer_weights]
-    return np.concatenate(flattened_weights)
+    flattened_weights_bytes = b''.join(arr.tobytes() for arr in layer_weights)
+    flattened_weights = np.frombuffer(flattened_weights_bytes, dtype=np.uint8)
+    return flattened_weights
 
 def save_weights(torch_tensor, output_path):
     view_dtype = get_view_dtype(torch_tensor.dtype)

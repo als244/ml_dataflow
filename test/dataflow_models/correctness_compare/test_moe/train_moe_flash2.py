@@ -83,9 +83,10 @@ for i in range(1, n_repeats + 1):
     ## FORWARD PASS
     #print(f"[Step {i}] Starting forward pass...")
     start_fwd = time.time_ns()
-    with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-        # Ensure model and inputs are on the same device
-        predictions = model.forward(token_ids, seqlens_info, i) # Shape: (bsz, seqlen, vocab_size)
+    # with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+    #     # Ensure model and inputs are on the same device
+    #     predictions = model.forward(token_ids, seqlens_info, i) # Shape: (bsz, seqlen, vocab_size)
+    predictions = model.forward(token_ids, seqlens_info, i) # Shape: (bsz, seqlen, vocab_size)
     stop_fwd = time.time_ns()
     time_fwd_ms = (stop_fwd - start_fwd) / 1e6
 

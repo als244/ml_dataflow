@@ -218,11 +218,30 @@ class MLP(nn.Module):
         self.down_proj = nn.Linear(expert_dim, model_dim, bias=False, dtype=expert_dtype)
 
     def forward(self, x, step_num):
-        down_proj = self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))
 
-        if TO_SAVE and self.layer_id == 0:
+        x1 = self.gate_proj(x)
+        x3 = self.up_proj(x)
+
+        swiglu_out = F.silu(x1) * x3
+
+        down_proj = self.down_proj(swiglu_out)
+
+        if TO_SAVE and self.layer_id == 0 and self.expert_id == 0:
+
+            print(f"w3 weight: {self.down_proj.weight}")
+            torch.save(self.up_proj.weight.cpu().view(-1, self.expert_dim), f"{SAVE_DIR}/layers_fwd/{self.layer_id}/expert_{self.expert_id}_w3.pt")
+
             print(f"[Step {step_num}] Saving MLP inp for layer {self.layer_id} and expert {self.expert_id}...")
             torch.save(x.cpu().view(-1, self.model_dim), f"{SAVE_DIR}/layers_fwd/{self.layer_id}/expert_{self.expert_id}_inp.pt")
+
+            print(f"[Step {step_num}] Saving MLP w1 for layer {self.layer_id} and expert {self.expert_id}...")
+            torch.save(x1.cpu().view(-1, self.expert_dim), f"{SAVE_DIR}/layers_fwd/{self.layer_id}/expert_{self.expert_id}_w1.pt")
+
+            print(f"[Step {step_num}] Saving MLP w3 for layer {self.layer_id} and expert {self.expert_id}...")
+            torch.save(x3.cpu().view(-1, self.expert_dim), f"{SAVE_DIR}/layers_fwd/{self.layer_id}/expert_{self.expert_id}_w3.pt")
+
+            print(f"[Step {step_num}] Saving MLP swiglu out for layer {self.layer_id} and expert {self.expert_id}...")
+            torch.save(swiglu_out.cpu().view(-1, self.expert_dim), f"{SAVE_DIR}/layers_fwd/{self.layer_id}/expert_{self.expert_id}_swiglu.pt")
         
             print(f"[Step {step_num}] Saving MLP out for layer {self.layer_id} and expert {self.expert_id}...")
             torch.save(down_proj.cpu().view(-1, self.model_dim), f"{SAVE_DIR}/layers_fwd/{self.layer_id}/expert_{self.expert_id}_out.pt")
@@ -347,6 +366,7 @@ class MoEMLP(nn.Module):
         ## default init would be:
         #torch.nn.init.uniform_(self.gate.weight, -1 / math.sqrt(model_dim), 1 / math.sqrt(model_dim))
 
+        
         with torch.no_grad():
             # Create the matrix with shape (model_dim, num_experts)
             qr_matrix = create_scaled_qr_matrix(model_dim, num_experts, std_dev=1)
@@ -358,6 +378,7 @@ class MoEMLP(nn.Module):
             # Assign the new weights to the gate layer.
             self.gate.weight.copy_(gate_weight)
 
+
         self.experts = nn.ModuleList(
             [MLP(model_dim, expert_dim, expert_id, self.layer_id, expert_dtype) for expert_id in range(self.num_experts)]
         )
@@ -365,10 +386,19 @@ class MoEMLP(nn.Module):
     def forward(self, hidden_states: torch.Tensor, step_num: int) -> torch.Tensor:
         """ """
         batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-        # router_logits: (batch * sequence_length, n_experts)
-        router_logits = self.gate(hidden_states)
 
+        hidden_states = hidden_states.view(-1, hidden_dim)
+        hidden_states_temp = hidden_states.to(self.router_dtype)
+
+        if TO_SAVE:
+            print(f"[Step {step_num}] Saving pre-router for layer {self.layer_id}...")
+            torch.save(hidden_states.cpu().view(-1, hidden_dim), f"{SAVE_DIR}/layers_fwd/{self.layer_id}/pre_router.pt")
+
+            print(f"[Step {step_num}] Saving gate weights for layer {self.layer_id}...")
+            torch.save(self.gate.weight.cpu().view(-1, self.num_experts), f"{SAVE_DIR}/layers_fwd/{self.layer_id}/gate_weights.pt")
+
+        # router_logits: (batch * sequence_length, n_experts)
+        router_logits = self.gate(hidden_states_temp)
         #routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
         #routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
         #routing_weights /= routing_weights.sum(dim=-1, keepdim=True)

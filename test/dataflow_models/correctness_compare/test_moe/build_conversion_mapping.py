@@ -87,8 +87,9 @@ for i in range(model_args.num_layers):
         routed_experts_dict[j] = {}
 
         routed_experts_dict[j]["w1"] = expert_w1_key
-        routed_experts_dict[j]["w2"] = expert_w2_key
         routed_experts_dict[j]["w3"] = expert_w3_key
+        routed_experts_dict[j]["w2"] = expert_w2_key
+        
     
     layer_dict["routed_experts"] = routed_experts_dict
 
