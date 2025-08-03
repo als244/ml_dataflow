@@ -117,10 +117,10 @@ Transformer_Model_Config * parse_config(char * config_path) {
         &(config->rope_theta),
         &(config->rms_norm_epsilon));
 
-    // Check if all 18 items were successfully scanned.
-    if (items_scanned != 18) {
+    // Check if all 19 items were successfully scanned.
+    if (items_scanned != 19) {
         fprintf(stderr, "Error: Configuration string does not match the expected format.\n");
-        fprintf(stderr, "Expected 18 items, but sscanf only matched %d.\n", items_scanned);
+        fprintf(stderr, "Expected 19 items, but sscanf only matched %d.\n", items_scanned);
         free(config_string);
         free(config);
         return NULL; // Return an error code
