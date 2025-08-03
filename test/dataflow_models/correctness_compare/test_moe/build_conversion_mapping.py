@@ -21,11 +21,9 @@ if (len(sys.argv) != 3):
 MODEL_PATH = sys.argv[1]
 OUTPUT_DICT_PATH = sys.argv[2]
 ## MoETransformer Class
-model = torch.load(MODEL_PATH, weights_only=False)
+model_state_dict = torch.load(f"{MODEL_PATH}.pt", weights_only=False)
 
-model_args = model.params
-
-model_state_dict = model.state_dict()
+model_args = pickle.load(open(f"{MODEL_PATH}_config.pkl", "rb"))
 
 # model_state_dict_keys = list(model_state_dict.keys())
 
