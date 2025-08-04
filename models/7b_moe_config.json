@@ -1,6 +1,7 @@
 {
     "embed_dtype": "bf16",
     "attn_dtype": "bf16",
+    "router_dtype": "bf16",
     "expert_dtype": "bf16",
     "head_dtype": "bf16",
     "vocab_size": 128256,

@@ -13,7 +13,7 @@ import time
 import pickle
 from flash_attn import flash_attn_varlen_func
 
-TO_SAVE = True
+TO_SAVE = False
 SAVE_DIR = "/home/shein/Documents/grad_school/research/ml_dataflow_stuff/ml_dataflow/test/dataflow_models/correct_transformer_data"
 
 
@@ -21,7 +21,7 @@ SAVE_DIR = "/home/shein/Documents/grad_school/research/ml_dataflow_stuff/ml_data
 class ModelArgs:
     embed_dtype: str = "bf16"
     attn_dtype: str = "bf16"
-    router_dtype: str = "fp32"
+    router_dtype: str = "bf16"
     expert_dtype: str = "bf16"
     head_dtype: str = "bf16"
     vocab_size: int = 128256
@@ -48,6 +48,8 @@ def dtype_to_torch_dtype(dtype: str):
         return torch.float16
     elif dtype == "fp32":
         return torch.float32
+    elif dtype == "none":
+        return None
     else:
         raise ValueError(f"Invalid dtype: {dtype}")
 
@@ -350,7 +352,7 @@ def create_scaled_qr_matrix(in_features, out_features, std_dev=1):
     return scaled_q_matrix
 
 class MoEMLP(nn.Module):
-    def __init__(self, num_experts, top_k, model_dim, expert_dim, layer_id, router_dtype=torch.float32, expert_dtype=torch.bfloat16):
+    def __init__(self, num_experts, top_k, model_dim, expert_dim, layer_id, router_dtype=torch.bfloat16, expert_dtype=torch.bfloat16):
         super().__init__()
         self.num_experts = num_experts
         self.top_k = top_k
@@ -366,7 +368,7 @@ class MoEMLP(nn.Module):
         ## default init would be:
         #torch.nn.init.uniform_(self.gate.weight, -1 / math.sqrt(model_dim), 1 / math.sqrt(model_dim))
 
-        
+        """
         with torch.no_grad():
             # Create the matrix with shape (model_dim, num_experts)
             qr_matrix = create_scaled_qr_matrix(model_dim, num_experts, std_dev=1)
@@ -377,6 +379,7 @@ class MoEMLP(nn.Module):
             
             # Assign the new weights to the gate layer.
             self.gate.weight.copy_(gate_weight)
+        """
 
 
         self.experts = nn.ModuleList(

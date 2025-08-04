@@ -84,9 +84,14 @@ static int set_transformer_block_weight_offsets(Transformer_Block_Config * confi
 	uint64_t w_2_size;
 	uint64_t w_3_size;
 
+	/*/
 	// router_dtype_size = el_size
 	// Make router use fp32
+	// should take this as config...
 	uint64_t router_dtype_size = sizeof(float);
+	*/
+
+	uint64_t router_dtype_size = el_size;
 
 	switch (config -> mlp_type){
 		case DATAFLOW_GATED_MLP:

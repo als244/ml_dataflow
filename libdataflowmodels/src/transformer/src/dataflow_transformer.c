@@ -3,11 +3,11 @@
 
 // toggle to print out before submitting any ops...
 // verbose printing of each op
-#define TO_PRINT 1
+#define TO_PRINT 0
 
 // meta-toggle required to be set to 1 to save any data
 // when set to 0, nothing will be saved
-#define TO_SAVE_DATA 1
+#define TO_SAVE_DATA 0
 
 
 // DETERMINES WHAT DATA TO SAVE...
@@ -2720,55 +2720,23 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 	}
 	*/
 
-	// 1. Router. First cast up to fp32...
-
-	void * x_temp_fp32 = kernelWorkspace;
-
-	uint64_t x_temp_fp32_size = (uint64_t) total_q * (uint64_t) model_dim * sizeof(float);
-
-	if (x_temp_fp32_size > kernelWorkspaceBytes){
-		fprintf(stderr, "Error: x_temp_fp32 size is greater than kernel workspace size...\n");
-		return -1;
-	}
-
-	void *new_kernelWorkspace = x_temp_fp32 + x_temp_fp32_size;
-
-	new_kernelWorkspace = (void *) (((uint64_t) new_kernelWorkspace + 255) & ~255UL);
-
-	uint64_t new_kernelWorkspaceBytes = kernelWorkspaceBytes - ((uint64_t) new_kernelWorkspace - (uint64_t) kernelWorkspace);
-	
-
-	uint64_t num_elements = (uint64_t) total_q * (uint64_t) model_dim;
-
-	ret = dataflow_submit_cast(dataflow_handle, compute_stream_id, fwd_dt, DATAFLOW_FP32, num_elements, activation_workspace -> x_temp, x_temp_fp32);
-	if (ret){
-		fprintf(stderr, "Error: failed to cast x_temp to fp32...\n");
-		return -1;
-	}
-
-	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_pre_router", x_temp_fp32, total_q, model_dim, DATAFLOW_FP32);
-		if (ret){
-			fprintf(stderr, "Error: failed to save x_attn_final_out file...\n");
-			return -1;
-		}
-	}
+	// 1. Router.
 
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
-					DATAFLOW_FP32, DATAFLOW_FP32, DATAFLOW_NONE, DATAFLOW_FP32,
+					fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
 					compute_dt,
 					to_transa, to_transb,
 					num_routed_experts, model_dim, total_q, 
 					1.0, 0.0,
-					transformer_block -> w_router, x_temp_fp32, NULL, working_activations -> x_routed,
-					new_kernelWorkspaceBytes, new_kernelWorkspace);
+					transformer_block -> w_router, activation_workspace -> x_temp, NULL, working_activations -> x_routed,
+					kernelWorkspaceBytes, kernelWorkspace);
 	if (ret){
 		fprintf(stderr, "Error: failed to submit router matmul proj...\n");
 		return -1;
 	}
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_router_logits", working_activations -> x_routed, total_q, num_routed_experts, DATAFLOW_FP32);
+		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_router_logits", working_activations -> x_routed, total_q, num_routed_experts, fwd_dt);
 		if (ret){
 			fprintf(stderr, "Error: failed to save x_attn_final_out file...\n");
 			return -1;
@@ -2803,7 +2771,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 	// Writes to populates weights, chosen experts, expert counts, expert counts cumsum
 	// Also writes directly to host memory for expert counts (bypassing D->H dma queue)
 	ret = dataflow_submit_default_select_experts(dataflow_handle, compute_stream_id, 
-                                DATAFLOW_FP32,
+                                fwd_dt,
                                 total_q, num_routed_experts, top_k_active,  
                                 working_activations -> x_routed, working_activations -> token_expert_weights, 
                                 working_activations -> chosen_experts, working_activations -> expert_counts, 
@@ -2899,13 +2867,16 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 
 	// 4.) Repeat for all routed experts
 
+	// Aliasing the kernel workspace to use as 
+	// temp space for the expert zone...
+	void * new_kernelWorkspace;
+	uint64_t new_kernelWorkspaceBytes;
+
 	void * expert_zone = kernelWorkspace;
 
 	uint64_t expert_zone_size;
 
 	int total_tokens = 0;
-
-	char exp_inp_name[256];
 
 	for (int i = 0; i < num_routed_experts; i++){
 
@@ -2915,7 +2886,10 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 			continue;
 		}
 
-		//printf("[Expert %d] Number of tokens: %d\n", i, cur_expert_num_tokens);
+		if (TO_PRINT){
+			printf("[Expert %d] Number of tokens: %d\n", i, cur_expert_num_tokens);
+		}
+
 		total_tokens += cur_expert_num_tokens;
 
 		expert_zone_size = (uint64_t) cur_expert_num_tokens * (uint64_t) model_dim * (uint64_t) x_el_size;
@@ -2946,23 +2920,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 			return -1;
 		}
 
-		if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-
-			
-			sprintf(exp_inp_name, "x_expert_%d_inp", i);
-			
-			ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, exp_inp_name, expert_zone, cur_expert_num_tokens, model_dim, fwd_dt);
-			if (ret){
-				fprintf(stderr, "Error: failed to save x_selected_experts file...\n");
-				return -1;
-			}
-		}
-
 		// 	b.) Submit Matmuls, Activation, Matmul
-
-		if (TO_PRINT){
-			printf("[Expert %d] Submitting FFN w1 and w3 matmuls...!\n", i);
-		}
 
 		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
 						fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
@@ -2978,55 +2936,19 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 			return -1;
 		}
 
-		if (i == 0 && TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-
-			
-			sprintf(exp_inp_name, "x_expert_0_w1", i);
-			
-			ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, exp_inp_name, (working_activations -> x_1)[num_shared_experts + i], cur_expert_num_tokens, ffn_dim, fwd_dt);
-			if (ret){
-				fprintf(stderr, "Error: failed to save x_selected_experts file...\n");
-				return -1;
-			}
-		}
-
 		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
 						fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
 						compute_dt,
 						to_transa, to_transb,
 						ffn_dim, model_dim, cur_expert_num_tokens, 
 						1.0, 0.0,
-						(transformer_block -> w_3)[num_shared_experts + i], activation_workspace -> x_temp, NULL, (working_activations -> x_3)[num_shared_experts + i],
+						(transformer_block -> w_3)[num_shared_experts + i], expert_zone, NULL, (working_activations -> x_3)[num_shared_experts + i],
 						new_kernelWorkspaceBytes, new_kernelWorkspace);
 
 		if (ret){
 			fprintf(stderr, "Error: failed to submit w3 matmul proj for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
 			return -1;
 		}
-
-		if (i == 0 && TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-
-			
-			sprintf(exp_inp_name, "x_expert_0_w3", i);
-			
-			ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, exp_inp_name, (working_activations -> x_3)[num_shared_experts + i], cur_expert_num_tokens, ffn_dim, fwd_dt);
-			if (ret){
-				fprintf(stderr, "Error: failed to save x_selected_experts file...\n");
-				return -1;
-			}
-
-			ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "exp0_w3", (transformer_block -> w_3)[num_shared_experts + i], model_dim, ffn_dim, fwd_dt);
-			if (ret){
-				fprintf(stderr, "Error: failed to save x_selected_experts file...\n");
-				return -1;
-			}
-		}
-
-
-		if (TO_PRINT){
-			printf("Submitting SwiGLU Activation...!\n");
-		}
-
 
 		ret = dataflow_submit_default_swiglu(dataflow_handle, compute_stream_id, 
 							fwd_dt, 
@@ -3037,19 +2959,6 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 			fprintf(stderr, "Error: failed to submit swiglu activation for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
 			return -1;
 		}
-
-		if (i == 0 && TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-
-	
-			sprintf(exp_inp_name, "x_expert_0_swiglu", i);
-			
-			ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, exp_inp_name, activation_workspace -> x_temp_mlp, cur_expert_num_tokens, ffn_dim, fwd_dt);
-			if (ret){
-				fprintf(stderr, "Error: failed to save x_selected_experts file...\n");
-				return -1;
-			}
-		}
-
 
 		if (TO_PRINT){
 			printf("Submitting FFN w2 matmul...!\n");
@@ -3068,19 +2977,6 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 			fprintf(stderr, "Error: failed to submit w2 matmul proj for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
 			return -1;
 		}
-
-		if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
-
-			char exp_out_name[256];
-			sprintf(exp_out_name, "x_expert_%d_out", i);
-			
-			ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, exp_out_name, expert_zone, cur_expert_num_tokens, model_dim, fwd_dt);
-			if (ret){
-				fprintf(stderr, "Error: failed to save x_selected_experts file...\n");
-				return -1;
-			}
-		}
-
 
 		// 	c.) Combine Expert Outputs
 
@@ -3398,7 +3294,7 @@ int dataflow_submit_transformer_moe_block_recompute(Dataflow_Handle * dataflow_h
 							to_transa, to_transb,
 							ffn_dim, model_dim, cur_expert_num_tokens, 
 							1.0, 0.0,
-							(transformer_block -> w_3)[num_shared_experts + i], activation_workspace -> x_temp, NULL, (working_activations -> x_3)[num_shared_experts + i],
+							(transformer_block -> w_3)[num_shared_experts + i], expert_zone, NULL, (working_activations -> x_3)[num_shared_experts + i],
 							new_kernelWorkspaceBytes, new_kernelWorkspace);
 
 			if (ret){
@@ -3738,50 +3634,18 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		return -1;
 	}
 
-	// Add results of router path to the upstream gradient...
 
-	void * dx_temp_fp32 = kernelWorkspace;
-	uint64_t dx_temp_fp32_size = (uint64_t) total_q * (uint64_t) model_dim * sizeof(float);
-
-	if (dx_temp_fp32_size > kernelWorkspaceBytes){
-		fprintf(stderr, "Error: dx_temp_fp32 size is greater than kernel workspace size...\n");
-		return -1;
-	}
-
-	new_kernelWorkspace = dx_temp_fp32 + dx_temp_fp32_size;
-
-	new_kernelWorkspace = (void *) (((uint64_t) new_kernelWorkspace + 255) & ~255UL);
-
-	new_kernelWorkspaceBytes = kernelWorkspaceBytes - ((uint64_t) new_kernelWorkspace - (uint64_t) kernelWorkspace);
-	
-	// don't need the forward activations of router
-
-	void * dX_router = (fwd_activations -> x_routed);
-	
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
-		DATAFLOW_FP32, DATAFLOW_FP32, DATAFLOW_NONE, DATAFLOW_FP32,
+		fwd_dt, bwd_dt, bwd_dt, bwd_dt,
 		compute_dt,
 		to_transa, to_transb,
 		model_dim, num_routed_experts, total_q, 
 		1.0, 1.0,
-		(transformer_block -> w_router), working_activations -> x_routed, NULL, dX_router,
+		(transformer_block -> w_router), working_activations -> x_routed, activation_workspace -> x_temp, activation_workspace -> x_temp,
 		kernelWorkspaceBytes, kernelWorkspace);
 	
 	if (ret) {
 		fprintf(stderr, "Error: failed to submit w2 backward matmul...\n");
-		return -1;
-	}
-
-	// casts from fp32 to fwd_dt and adds to the upstream gradient...
-	uint64_t num_els = (uint64_t) total_q * (uint64_t) model_dim;
-	ret = dataflow_submit_cast_and_add(dataflow_handle, compute_stream_id,
-		DATAFLOW_FP32, bwd_dt, bwd_dt,
-		num_els,
-		1.0, dX_router,
-		1.0, activation_workspace -> x_temp,
-		activation_workspace -> x_temp);
-	if (ret){
-		fprintf(stderr, "Error: failed to submit accumulate router backward...\n");
 		return -1;
 	}
 

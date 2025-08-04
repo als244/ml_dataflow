@@ -34,7 +34,7 @@
 
 	#define PCIE_LINK_EFFICIENCY 0.75f
 
-	#define NUM_STEPS 1
+	#define NUM_STEPS 500
 
 	// num_chunks = num_chunks_per_seq * num_seq_groups_per_round
 	// num_chunks_per_seq = seqlen / chunk_size
@@ -3788,7 +3788,8 @@
 
 
 
-				// TESTING FOR NOW...!
+				/*
+				// TESTING FOR REAL NOW...!
 
 				ret = dataflow_handle.sync_handle(&dataflow_handle);
 				if (ret){
@@ -3805,6 +3806,7 @@
 				}
 
 				exit(0);
+				*/
 		
 
 

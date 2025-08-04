@@ -14,7 +14,7 @@ model_args = ModelArgs()
 
 model_args.embed_dtype = "bf16"
 model_args.attn_dtype = "bf16"
-model_args.router_dtype = "fp32"
+model_args.router_dtype = "bf16"
 model_args.expert_dtype = "bf16"
 model_args.head_dtype = "bf16"
 model_args.vocab_size = 128256
