@@ -8,23 +8,37 @@ extern "C" __global__ void default_merge_expert_result_bf16_bf16_kernel(int num_
         return;
     }
 
-    __shared__ float smem_token_expert_weight;
-
-    // Initialize shared memory to prevent reading an uninitialized value
-    // if the expert is not found (which shouldn't happen in correct logic).
-    if (threadIdx.x == 0) {
-        smem_token_expert_weight = 0.0f;
-    }
-    __syncthreads();
-    
     int expert_base = expert_counts_cumsum[expert_id] - num_tokens;
 
     int orig_token_ind = expert_mapping[expert_base + new_token_ind];
 
-    for (int i = threadIdx.x; i < top_k_experts; i += blockDim.x) {
-        if (chosen_experts[orig_token_ind * top_k_experts + i] == (uint16_t) expert_id) {
-            smem_token_expert_weight = token_expert_weights[orig_token_ind * top_k_experts + i];
-            break;
+    __shared__ float smem_token_expert_weight;
+
+    // IF NO WEIGHTS PASSED IN, ASSUME JUST ADDING with 1.0 (occurs during bwd x accumulation)
+    if (!token_expert_weights) {
+        if (threadIdx.x == 0) {
+            smem_token_expert_weight = 1.0f;
+        }
+    }
+    else{
+        // Initialize shared memory to prevent reading an uninitialized value
+        // if the expert is not found (which shouldn't happen in correct logic).
+        if (threadIdx.x == 0) {
+            smem_token_expert_weight = 0.0f;
+        }
+    }
+
+
+    __syncthreads();
+    
+
+    // IF weights are passed in, find the weight for the current token and expert
+    if (token_expert_weights){
+        for (int i = threadIdx.x; i < top_k_experts; i += blockDim.x) {
+            if (chosen_experts[orig_token_ind * top_k_experts + i] == (uint16_t) expert_id) {
+                smem_token_expert_weight = token_expert_weights[orig_token_ind * top_k_experts + i];
+                break;
+            }
         }
     }
 

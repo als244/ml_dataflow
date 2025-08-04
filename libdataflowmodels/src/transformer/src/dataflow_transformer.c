@@ -3597,7 +3597,7 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 			expert_zone, i, 
 			fwd_activations -> expert_counts_cumsum, 
 			fwd_activations -> expert_mapping,
-			fwd_activations -> token_expert_weights,
+			NULL, // already multiplied by router weight from original router_bwd_x; this is just a simple add
 			fwd_activations -> chosen_experts,
 			activation_workspace -> x_temp);
 		

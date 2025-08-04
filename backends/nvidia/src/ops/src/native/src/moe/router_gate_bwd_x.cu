@@ -49,7 +49,7 @@ extern "C" __global__ void default_router_gate_bwd_x_bf16_bf16_kernel(int num_to
 
         for (int i = threadIdx.x; i < top_k_active; i += blockDim.x){
             chosen_expert = chosen_experts[token_id * top_k_active + i];
-            dX_routed[token_id * num_routed_experts + chosen_expert] = __float2bfloat16(__bfloat162float(dX_routed[token_id * num_routed_experts + chosen_expert]) * (token_expert_weights[token_id * top_k_active + i] - avg_upstream_grad));
+            dX_routed[token_id * num_routed_experts + chosen_expert] = __float2bfloat16(token_expert_weights[token_id * top_k_active + i] * (__bfloat162float(dX_routed[token_id * num_routed_experts + chosen_expert]) - avg_upstream_grad));
         }
 
         token_id += gridDim.x;
