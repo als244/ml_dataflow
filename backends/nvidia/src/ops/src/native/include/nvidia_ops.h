@@ -40,7 +40,7 @@
 
 #define ROUND_UP_TO_MULTIPLE(x, multiple) (((x + multiple - 1) / multiple) * multiple)
 
-
+// Casting and Adding
 extern "C" __global__ void default_cast_bf16_fp32_kernel(uint64_t num_els, __nv_bfloat16 * src, float * dst);
 extern "C" __global__ void default_cast_and_add_fp32_bf16_bf16_kernel(int64_t num_elements, float alpha, float * A, float beta, __nv_bfloat16 * B, __nv_bfloat16 * C);
 

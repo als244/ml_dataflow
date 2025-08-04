@@ -248,13 +248,13 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
 
         // if MoE, need to allocate space for extra metadata...
         saved_activations_offsets -> expert_counts = cur_offset;
-        cur_offset += (num_local_experts + 1) * sizeof(int);
+        cur_offset += (num_global_routed_experts + 1) * sizeof(int);
 
         // Align offset to 256 bytes
         cur_offset = (cur_offset + 255) & ~255UL;
 
         saved_activations_offsets -> expert_counts_cumsum = cur_offset;
-        cur_offset += num_local_experts * sizeof(int);
+        cur_offset += num_global_routed_experts * sizeof(int);
 
         // Align offset to 256 bytes
         cur_offset = (cur_offset + 255) & ~255UL;

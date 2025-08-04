@@ -3376,6 +3376,7 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		return -1;
 	}
 
+
 	MoE_Config * model_moe_config = &((transformer_block -> config).moe_config);
 
 	int num_shared_experts = model_moe_config -> num_shared_experts;
@@ -3413,6 +3414,13 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 
 
 	// 1. Backprop through each expert
+
+	// Will be accumulating the gradients into activation_workspace -> x_temp, so make sure to clear it first...
+	ret = (dataflow_handle -> set_mem)(dataflow_handle, compute_stream_id, activation_workspace -> x_temp, 0, (uint64_t) total_q * (uint64_t) model_dim * (uint64_t) x_el_bwd_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to set x_temp to 0...\n");
+		return -1;
+	}
 
 	// Forward: [num_tokens, ffn_dim] @ [ffn_dim, model_dim] -> [num_tokens, model_dim]
 	// Backward: dX = dY @ W^T

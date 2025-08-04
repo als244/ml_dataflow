@@ -77,8 +77,8 @@ class RMSNorm(torch.nn.Module):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
 
     def forward(self, x):
-        output = self._norm(x.float())
-        return (output * self.weight.float()).type_as(x)
+        output = self._norm(x.float()).type_as(x)
+        return output * self.weight
 
 
 def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0):
@@ -402,12 +402,12 @@ class MoEMLP(nn.Module):
 
         # router_logits: (batch * sequence_length, n_experts)
         router_logits = self.gate(hidden_states_temp)
-        #routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-        #routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-        #routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
         
-        routing_weights, selected_experts = deterministic_topk(router_logits, self.top_k, dim=-1)
-        routing_weights = F.softmax(routing_weights.float(), dim=-1)
+        #routing_weights, selected_experts = deterministic_topk(router_logits, self.top_k, dim=-1)
+        #routing_weights = F.softmax(routing_weights.float(), dim=-1)
 
         if TO_SAVE:
             print(f"[Step {step_num}] Saving router logits for layer {self.layer_id}...")
@@ -441,7 +441,7 @@ class MoEMLP(nn.Module):
             # the current expert. We need to make sure to multiply the output hidden
             # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
             current_state = hidden_states[None, top_x].reshape(-1, hidden_dim)
-            current_hidden_states = (expert_layer(current_state, step_num).float() * routing_weights[top_x, idx, None]).to(hidden_states.dtype)
+            current_hidden_states = (expert_layer(current_state, step_num) * routing_weights[top_x, idx, None]).to(hidden_states.dtype)
 
             # However `index_add_` only support torch tensors for indexing so we'll use
             # the `top_x` tensor here.
