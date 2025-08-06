@@ -184,7 +184,19 @@ int default_router_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_launch_conf
 	cuda_launch_config -> blockDimY = 1;
 	cuda_launch_config -> blockDimZ = 1;
 
+	Op_Skeleton * op_skeleton = &(cuda_function -> op_skeleton);
+
+	Op_Skeleton_Header * op_skeleton_header = &(op_skeleton -> header);
+
+	DataflowDatatype * arg_dtypes = op_skeleton_header -> arg_dtypes;
+
+	DataflowDatatype dx_dt = arg_dtypes[10];
+
+	size_t dx_el_size = dataflow_sizeof_element(dx_dt);
+
 	int cur_expert_num_tokens = *((int *) op -> op_args[0]);
+
+	int model_dim = *((int *) op -> op_args[1]);
 
 	int num_blocks = cur_expert_num_tokens;
 	int thread_per_block = 256;
@@ -192,7 +204,11 @@ int default_router_bwd_x_set_launch_config(Cuda_Launch_Config * cuda_launch_conf
 	cuda_launch_config -> gridDimX = num_blocks;
 	cuda_launch_config -> blockDimX = thread_per_block;
 
-	cuda_launch_config -> sharedMemBytes = 0;
+	size_t shared_mem_size = model_dim * dx_el_size + // For smem_upstream_dX
+                         32 * sizeof(float) +               // For warp_sums
+                         sizeof(float);
+
+	cuda_launch_config -> sharedMemBytes = shared_mem_size;
 
 	return 0;
 }

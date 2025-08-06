@@ -19,12 +19,12 @@
 	#define TOKEN_IDS_PATH "../data/65536_token_ids_uint32.dat"
 	#define TOKEN_LABELS_PATH "../data/65536_labels_uint32.dat"
 
-	#define DEFAULT_MIN_CHUNK_SIZE 8192
+	#define DEFAULT_MIN_CHUNK_SIZE 98304
 
-	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 8192
+	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 4096
 
-	#define MAX_SEQ_GROUPS_PER_ROUND 1
-	#define MAX_ROUNDS_PER_STEP 1
+	#define MAX_SEQ_GROUPS_PER_ROUND 100
+	#define MAX_ROUNDS_PER_STEP 100
 
 	// this (along with num seqs per round) modulates how frequently we will step 
 	// the optimizer...
@@ -34,7 +34,7 @@
 
 	#define PCIE_LINK_EFFICIENCY 0.75f
 
-	#define NUM_STEPS 500
+	#define NUM_STEPS 10
 
 	// num_chunks = num_chunks_per_seq * num_seq_groups_per_round
 	// num_chunks_per_seq = seqlen / chunk_size
@@ -179,7 +179,45 @@
 
 		return 0;
 	}
+
+	int save_file(Dataflow_Handle * dataflow_handle, int stream_id, char * filename, void * data, size_t data_size){
 	
+		int ret;
+
+		void * host_ptr = malloc(data_size);
+
+		ret = (dataflow_handle -> submit_outbound_transfer)(dataflow_handle, stream_id, host_ptr, data, data_size);
+		if (ret){
+			fprintf(stderr, "Error: failed to submit outbound transfer...\n");
+			return -1;
+		}
+
+		ret = (dataflow_handle -> sync_stream)(dataflow_handle, stream_id);
+		if (ret){
+			fprintf(stderr, "Error: failed to sync stream...\n");
+			return -1;
+		}
+
+		FILE * fp = fopen(filename, "wb");
+		if (!fp){
+			free(host_ptr);
+			fprintf(stderr, "Error: failed to save %s, because couldn't open file: %s...\n", filename, filename);
+			return -1;
+		}
+
+
+		size_t num_written = fwrite(host_ptr, 1, data_size, fp);
+		if (num_written != data_size){
+			free(host_ptr);
+			fprintf(stderr, "Error: failed to write to file %s, wrote %zu elements instead of %zu\n", filename, num_written, data_size);
+			return -1;
+		}
+
+		fclose(fp);
+
+		free(host_ptr);
+
+	}
 
 	uint64_t get_chunk_activations_size(uint64_t chunk_num_tokens, uint64_t model_dim, uint64_t kv_dim, uint64_t num_active_experts, uint64_t expert_dim, DataflowDatatype fwd_dt){
 
@@ -1576,6 +1614,13 @@
 			return -1;
 		}
 		fclose(fp);
+
+		// PREVENT ANY OUT-OF-BOUNDS TOKENS...
+		for (int i = 0; i < num_tokens_example_seq; i++){
+			if (sys_token_ids[i] >= vocab_size){
+				sys_token_ids[i] = vocab_size - 1;
+			}
+		}
 		
 		
 
@@ -1595,6 +1640,13 @@
 			return -1;
 		}
 		fclose(fp);
+
+		// PREVENT ANY OUT-OF-BOUNDS TOKENS...
+		for (int i = 0; i < num_tokens_example_seq; i++){
+			if (sys_labels[i] >= vocab_size){
+				sys_labels[i] = vocab_size - 1;
+			}
+		}
 
 		if (num_tokens_example_seq < seq_len){
 			sys_token_ids = realloc(sys_token_ids, seq_len * sizeof(uint32_t));
@@ -3289,8 +3341,6 @@
 						}
 
 						// set the context
-
-						
 						seq_batches[chunk_id] -> context = fwd_context;
 
 						dataflow_handle.profiler.range_pop();

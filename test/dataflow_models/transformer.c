@@ -1549,7 +1549,13 @@
 			return -1;
 		}
 		fclose(fp);
-		
+
+		// PREVENT ANY OUT-OF-BOUNDS TOKENS...
+		for (int i = 0; i < num_tokens_example_seq; i++){
+			if (sys_token_ids[i] >= vocab_size){
+				sys_token_ids[i] = vocab_size - 1;
+			}
+		}
 		
 
 		uint32_t * sys_labels = malloc(num_tokens_example_seq * sizeof(uint32_t));
@@ -1569,6 +1575,13 @@
 		}
 		fclose(fp);
 
+		// PREVENT ANY OUT-OF-BOUNDS TOKENS...
+		for (int i = 0; i < num_tokens_example_seq; i++){
+			if (sys_labels[i] >= vocab_size){
+				sys_labels[i] = vocab_size - 1;
+			}
+		}
+		
 		if (num_tokens_example_seq < seq_len){
 			sys_token_ids = realloc(sys_token_ids, seq_len * sizeof(uint32_t));
 			if (!sys_token_ids){
