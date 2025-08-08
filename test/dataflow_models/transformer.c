@@ -20,11 +20,11 @@
 	#define TOKEN_LABELS_PATH "../data/65536_labels_uint32.dat"
 
 	#define DEFAULT_MIN_CHUNK_SIZE 8192
-	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 2048
+	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 8192
 
 	// this (along with num seqs per round) modulates how frequently we will step 
 	// the optimizer...
-	#define TARGET_OPT_OVERHEAD_FRAC 0.02f
+	#define TARGET_OPT_OVERHEAD_FRAC 0.01f
 	// to help determien how many rounds per step
 	#define FLOP_EFFICIENCY_ESTIMATE 0.6f
 
@@ -1581,7 +1581,7 @@
 				sys_labels[i] = vocab_size - 1;
 			}
 		}
-		
+
 		if (num_tokens_example_seq < seq_len){
 			sys_token_ids = realloc(sys_token_ids, seq_len * sizeof(uint32_t));
 			if (!sys_token_ids){
@@ -1821,6 +1821,7 @@
 				}
 
 				void * cur_host_expert_counts_buffer = cur_host_mem;
+				//void * cur_host_expert_mapping_buffer = cur_host_mem + num_routed_experts * n_layers * sizeof(int);
 
 				ret = populate_seq_batch_metadata_buffer(&dataflow_handle, inbound_stream_id, 
 												seq_batches[chunk_id],
@@ -1839,6 +1840,9 @@
 
 				cur_host_mem += num_routed_experts * n_layers * sizeof(int);
 				used_host_mem += num_routed_experts * n_layers * sizeof(int);
+
+				//cur_host_mem += n_layers * chunk_size * num_active_routed_experts * sizeof(int);
+				//used_host_mem += n_layers * chunk_size * num_active_routed_experts * sizeof(int);
 
 				ret = dataflow_handle.sync_stream(&dataflow_handle, inbound_stream_id);
 				if (ret){

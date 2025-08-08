@@ -113,3 +113,162 @@ extern "C" __global__ void default_merge_expert_result_bf16_bf16_kernel(int num_
     }
     
 }
+
+#define MERGE_EXPERT_RESULT_VEC_SIZE 8
+extern "C" __global__ void default_merge_experts_bf16_bf16_kernel(
+    int total_tokens,
+    int model_dim,
+    int num_selected_experts,
+    const __nv_bfloat16* __restrict__ expert_zones,
+    int* __restrict__ token_mapping,
+    float* __restrict__ token_expert_weights,
+    __nv_bfloat16* __restrict__ X_combined) {
+
+    int orig_token_ind = blockIdx.x;
+
+    if (orig_token_ind >= total_tokens) {
+        return;
+    }
+
+    int model_dim_vec = model_dim / MERGE_EXPERT_RESULT_VEC_SIZE;
+
+    const float4* X_combined_vec = (const float4*)X_combined;
+    const float4* expert_zones_vec = (const float4*)expert_zones;
+    float4* X_combined_out_vec = (float4*)X_combined;
+
+    extern __shared__ uint8_t smem[];
+    float* orig_token_smem = (float*)smem;
+
+    /* Step 1: Vectorized load and unpack */
+    int i;
+    for (i = threadIdx.x; i < model_dim_vec; i += blockDim.x) {
+        float4 bfloat16_in_f4 = X_combined_vec[orig_token_ind * model_dim_vec + i];
+        
+        /*
+         * FIX: Cast the address of the loaded float4 to a pointer to an array of
+         * __nv_bfloat162. This provides the correct type for the intrinsic.
+         */
+        __nv_bfloat162* bfloat16_in_vec2 = (__nv_bfloat162*)&bfloat16_in_f4;
+
+        float2 f1 = __bfloat1622float2(bfloat16_in_vec2[0]);
+        float2 f2 = __bfloat1622float2(bfloat16_in_vec2[1]);
+        float2 f3 = __bfloat1622float2(bfloat16_in_vec2[2]);
+        float2 f4 = __bfloat1622float2(bfloat16_in_vec2[3]);
+
+        orig_token_smem[i * MERGE_EXPERT_RESULT_VEC_SIZE + 0] = f1.x;
+        orig_token_smem[i * MERGE_EXPERT_RESULT_VEC_SIZE + 1] = f1.y;
+        orig_token_smem[i * MERGE_EXPERT_RESULT_VEC_SIZE + 2] = f2.x;
+        orig_token_smem[i * MERGE_EXPERT_RESULT_VEC_SIZE + 3] = f2.y;
+        orig_token_smem[i * MERGE_EXPERT_RESULT_VEC_SIZE + 4] = f3.x;
+        orig_token_smem[i * MERGE_EXPERT_RESULT_VEC_SIZE + 5] = f3.y;
+        orig_token_smem[i * MERGE_EXPERT_RESULT_VEC_SIZE + 6] = f4.x;
+        orig_token_smem[i * MERGE_EXPERT_RESULT_VEC_SIZE + 7] = f4.y;
+    }
+
+    __syncthreads();
+
+    /* Step 2: Accumulate expert outputs */
+    for (i = threadIdx.x; i < model_dim_vec; i += blockDim.x) {
+        float acc[MERGE_EXPERT_RESULT_VEC_SIZE];
+        int j, k;
+
+        #pragma unroll
+        for(j = 0; j < MERGE_EXPERT_RESULT_VEC_SIZE; ++j) {
+            acc[j] = orig_token_smem[i * MERGE_EXPERT_RESULT_VEC_SIZE + j];
+        }
+
+        for (k = 0; k < num_selected_experts; k++) {
+            int expert_zone_row = token_mapping[orig_token_ind * num_selected_experts + k];
+            float token_expert_weight = token_expert_weights[orig_token_ind * num_selected_experts + k];
+            
+            float4 expert_in_f4 = expert_zones_vec[expert_zone_row * model_dim_vec + i];
+            __nv_bfloat162* expert_in_vec2 = (__nv_bfloat162*)&expert_in_f4;
+
+            float2 ef1 = __bfloat1622float2(expert_in_vec2[0]);
+            float2 ef2 = __bfloat1622float2(expert_in_vec2[1]);
+            float2 ef3 = __bfloat1622float2(expert_in_vec2[2]);
+            float2 ef4 = __bfloat1622float2(expert_in_vec2[3]);
+
+            acc[0] += token_expert_weight * ef1.x;
+            acc[1] += token_expert_weight * ef1.y;
+            acc[2] += token_expert_weight * ef2.x;
+            acc[3] += token_expert_weight * ef2.y;
+            acc[4] += token_expert_weight * ef3.x;
+            acc[5] += token_expert_weight * ef3.y;
+            acc[6] += token_expert_weight * ef4.x;
+            acc[7] += token_expert_weight * ef4.y;
+        }
+
+        #pragma unroll
+        for(j = 0; j < MERGE_EXPERT_RESULT_VEC_SIZE; ++j) {
+            orig_token_smem[i * MERGE_EXPERT_RESULT_VEC_SIZE + j] = acc[j];
+        }
+    }
+
+    __syncthreads();
+
+    /* Step 3: Pack and vectorized write back */
+    for (i = threadIdx.x; i < model_dim_vec; i += blockDim.x) {
+        float2 f1 = {orig_token_smem[i * MERGE_EXPERT_RESULT_VEC_SIZE + 0], orig_token_smem[i * MERGE_EXPERT_RESULT_VEC_SIZE + 1]};
+        float2 f2 = {orig_token_smem[i * MERGE_EXPERT_RESULT_VEC_SIZE + 2], orig_token_smem[i * MERGE_EXPERT_RESULT_VEC_SIZE + 3]};
+        float2 f3 = {orig_token_smem[i * MERGE_EXPERT_RESULT_VEC_SIZE + 4], orig_token_smem[i * MERGE_EXPERT_RESULT_VEC_SIZE + 5]};
+        float2 f4 = {orig_token_smem[i * MERGE_EXPERT_RESULT_VEC_SIZE + 6], orig_token_smem[i * MERGE_EXPERT_RESULT_VEC_SIZE + 7]};
+
+        /*
+         * FIX: Create a temporary array of the correct __nv_bfloat162 type to hold
+         * the intrinsic's output. Then, cast this array to a float4 for the final write.
+         */
+        __nv_bfloat162 bfloat16_out_vec2[4];
+        bfloat16_out_vec2[0] = __float22bfloat162_rn(f1);
+        bfloat16_out_vec2[1] = __float22bfloat162_rn(f2);
+        bfloat16_out_vec2[2] = __float22bfloat162_rn(f3);
+        bfloat16_out_vec2[3] = __float22bfloat162_rn(f4);
+        
+        X_combined_out_vec[orig_token_ind * model_dim_vec + i] = *((float4*)bfloat16_out_vec2);
+    }
+}
+
+
+extern "C" __global__ void naive_default_merge_experts_bf16_bf16_kernel(
+    int total_tokens,
+    int model_dim,
+    int num_selected_experts,
+    const __nv_bfloat16* __restrict__ expert_zones,
+    int* __restrict__ token_mapping,
+    float* __restrict__ token_expert_weights,
+    __nv_bfloat16* __restrict__ X_combined){
+
+    int orig_token_ind = blockIdx.x;
+
+    if (orig_token_ind >= total_tokens) {
+        return;
+    }
+
+    extern __shared__ uint8_t smem[];
+
+    float * orig_token = (float *) smem;
+
+    for (int i = threadIdx.x; i < model_dim; i += blockDim.x){
+        orig_token[i] = __bfloat162float(X_combined[orig_token_ind * model_dim + i]);
+    }
+
+    __syncthreads();
+
+    int expert_zone_row;
+    float token_expert_weight;
+
+    for (int k = 0; k < num_selected_experts; k++){
+        expert_zone_row = token_mapping[orig_token_ind * num_selected_experts + k];
+        token_expert_weight = token_expert_weights[orig_token_ind * num_selected_experts + k];
+        for (int i = threadIdx.x; i < model_dim; i += blockDim.x){
+            orig_token[i] += token_expert_weight * __bfloat162float(expert_zones[expert_zone_row * model_dim + i]);
+        }
+    }
+
+    __syncthreads();
+
+    for (int i = threadIdx.x; i < model_dim; i += blockDim.x){
+        X_combined[orig_token_ind * model_dim + i] = __float2bfloat16(orig_token[i]);
+    }
+  
+}

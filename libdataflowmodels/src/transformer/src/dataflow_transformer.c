@@ -2203,7 +2203,7 @@ int dataflow_submit_transformer_embedding_bwd_w(Dataflow_Handle * dataflow_handl
 
 
 
-int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int compute_stream_id, 
+int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int compute_stream_id, int compute_backup_stream_id,
 								Transformer_Block_Transition * block_input, 
 								Transformer_Block * transformer_block, 
 								Transformer_Block_Activations * activations, 
@@ -2606,6 +2606,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 	// Returned by prepare expert zone, to know what dimensions to 
 	// launch GEMM...
 	int * host_expert_counts = batch_moe_config -> host_expert_counts + layer_id * num_routed_experts;
+	//int * host_expert_mapping = batch_moe_config -> host_expert_mapping + layer_id * (total_q * top_k_active);
 
 	// TODO: handle matmuls of shared experts here...
 	
@@ -2712,14 +2713,6 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		}
 	}
 
-	/*
-	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_ffn_norm_out", activation_workspace -> x_temp, total_q, model_dim, fwd_dt);
-	if (ret){
-		fprintf(stderr, "Error: failed to save x_ffn_norm_out file...\n");
-		return -1;
-	}
-	*/
-
 	// 1. Router.
 
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
@@ -2743,13 +2736,6 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		}
 	}
 
-	/*
-	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_router_out", working_activations -> x_routed, total_q, num_routed_experts, fwd_dt);
-	if (ret){
-		fprintf(stderr, "Error: failed to save x_router_out file...\n");
-		return -1;
-	*/
-	
 	
 	// 2.) Select Experts
 
@@ -2798,56 +2784,12 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 
 	}
 
-	/*
-	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_chosen_experts", working_activations -> chosen_experts, total_q, top_k_active, DATAFLOW_UINT16);
-	if (ret){
-		fprintf(stderr, "Error: failed to save x_chosen_experts file...\n");
-		return -1;
-	}
-
-	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_expert_weights", working_activations -> token_expert_weights, total_q, top_k_active, DATAFLOW_FP32);
-	if (ret){
-		fprintf(stderr, "Error: failed to save x_expert_weights file...\n");
-		return -1;
-	}
-
-	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_expert_counts", working_activations -> expert_counts, num_routed_experts, 1, DATAFLOW_INT);
-	if (ret){
-		fprintf(stderr, "Error: failed to save x_expert_counts file...\n");
-		return -1;
-	}
-
-	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_expert_counts_cumsum", working_activations -> expert_counts_cumsum, num_routed_experts, 1, DATAFLOW_INT);
-	if (ret){
-		fprintf(stderr, "Error: failed to save x_expert_counts_cumsum file...\n");
-		return -1;
-	}
-	*/
-
 	// 3.) Build Mapping
 
 	ret = dataflow_submit_default_build_expert_mapping(dataflow_handle, compute_stream_id, 
                                 total_q, num_routed_experts, top_k_active, 
                                 working_activations -> chosen_experts, working_activations -> expert_counts_cumsum,
-                                working_activations -> expert_mapping);
-	if (ret){
-		fprintf(stderr, "Error: failed to submit build expert mapping...\n");
-		return -1;
-	}
-
-	/*
-	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_expert_mapping", working_activations -> expert_mapping, total_q * top_k_active, 1, DATAFLOW_INT);
-	if (ret){
-		fprintf(stderr, "Error: failed to save x_expert_mapping file...\n");
-		return -1;
-	}
-
-	ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_orig_block_output", block_output -> X, total_q, model_dim, fwd_dt);
-	if (ret){
-		fprintf(stderr, "Error: failed to save x_orig_block_output file...\n");
-		return -1;
-	}
-	*/
+                                working_activations -> expert_mapping, working_activations -> token_mapping);
 
 	// Sync with compute stream here to know the number of tokens in each expert...
 	// Required to know in order to correctly partition memory and make GEMM calls...
@@ -2865,18 +2807,41 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		return -1;
 	}
 
+	void * expert_zones = activation_workspace -> x_expert_zones;
+
+	ret = dataflow_submit_default_prepare_experts(dataflow_handle, compute_stream_id, 
+                                fwd_dt, fwd_dt,
+                                total_q, model_dim, top_k_active, activation_workspace -> x_temp, 
+								working_activations -> token_mapping, 
+								expert_zones);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit prepare experts...\n");
+		return -1;
+	}
+
+	void * cur_stream_state = (dataflow_handle -> get_stream_state)(dataflow_handle, compute_stream_id);
+
+	if (!cur_stream_state){
+		fprintf(stderr, "Error: failed to get stream state for compute stream #%d...\n", compute_stream_id);
+		return -1;
+	}
+
+	// ensure backup stream waits for compute stream to finish...
+	ret = (dataflow_handle -> submit_dependency)(dataflow_handle, compute_backup_stream_id, cur_stream_state);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit dependency for compute backup stream #%d to wait for compute stream #%d to finish...\n", compute_backup_stream_id, compute_stream_id);
+		return -1;
+	}
+
 	// 4.) Repeat for all routed experts
 
-	// Aliasing the kernel workspace to use as 
-	// temp space for the expert zone...
-	void * new_kernelWorkspace;
-	uint64_t new_kernelWorkspaceBytes;
-
-	void * expert_zone = kernelWorkspace;
-
-	uint64_t expert_zone_size;
+	void * cur_expert_zone = expert_zones;
 
 	int total_tokens = 0;
+
+	uint64_t token_size = (uint64_t) model_dim * (uint64_t) x_el_size;
+
+	int cur_compute_stream = compute_stream_id;
 
 	for (int i = 0; i < num_routed_experts; i++){
 
@@ -2886,71 +2851,38 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 			continue;
 		}
 
-		if (TO_PRINT){
-			printf("[Expert %d] Number of tokens: %d\n", i, cur_expert_num_tokens);
-		}
-
-		total_tokens += cur_expert_num_tokens;
-
-		expert_zone_size = (uint64_t) cur_expert_num_tokens * (uint64_t) model_dim * (uint64_t) x_el_size;
-
-		if (expert_zone_size > kernelWorkspaceBytes){
-			fprintf(stderr, "Error: expert zone size is greater than kernel workspace size for expert #%d with %d tokens...\n", i, cur_expert_num_tokens);
-			return -1;
-		}
-
-		new_kernelWorkspace = expert_zone + expert_zone_size;
-
-		new_kernelWorkspace = (void *) (((uint64_t) new_kernelWorkspace + 255) & ~255UL);
-
-		new_kernelWorkspaceBytes = kernelWorkspaceBytes - ((uint64_t) new_kernelWorkspace - (uint64_t) kernelWorkspace);
-
-		// 	a.) Prepare Expert Zone
 		
-	
-		ret = dataflow_submit_default_prepare_expert_zone(dataflow_handle, compute_stream_id, 
-								fwd_dt, fwd_dt,
-								model_dim, activation_workspace -> x_temp, 
-								i, working_activations -> expert_counts,
-								working_activations -> expert_counts_cumsum, 
-								working_activations -> expert_mapping, 
-								expert_zone);
-		if (ret){
-			fprintf(stderr, "Error: failed to submit prepare expert zone...\n");
-			return -1;
-		}
+		// Submit Matmuls, Activation, Matmul
 
-		// 	b.) Submit Matmuls, Activation, Matmul
-
-		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+		ret = dataflow_submit_matmul(dataflow_handle, cur_compute_stream, 
 						fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
 						compute_dt,
 						to_transa, to_transb,
 						ffn_dim, model_dim, cur_expert_num_tokens, 
 						1.0, 0.0,
-						(transformer_block -> w_1)[num_shared_experts + i], expert_zone, NULL, (working_activations -> x_1)[num_shared_experts + i],
-						new_kernelWorkspaceBytes, new_kernelWorkspace);
+						(transformer_block -> w_1)[num_shared_experts + i], cur_expert_zone, NULL, (working_activations -> x_1)[num_shared_experts + i],
+						kernelWorkspaceBytes, kernelWorkspace);
 
 		if (ret){
 			fprintf(stderr, "Error: failed to submit w1 matmul proj for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
 			return -1;
 		}
 
-		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+		ret = dataflow_submit_matmul(dataflow_handle, cur_compute_stream, 
 						fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
 						compute_dt,
 						to_transa, to_transb,
 						ffn_dim, model_dim, cur_expert_num_tokens, 
 						1.0, 0.0,
-						(transformer_block -> w_3)[num_shared_experts + i], expert_zone, NULL, (working_activations -> x_3)[num_shared_experts + i],
-						new_kernelWorkspaceBytes, new_kernelWorkspace);
+						(transformer_block -> w_3)[num_shared_experts + i], cur_expert_zone, NULL, (working_activations -> x_3)[num_shared_experts + i],
+						kernelWorkspaceBytes, kernelWorkspace);
 
 		if (ret){
 			fprintf(stderr, "Error: failed to submit w3 matmul proj for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
 			return -1;
 		}
 
-		ret = dataflow_submit_default_swiglu(dataflow_handle, compute_stream_id, 
+		ret = dataflow_submit_default_swiglu(dataflow_handle, cur_compute_stream, 
 							fwd_dt, 
 							cur_expert_num_tokens, ffn_dim, 
 							(working_activations -> x_1)[num_shared_experts + i], (working_activations -> x_3)[num_shared_experts + i], activation_workspace -> x_temp_mlp);
@@ -2964,34 +2896,27 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 			printf("Submitting FFN w2 matmul...!\n");
 		}
 
-		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+		ret = dataflow_submit_matmul(dataflow_handle, cur_compute_stream, 
 						fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
 						compute_dt,
 						to_transa, to_transb,
 						model_dim, ffn_dim, cur_expert_num_tokens, 
 						1.0, 0.0,
-						(transformer_block -> w_2)[num_shared_experts + i], activation_workspace -> x_temp_mlp, NULL, expert_zone,
-						new_kernelWorkspaceBytes, new_kernelWorkspace);
+						(transformer_block -> w_2)[num_shared_experts + i], activation_workspace -> x_temp_mlp, NULL, cur_expert_zone,
+						kernelWorkspaceBytes, kernelWorkspace);
 
 		if (ret){
 			fprintf(stderr, "Error: failed to submit w2 matmul proj for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
 			return -1;
 		}
 
-		// 	c.) Combine Expert Outputs
+		cur_expert_zone += token_size * cur_expert_num_tokens;
+		total_tokens += cur_expert_num_tokens;
 
-		ret = dataflow_submit_default_merge_expert_result(dataflow_handle, compute_stream_id, 
-								fwd_dt, fwd_dt,
-								cur_expert_num_tokens, model_dim, top_k_active, 
-								expert_zone, i, 
-								working_activations -> expert_counts_cumsum, 
-								working_activations -> expert_mapping,
-								working_activations -> token_expert_weights,
-								working_activations -> chosen_experts,
-								block_output -> X);
-		if (ret){
-			fprintf(stderr, "Error: failed to submit combine expert outputs...\n");
-			return -1;
+		if (cur_compute_stream == compute_stream_id){
+			cur_compute_stream = compute_backup_stream_id;
+		} else {
+			cur_compute_stream = compute_stream_id;
 		}
 
 	}
@@ -3000,6 +2925,36 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		fprintf(stderr, "Error: total tokens does not match expected number of tokens. Chunk size: %d, top_k_active: %d => expected %d, got %d\n", total_q, top_k_active, total_q * top_k_active, total_tokens);
 		return -1;
 	}
+
+	// 	5. ) Combine Expert Outputs
+
+	// ensure compute stream waits for backup stream to finish...
+
+	cur_stream_state = (dataflow_handle -> get_stream_state)(dataflow_handle, compute_backup_stream_id);
+	if (!cur_stream_state){
+		fprintf(stderr, "Error: failed to get stream state for compute backup stream #%d...\n", compute_backup_stream_id);
+		return -1;
+	}
+
+	ret = (dataflow_handle -> submit_dependency)(dataflow_handle, compute_stream_id, cur_stream_state);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit dependency for compute stream #%d to wait for compute backup stream #%d to finish...\n", compute_stream_id, compute_backup_stream_id);
+		return -1;
+	}
+
+
+	ret = dataflow_submit_default_merge_experts(dataflow_handle, compute_stream_id, 
+								fwd_dt, fwd_dt,
+								total_q, model_dim, top_k_active, 
+								expert_zones,
+								working_activations -> token_mapping,
+								working_activations -> token_expert_weights,
+								block_output -> X);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit merge experts...\n");
+		return -1;
+	}
+
 
 	if (TO_SAVE_DATA && TO_SAVE_LAYER && ((LAYER_ID_TO_SAVE == -1) || (layer_id == LAYER_ID_TO_SAVE))){
 		ret = save_file(dataflow_handle, compute_stream_id, layer_id, seq_id, chunk_id, false, "x_act_stream_out", block_output -> X, total_q, model_dim, fwd_dt);

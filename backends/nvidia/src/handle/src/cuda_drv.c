@@ -552,7 +552,7 @@ int cu_transfer_dev_to_dev_blocking(void * dev_dest, void * dev_src, uint64_t si
 	CUresult result;
 	const char * err;
 
-	result = cuMemcpyDtoD((CUdeviceptr) dev_src, (CUdeviceptr) dev_src, size_bytes);
+	result = cuMemcpyDtoD((CUdeviceptr) dev_dest, (CUdeviceptr) dev_src, size_bytes);
 	if (result != CUDA_SUCCESS){
 		cuGetErrorString(result, &err);
 		fprintf(stderr, "Error: unable to do d to h blocking transfer of size %lu: %s...\n", size_bytes, err);
@@ -569,10 +569,40 @@ int cu_transfer_dev_to_dev_async(CUstream stream, void * dev_dest, void * dev_sr
 	CUresult result;
 	const char * err;
 
-	result = cuMemcpyDtoDAsync((CUdeviceptr) dev_src, (CUdeviceptr) dev_src, size_bytes, stream);
+	result = cuMemcpyDtoDAsync((CUdeviceptr) dev_dest, (CUdeviceptr) dev_src, size_bytes, stream);
 	if (result != CUDA_SUCCESS){
 		cuGetErrorString(result, &err);
 		fprintf(stderr, "Error: unable to submit d to d async transfer of size %lu: %s...\n", size_bytes, err);
+		return -1;
+	}
+
+	return 0;
+
+}
+
+int cu_transfer_batch_dev_to_dev_async(CUstream stream, int num_transfers, int dest_id, int src_id, void ** dev_dest, void ** dev_src, uint64_t * size_bytes) {
+
+	CUresult result;
+	const char * err;
+
+	size_t numAttrs = 1;
+	size_t attrsIdxs = 0;
+
+	CUmemcpyAttributes attrs;
+
+	attrs.srcLocHint.type = CU_MEM_LOCATION_TYPE_DEVICE;
+	attrs.srcLocHint.id = src_id;
+	attrs.dstLocHint.type = CU_MEM_LOCATION_TYPE_DEVICE;
+	attrs.dstLocHint.id = dest_id;
+	attrs.flags = CU_MEMCPY_FLAG_PREFER_OVERLAP_WITH_COMPUTE;
+	attrs.srcAccessOrder = CU_MEMCPY_SRC_ACCESS_ORDER_STREAM;
+
+	size_t failIdx;
+
+	result = cuMemcpyBatchAsync((CUdeviceptr *) dev_dest, (CUdeviceptr *) dev_src, (size_t *) size_bytes, (size_t) num_transfers, &attrs, &attrsIdxs, numAttrs, &failIdx, stream);
+	if (result != CUDA_SUCCESS){
+		cuGetErrorString(result, &err);
+		fprintf(stderr, "Error: unable to submit batch d to d async with %d transfers. Failed at index %zu: %s...\n", num_transfers, failIdx, err);
 		return -1;
 	}
 

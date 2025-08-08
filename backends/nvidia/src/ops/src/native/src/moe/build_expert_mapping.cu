@@ -12,13 +12,13 @@
  * @param expert_counts_cumsum  A K-length array of atomic counters, PRE-INITIALIZED
  * with the starting offsets for each value category 
  * => expert_counts_cumsum is the argument pssed in
- * @param expert_mapping      The final M x K output array for row indices.
-
+ * @param expert_mapping      The final K x M output array for original row indices for each expert.
+ * @param token_mapping       The final M x K output array for expert indices for each token.
  */
 extern "C" __global__ void default_build_expert_mapping_kernel(int num_tokens, int num_routed_experts, int num_selected_experts, 
                                         const uint16_t* chosen_experts,
                                        int* expert_counts_cumsum,
-                                       int* expert_mapping)
+                                       int* expert_mapping, int * token_mapping)
 {
     // --- Shared Memory Declaration ---
     // Stores counts for this block (Phase 1). Re-used for local write offsets (Phase 3).
@@ -97,6 +97,7 @@ extern "C" __global__ void default_build_expert_mapping_kernel(int num_tokens, i
 
             // Write the row index to its final sorted position.
             expert_mapping[write_pos] = row_idx;
+            token_mapping[row_idx * num_selected_experts + k] = write_pos;
         }
     }
 }

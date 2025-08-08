@@ -142,13 +142,47 @@ int default_prepare_expert_zone_set_launch_config(Cuda_Launch_Config * cuda_laun
 
 	int sm_count = device_info -> sm_count;
 
-	int num_blocks = sm_count * 64;
+	int num_blocks = 16;
 	int thread_per_block = 256;
 
 	cuda_launch_config -> gridDimX = num_blocks;
 	cuda_launch_config -> blockDimX = thread_per_block;
 
 	cuda_launch_config -> sharedMemBytes = 0;
+
+	return 0;
+
+}
+
+int default_prepare_experts_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Dataflow_Handle * dataflow_handle, Cuda_Function * cuda_function, Op * op) {
+
+	cuda_launch_config -> gridDimY = 1;
+	cuda_launch_config -> gridDimZ = 1;
+	cuda_launch_config -> blockDimY = 1;
+	cuda_launch_config -> blockDimZ = 1;
+
+	int total_tokens = *((int *) op -> op_args[0]);
+	int model_dim = *((int *) op -> op_args[1]);
+
+	Op_Skeleton * op_skeleton = &(cuda_function -> op_skeleton);
+
+	Op_Skeleton_Header * op_skeleton_header = &(op_skeleton -> header);
+
+	DataflowDatatype * arg_dtypes = op_skeleton_header -> arg_dtypes;
+
+
+	DataflowDatatype x_dt = arg_dtypes[3];
+	size_t x_el_size = dataflow_sizeof_element(x_dt);
+
+	int num_blocks = total_tokens;
+	int thread_per_block = 128;
+
+	cuda_launch_config -> gridDimX = num_blocks;
+	cuda_launch_config -> blockDimX = thread_per_block;
+
+	int shared_mem_size = model_dim * x_el_size;
+
+	cuda_launch_config -> sharedMemBytes = shared_mem_size;
 
 	return 0;
 
@@ -171,6 +205,31 @@ int default_merge_expert_result_set_launch_config(Cuda_Launch_Config * cuda_laun
 	cuda_launch_config -> blockDimX = thread_per_block;
 
 	cuda_launch_config -> sharedMemBytes = 0;
+
+	return 0;
+}
+
+int default_merge_experts_set_launch_config(Cuda_Launch_Config * cuda_launch_config, Dataflow_Handle * dataflow_handle, Cuda_Function * cuda_function, Op * op) {
+
+	cuda_launch_config -> gridDimY = 1;
+	cuda_launch_config -> gridDimZ = 1;
+	cuda_launch_config -> blockDimY = 1;
+	cuda_launch_config -> blockDimZ = 1;
+
+	int total_tokens = *((int *) op -> op_args[0]);
+	int model_dim = *((int *) op -> op_args[1]);
+
+	size_t x_el_size = sizeof(float);
+
+	int num_blocks = total_tokens;
+	int thread_per_block = 128;
+
+	cuda_launch_config -> gridDimX = num_blocks;
+	cuda_launch_config -> blockDimX = thread_per_block;
+
+	int shared_mem_size = model_dim * x_el_size;
+
+	cuda_launch_config -> sharedMemBytes = shared_mem_size;
 
 	return 0;
 }

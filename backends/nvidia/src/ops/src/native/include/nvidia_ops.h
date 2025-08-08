@@ -263,17 +263,41 @@ extern "C" __global__ void default_select_experts_fp8e5m2_kernel(int total_token
 extern "C" __global__ void default_build_expert_mapping_kernel(int num_tokens, int num_routed_experts, int num_selected_experts, 
                                         const uint16_t* chosen_experts,
                                        int* expert_counts_cumsum,
-                                       int* expert_mapping);
+                                       int* expert_mapping, int* token_mapping);
 
 
 
 // This is where casting to expert dtype would occur...
-extern "C" __global__ void default_prepare_expert_zone_bf16_bf16_kernel(int model_dim, __nv_bfloat16 * X, int expert_id, int * expert_counts, int* expert_counts_cumsum, int* expert_mapping, __nv_bfloat16 * expert_zone);
+extern "C" __global__ void default_prepare_expert_zone_bf16_bf16_kernel(
+    int model_dim,
+    const __nv_bfloat16* __restrict__ X,
+    int expert_id,
+    const int* __restrict__ expert_counts,
+    const int* __restrict__ expert_counts_cumsum,
+    const int* __restrict__ expert_mapping,
+    __nv_bfloat16* __restrict__ expert_zone);
+
+
+// This is where casting to expert dtype would occur...
+extern "C" __global__ void default_prepare_experts_bf16_bf16_kernel(
+    int total_tokens,
+    int model_dim,
+    int num_selected_experts,
+    const __nv_bfloat16* __restrict__ X,
+    int* __restrict__ token_mapping,
+    __nv_bfloat16* __restrict__ expert_zones);
 
 // After doing matmul with expert zone, merge the results
 extern "C" __global__ void default_merge_expert_result_bf16_bf16_kernel(int num_tokens, int model_dim, int top_k_experts, __nv_bfloat16 * expert_zone, int expert_id, int * expert_counts_cumsum, int * expert_mapping, float * token_expert_weights, uint16_t * chosen_experts, __nv_bfloat16 * X_combined);
 
-
+extern "C" __global__ void default_merge_experts_bf16_bf16_kernel(
+    int total_tokens,
+    int model_dim,
+    int num_selected_experts,
+    const __nv_bfloat16* __restrict__ expert_zones,
+    int* __restrict__ token_mapping,
+    float* __restrict__ token_expert_weights,
+    __nv_bfloat16* __restrict__ X_combined);
 
 extern "C" __global__ void default_router_bwd_x_bf16_bf16_kernel(int num_expert_tokens, int model_dim, int num_routed_experts, int top_k_active,
                                                                     int expert_id, int * expert_counts_cumsum, int * expert_mapping, 

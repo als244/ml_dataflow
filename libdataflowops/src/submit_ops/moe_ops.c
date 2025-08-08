@@ -40,7 +40,7 @@ int dataflow_submit_default_select_experts(Dataflow_Handle * handle, int stream_
 int dataflow_submit_default_build_expert_mapping(Dataflow_Handle * handle, int stream_id, 
                                 int total_tokens, int num_routed_experts, int num_selected_experts, 
                                 uint16_t * chosen_experts, int * expert_counts_cumsum,
-                                int * expert_mapping) {
+                                int * expert_mapping, int * token_mapping) {
 
     int ret;
 
@@ -56,6 +56,7 @@ int dataflow_submit_default_build_expert_mapping(Dataflow_Handle * handle, int s
     op_args[3] = &chosen_experts;
     op_args[4] = &expert_counts_cumsum;
     op_args[5] = &expert_mapping;
+    op_args[6] = &token_mapping;
 
     ret = (handle -> submit_op)(handle, &build_expert_mapping_op, stream_id);
     if (ret){
@@ -65,6 +66,36 @@ int dataflow_submit_default_build_expert_mapping(Dataflow_Handle * handle, int s
 
     return 0;
 
+}
+
+int dataflow_submit_default_prepare_experts(Dataflow_Handle * handle, int stream_id, 
+                                DataflowDatatype attn_datatype, DataflowDatatype expert_datatype,
+                                int total_tokens, int model_dim, int num_selected_experts, void * X, 
+								int * token_mapping, 
+								void * expert_zone){
+
+    int ret;
+
+    Op prepare_experts_op;
+
+    dataflow_set_default_prepare_experts_skeleton(&prepare_experts_op.op_skeleton, attn_datatype, expert_datatype);
+
+    void ** op_args = prepare_experts_op.op_args;
+
+    op_args[0] = &total_tokens;
+    op_args[1] = &model_dim;
+    op_args[2] = &num_selected_experts;
+    op_args[3] = &X;
+    op_args[4] = &token_mapping;
+    op_args[5] = &expert_zone;
+
+    ret = (handle -> submit_op)(handle, &prepare_experts_op, stream_id);
+    if (ret){
+        fprintf(stderr, "Error: failed to submit prepare experts op...\n");
+        return -1;
+    }
+
+    return 0;
 }
 
 int dataflow_submit_default_prepare_expert_zone(Dataflow_Handle * handle, int stream_id, 
@@ -93,6 +124,39 @@ int dataflow_submit_default_prepare_expert_zone(Dataflow_Handle * handle, int st
     ret = (handle -> submit_op)(handle, &prepare_expert_zone_op, stream_id);
     if (ret){
         fprintf(stderr, "Error: failed to submit prepare expert zone op...\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+int dataflow_submit_default_merge_experts(Dataflow_Handle * handle, int stream_id, 
+								DataflowDatatype attn_datatype, DataflowDatatype expert_datatype,
+								int num_tokens, int model_dim, int top_k_experts, 
+								void * expert_zones,
+								int * token_mapping,
+								float * token_expert_weights,
+								void * X_combined){
+
+    int ret;
+
+    Op merge_experts_op;
+
+    dataflow_set_default_merge_experts_skeleton(&merge_experts_op.op_skeleton, attn_datatype, expert_datatype);
+
+    void ** op_args = merge_experts_op.op_args;
+
+    op_args[0] = &num_tokens;
+    op_args[1] = &model_dim;
+    op_args[2] = &top_k_experts;
+    op_args[3] = &expert_zones;
+    op_args[4] = &token_mapping;
+    op_args[5] = &token_expert_weights;
+    op_args[6] = &X_combined;
+
+    ret = (handle -> submit_op)(handle, &merge_experts_op, stream_id);
+    if (ret){
+        fprintf(stderr, "Error: failed to submit merge experts op...\n");
         return -1;
     }
 

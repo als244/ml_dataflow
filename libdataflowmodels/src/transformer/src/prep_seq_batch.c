@@ -261,6 +261,12 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
 
         saved_activations_offsets -> expert_mapping = cur_offset;
         cur_offset += total_tokens * top_k_active * sizeof(int);
+
+        // Align offset to 256 bytes
+        cur_offset = (cur_offset + 255) & ~255UL;
+
+        saved_activations_offsets -> token_mapping = cur_offset;
+        cur_offset += total_tokens * top_k_active * sizeof(int);
     }
     else{
         saved_activations_offsets -> x_routed = cur_offset;
@@ -269,6 +275,7 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
         saved_activations_offsets -> expert_counts = cur_offset;
         saved_activations_offsets -> expert_counts_cumsum = cur_offset;
         saved_activations_offsets -> expert_mapping = cur_offset;
+        saved_activations_offsets -> token_mapping = cur_offset;
     }
 
     // CUTOFF FOR SAVING INP ONLY...
@@ -659,6 +666,7 @@ int populate_seq_batch_metadata_buffer(Dataflow_Handle * dataflow_handle, int in
         seq_batch -> sys_labels = sys_labels;
         seq_batch -> sys_seq_positions = sys_seq_positions;
         (seq_batch -> moe_config).host_expert_counts = sys_host_expert_count_buffer;
+        //(seq_batch -> moe_config).host_expert_mapping = sys_host_expert_mapping;
         
         return 0;
 }
@@ -756,6 +764,7 @@ int bind_seq_batch_saved_activations_buffer(Seq_Batch * seq_batch, Seq_Batch_Sav
     saved_activations -> expert_counts = NULL;
     saved_activations -> expert_counts_cumsum = NULL;
     saved_activations -> expert_mapping = NULL;
+    saved_activations -> token_mapping = NULL;
 
     if (saved_activations_offsets -> num_local_experts > 1){
         
@@ -767,6 +776,7 @@ int bind_seq_batch_saved_activations_buffer(Seq_Batch * seq_batch, Seq_Batch_Sav
         saved_activations -> expert_counts = (void *) (saved_activations_buffer + saved_activations_offsets -> expert_counts);
         saved_activations -> expert_counts_cumsum = (void *) (saved_activations_buffer + saved_activations_offsets -> expert_counts_cumsum);
         saved_activations -> expert_mapping = (void *) (saved_activations_buffer + saved_activations_offsets -> expert_mapping);
+        saved_activations -> token_mapping = (int *) (saved_activations_buffer + saved_activations_offsets -> token_mapping);
     }
 
     // only save if full...
@@ -823,6 +833,12 @@ uint64_t get_seq_batch_activation_workspace_buffer_size(Seq_Batch * seq_batch, T
     uint64_t activation_workspace_size = 0;
     activation_workspace_size += total_tokens * (uint64_t) block_config -> model_dim * (uint64_t) dtype_size;
     activation_workspace_size += total_tokens * (uint64_t) block_config -> ffn_dim * (uint64_t) dtype_size;
+
+    MoE_Config * model_moe_config = &(block_config -> moe_config);
+
+    int top_k_active = model_moe_config -> top_k_experts;
+
+    activation_workspace_size += total_tokens * (uint64_t) top_k_active * (uint64_t) block_config -> model_dim * (uint64_t) dtype_size;
 
     return activation_workspace_size;
 }

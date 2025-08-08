@@ -8,7 +8,7 @@ extern "C" __global__ void default_router_bwd_x_bf16_bf16_kernel(
     __nv_bfloat16 *expert_out, __nv_bfloat16 *upstream_dX,
     __nv_bfloat16 *dX_routed, __nv_bfloat16 *dX_expert_out) {
 
-    extern __shared__ char smem[];
+    extern __shared__ uint8_t smem[];
     __nv_bfloat16* smem_upstream_dX = (__nv_bfloat16*)smem;
     float* warp_sums = (float*)(smem + model_dim * sizeof(__nv_bfloat16));
     float* smem_token_weight = (float*)(smem + model_dim * sizeof(__nv_bfloat16) + 32 * sizeof(float));

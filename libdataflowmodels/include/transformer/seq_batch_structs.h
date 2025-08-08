@@ -56,6 +56,9 @@ typedef struct seq_batch_saved_activations_offsets {
 	// of size total_tokens * top_k
 	uint64_t expert_mapping;
 
+	// of size total_tokens * top_k_active
+	uint64_t token_mapping;
+
 	uint64_t inp_only_cutoff;
 	uint64_t softmax_lse;
 	uint64_t x_attn_out;
@@ -266,6 +269,9 @@ typedef struct seq_batch_saved_activations {
 	int * expert_counts_cumsum;
 	// num_tokens_per_expert result determines the boundaries of each expert...
 	int * expert_mapping;
+	
+	// going form original row, to index within the total_tokens * top_k_active expert block
+	int * token_mapping;
 
 	// of size num_local_experts
 
@@ -300,6 +306,7 @@ typedef struct seq_batch_context {
 
 typedef struct seq_batch_moe_config {
 	int * host_expert_counts;
+	//int * host_expert_mapping;
 } Seq_Batch_MoE_Config;
 
 struct seq_batch {
@@ -377,6 +384,9 @@ typedef struct seq_batch_activation_workspace {
 	// used as buffer to hold the combined/activated
 	// gate for x1 and x3...
 	void * x_temp_mlp;
+
+	// of size total_tokens * top_k_active * model_dim
+	void * x_expert_zones;
 
 	// workspace for attention and matmuls in block...
 	// needs to be zeroed out before attention fwd and bwd...

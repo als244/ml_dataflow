@@ -748,6 +748,18 @@ int cuda_submit_peer_transfer(Dataflow_Handle * dataflow_handle, int stream_id, 
 	
 }
 
+int cuda_submit_batch_peer_transfer(Dataflow_Handle * dataflow_handle, int stream_id, int num_transfers, void ** dev_dest, void ** dev_src, uint64_t * size_bytes){
+
+	CUstream * cu_streams = (CUstream *) dataflow_handle -> streams;
+
+	CUstream stream = cu_streams[stream_id];
+
+	int src_id = dataflow_handle -> device_id;	
+	int dest_id = dataflow_handle -> device_id;
+
+	return cu_transfer_batch_dev_to_dev_async(stream, num_transfers, dest_id, src_id, dev_dest, dev_src, size_bytes);
+}
+
 
 
 int cuda_set_device_info(Cuda_Device_Info * device_info, CUdevice dev){
@@ -1056,7 +1068,8 @@ int dataflow_init_handle(Dataflow_Handle * dataflow_handle, ComputeType compute_
 	// Transfer Functionality
 	dataflow_handle -> submit_inbound_transfer = cuda_submit_inbound_transfer;
 	dataflow_handle -> submit_outbound_transfer = cuda_submit_outbound_transfer;
-	dataflow_handle -> submit_peer_transfer = cuda_submit_outbound_transfer;
+	dataflow_handle -> submit_peer_transfer = cuda_submit_peer_transfer;
+	//dataflow_handle -> submit_batch_peer_transfer = cuda_submit_batch_peer_transfer;
 
 
 	// Initilaize profiler functionality...

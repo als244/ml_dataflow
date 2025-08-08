@@ -96,7 +96,7 @@ int dataflow_submit_transformer_embedding_bwd_w(Dataflow_Handle * dataflow_handl
 
 
 // Just keeping these as seperate functions for now while we are testing...
-int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int compute_stream_id, 
+int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int compute_stream_id, int compute_backup_stream_id,
 		Transformer_Block_Transition * block_input, 
 		Transformer_Block * transformer_block, 
 		Transformer_Block_Activations * activations, 

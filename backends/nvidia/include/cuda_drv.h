@@ -78,4 +78,6 @@ int cu_transfer_dev_to_host_async(CUstream stream, void * host_dest, void * dev_
 int cu_transfer_dev_to_dev_blocking(void * dev_dest, void * dev_src, uint64_t size_bytes);
 int cu_transfer_dev_to_dev_async(CUstream stream, void * dev_dest, void * dev_src, uint64_t size_bytes);
 
+int cu_transfer_batch_dev_to_dev_async(CUstream stream, int num_transfers, int dest_id, int src_id, void ** dev_dest, void ** dev_src, uint64_t * size_bytes);
+
 #endif

@@ -19,7 +19,7 @@
 	#define TOKEN_IDS_PATH "../data/65536_token_ids_uint32.dat"
 	#define TOKEN_LABELS_PATH "../data/65536_labels_uint32.dat"
 
-	#define DEFAULT_MIN_CHUNK_SIZE 98304
+	#define DEFAULT_MIN_CHUNK_SIZE 65536
 
 	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 4096
 
@@ -34,7 +34,7 @@
 
 	#define PCIE_LINK_EFFICIENCY 0.75f
 
-	#define NUM_STEPS 10
+	#define NUM_STEPS 3
 
 	// num_chunks = num_chunks_per_seq * num_seq_groups_per_round
 	// num_chunks_per_seq = seqlen / chunk_size
@@ -307,18 +307,19 @@
 		unsigned int ctx_flags = CU_CTX_SCHED_BLOCKING_SYNC | CU_CTX_MAP_HOST;
 		//unsigned int ctx_flags = CU_CTX_SCHED_BLOCKING_SYNC;
 
-		int num_streams = 7;
-		int opt_stream_prios[7] = {0, 0, 0, 0, 0, 0, 0};
-		char * opt_stream_names[7] = {"Inbound", "Compute", "Outbound", "Peer", "Host Ops", "Inbound Fwd Context", "Loss Update"};
+		int num_streams = 8;
+		int opt_stream_prios[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+		char * opt_stream_names[8] = {"Inbound", "Compute", "Compute Backup", "Outbound", "Peer", "Host Ops", "Inbound Fwd Context", "Loss Update"};
 
 
 		int inbound_stream_id = 0;
 		int compute_stream_id = 1;
-		int outbound_stream_id = 2;
-		int peer_stream_id = 3;
-		int host_ops_stream_id = 4;
-		int inbound_fwd_ctx_stream_id = 5;
-		int loss_stream_id = 6;
+		int compute_backup_stream_id = 2;
+		int outbound_stream_id = 3;
+		int peer_stream_id = 4;
+		int host_ops_stream_id = 5;
+		int inbound_fwd_ctx_stream_id = 6;
+		int loss_stream_id = 7;
 
 		ret = dataflow_init_handle(&dataflow_handle, compute_type, device_id, 
 				ctx_id, ctx_flags, 
@@ -1064,7 +1065,7 @@
 		uint64_t sticky_dev_recomputed_buffer_size = 2 * chunk_size * (uint64_t) model_dim * block_dt_size;
 		uint64_t sticky_dev_working_grad_act_size = get_chunk_activations_size(chunk_size, model_dim, kv_dim, num_total_active_experts, expert_dim, block_bwd_dt);
 		
-		uint64_t sticky_act_workspace_size = chunk_size * ((uint64_t) model_dim + (uint64_t) expert_dim) * block_dt_size;
+		uint64_t sticky_act_workspace_size = chunk_size * ((uint64_t) model_dim * (1 + (uint64_t) num_total_active_experts) + (uint64_t) expert_dim) * block_dt_size;
 		// now also incoporate the other sicy buffers...
 		total_base_dev_mem += sticky_transitions_size + sticky_dev_logits_size + sticky_dev_recomputed_buffer_size + sticky_dev_working_grad_act_size + sticky_dev_head_act_size + sticky_act_workspace_size;
 		
@@ -1887,6 +1888,7 @@
 				}
 
 				void * cur_host_expert_counts_buffer = cur_host_mem;
+				//void * cur_host_expert_mapping_buffer = cur_host_mem + num_routed_experts * n_layers * sizeof(int);
 
 				ret = populate_seq_batch_metadata_buffer(&dataflow_handle, inbound_stream_id, 
 												seq_batches[chunk_id],
@@ -1905,6 +1907,9 @@
 
 				cur_host_mem += num_routed_experts * n_layers * sizeof(int);
 				used_host_mem += num_routed_experts * n_layers * sizeof(int);
+				
+				//cur_host_mem += n_layers * chunk_size * num_active_routed_experts * sizeof(int);
+				//used_host_mem += n_layers * chunk_size * num_active_routed_experts * sizeof(int);
 
 				ret = dataflow_handle.sync_stream(&dataflow_handle, inbound_stream_id);
 				if (ret){
@@ -2191,7 +2196,7 @@
 
 		activation_workspace -> x_temp = cur_dev_mem;
 		activation_workspace -> x_temp_mlp = activation_workspace -> x_temp + ((uint64_t) max_tokens_per_chunk * (uint64_t) model_dim * (uint64_t) block_dt_size);
-		
+		activation_workspace -> x_expert_zones = activation_workspace -> x_temp_mlp + ((uint64_t) max_tokens_per_chunk * (uint64_t) expert_dim * (uint64_t) block_dt_size);
 
 		activation_workspace -> kernelWorkspace = kernelWorkspace;
 		activation_workspace -> kernelWorkspaceBytes = kernelWorkspaceBytes;
@@ -3417,7 +3422,7 @@
 							// set the context
 							seq_batches[chunk_id] -> context = fwd_context;
 
-							ret = dataflow_submit_transformer_moe_block(&dataflow_handle, compute_stream_id, 
+							ret = dataflow_submit_transformer_moe_block(&dataflow_handle, compute_stream_id, compute_backup_stream_id,
 															&(block_transitions[2 * chunk_id + (k % 2)]), 
 															working_block, 
 															cur_activations, 
