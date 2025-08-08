@@ -2904,7 +2904,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		newKernelWorkspace = curKernelWorkspace + tempExpertSize;
 		// Workspace must be aligned to 256 bytes
 		newKernelWorkspace = (void *) (((uint64_t)newKernelWorkspace + 255) & ~255UL);
-		newKernelWorkspaceBytes = newKernelWorkspace - curKernelWorkspace;
+		newKernelWorkspaceBytes = streamKernelWorkspaceBytes - (newKernelWorkspace - curKernelWorkspace);
 
 		ret = dataflow_submit_default_swiglu(dataflow_handle, cur_compute_stream, 
 							fwd_dt, 
