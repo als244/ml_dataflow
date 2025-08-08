@@ -2843,6 +2843,16 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 
 	int cur_compute_stream = compute_stream_id;
 
+	uint64_t streamKernelWorkspaceBytes = kernelWorkspaceBytes / 2;
+	void * backupKernelWorkspace = kernelWorkspace + streamKernelWorkspaceBytes;
+
+	void * curKernelWorkspace = kernelWorkspace;
+
+	void * newKernelWorkspace;
+	uint64_t newKernelWorkspaceBytes;
+	uint64_t tempExpertSize;
+	void * tempExpertZone;
+
 	for (int i = 0; i < num_routed_experts; i++){
 
 		int cur_expert_num_tokens = host_expert_counts[i];
@@ -2861,7 +2871,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 						ffn_dim, model_dim, cur_expert_num_tokens, 
 						1.0, 0.0,
 						(transformer_block -> w_1)[num_shared_experts + i], cur_expert_zone, NULL, (working_activations -> x_1)[num_shared_experts + i],
-						kernelWorkspaceBytes, kernelWorkspace);
+						streamKernelWorkspaceBytes, curKernelWorkspace);
 
 		if (ret){
 			fprintf(stderr, "Error: failed to submit w1 matmul proj for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
@@ -2875,17 +2885,31 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 						ffn_dim, model_dim, cur_expert_num_tokens, 
 						1.0, 0.0,
 						(transformer_block -> w_3)[num_shared_experts + i], cur_expert_zone, NULL, (working_activations -> x_3)[num_shared_experts + i],
-						kernelWorkspaceBytes, kernelWorkspace);
+						streamKernelWorkspaceBytes, curKernelWorkspace);
 
 		if (ret){
 			fprintf(stderr, "Error: failed to submit w3 matmul proj for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
 			return -1;
 		}
 
+		tempExpertSize = cur_expert_num_tokens * ffn_dim * x_el_size;
+
+		if (tempExpertSize > streamKernelWorkspaceBytes){
+			fprintf(stderr, "Error: expert #%d has too many tokens for current kernel workspace. (# tokens: %d, streamKernelWorkspaceBytes: %lu)\n", i, cur_expert_num_tokens, streamKernelWorkspaceBytes);
+			return -1;
+		}
+
+
+		tempExpertZone = curKernelWorkspace;
+		newKernelWorkspace = curKernelWorkspace + tempExpertSize;
+		// Workspace must be aligned to 256 bytes
+		newKernelWorkspace = (void *) (((uint64_t)newKernelWorkspace + 255) & ~255UL);
+		newKernelWorkspaceBytes = newKernelWorkspace - curKernelWorkspace;
+
 		ret = dataflow_submit_default_swiglu(dataflow_handle, cur_compute_stream, 
 							fwd_dt, 
 							cur_expert_num_tokens, ffn_dim, 
-							(working_activations -> x_1)[num_shared_experts + i], (working_activations -> x_3)[num_shared_experts + i], activation_workspace -> x_temp_mlp);
+							(working_activations -> x_1)[num_shared_experts + i], (working_activations -> x_3)[num_shared_experts + i], tempExpertZone);
 
 		if (ret){
 			fprintf(stderr, "Error: failed to submit swiglu activation for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
@@ -2902,8 +2926,8 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 						to_transa, to_transb,
 						model_dim, ffn_dim, cur_expert_num_tokens, 
 						1.0, 0.0,
-						(transformer_block -> w_2)[num_shared_experts + i], activation_workspace -> x_temp_mlp, NULL, cur_expert_zone,
-						kernelWorkspaceBytes, kernelWorkspace);
+						(transformer_block -> w_2)[num_shared_experts + i], tempExpertZone, NULL, cur_expert_zone,
+						newKernelWorkspaceBytes, newKernelWorkspace);
 
 		if (ret){
 			fprintf(stderr, "Error: failed to submit w2 matmul proj for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
@@ -2915,8 +2939,10 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 
 		if (cur_compute_stream == compute_stream_id){
 			cur_compute_stream = compute_backup_stream_id;
+			curKernelWorkspace = backupKernelWorkspace;
 		} else {
 			cur_compute_stream = compute_stream_id;
+			curKernelWorkspace = kernelWorkspace;
 		}
 
 	}
