@@ -103,7 +103,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		Transformer_Block_Transition * block_output);
 
 
-int dataflow_submit_transformer_moe_block_recompute(Dataflow_Handle * dataflow_handle, int compute_stream_id, 
+int dataflow_submit_transformer_moe_block_recompute(Dataflow_Handle * dataflow_handle, int compute_stream_id, int compute_backup_stream_id,
 			Transformer_Block * transformer_block,
 			Seq_Batch * seq_batch,
 			SavedActivationLevel saved_activation_level,
