@@ -30,11 +30,11 @@
 	// the optimizer...
 	#define TARGET_OPT_OVERHEAD_FRAC 0.02f
 	// to help determien how many rounds per step
-	#define FLOP_EFFICIENCY_ESTIMATE 0.6f
+	#define FLOP_EFFICIENCY_ESTIMATE 0.55f
 
-	#define PCIE_LINK_EFFICIENCY 0.75f
+	#define PCIE_LINK_EFFICIENCY 0.5f
 
-	#define NUM_STEPS 3
+	#define NUM_STEPS 500
 
 	// num_chunks = num_chunks_per_seq * num_seq_groups_per_round
 	// num_chunks_per_seq = seqlen / chunk_size
@@ -4023,7 +4023,7 @@
 								}
 								
 								dataflow_handle.profiler.range_push(profile_msg);
-								ret = dataflow_submit_transformer_moe_block_recompute(&dataflow_handle, compute_stream_id, 
+								ret = dataflow_submit_transformer_moe_block_recompute(&dataflow_handle, compute_stream_id, compute_backup_stream_id,
 												working_block,
 												seq_batches[chunk_id],
 												cur_saved_activation_level,
@@ -4191,7 +4191,7 @@
 
 						
 							// uses the same input transition as bwd_x...
-							ret = dataflow_submit_transformer_moe_block_bwd_w(&dataflow_handle, compute_stream_id,
+							ret = dataflow_submit_transformer_moe_block_bwd_w(&dataflow_handle, compute_stream_id, compute_backup_stream_id,
 												&(block_transitions[2 * chunk_id + (k % 2)]),
 												cur_fwd_activations, 
 												grad_activations, 

@@ -120,7 +120,7 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		Transformer_Block_Transition * next_grad_stream);
 
 
-int dataflow_submit_transformer_moe_block_bwd_w(Dataflow_Handle * dataflow_handle, int compute_stream_id,
+int dataflow_submit_transformer_moe_block_bwd_w(Dataflow_Handle * dataflow_handle, int compute_stream_id, int compute_backup_stream_id,
 		Transformer_Block_Transition * grad_stream,
 		Seq_Batch_Saved_Activations * fwd_activations, 
 		Transformer_Block_Activations * grad_activations, 
