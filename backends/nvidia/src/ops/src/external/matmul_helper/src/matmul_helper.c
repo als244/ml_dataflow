@@ -648,7 +648,8 @@ int cublas_matmul_init(Dataflow_Handle * dataflow_handle, void * op_table_value)
 		return -1;
 	}
 
-	op_extra -> num_matmuls = 0;
+	op_extra -> num_algos_saved = 0;
+	op_extra -> num_matmuls_called = 0;
 	op_extra -> num_algo_hits = 0;
 
 	// initialize handle
@@ -849,7 +850,7 @@ int cublas_matmul(Dataflow_Handle * dataflow_handle, int stream_id, Op * op, voi
 			in_table = 0;
 		}
 
-		
+		matmul_op_extra -> num_algos_saved += 1;
 		// reset the cublas matmul algo value pointer
 		cublas_matmul_algo_value = &new_cublas_matmul_algo_value;
 	}
@@ -939,7 +940,7 @@ int cublas_matmul(Dataflow_Handle * dataflow_handle, int stream_id, Op * op, voi
 		fprintf(stderr, "Error: failed to destroy matrix layouts...\n");
 	}
 
-	matmul_op_extra -> num_matmuls += 1;
+	matmul_op_extra -> num_matmuls_called += 1;
 	matmul_op_extra -> num_algo_hits += algo_cache_hit;
 	return 0;
 }

@@ -15,7 +15,8 @@
 typedef struct cublas_matmul_op_extra {
 	cublasLtHandle_t cublas_handle;
 	Dataflow_Table cublas_matmul_algo_table;
-	uint64_t num_matmuls;
+	uint64_t num_algos_saved;
+	uint64_t num_matmuls_called;
 	uint64_t num_algo_hits;
 } Cublas_Matmul_Op_Extra;
 
