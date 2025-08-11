@@ -179,7 +179,13 @@ extern "C" __global__ void default_merge_experts_bf16_bf16_kernel(
 
         for (k = 0; k < num_selected_experts; k++) {
             int expert_zone_row = token_mapping[orig_token_ind * num_selected_experts + k];
-            float token_expert_weight = token_expert_weights[orig_token_ind * num_selected_experts + k];
+
+            float token_expert_weight;
+            if (token_expert_weights) {
+                token_expert_weight = token_expert_weights[orig_token_ind * num_selected_experts + k];
+            } else {
+                token_expert_weight = 1.0f;
+            }
             
             float4 expert_in_f4 = expert_zones_vec[expert_zone_row * model_dim_vec + i];
             __nv_bfloat162* expert_in_vec2 = (__nv_bfloat162*)&expert_in_f4;
@@ -189,14 +195,26 @@ extern "C" __global__ void default_merge_experts_bf16_bf16_kernel(
             float2 ef3 = __bfloat1622float2(expert_in_vec2[2]);
             float2 ef4 = __bfloat1622float2(expert_in_vec2[3]);
 
-            acc[0] += token_expert_weight * ef1.x;
-            acc[1] += token_expert_weight * ef1.y;
-            acc[2] += token_expert_weight * ef2.x;
-            acc[3] += token_expert_weight * ef2.y;
-            acc[4] += token_expert_weight * ef3.x;
-            acc[5] += token_expert_weight * ef3.y;
-            acc[6] += token_expert_weight * ef4.x;
-            acc[7] += token_expert_weight * ef4.y;
+            if (token_expert_weight != 1.0f) {
+                acc[0] += token_expert_weight * ef1.x;
+                acc[1] += token_expert_weight * ef1.y;
+                acc[2] += token_expert_weight * ef2.x;
+                acc[3] += token_expert_weight * ef2.y;
+                acc[4] += token_expert_weight * ef3.x;
+                acc[5] += token_expert_weight * ef3.y;
+                acc[6] += token_expert_weight * ef4.x;
+                acc[7] += token_expert_weight * ef4.y;
+            }
+            else {
+                acc[0] += ef1.x;
+                acc[1] += ef1.y;
+                acc[2] += ef2.x;
+                acc[3] += ef2.y;
+                acc[4] += ef3.x;
+                acc[5] += ef3.y;
+                acc[6] += ef4.x;
+                acc[7] += ef4.y;
+            }
         }
 
         #pragma unroll
