@@ -215,12 +215,22 @@ float get_recompute_flops(int num_seqs_per_round, int seq_len, int n_layers, int
 	int total_experts_computed = num_shared_experts + num_active_routed_experts;
 	recompute_flops += total_recompute_chunks * total_experts_computed * (2 * (2 * chunk_size_f * model_dim_f * expert_dim_f));
 
+
+	// we always recompute the final ffn matmul for all routed experts
+	float seq_len_f = (float) seq_len;
+	int num_seqs_per_round_f = (float) num_seqs_per_round;
+	int n_layers_f = (float) n_layers;
+
+	float total_round_tokens_f = num_seqs_per_round_f * seq_len_f;
+	
+	recompute_flops +=  n_layers_f * num_active_routed_experts * (2 * total_round_tokens_f * model_dim_f * expert_dim_f);
+
+
 	// now do inp only chunks...
 	float chunk_seq_len;
 	float seqs_per_chunk;
 
 	// We are using flash attention, so we by default recompute the seq_len x seq_len attention score matrix.
-	float seq_len_f = (float) seq_len;
 
 	float attn_flop_ratio = 1;
 	if (is_causal){
@@ -228,8 +238,7 @@ float get_recompute_flops(int num_seqs_per_round, int seq_len, int n_layers, int
 	}
 
 	
-	int num_seqs_per_round_f = (float) num_seqs_per_round;
-	int n_layers_f = (float) n_layers;
+	// We are using flash attention, so we by default recompute the seq_len x seq_len attention score matrix.
 	float recompute_attn_flops = num_seqs_per_round_f * n_layers_f * (attn_flop_ratio * 2 * seq_len_f * seq_len_f * model_dim_f);
 	recompute_flops += recompute_attn_flops;
 
