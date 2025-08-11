@@ -30,11 +30,11 @@
 	// the optimizer...
 	#define TARGET_OPT_OVERHEAD_FRAC 0.02f
 	// to help determien how many rounds per step
-	#define FLOP_EFFICIENCY_ESTIMATE 0.55f
+	#define FLOP_EFFICIENCY_ESTIMATE 0.7f
 
-	#define PCIE_LINK_EFFICIENCY 0.5f
+	#define PCIE_LINK_EFFICIENCY 0.6f
 
-	#define NUM_STEPS 500
+	#define NUM_STEPS 3
 
 	// num_chunks = num_chunks_per_seq * num_seq_groups_per_round
 	// num_chunks_per_seq = seqlen / chunk_size
@@ -309,12 +309,12 @@
 
 		int num_streams = 8;
 		int opt_stream_prios[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-		char * opt_stream_names[8] = {"Inbound", "Compute", "Compute Backup", "Outbound", "Peer", "Host Ops", "Inbound Fwd Context", "Loss Update"};
+		char * opt_stream_names[8] = {"Inbound", "Compute", "Secondary Compute", "Outbound", "Peer", "Host Ops", "Inbound Fwd Context", "Loss Update"};
 
 
 		int inbound_stream_id = 0;
 		int compute_stream_id = 1;
-		int compute_backup_stream_id = 2;
+		int secondary_compute_stream_id = 2;
 		int outbound_stream_id = 3;
 		int peer_stream_id = 4;
 		int host_ops_stream_id = 5;
@@ -3422,7 +3422,7 @@
 							// set the context
 							seq_batches[chunk_id] -> context = fwd_context;
 
-							ret = dataflow_submit_transformer_moe_block(&dataflow_handle, compute_stream_id, compute_backup_stream_id,
+							ret = dataflow_submit_transformer_moe_block(&dataflow_handle, compute_stream_id, secondary_compute_stream_id,
 															&(block_transitions[2 * chunk_id + (k % 2)]), 
 															working_block, 
 															cur_activations, 
@@ -4023,7 +4023,7 @@
 								}
 								
 								dataflow_handle.profiler.range_push(profile_msg);
-								ret = dataflow_submit_transformer_moe_block_recompute(&dataflow_handle, compute_stream_id, compute_backup_stream_id,
+								ret = dataflow_submit_transformer_moe_block_recompute(&dataflow_handle, compute_stream_id, secondary_compute_stream_id,
 												working_block,
 												seq_batches[chunk_id],
 												cur_saved_activation_level,
@@ -4044,7 +4044,7 @@
 							sprintf(profile_msg, "Bwd X");
 							dataflow_handle.profiler.range_push(profile_msg);
 
-							ret = dataflow_submit_transformer_moe_block_bwd_x(&dataflow_handle, compute_stream_id,
+							ret = dataflow_submit_transformer_moe_block_bwd_x(&dataflow_handle, compute_stream_id, secondary_compute_stream_id,
 												working_block, 
 												&(block_transitions[2 * chunk_id + (k % 2)]), 
 												cur_fwd_activations, fwd_context,
@@ -4191,7 +4191,7 @@
 
 						
 							// uses the same input transition as bwd_x...
-							ret = dataflow_submit_transformer_moe_block_bwd_w(&dataflow_handle, compute_stream_id, compute_backup_stream_id,
+							ret = dataflow_submit_transformer_moe_block_bwd_w(&dataflow_handle, compute_stream_id, secondary_compute_stream_id,
 												&(block_transitions[2 * chunk_id + (k % 2)]),
 												cur_fwd_activations, 
 												grad_activations, 

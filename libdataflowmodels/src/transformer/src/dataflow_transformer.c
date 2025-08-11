@@ -2203,7 +2203,7 @@ int dataflow_submit_transformer_embedding_bwd_w(Dataflow_Handle * dataflow_handl
 
 
 
-int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int compute_stream_id, int compute_backup_stream_id,
+int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int compute_stream_id, int secondary_compute_stream_id,
 								Transformer_Block_Transition * block_input, 
 								Transformer_Block * transformer_block, 
 								Transformer_Block_Activations * activations, 
@@ -2827,9 +2827,9 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 	}
 
 	// ensure backup stream waits for compute stream to finish...
-	ret = (dataflow_handle -> submit_dependency)(dataflow_handle, compute_backup_stream_id, cur_stream_state);
+	ret = (dataflow_handle -> submit_dependency)(dataflow_handle, secondary_compute_stream_id, cur_stream_state);
 	if (ret){
-		fprintf(stderr, "Error: failed to submit dependency for compute backup stream #%d to wait for compute stream #%d to finish...\n", compute_backup_stream_id, compute_stream_id);
+		fprintf(stderr, "Error: failed to submit dependency for compute backup stream #%d to wait for compute stream #%d to finish...\n", secondary_compute_stream_id, compute_stream_id);
 		return -1;
 	}
 
@@ -2844,7 +2844,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 	int cur_compute_stream = compute_stream_id;
 
 	uint64_t streamKernelWorkspaceBytes = kernelWorkspaceBytes / 2;
-	void * backupKernelWorkspace = kernelWorkspace + streamKernelWorkspaceBytes;
+	void * secondaryKernelWorkspace = kernelWorkspace + streamKernelWorkspaceBytes;
 
 	void * curKernelWorkspace = kernelWorkspace;
 
@@ -2938,8 +2938,8 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 		total_tokens += cur_expert_num_tokens;
 
 		if (cur_compute_stream == compute_stream_id){
-			cur_compute_stream = compute_backup_stream_id;
-			curKernelWorkspace = backupKernelWorkspace;
+			cur_compute_stream = secondary_compute_stream_id;
+			curKernelWorkspace = secondaryKernelWorkspace;
 		} else {
 			cur_compute_stream = compute_stream_id;
 			curKernelWorkspace = kernelWorkspace;
@@ -2956,15 +2956,15 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 
 	// ensure compute stream waits for backup stream to finish...
 
-	cur_stream_state = (dataflow_handle -> get_stream_state)(dataflow_handle, compute_backup_stream_id);
+	cur_stream_state = (dataflow_handle -> get_stream_state)(dataflow_handle, secondary_compute_stream_id);
 	if (!cur_stream_state){
-		fprintf(stderr, "Error: failed to get stream state for compute backup stream #%d...\n", compute_backup_stream_id);
+		fprintf(stderr, "Error: failed to get stream state for compute backup stream #%d...\n", secondary_compute_stream_id);
 		return -1;
 	}
 
 	ret = (dataflow_handle -> submit_dependency)(dataflow_handle, compute_stream_id, cur_stream_state);
 	if (ret){
-		fprintf(stderr, "Error: failed to submit dependency for compute stream #%d to wait for compute backup stream #%d to finish...\n", compute_stream_id, compute_backup_stream_id);
+		fprintf(stderr, "Error: failed to submit dependency for compute stream #%d to wait for compute backup stream #%d to finish...\n", compute_stream_id, secondary_compute_stream_id);
 		return -1;
 	}
 
@@ -2994,7 +2994,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 }
 
 
-int dataflow_submit_transformer_moe_block_recompute(Dataflow_Handle * dataflow_handle, int compute_stream_id, int compute_backup_stream_id,
+int dataflow_submit_transformer_moe_block_recompute(Dataflow_Handle * dataflow_handle, int compute_stream_id, int secondary_compute_stream_id,
 	Transformer_Block * transformer_block,
 	Seq_Batch * seq_batch,
 	SavedActivationLevel saved_activation_level,
@@ -3224,9 +3224,9 @@ int dataflow_submit_transformer_moe_block_recompute(Dataflow_Handle * dataflow_h
 		}
 
 		// ensure backup stream waits for compute stream to finish...
-		ret = (dataflow_handle -> submit_dependency)(dataflow_handle, compute_backup_stream_id, cur_stream_state);
+		ret = (dataflow_handle -> submit_dependency)(dataflow_handle, secondary_compute_stream_id, cur_stream_state);
 		if (ret){
-			fprintf(stderr, "Error: failed to submit dependency for compute backup stream #%d to wait for compute stream #%d to finish...\n", compute_backup_stream_id, compute_stream_id);
+			fprintf(stderr, "Error: failed to submit dependency for compute backup stream #%d to wait for compute stream #%d to finish...\n", secondary_compute_stream_id, compute_stream_id);
 			return -1;
 		}
 
@@ -3241,7 +3241,7 @@ int dataflow_submit_transformer_moe_block_recompute(Dataflow_Handle * dataflow_h
 		int cur_compute_stream = compute_stream_id;
 
 		uint64_t streamKernelWorkspaceBytes = kernelWorkspaceBytes / 2;
-		void * backupKernelWorkspace = kernelWorkspace + streamKernelWorkspaceBytes;
+		void * secondaryKernelWorkspace = kernelWorkspace + streamKernelWorkspaceBytes;
 
 		void * curKernelWorkspace = kernelWorkspace;
 
@@ -3290,8 +3290,8 @@ int dataflow_submit_transformer_moe_block_recompute(Dataflow_Handle * dataflow_h
 			total_tokens += cur_expert_num_tokens;
 
 			if (cur_compute_stream == compute_stream_id){
-				cur_compute_stream = compute_backup_stream_id;
-				curKernelWorkspace = backupKernelWorkspace;
+				cur_compute_stream = secondary_compute_stream_id;
+				curKernelWorkspace = secondaryKernelWorkspace;
 			} else {
 				cur_compute_stream = compute_stream_id;
 				curKernelWorkspace = kernelWorkspace;
@@ -3308,15 +3308,15 @@ int dataflow_submit_transformer_moe_block_recompute(Dataflow_Handle * dataflow_h
 
 		// ensure compute stream waits for backup stream to finish...
 
-		cur_stream_state = (dataflow_handle -> get_stream_state)(dataflow_handle, compute_backup_stream_id);
+		cur_stream_state = (dataflow_handle -> get_stream_state)(dataflow_handle, secondary_compute_stream_id);
 		if (!cur_stream_state){
-			fprintf(stderr, "Error: failed to get stream state for compute backup stream #%d...\n", compute_backup_stream_id);
+			fprintf(stderr, "Error: failed to get stream state for compute backup stream #%d...\n", secondary_compute_stream_id);
 			return -1;
 		}
 
 		ret = (dataflow_handle -> submit_dependency)(dataflow_handle, compute_stream_id, cur_stream_state);
 		if (ret){
-			fprintf(stderr, "Error: failed to submit dependency for compute stream #%d to wait for compute backup stream #%d to finish...\n", compute_stream_id, compute_backup_stream_id);
+			fprintf(stderr, "Error: failed to submit dependency for compute stream #%d to wait for compute backup stream #%d to finish...\n", compute_stream_id, secondary_compute_stream_id);
 			return -1;
 		}
 
@@ -3330,7 +3330,7 @@ int dataflow_submit_transformer_moe_block_recompute(Dataflow_Handle * dataflow_h
 }
 
 
-int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handle, int compute_stream_id,
+int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handle, int compute_stream_id, int secondary_compute_stream_id,
 	Transformer_Block * transformer_block, 
 	Transformer_Block_Transition * inp_grad_stream, 
 	Seq_Batch_Saved_Activations * fwd_activations, Seq_Batch_Context * fwd_context,
@@ -3427,26 +3427,41 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 
 	// 1. Backprop through each expert
 
-	// Will be accumulating the gradients into activation_workspace -> x_temp, so make sure to clear it first...
-	ret = (dataflow_handle -> set_mem)(dataflow_handle, compute_stream_id, activation_workspace -> x_temp, 0, (uint64_t) total_q * (uint64_t) model_dim * (uint64_t) x_el_bwd_size);
-	if (ret){
-		fprintf(stderr, "Error: failed to set x_temp to 0...\n");
+	void * expert_zones = activation_workspace -> x_expert_zones;
+
+	void * cur_stream_state = (dataflow_handle -> get_stream_state)(dataflow_handle, compute_stream_id);
+
+	if (!cur_stream_state){
+		fprintf(stderr, "Error: failed to get stream state for compute stream #%d...\n", compute_stream_id);
 		return -1;
 	}
 
-	// Forward: [num_tokens, ffn_dim] @ [ffn_dim, model_dim] -> [num_tokens, model_dim]
-	// Backward: dX = dY @ W^T
-	// M = output rows of dX = ffn_dim
-	// K = output cols of dX = model_dim
-	// N = batch dim = num_tokens
+	// ensure backup stream waits for compute stream to finish...
+	ret = (dataflow_handle -> submit_dependency)(dataflow_handle, secondary_compute_stream_id, cur_stream_state);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit dependency for compute backup stream #%d to wait for compute stream #%d to finish...\n", secondary_compute_stream_id, compute_stream_id);
+		return -1;
+	}
 
-	void * expert_zone = kernelWorkspace;
+	// 4.) Repeat for all routed experts
 
-	void * new_kernelWorkspace;
-	uint64_t new_kernelWorkspaceBytes;
-	uint64_t expert_zone_size;
+	void * cur_expert_zone = expert_zones;
 
 	int total_tokens = 0;
+
+	uint64_t token_size = (uint64_t) model_dim * (uint64_t) x_el_size;
+
+	int cur_compute_stream = compute_stream_id;
+
+	uint64_t streamKernelWorkspaceBytes = kernelWorkspaceBytes / 2;
+	void * secondaryKernelWorkspace = kernelWorkspace + streamKernelWorkspaceBytes;
+
+	void * curKernelWorkspace = kernelWorkspace;
+
+	void * newKernelWorkspace;
+	uint64_t newKernelWorkspaceBytes;
+	uint64_t tempExpertSize;
+	void * tempExpertZone;
 
 	for (int i = 0; i < num_routed_experts; i++){
 
@@ -3459,21 +3474,21 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 			continue;
 		}
 
-		//printf("[Expert %d] Number of tokens: %d\n", i, cur_expert_num_tokens);
-		total_tokens += cur_expert_num_tokens;
+		tempExpertSize = cur_expert_num_tokens * ffn_dim * x_el_size;
 
-		expert_zone_size = (uint64_t) cur_expert_num_tokens * (uint64_t) model_dim * (uint64_t) x_el_size;
-
-		if (expert_zone_size > kernelWorkspaceBytes){
-			fprintf(stderr, "Error: expert zone size is greater than kernel workspace size for expert #%d with %d tokens...\n", i, cur_expert_num_tokens);
+		if (tempExpertSize > streamKernelWorkspaceBytes){
+			fprintf(stderr, "Error: expert #%d has too many tokens for current kernel workspace. (# tokens: %d, streamKernelWorkspaceBytes: %lu)\n", i, cur_expert_num_tokens, streamKernelWorkspaceBytes);
 			return -1;
 		}
 
-		new_kernelWorkspace = expert_zone + expert_zone_size;
 
-		new_kernelWorkspace = (void *) (((uint64_t) new_kernelWorkspace + 255) & ~255UL);
+		tempExpertZone = curKernelWorkspace;
+		newKernelWorkspace = curKernelWorkspace + tempExpertSize;
+		// Workspace must be aligned to 256 bytes
+		newKernelWorkspace = (void *) (((uint64_t)newKernelWorkspace + 255) & ~255UL);
+		newKernelWorkspaceBytes = streamKernelWorkspaceBytes - (newKernelWorkspace - curKernelWorkspace);
 
-		new_kernelWorkspaceBytes = kernelWorkspaceBytes - ((uint64_t) new_kernelWorkspace - (uint64_t) kernelWorkspace);
+		
 	
 		// a.) compute expert output dot product with dLoss in order to correctly obtain
 		// gradients with respect to router...
@@ -3482,37 +3497,38 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		/* START: FWD RECOMPUTE*/
 		
 		// need to recompute the expert output (fwd_expert_out)...
-		ret = dataflow_submit_default_swiglu(dataflow_handle, compute_stream_id, 
+		ret = dataflow_submit_default_swiglu(dataflow_handle, cur_compute_stream, 
 			fwd_dt, 
 			cur_expert_num_tokens, ffn_dim, 
-			(fwd_activations -> x_1)[num_shared_experts + i], (fwd_activations -> x_3)[num_shared_experts + i], activation_workspace -> x_temp_mlp);
+			(fwd_activations -> x_1)[num_shared_experts + i], (fwd_activations -> x_3)[num_shared_experts + i], tempExpertZone);
 
 		if (ret){
 			fprintf(stderr, "Error: failed to submit swiglu activation for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
 			return -1;
 		}
 
-		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
+		ret = dataflow_submit_matmul(dataflow_handle, cur_compute_stream, 
 				fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
 				compute_dt,
 				1, 0,
 				model_dim, ffn_dim, cur_expert_num_tokens, 
 				1.0, 0.0,
-				(transformer_block -> w_2)[num_shared_experts + i], activation_workspace -> x_temp_mlp, NULL, expert_zone,
-				new_kernelWorkspaceBytes, new_kernelWorkspace);
+				(transformer_block -> w_2)[num_shared_experts + i], tempExpertZone, NULL, cur_expert_zone,
+				newKernelWorkspaceBytes, newKernelWorkspace);
 
 		if (ret){
 			fprintf(stderr, "Error: failed to submit w2 matmul proj for expert #%d. (# tokens: %d)...\n", i, cur_expert_num_tokens);
 			return -1;
 		}
 
+		// Now temp expert zone & cur expert zone hold fwd output...
+
 		/* END: FWD RECOMPUTE*/
 
 		// Responsible for computeing the dot product of each expert's output and the respective loss..
 		// additionally re-populates the expert_zone with the gradient (times router weight) instead of forward out...
 
-		// NEED TO IMPLEMENT!!!
-		ret = dataflow_submit_router_bwd_x(dataflow_handle, compute_stream_id,
+		ret = dataflow_submit_router_bwd_x(dataflow_handle, cur_compute_stream,
 								fwd_dt, bwd_dt,
 								cur_expert_num_tokens, model_dim, num_routed_experts, top_k_active,
 								i,
@@ -3520,27 +3536,29 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 								fwd_activations -> expert_mapping,
 								fwd_activations -> chosen_experts,
 								fwd_activations -> token_expert_weights,
-								expert_zone, inp_grad_stream -> X,
+								cur_expert_zone, inp_grad_stream -> X,
 								working_activations -> x_routed, // populating column [i] of router derivs with dot product of expert output and loss gradient corresponding to tokens selected by this expert
-								expert_zone); // repopulating with the rows from inp_grad_stream -> X corresponding to this expert...
+								cur_expert_zone); // repopulating with the rows from inp_grad_stream -> X corresponding to this expert...
 		if (ret){
 			fprintf(stderr, "Error: failed to submit router backward...\n");
 			return -1;
 		}
+
+		// Now cur_expert_zone holds the scaled upstream gradient, and tempExpertZone still holds the fwd output...
 
 
 		// Doing BWD W of w2 matmul through HERE because alreay have two matrices that are needed
 		// (input to expert's w2 (swiglu output in [activation_workspace -> x_temp_mlp] and
 		// the upstream gradient corresponding to this expert's output [expert_zone])...
 
-		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+		ret = dataflow_submit_matmul(dataflow_handle, cur_compute_stream,
 			fwd_dt, bwd_dt, bwd_dt, bwd_dt,
 			compute_dt,
 			0, 1, // 0, 1 for bwd W
 			ffn_dim, cur_expert_num_tokens, model_dim, 
 			1.0, 1.0,  // Accumulate gradients
-			activation_workspace -> x_temp_mlp, expert_zone, (grad_weights -> w_2)[num_shared_experts + i], (grad_weights -> w_2)[num_shared_experts + i],
-			new_kernelWorkspaceBytes, new_kernelWorkspace);
+			tempExpertZone, cur_expert_zone, (grad_weights -> w_2)[num_shared_experts + i], (grad_weights -> w_2)[num_shared_experts + i],
+			newKernelWorkspaceBytes, newKernelWorkspace);
 		
 		if (ret) {
 			fprintf(stderr, "Error: failed to submit bwd W of w2 matmul within bwd x...\n");
@@ -3550,14 +3568,17 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 
 		// c.) start backprop through expert...`
 
-		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+
+		// Now tempExpertZone holds the activation gradient going through the w2 matmul...
+
+		ret = dataflow_submit_matmul(dataflow_handle, cur_compute_stream,
 							fwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
 							compute_dt,
 							to_transa, to_transb,
 							ffn_dim, model_dim, cur_expert_num_tokens,
 							1.0, 0.0,
-							(transformer_block -> w_2)[num_shared_experts + i], expert_zone, NULL, (activation_workspace -> x_temp_mlp),
-							new_kernelWorkspaceBytes, new_kernelWorkspace);
+							(transformer_block -> w_2)[num_shared_experts + i], cur_expert_zone, NULL, tempExpertZone,
+							newKernelWorkspaceBytes, newKernelWorkspace);
 		if (ret) {
 			fprintf(stderr, "Error: failed to submit w2 backward matmul...\n");
 			return -1;
@@ -3565,11 +3586,11 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 
 		// 2. Backprop through SwiGLU
 
-		ret = dataflow_submit_default_swiglu_bwd_x(dataflow_handle, compute_stream_id,
+		ret = dataflow_submit_default_swiglu_bwd_x(dataflow_handle, cur_compute_stream,
 									fwd_dt, bwd_dt,
 									cur_expert_num_tokens, ffn_dim,
 									(fwd_activations -> x_1)[num_shared_experts + i], (fwd_activations -> x_3)[num_shared_experts + i],
-									activation_workspace -> x_temp_mlp,
+									tempExpertZone,
 									(working_activations -> x_1)[num_shared_experts + i], (working_activations -> x_3)[num_shared_experts + i]);
 		if (ret) {
 			fprintf(stderr, "Error: failed to submit swiglu backward...\n");
@@ -3583,47 +3604,43 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		// K = output cols of dX = ffn_dim
 		// N = batch dim = num_tokens
 
-		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+		ret = dataflow_submit_matmul(dataflow_handle, cur_compute_stream,
 								fwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
 								compute_dt,
 								to_transa, to_transb,
 								model_dim, ffn_dim, cur_expert_num_tokens,  // M = model_dim, K = ffn_dim, N = num_tokens
 								1.0, 0.0,
-								(transformer_block -> w_1)[num_shared_experts + i], (working_activations -> x_1)[num_shared_experts + i], NULL, expert_zone,
-								new_kernelWorkspaceBytes, new_kernelWorkspace);
+								(transformer_block -> w_1)[num_shared_experts + i], (working_activations -> x_1)[num_shared_experts + i], NULL, cur_expert_zone,
+								newKernelWorkspaceBytes, newKernelWorkspace);
 		if (ret) {
 			fprintf(stderr, "Error: failed to submit w1 backward matmul...\n");
 			return -1;
 		}
 
-		ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
+		ret = dataflow_submit_matmul(dataflow_handle, cur_compute_stream,
 								fwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
 								compute_dt,
 								to_transa, to_transb,
 								model_dim, ffn_dim, cur_expert_num_tokens,  // M = model_dim, K = ffn_dim, N = num_tokens
 								1.0, 1.0,  // Add to previous gradient
-								(transformer_block -> w_3)[num_shared_experts + i], (working_activations -> x_3)[num_shared_experts + i], expert_zone, expert_zone,
-								new_kernelWorkspaceBytes, new_kernelWorkspace);
+								(transformer_block -> w_3)[num_shared_experts + i], (working_activations -> x_3)[num_shared_experts + i], cur_expert_zone, cur_expert_zone,
+								newKernelWorkspaceBytes, newKernelWorkspace);
 		if (ret) {
 			fprintf(stderr, "Error: failed to submit w3 backward matmul...\n");
 			return -1;
 		}
 
-		// Merge result into the upstream gradient (activation_workspace -> x_temp)
-
-		ret = dataflow_submit_default_merge_expert_result(dataflow_handle, compute_stream_id, 
-			bwd_dt, bwd_dt,
-			cur_expert_num_tokens, model_dim, top_k_active, 
-			expert_zone, i, 
-			fwd_activations -> expert_counts_cumsum, 
-			fwd_activations -> expert_mapping,
-			NULL, // already multiplied by router weight from original router_bwd_x; this is just a simple add
-			fwd_activations -> chosen_experts,
-			activation_workspace -> x_temp);
 		
-		if (ret){
-			fprintf(stderr, "Error: failed to submit combine expert outputs...\n");
-			return -1;
+
+		cur_expert_zone += token_size * cur_expert_num_tokens;
+		total_tokens += cur_expert_num_tokens;
+
+		if (cur_compute_stream == compute_stream_id){
+			cur_compute_stream = secondary_compute_stream_id;
+			curKernelWorkspace = secondaryKernelWorkspace;
+		} else {
+			cur_compute_stream = compute_stream_id;
+			curKernelWorkspace = kernelWorkspace;
 		}
 
 
@@ -3633,6 +3650,44 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		fprintf(stderr, "Error: total routed tokens does not match expected number of tokens. Chunk size: %d, top_k_active: %d => expected %d, got %d\n", total_q, top_k_active, total_q * top_k_active, total_tokens	);
 		return -1;
 	}
+
+	// ensure compute stream waits for backup stream to finish...
+
+	cur_stream_state = (dataflow_handle -> get_stream_state)(dataflow_handle, secondary_compute_stream_id);
+	if (!cur_stream_state){
+		fprintf(stderr, "Error: failed to get stream state for compute backup stream #%d...\n", secondary_compute_stream_id);
+		return -1;
+	}
+
+	ret = (dataflow_handle -> submit_dependency)(dataflow_handle, compute_stream_id, cur_stream_state);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit dependency for compute stream #%d to wait for compute backup stream #%d to finish...\n", compute_stream_id, secondary_compute_stream_id);
+		return -1;
+	}
+
+
+	// Merge result into the upstream gradient (activation_workspace -> x_temp) for the downstream 
+
+	// Will be accumulating the gradients into activation_workspace -> x_temp, so make sure to clear it first...
+	ret = (dataflow_handle -> set_mem)(dataflow_handle, compute_stream_id, activation_workspace -> x_temp, 0, (uint64_t) total_q * (uint64_t) model_dim * (uint64_t) x_el_bwd_size);
+	if (ret){
+		fprintf(stderr, "Error: failed to set x_temp to 0...\n");
+		return -1;
+	}
+
+	ret = dataflow_submit_default_merge_experts(dataflow_handle, compute_stream_id, 
+								fwd_dt, bwd_dt,
+								total_q, model_dim, top_k_active, 
+								expert_zones,
+								fwd_activations -> token_mapping,
+								NULL,
+								activation_workspace -> x_temp);
+	if (ret){
+		fprintf(stderr, "Error: failed to submit merge experts...\n");
+		return -1;
+	}
+
+
 
 	// Also merge all the shared experts into the upstream gradient...
 
@@ -3918,7 +3973,7 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 }
 
 
-int dataflow_submit_transformer_moe_block_bwd_w(Dataflow_Handle * dataflow_handle, int compute_stream_id, int compute_backup_stream_id,
+int dataflow_submit_transformer_moe_block_bwd_w(Dataflow_Handle * dataflow_handle, int compute_stream_id, int secondary_compute_stream_id,
 	Transformer_Block_Transition * grad_stream,
 	Seq_Batch_Saved_Activations * fwd_activations, 
 	Transformer_Block_Activations * grad_activations, 
@@ -4027,9 +4082,9 @@ int dataflow_submit_transformer_moe_block_bwd_w(Dataflow_Handle * dataflow_handl
 	}
 
 	// ensure backup stream waits for compute stream to finish...
-	ret = (dataflow_handle -> submit_dependency)(dataflow_handle, compute_backup_stream_id, cur_stream_state);
+	ret = (dataflow_handle -> submit_dependency)(dataflow_handle, secondary_compute_stream_id, cur_stream_state);
 	if (ret){
-		fprintf(stderr, "Error: failed to submit dependency for compute backup stream #%d to wait for compute stream #%d to finish...\n", compute_backup_stream_id, compute_stream_id);
+		fprintf(stderr, "Error: failed to submit dependency for compute backup stream #%d to wait for compute stream #%d to finish...\n", secondary_compute_stream_id, compute_stream_id);
 		return -1;
 	}
 
@@ -4044,7 +4099,7 @@ int dataflow_submit_transformer_moe_block_bwd_w(Dataflow_Handle * dataflow_handl
 	int cur_compute_stream = compute_stream_id;
 
 	uint64_t streamKernelWorkspaceBytes = kernelWorkspaceBytes / 2;
-	void * backupKernelWorkspace = kernelWorkspace + streamKernelWorkspaceBytes;
+	void * secondaryKernelWorkspace = kernelWorkspace + streamKernelWorkspaceBytes;
 
 	void * curKernelWorkspace = kernelWorkspace;
 
@@ -4089,8 +4144,8 @@ int dataflow_submit_transformer_moe_block_bwd_w(Dataflow_Handle * dataflow_handl
 		total_tokens += cur_expert_num_tokens;
 
 		if (cur_compute_stream == compute_stream_id){
-			cur_compute_stream = compute_backup_stream_id;
-			curKernelWorkspace = backupKernelWorkspace;
+			cur_compute_stream = secondary_compute_stream_id;
+			curKernelWorkspace = secondaryKernelWorkspace;
 		} else {
 			cur_compute_stream = compute_stream_id;
 			curKernelWorkspace = kernelWorkspace;
@@ -4105,15 +4160,15 @@ int dataflow_submit_transformer_moe_block_bwd_w(Dataflow_Handle * dataflow_handl
 
 	// ensure both finish before moving on to other functions (shared workspace and can't overlap)...
 
-	cur_stream_state = (dataflow_handle -> get_stream_state)(dataflow_handle, compute_backup_stream_id);
+	cur_stream_state = (dataflow_handle -> get_stream_state)(dataflow_handle, secondary_compute_stream_id);
 		if (!cur_stream_state){
-			fprintf(stderr, "Error: failed to get stream state for compute backup stream #%d...\n", compute_backup_stream_id);
+			fprintf(stderr, "Error: failed to get stream state for compute backup stream #%d...\n", secondary_compute_stream_id);
 			return -1;
 		}
 
 	ret = (dataflow_handle -> submit_dependency)(dataflow_handle, compute_stream_id, cur_stream_state);
 	if (ret){
-		fprintf(stderr, "Error: failed to submit dependency for compute stream #%d to wait for compute backup stream #%d to finish...\n", compute_stream_id, compute_backup_stream_id);
+		fprintf(stderr, "Error: failed to submit dependency for compute stream #%d to wait for compute backup stream #%d to finish...\n", compute_stream_id, secondary_compute_stream_id);
 		return -1;
 	}
 
