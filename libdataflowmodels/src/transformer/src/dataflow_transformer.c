@@ -1412,7 +1412,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	}
 
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
-					bwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
+					bwd_dt, bwd_dt, bwd_dt, bwd_dt,
 					compute_dt,
 					to_transa, to_transb,
 					model_dim, ffn_dim, total_q,  // M = model_dim, K = ffn_dim, N = num_tokens
@@ -1785,7 +1785,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	// K = output cols of dX = kv_dim
 	// N = batch dim = num_tokens
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
-					bwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
+					bwd_dt, bwd_dt, bwd_dt, bwd_dt,
 					compute_dt,
 					to_transa, to_transb,
 					model_dim, kv_dim, total_q,  // M = model_dim, K = kv_dim, N = num_tokens
@@ -1806,7 +1806,7 @@ int dataflow_submit_transformer_block_bwd_x(Dataflow_Handle * dataflow_handle, i
 	}
 
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
-					bwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
+					bwd_dt, bwd_dt, bwd_dt, bwd_dt,
 					compute_dt,
 					to_transa, to_transb,
 					model_dim, kv_dim, total_q,  // M = model_dim, K = kv_dim, N = num_tokens
@@ -2671,7 +2671,7 @@ int dataflow_submit_transformer_moe_block(Dataflow_Handle * dataflow_handle, int
 
 		if (i == 0){
 			ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id, 
-							fwd_dt, fwd_dt, DATAFLOW_NONE, fwd_dt,
+							fwd_dt, fwd_dt, fwd_dt, fwd_dt,
 							compute_dt,
 							to_transa, to_transb,
 							model_dim, ffn_dim, total_q, 
@@ -3618,7 +3618,7 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 		}
 
 		ret = dataflow_submit_matmul(dataflow_handle, cur_compute_stream,
-								fwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
+								fwd_dt, bwd_dt, bwd_dt, bwd_dt,
 								compute_dt,
 								to_transa, to_transb,
 								model_dim, ffn_dim, cur_expert_num_tokens,  // M = model_dim, K = ffn_dim, N = num_tokens
@@ -3907,7 +3907,7 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 	// K = output cols of dX = kv_dim
 	// N = batch dim = num_tokens
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
-							bwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
+							bwd_dt, bwd_dt, bwd_dt, bwd_dt,
 							compute_dt,
 							to_transa, to_transb,
 							model_dim, kv_dim, total_q,  // M = model_dim, K = kv_dim, N = num_tokens
@@ -3921,7 +3921,7 @@ int dataflow_submit_transformer_moe_block_bwd_x(Dataflow_Handle * dataflow_handl
 
 
 	ret = dataflow_submit_matmul(dataflow_handle, compute_stream_id,
-							bwd_dt, bwd_dt, DATAFLOW_NONE, bwd_dt,
+							bwd_dt, bwd_dt, bwd_dt, bwd_dt,
 							compute_dt,
 							to_transa, to_transb,
 							model_dim, kv_dim, total_q,  // M = model_dim, K = kv_dim, N = num_tokens
