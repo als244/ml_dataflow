@@ -3,34 +3,12 @@ import torch.nn as nn
 import glob
 import json
 
-from moe_model_flash2 import ModelArgs, MoETransformer, SeqlensInfo
-
-import torch.optim as optim
-
 import time
 import numpy as np
 import os
 
 import sys
 import pickle
-
-if (len(sys.argv) != 3):
-    print("Usage: python convert_moe_to_raw.py <pytorch_model_path> <out_conversion_dict>")
-    sys.exit(1)
-
-MODEL_PATH = sys.argv[1]
-OUTPUT_DICT_PATH = sys.argv[2]
-## MoETransformer Class
-model_state_dict = torch.load(f"{MODEL_PATH}.pt", weights_only=False)
-
-model_args = pickle.load(open(f"{MODEL_PATH}_config.pkl", "rb"))
-
-# model_state_dict_keys = list(model_state_dict.keys())
-
-# for key in model_state_dict_keys:
-#     print(key)
-#     print(model_state_dict[key].shape)
-#     print("\n")
 
 
 conversion_dict = {}
