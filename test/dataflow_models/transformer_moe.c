@@ -1069,8 +1069,8 @@
 		// now also incoporate the other sicy buffers...
 		total_base_dev_mem += sticky_transitions_size + sticky_dev_logits_size + sticky_dev_recomputed_buffer_size + sticky_dev_working_grad_act_size + sticky_dev_head_act_size + sticky_act_workspace_size;
 		
-		// save 200 MB just in case...
-		uint64_t extra_padding = 200 * (1UL << 20);
+		// save 400 MB for other metadata that we might've missed...
+		uint64_t extra_padding = 400 * (1UL << 20);
 		total_base_dev_mem += extra_padding;
 
 		// printf("Total Base Dev Mem: %lu\n", total_base_dev_mem);
