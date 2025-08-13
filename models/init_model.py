@@ -174,8 +174,8 @@ def main(config_path, model_dir_path):
 
 
 
-    total_parms = 0
-
+    total_params = 0
+    active_params = 0
 
     if (vocab_size > 0):
         ## EMBEDDINGS!
@@ -184,7 +184,8 @@ def main(config_path, model_dir_path):
 
         print("Initializing token embeddings...")
 
-        total_parms = vocab_size * model_dim
+        total_params += vocab_size * model_dim
+        active_params
 
         token_embedding = torch.randn(vocab_size, model_dim, dtype=embed_dtype).view(embed_view_dtype).numpy()
 
@@ -205,48 +206,56 @@ def main(config_path, model_dir_path):
 
         all_weights.append(attn_norm.reshape(-1))
 
-        total_parms += model_dim
+        total_params += model_dim
+        active_params += model_dim
 
         ## q matrix
         q_proj = torch.empty((model_dim, model_dim), dtype=attn_dtype).uniform_(-recip_model_sqrt, recip_model_sqrt).view(attn_view_dtype).numpy()
 
         all_weights.append(q_proj.reshape(-1))
 
-        total_parms += model_dim * model_dim
+        total_params += model_dim * model_dim
+        active_params += model_dim * model_dim
 
         ## save
         k_proj = torch.empty((kv_dim, model_dim), dtype=attn_dtype).uniform_(-recip_model_sqrt, recip_model_sqrt).view(attn_view_dtype).numpy()
 
         all_weights.append(k_proj.reshape(-1))
 
-        total_parms += kv_dim * model_dim
+        total_params += kv_dim * model_dim
+        active_params += kv_dim * model_dim
 
         ## save
         v_proj = torch.empty((kv_dim, model_dim), dtype=attn_dtype).uniform_(-recip_model_sqrt, recip_model_sqrt).view(attn_view_dtype).numpy()
 
         all_weights.append(v_proj.reshape(-1))
 
-        total_parms += kv_dim * model_dim
-
+        total_params += kv_dim * model_dim
+        active_params += kv_dim * model_dim
 
         if qk_norm_weight_type == "head":
             ## q norm
             q_norm = torch.ones(head_dim, dtype=attn_dtype).view(attn_view_dtype).numpy()
             all_weights.append(q_norm.reshape(-1))
-            total_parms += head_dim
+            total_params += head_dim
+            active_params += head_dim
+
             ## k norm
             k_norm = torch.ones(head_dim, dtype=attn_dtype).view(attn_view_dtype).numpy()
             all_weights.append(k_norm.reshape(-1))
-            total_parms += head_dim  
+            total_params += head_dim
+            active_params += head_dim
         elif qk_norm_weight_type == "token":
             ## q norm
             q_norm = torch.ones(model_dim, dtype=attn_dtype).view(attn_view_dtype).numpy()
             all_weights.append(q_norm.reshape(-1))
-            total_parms += model_dim
+            total_params += model_dim
+            active_params += model_dim
             ## k norm
             k_norm = torch.ones(model_dim, dtype=attn_dtype).view(attn_view_dtype).numpy()
             all_weights.append(k_norm.reshape(-1))
-            total_parms += model_dim
+            total_params += model_dim
+            active_params += model_dim
         else:
             pass
 
@@ -255,14 +264,16 @@ def main(config_path, model_dir_path):
 
         all_weights.append(o_proj.reshape(-1))
 
-        total_parms += model_dim * model_dim
+        total_params += model_dim * model_dim
+        active_params += model_dim * model_dim
 
         ## mlp norm
         ffn_norm = torch.ones(model_dim, dtype=attn_dtype).view(attn_view_dtype).numpy()
 
         all_weights.append(ffn_norm.reshape(-1))
 
-        total_parms += model_dim
+        total_params += model_dim
+        active_params += model_dim
 
         ## touter
         if num_routed_experts > 0:
@@ -271,7 +282,8 @@ def main(config_path, model_dir_path):
 
             all_weights.append(router_proj.reshape(-1))
 
-            total_parms += num_routed_experts * model_dim
+            total_params += num_routed_experts * model_dim
+            active_params += num_routed_experts * model_dim
 
         for j in range(num_shared_experts + num_routed_experts):
 
@@ -282,14 +294,14 @@ def main(config_path, model_dir_path):
 
                 all_weights.append(w_1.reshape(-1))
 
-                total_parms += expert_dim * model_dim
+                total_params += expert_dim * model_dim
 
                 ## save
                 w_3 = torch.empty((expert_dim, model_dim), dtype=expert_dtype).uniform_(-recip_model_sqrt, recip_model_sqrt).view(expert_view_dtype).numpy()
 
                 all_weights.append(w_3.reshape(-1))
 
-                total_parms += expert_dim * model_dim
+                total_params += expert_dim * model_dim
 
                 ## save
                 recip_expert_sqrt = 1 / math.sqrt(expert_dim)
@@ -297,10 +309,12 @@ def main(config_path, model_dir_path):
 
                 all_weights.append(w_2.reshape(-1))
 
-                total_parms += model_dim * expert_dim
+                total_params += model_dim * expert_dim
             else:
                 raise ValueError(f"Invalid expert MLP type: {expert_mlp_type}")
         
+        active_params += (num_shared_experts + top_k_routed_experts) * 3 * expert_dim * model_dim
+
         combined_layer = np.concatenate(all_weights, axis=0)
 
         combined_layer.tofile(f"{model_dir_path}/layers/{i}/combined_layer.weight")
@@ -312,18 +326,20 @@ def main(config_path, model_dir_path):
         print("Initializing head...")
         rms_head = torch.ones(model_dim, dtype=head_dtype).view(head_view_dtype).numpy()
 
-        total_parms += model_dim
-    
+        total_params += model_dim
+        active_params += model_dim
+
         head_proj = torch.empty((vocab_size, model_dim), dtype=head_dtype).uniform_(-recip_model_sqrt, recip_model_sqrt).view(head_view_dtype).numpy()
 
-        total_parms += vocab_size * model_dim
+        total_params += vocab_size * model_dim
+        active_params += vocab_size * model_dim
 
         combined_head = np.concatenate((rms_head.reshape(-1), head_proj.reshape(-1)), axis=0)
 
         combined_head.tofile(f"{model_dir_path}/head/combined_head.weight")
 
-    print(f"\nTotal parameters: {total_parms / 1e6}M")
-        
+    print(f"\nTotal parameters: {int(total_params)}\n\t{total_params / 1e6}M\n")
+    print(f"\nActive parameters: {int(active_params)}\n\t{active_params / 1e6}M")
 
 if __name__ == "__main__":
 
