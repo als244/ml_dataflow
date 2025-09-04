@@ -19,9 +19,9 @@
 	#define TOKEN_IDS_PATH "../data/65536_token_ids_uint32.dat"
 	#define TOKEN_LABELS_PATH "../data/65536_labels_uint32.dat"
 
-	#define DEFAULT_MIN_CHUNK_SIZE 16384
+	#define DEFAULT_MIN_CHUNK_SIZE 8192
 
-	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 2048
+	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 1024
 
 	#define MAX_SEQ_GROUPS_PER_ROUND 100
 	#define MAX_ROUNDS_PER_STEP 100
