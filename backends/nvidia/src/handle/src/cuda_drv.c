@@ -37,7 +37,11 @@ int cu_initialize_ctx(CUcontext * ctx, CUdevice dev, unsigned int ctx_flags){
 	CUresult result;
 	const char * err;
 
-	result = cuCtxCreate(ctx, ctx_flags, dev);
+	#if CUDA_VERSION >= 13000
+		result = cuCtxCreate(ctx, NULL, ctx_flags, dev);
+	#else
+		result = cuCtxCreate(ctx, ctx_flags, dev);
+	#endif
 	if (result != CUDA_SUCCESS){
 		cuGetErrorString(result, &err);
     	fprintf(stderr, "Error: Could not create context: %s\n", err);
@@ -599,7 +603,12 @@ int cu_transfer_batch_dev_to_dev_async(CUstream stream, int num_transfers, int d
 
 	size_t failIdx;
 
-	result = cuMemcpyBatchAsync((CUdeviceptr *) dev_dest, (CUdeviceptr *) dev_src, (size_t *) size_bytes, (size_t) num_transfers, &attrs, &attrsIdxs, numAttrs, &failIdx, stream);
+	#if CUDA_VERSION >= 13000
+		result = cuMemcpyBatchAsync((CUdeviceptr *) dev_dest, (CUdeviceptr *) dev_src, (size_t *) size_bytes, (size_t) num_transfers, &attrs, &attrsIdxs, numAttrs, stream);
+	#else
+		result = cuMemcpyBatchAsync((CUdeviceptr *) dev_dest, (CUdeviceptr *) dev_src, (size_t *) size_bytes, (size_t) num_transfers, &attrs, &attrsIdxs, numAttrs, &failIdx, stream);
+	#endif
+
 	if (result != CUDA_SUCCESS){
 		cuGetErrorString(result, &err);
 		fprintf(stderr, "Error: unable to submit batch d to d async with %d transfers. Failed at index %zu: %s...\n", num_transfers, failIdx, err);
