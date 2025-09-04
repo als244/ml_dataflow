@@ -19,9 +19,9 @@
 	#define TOKEN_IDS_PATH "../data/65536_token_ids_uint32.dat"
 	#define TOKEN_LABELS_PATH "../data/65536_labels_uint32.dat"
 
-	#define DEFAULT_MIN_CHUNK_SIZE 65536
+	#define DEFAULT_MIN_CHUNK_SIZE 16384
 
-	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 4096
+	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 2048
 
 	#define MAX_SEQ_GROUPS_PER_ROUND 100
 	#define MAX_ROUNDS_PER_STEP 100
@@ -30,9 +30,9 @@
 	// the optimizer...
 	#define TARGET_OPT_OVERHEAD_FRAC 0.02f
 	// to help determien how many rounds per step
-	#define FLOP_EFFICIENCY_ESTIMATE 0.7f
+	#define FLOP_EFFICIENCY_ESTIMATE 0.6f
 
-	#define PCIE_LINK_EFFICIENCY 0.6f
+	#define PCIE_LINK_EFFICIENCY 0.7f
 
 	#define NUM_STEPS 3
 
@@ -1156,6 +1156,13 @@
 				if (leftover_space > fwd_block_size){
 					NUM_DEV_BLOCKS++;
 					leftover_space -= fwd_block_size;
+				}
+
+				// if num_grad_blocks == 1, then prioritize a second grad block to avoid blocking behavior in bwd pass, 
+				// otherwise prioritize more activation slots to avoid blocking behavior in fwd pass...
+				if (NUM_DEV_GRAD_BLOCKS == 1 && leftover_space > bwd_block_size){
+					NUM_DEV_GRAD_BLOCKS++;
+					leftover_space -= bwd_block_size;
 				}
 
 				uint64_t remaining_slots = n_layers * num_chunks - NUM_DEV_ACTIVATION_SLOTS;
