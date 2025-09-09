@@ -206,7 +206,7 @@ cd models
 python init_model.py <model config> <output model path>
 ```
 
-Where `model config` can be selected from one of the default ones (e.g. `python init_model.py 8b_config.json my_8B_model`), or you can create your own following the same structure. (The QK Norm and MoE features are not implemented yet, however).
+Where `model config` can be selected from one of the default ones (e.g. `python init_model.py 8b_config.json my_8B_model`), or you can create your own following the same structure.
 
 The 1b and 8b models are the same dimensions as llama3, the 32b model is the same as qwen.
 
@@ -306,7 +306,7 @@ Tested across 4 different machines:
 
 ---
 
-**Practical note**: The training demo source code is quite messy! This is not the intended usage, there are some missing pieces... Critical upstream functionality (*data ingestion*, *model/loss/optimizer customization*, *model saving/loading*, *multi-worker training*, & *a wider set of common kernels such as attention variants, other normalizations, optimizers, convolutions, and MoE selecting/routing/combining*) is underway.
+**Practical note**: The training demo source code is quite messy! This is not the intended usage, there are some missing pieces... Critical upstream functionality (*data ingestion*, *model/loss/optimizer customization*, *model saving/loading*, *multi-worker training*, & *a wider set of common kernels such as attention variants, other normalizations, optimizers, convolutions, and distributed MoE selecting/routing/combining*) is underway.
 
 The plan is to build a robust core of C libraries and create user-friendly Python bindings (at the various layers of stack) for convenient interfacing. Typical usage will have a similar API to most other training frameworks and only need to use the top-level bindings.
 
