@@ -34,6 +34,7 @@ learning_rate = 1e-5
 ds_config = {
     "train_micro_batch_size_per_gpu": 1,
     "gradient_accumulation_steps": 1,
+    "use_liger_kernel": True,
     "wall_clock_breakdown": True,
     "optimizer": { "type": "AdamW", "params": { "lr": learning_rate, "betas": [0.9, 0.95] } },
     "fp16": { "enabled": True },
