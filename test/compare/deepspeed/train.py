@@ -20,7 +20,8 @@ args = parser.parse_args()
 
 # --- Model & Training Configuration ---
 model_args = ModelArgs(
-    dim=4096, n_layers=32, n_heads=32, vocab_size=128256,
+    dtype=torch.bfloat16,
+    dim=4096, n_layers=32, n_heads=32, n_kv_heads=8, vocab_size=128256,
     intermediate_size=14336, norm_eps=1e-5, max_seq_len=args.seq_len
 )
 

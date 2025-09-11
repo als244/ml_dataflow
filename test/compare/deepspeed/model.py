@@ -14,9 +14,11 @@ from torch.utils.checkpoint import checkpoint
 @dataclass
 class ModelArgs:
     """Configuration for the Llama3 model."""
+    dtype: torch.dtype = torch.bfloat16
     dim: int = 4096
     n_layers: int = 32
     n_heads: int = 32
+    n_kv_heads: int = 8
     vocab_size: int = 128256
     intermediate_size: int = 14336
     norm_eps: float = 1e-5
@@ -24,10 +26,10 @@ class ModelArgs:
 
 class RMSNorm(nn.Module):
     """Root Mean Square Normalization."""
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, dim: int, eps: float = 1e-6, dtype: torch.dtype = torch.bfloat16):
         super().__init__()
         self.eps = eps
-        self.weight = nn.Parameter(torch.ones(dim))
+        self.weight = nn.Parameter(torch.ones(dim, dtype=dtype))
 
     def _norm(self, x):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
@@ -59,11 +61,12 @@ class Attention(nn.Module):
         super().__init__()
         self.n_heads = args.n_heads
         self.head_dim = args.dim // args.n_heads
-
-        self.wq = nn.Linear(args.dim, args.n_heads * self.head_dim, bias=False)
-        self.wk = nn.Linear(args.dim, args.n_heads * self.head_dim, bias=False)
-        self.wv = nn.Linear(args.dim, args.n_heads * self.head_dim, bias=False)
-        self.wo = nn.Linear(args.n_heads * self.head_dim, args.dim, bias=False)
+        self.n_kv_heads = args.n_kv_heads
+        self.dtype = args.dtype
+        self.wq = nn.Linear(args.dim, args.n_heads * self.head_dim, bias=False, dtype=self.dtype)
+        self.wk = nn.Linear(args.dim, args.n_kv_heads * self.head_dim, bias=False, dtype=self.dtype)
+        self.wv = nn.Linear(args.dim, args.n_kv_heads * self.head_dim, bias=False, dtype=self.dtype)
+        self.wo = nn.Linear(args.n_heads * self.head_dim, args.dim, bias=False, dtype=self.dtype)
 
     def forward(self, x: torch.Tensor, freqs_complex: torch.Tensor):
         nvtx.range_push("Attention") # NVTX Start
@@ -72,8 +75,8 @@ class Attention(nn.Module):
         
         xq, xk, xv = self.wq(x), self.wk(x), self.wv(x)
         xq = xq.view(batch_size, seq_len, self.n_heads, self.head_dim)
-        xk = xk.view(batch_size, seq_len, self.n_heads, self.head_dim)
-        xv = xv.view(batch_size, seq_len, self.n_heads, self.head_dim)
+        xk = xk.view(batch_size, seq_len, self.n_kv_heads, self.head_dim)
+        xv = xv.view(batch_size, seq_len, self.n_kv_heads, self.head_dim)
 
         xq = apply_rotary_embeddings(xq, freqs_complex, device=x.device)
         xk = apply_rotary_embeddings(xk, freqs_complex, device=x.device)
@@ -90,9 +93,10 @@ class Attention(nn.Module):
 class FeedForward(nn.Module):
     def __init__(self, args: ModelArgs):
         super().__init__()
-        self.w1 = nn.Linear(args.dim, args.intermediate_size, bias=False)
-        self.w3 = nn.Linear(args.dim, args.intermediate_size, bias=False)
-        self.w2 = nn.Linear(args.intermediate_size, args.dim, bias=False)
+        self.dtype = args.dtype
+        self.w1 = nn.Linear(args.dim, args.intermediate_size, bias=False, dtype=self.dtype)
+        self.w3 = nn.Linear(args.dim, args.intermediate_size, bias=False, dtype=self.dtype)
+        self.w2 = nn.Linear(args.intermediate_size, args.dim, bias=False, dtype=self.dtype)
 
     def forward(self, x: torch.Tensor):
         nvtx.range_push("FeedForward") # NVTX Start
@@ -105,10 +109,11 @@ class FeedForward(nn.Module):
 class DecoderBlock(nn.Module):
     def __init__(self, args: ModelArgs):
         super().__init__()
+        self.dtype = args.dtype
         self.attention = Attention(args)
         self.feed_forward = FeedForward(args)
-        self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
-        self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
+        self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps, dtype=self.dtype)
+        self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps, dtype=self.dtype)
 
     def forward(self, x: torch.Tensor, freqs_complex: torch.Tensor):
         # The main range for this block is pushed in the Llama3Model loop
@@ -125,13 +130,14 @@ class DecoderBlock(nn.Module):
 class Llama3Model(nn.Module):
     def __init__(self, params: ModelArgs):
         super().__init__()
+        self.dtype = params.dtype
         self.params = params
         self.vocab_size = params.vocab_size
         
-        self.tok_embeddings = nn.Embedding(params.vocab_size, params.dim)
+        self.tok_embeddings = nn.Embedding(params.vocab_size, params.dim, dtype=self.dtype)
         self.layers = nn.ModuleList([DecoderBlock(params) for _ in range(params.n_layers)])
-        self.norm = RMSNorm(params.dim, eps=params.norm_eps)
-        self.output = nn.Linear(params.dim, params.vocab_size, bias=False)
+        self.norm = RMSNorm(params.dim, eps=params.norm_eps, dtype=self.dtype)
+        self.output = nn.Linear(params.dim, params.vocab_size, bias=False, dtype=self.dtype)
         
         self.freqs_complex = precompute_theta_pos_frequencies(
             params.dim // params.n_heads, params.max_seq_len, "cpu"
