@@ -18,6 +18,8 @@ parser.add_argument('--local_rank', type=int, default=0, help='Local rank')
 parser = deepspeed.add_config_arguments(parser)
 args = parser.parse_args()
 
+torch.set_default_dtype(torch.bfloat16)
+
 # --- Model & Training Configuration ---
 model_args = ModelArgs(
     dtype=torch.bfloat16,
