@@ -60,6 +60,24 @@ def precompute_rope_embeddings(head_dim: int, max_seq_len: int, rope_theta: floa
 
     return cos_emb, sin_emb
 
+
+def precompute_theta_pos_frequencies(head_dim: int, seq_len: int, device: str, theta: float = 10000.0):
+    """Precomputes the rotary frequencies for RoPE."""
+    theta_base = torch.tensor(theta, device=device)
+    inv_freq = 1.0 / (theta_base ** (torch.arange(0, head_dim, 2).float().to(device) / head_dim))
+    t = torch.arange(seq_len, device=device, dtype=torch.float32)
+    freqs = torch.outer(t, inv_freq)
+    return torch.polar(torch.ones_like(freqs), freqs)  # complex64
+
+def apply_rotary_embeddings(x: torch.Tensor, freqs_complex: torch.Tensor, device: str):
+    """Applies rotary positional embeddings to the input tensor."""
+    x_complex = torch.view_as_complex(x.float().reshape(*x.shape[:-1], -1, 2))
+    freqs_complex = freqs_complex.unsqueeze(0).unsqueeze(2)
+    x_rotated = x_complex * freqs_complex
+    x_out = torch.view_as_real(x_rotated)
+    x_out = x_out.reshape(*x.shape)
+    return x_out.type_as(x).to(device)
+
 class Attention(nn.Module):
     """Multi-Head Attention updated to use FlashAttention."""
     def __init__(self, args: ModelArgs, sin_vals: torch.Tensor, cos_vals: torch.Tensor):
@@ -75,7 +93,7 @@ class Attention(nn.Module):
         self.sin_vals = sin_vals
         self.cos_vals = cos_vals
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor, freqs_complex: torch.Tensor):
         nvtx.range_push("Attention") # NVTX Start
         
         batch_size, seq_len, _ = x.shape
@@ -85,7 +103,10 @@ class Attention(nn.Module):
         xk = xk.view(batch_size, seq_len, self.n_kv_heads, self.head_dim)
         xv = xv.view(batch_size, seq_len, self.n_kv_heads, self.head_dim)
 
-        xq, xk = LigerRope(xq, xk, self.cos_vals[:seq_len], self.sin_vals[:seq_len])
+        #xq, xk = LigerRope(xq, xk, self.cos_vals[:seq_len], self.sin_vals[:seq_len])
+
+        xq = apply_rotary_embeddings(xq, freqs_complex, device=x.device)
+        xk = apply_rotary_embeddings(xk, freqs_complex, device=x.device)
         
         output = flash_attn_interface.flash_attn_func(xq, xk, xv, causal=True)
         
@@ -124,10 +145,10 @@ class DecoderBlock(nn.Module):
         self.attention_norm = LigerRMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = LigerRMSNorm(args.dim, eps=args.norm_eps)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor, freqs_complex: torch.Tensor):
         # The main range for this block is pushed in the Llama3Model loop
         nvtx.range_push("Attention Sub-Block")
-        h = x + self.attention(x)
+        h = x + self.attention(x, freqs_complex)
         nvtx.range_pop()
         
         nvtx.range_push("FeedForward Sub-Block")
@@ -146,9 +167,13 @@ class Llama3Model(nn.Module):
         self.sin_embeddings, self.cos_embeddings = precompute_rope_embeddings(params.dim // params.n_heads, params.max_seq_len, params.rope_theta)
         
         self.tok_embeddings = nn.Embedding(params.vocab_size, params.dim, dtype=self.dtype)
-        self.layers = nn.ModuleList([DecoderBlock(params, self.sin_embeddings, self.cos_embeddings) for _ in range(params.n_layers)])
+        self.layers = nn.ModuleList([DecoderBlock(params) for _ in range(params.n_layers)])
         self.norm = LigerRMSNorm(params.dim, eps=params.norm_eps)
         self.output = nn.Linear(params.dim, params.vocab_size, bias=False, dtype=self.dtype)
+
+        self.freqs_complex = precompute_theta_pos_frequencies(
+            params.dim // params.n_heads, params.max_seq_len, "cpu"
+        )
         
        
 
@@ -160,12 +185,15 @@ class Llama3Model(nn.Module):
         nvtx.range_push("Token Embeddings")
         h = self.tok_embeddings(tokens)
         nvtx.range_pop()
+
+        self.freqs_complex = self.freqs_complex.to(h.device)
+        freqs = self.freqs_complex[:seq_len]
         
 
         nvtx.range_push("Decoder Layers")
         for i, layer in enumerate(self.layers):
             nvtx.range_push(f"Layer {i}") # Push a specific range for each layer
-            h = checkpoint(layer, h, use_reentrant=False)
+            h = checkpoint(layer, h, freqs, use_reentrant=False)
             nvtx.range_pop()
         nvtx.range_pop()
             
