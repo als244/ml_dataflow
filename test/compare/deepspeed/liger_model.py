@@ -75,7 +75,7 @@ class Attention(nn.Module):
         self.sin_vals = sin_vals
         self.cos_vals = cos_vals
 
-    def forward(self, x: torch.Tensor, freqs_complex: torch.Tensor):
+    def forward(self, x: torch.Tensor):
         nvtx.range_push("Attention") # NVTX Start
         
         batch_size, seq_len, _ = x.shape
@@ -124,10 +124,10 @@ class DecoderBlock(nn.Module):
         self.attention_norm = LigerRMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = LigerRMSNorm(args.dim, eps=args.norm_eps)
 
-    def forward(self, x: torch.Tensor, freqs_complex: torch.Tensor):
+    def forward(self, x: torch.Tensor):
         # The main range for this block is pushed in the Llama3Model loop
         nvtx.range_push("Attention Sub-Block")
-        h = x + self.attention(self.attention_norm(x), freqs_complex)
+        h = x + self.attention(x)
         nvtx.range_pop()
         
         nvtx.range_push("FeedForward Sub-Block")
