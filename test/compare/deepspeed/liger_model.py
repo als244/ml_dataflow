@@ -80,7 +80,7 @@ def apply_rotary_embeddings(x: torch.Tensor, freqs_complex: torch.Tensor, device
 
 class Attention(nn.Module):
     """Multi-Head Attention updated to use FlashAttention."""
-    def __init__(self, args: ModelArgs, sin_vals: torch.Tensor, cos_vals: torch.Tensor):
+    def __init__(self, args: ModelArgs):
         super().__init__()
         self.n_heads = args.n_heads
         self.head_dim = args.dim // args.n_heads
@@ -90,8 +90,6 @@ class Attention(nn.Module):
         self.wk = nn.Linear(args.dim, args.n_kv_heads * self.head_dim, bias=False, dtype=self.dtype)
         self.wv = nn.Linear(args.dim, args.n_kv_heads * self.head_dim, bias=False, dtype=self.dtype)
         self.wo = nn.Linear(args.n_heads * self.head_dim, args.dim, bias=False, dtype=self.dtype)
-        self.sin_vals = sin_vals
-        self.cos_vals = cos_vals
 
     def forward(self, x: torch.Tensor, freqs_complex: torch.Tensor):
         nvtx.range_push("Attention") # NVTX Start
@@ -137,10 +135,10 @@ class FeedForward(nn.Module):
         return result
 
 class DecoderBlock(nn.Module):
-    def __init__(self, args: ModelArgs, sin_vals: torch.Tensor, cos_vals: torch.Tensor):
+    def __init__(self, args: ModelArgs):
         super().__init__()
         self.dtype = args.dtype
-        self.attention = Attention(args, sin_vals, cos_vals)
+        self.attention = Attention(args)
         self.feed_forward = FeedForward(args)
         self.attention_norm = LigerRMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = LigerRMSNorm(args.dim, eps=args.norm_eps)
