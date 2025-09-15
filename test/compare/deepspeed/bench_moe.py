@@ -65,7 +65,7 @@ class MoEFeedForward(nn.Module):
         )
 
     def forward(self, x: torch.Tensor):
-        # x shape: (batch_size, sequence_length, hidden_dim)
+        # x shape: (total_tokens, hidden_dim)
         batch_size, sequence_length, hidden_dim = x.shape
 
         # Flatten input for routing and expert processing.
@@ -104,7 +104,7 @@ def benchmark(args):
     # Use bfloat16 for better performance on modern GPUs.
     dtype = torch.bfloat16
     
-    print("\n--- 벤치마크 구성 ---")
+    print("\n--- Arguments ---")
     for k, v in vars(args).items():
         print(f"  {k}: {v}")
     print(f"  Device: {device}")
@@ -196,7 +196,7 @@ def benchmark(args):
 def main():
     parser = argparse.ArgumentParser(description="Benchmark MoE Layer FWD+BWD Performance")
     # Common settings inspired by models like Mixtral 8x7B
-    parser.add_argument('--batch-size', type=int, default=4, help='Batch size for the benchmark')
+    parser.add_argument('--batch-size', type=int, default=2, help='Batch size for the benchmark')
     parser.add_argument('--sequence-length', type=int, default=65536, help='Sequence length of the input')
     parser.add_argument('--model-dim', type=int, default=1536, help='Model hidden dimension (D_model)')
     parser.add_argument('--expert-dim', type=int, default=768, help='Expert intermediate dimension (D_expert)')
