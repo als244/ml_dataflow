@@ -6,8 +6,15 @@ from torch.utils.data import TensorDataset, DataLoader
 import deepspeed
 import argparse
 import time
+import random
+import numpy as np
 
-from liger_moe_model import Llama3Model, ModelArgs
+from liger_moe_model_scattermoe import Llama3Model, ModelArgs
+
+
+import ctypes
+
+_cudart = ctypes.CDLL('libcudart.so')
 
 # --- Argument Parsing ---
 parser = argparse.ArgumentParser(description="DeepSpeed Llama3 Training with Full Logging")
@@ -20,25 +27,34 @@ args = parser.parse_args()
 
 torch.set_default_dtype(torch.bfloat16)
 
+SEED = 42
+
+torch.manual_seed(SEED)
+random.seed(SEED)
+np.random.seed(SEED)
+
+
 # --- Model & Training Configuration ---
 model_args = ModelArgs(
     dtype=torch.bfloat16,
     dim=1536, n_layers=24, n_heads=12, n_kv_heads=4, vocab_size=81920,
-    expert_dim=384, num_experts=256, top_k=16, norm_eps=1e-5, max_seq_len=1048576,
+    expert_dim=1536, num_experts=64, top_k=4, norm_eps=1e-5, max_seq_len=1048576,
     rope_theta=500000
 )
 
-epochs = 500
+epochs = 1
 learning_rate = 1e-5
+grad_accum_steps = 14
+total_steps = 3 * grad_accum_steps
 
 # --- DeepSpeed Configuration with Logging ---
 # The ds_config can be loaded from a JSON file specified by --deepspeed_config
 # For simplicity, we define it here.
 ds_config = {
     "train_micro_batch_size_per_gpu": 1,
-    "gradient_accumulation_steps": 60,
+    "gradient_accumulation_steps": grad_accum_steps,
     "wall_clock_breakdown": True,
-    "optimizer": { "type": "AdamW", "params": { "lr": learning_rate, "betas": [0.9, 0.95] }, "fp32_optimizer_states": False},
+    "optimizer": { "type": "AdamW", "params": { "lr": learning_rate, "betas": [0.9, 0.95], "fp32_optimizer_states": False} },
     "bf16": { "enabled": True},
     "gradient_clipping": 1.0,
     "steps_per_print": 1,
@@ -55,7 +71,7 @@ ds_config = {
         "offload_param": {
             "device": "cpu",
             "pin_memory": True
-        }
+        },
     },
 
     
@@ -129,8 +145,13 @@ model_engine, optimizer, training_dataloader, _ = deepspeed.initialize(
 
 # --- Training Loop with Throughput Calculation ---
 print(f"Starting training with sequence length: {args.seq_len}...")
+
+ret = _cudart.cudaProfilerStart()
+
 start_time = time.time()
 total_tokens = 0
+
+num_steps = 0
 
 for epoch in range(epochs):
     # The training_dataloader is now the one created by DeepSpeed
@@ -144,10 +165,12 @@ for epoch in range(epochs):
         model_engine.backward(loss)
         model_engine.step()
 
+        num_steps += 1
+
         actual_bs = model_engine.train_micro_batch_size_per_gpu()
         total_tokens += actual_bs * args.seq_len
         
-        if (i + 1) % 10 == 0:
+        if (i + 1) % grad_accum_steps == 0:
             end_time = time.time()
             elapsed_time = end_time - start_time
             if elapsed_time > 0:
@@ -155,9 +178,12 @@ for epoch in range(epochs):
                 mem_alloc = torch.cuda.memory_allocated() / 1024**3
                 print(
                     f"Epoch: {epoch+1}, Step: {i+1}, BS: {actual_bs}, Loss: {loss.item():.4f} | "
-                    f"Tok/sec: {tokens_per_sec:.2f} | VRAM: {mem_alloc:.2f}GB"
+                    f"Total_tokens: {total_tokens}, Total_time = {elapsed_time}, Tok/sec: {tokens_per_sec:.2f} | VRAM: {mem_alloc:.2f}GB"
                 )
-            start_time = time.time()
-            total_tokens = 0
+
+        if num_steps == total_steps:
+            break
+
+ret = _cudart.cudaProfilerStop()
 
 print("\nTraining complete! ✅")
