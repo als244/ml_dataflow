@@ -7,8 +7,8 @@ from dataclasses import dataclass
 import torch.cuda.nvtx as nvtx # Import NVTX
 
 # Import FlashAttention
-#import flash_attn_interface
-from flash_attn import flash_attn_func
+import flash_attn_interface
+#from flash_attn import flash_attn_func
 
 from torch.utils.checkpoint import checkpoint
 
@@ -29,13 +29,13 @@ class ModelArgs:
     """Configuration for the Llama3 model."""
     dtype: torch.dtype = torch.bfloat16
     dim: int = 1536
-    n_layers: int = 16
+    n_layers: int = 24
     n_heads: int = 12
-    n_kv_heads: int = 3
-    vocab_size: int = 128256
+    n_kv_heads: int = 4
+    vocab_size: int = 81920
     expert_dim: int = 384
-    num_experts: int = 16
-    top_k: int = 2
+    num_experts: int = 256
+    top_k: int = 16
     norm_eps: float = 1e-5
     max_seq_len: int = 1048576
     rope_theta: float = 500000
@@ -103,7 +103,7 @@ class Attention(nn.Module):
         xq = apply_rotary_embeddings(xq, freqs_complex, device=x.device)
         xk = apply_rotary_embeddings(xk, freqs_complex, device=x.device)
         
-        output = flash_attn_func(xq, xk, xv, causal=True)
+        output = flash_attn_interface.flash_attn_func(xq, xk, xv, causal=True)
         
         output = output.view(batch_size, seq_len, -1)
         
@@ -113,17 +113,18 @@ class Attention(nn.Module):
         return result
 
 class MoEFeedForward(nn.Module):
-    def __init__(self, args: ModelArgs):
+    def __init__(self, args: ModelArgs, layer_id):
         super().__init__()
-        
-        
+         
+        self.has_saved = False
+        self.layer_id = layer_id
         self.top_k = args.top_k
         self.router = nn.Linear(args.dim, args.num_experts, bias=False, dtype=args.dtype)
         self.moe_layer = GLUMLP(input_size=args.dim, hidden_size=args.expert_dim, activation=nn.SiLU(), num_experts=args.num_experts, top_k=args.top_k)
         
 
     def forward(self, x: torch.Tensor):
-        nvtx.range_push("FeedForward") # NVTX Start
+        nvtx.range_push("MoE") # NVTX Start
 
         batch_size, sequence_length, hidden_dim = x.shape
 
@@ -140,29 +141,26 @@ class MoEFeedForward(nn.Module):
         final_hidden_states = self.moe_layer(x, routing_weights, selected_experts)
 
         final_hidden_states = final_hidden_states.view(batch_size, sequence_length, hidden_dim)
-        
+
         nvtx.range_pop() # NVTX End
         return final_hidden_states
 
 class DecoderBlock(nn.Module):
-    def __init__(self, args: ModelArgs):
+    def __init__(self, args: ModelArgs, layer_id):
         super().__init__()
         self.dtype = args.dtype
+        self.layer_id = layer_id
         self.attention = Attention(args)
-        self.moe_feed_forward = MoEFeedForward(args)
+        self.moe_feed_forward = MoEFeedForward(args, layer_id)
         self.attention_norm = LigerRMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = LigerRMSNorm(args.dim, eps=args.norm_eps)
 
     def forward(self, x: torch.Tensor, freqs_complex: torch.Tensor):
         # The main range for this block is pushed in the Llama3Model loop
-        nvtx.range_push("Attention Sub-Block")
         h = x + self.attention(x, freqs_complex)
-        nvtx.range_pop()
         
-        nvtx.range_push("FeedForward Sub-Block")
         out = h + self.moe_feed_forward(self.ffn_norm(h))
-        nvtx.range_pop()
-        
+
         return out
 
 class Llama3Model(nn.Module):
@@ -175,7 +173,7 @@ class Llama3Model(nn.Module):
         self.sin_embeddings, self.cos_embeddings = precompute_rope_embeddings(params.dim // params.n_heads, params.max_seq_len, params.rope_theta)
         
         self.tok_embeddings = nn.Embedding(params.vocab_size, params.dim, dtype=self.dtype)
-        self.layers = nn.ModuleList([DecoderBlock(params) for _ in range(params.n_layers)])
+        self.layers = nn.ModuleList([DecoderBlock(params, i) for i in range(params.n_layers)])
         self.norm = LigerRMSNorm(params.dim, eps=params.norm_eps)
         self.output = nn.Linear(params.dim, params.vocab_size, bias=False, dtype=self.dtype)
 
