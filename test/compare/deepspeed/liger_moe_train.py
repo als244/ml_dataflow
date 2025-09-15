@@ -23,8 +23,8 @@ torch.set_default_dtype(torch.bfloat16)
 # --- Model & Training Configuration ---
 model_args = ModelArgs(
     dtype=torch.bfloat16,
-    dim=1536, n_layers=16, n_heads=12, n_kv_heads=3, vocab_size=128256,
-    expert_dim=384, num_experts=16, top_k=2, norm_eps=1e-5, max_seq_len=1048576,
+    dim=1536, n_layers=24, n_heads=12, n_kv_heads=4, vocab_size=81920,
+    expert_dim=384, num_experts=256, top_k=16, norm_eps=1e-5, max_seq_len=1048576,
     rope_theta=500000
 )
 
