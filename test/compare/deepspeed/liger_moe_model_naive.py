@@ -137,7 +137,7 @@ class MoEFeedForward(nn.Module):
         
         
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, hidden_states: torch.Tensor):
         nvtx.range_push("MoE") # NVTX Start
 
         batch_size, sequence_length, hidden_dim = hidden_states.shape
