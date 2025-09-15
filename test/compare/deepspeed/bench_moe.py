@@ -165,13 +165,13 @@ def benchmark(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Benchmark MoE Layer FWD+BWD Performance")
-    parser.add_argument('--chunk-tokens', type=int, default=131072, help='Total number of tokens to process per iteration (e.g., batch_size * sequence_length)')
-    parser.add_argument('--model-dim', type=int, default=1536, help='Model hidden dimension (D_model)')
-    parser.add_argument('--expert-dim', type=int, default=768, help='Expert intermediate dimension (D_expert)')
-    parser.add_argument('--num-experts', type=int, default=64, help='Total number of experts')
-    parser.add_argument('--top-k', type=int, default=8, help='Number of experts to route each token to')
-    parser.add_argument('--num-iters', type=int, default=200, help='Number of timed iterations for the benchmark')
-    parser.add_argument('--warmup-iters', type=int, default=20, help='Number of warmup iterations before timing')
+    parser.add_argument('--chunk_tokens', type=int, default=131072, help='Total number of tokens to process per iteration (e.g., batch_size * sequence_length)')
+    parser.add_argument('--model_dim', type=int, default=1536, help='Model hidden dimension (D_model)')
+    parser.add_argument('--expert_dim', type=int, default=768, help='Expert intermediate dimension (D_expert)')
+    parser.add_argument('--num_experts', type=int, default=64, help='Total number of experts')
+    parser.add_argument('--top_k', type=int, default=8, help='Number of experts to route each token to')
+    parser.add_argument('--num_iters', type=int, default=200, help='Number of timed iterations for the benchmark')
+    parser.add_argument('--warmup_iters', type=int, default=20, help='Number of warmup iterations before timing')
     
     args = parser.parse_args()
     benchmark(args)
