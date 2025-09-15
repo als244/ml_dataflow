@@ -7,8 +7,8 @@ from dataclasses import dataclass
 import torch.cuda.nvtx as nvtx # Import NVTX
 
 # Import FlashAttention
-#import flash_attn_interface
-from flash_attn import flash_attn_func
+import flash_attn_interface
+#from flash_attn import flash_attn_func
 
 from torch.utils.checkpoint import checkpoint
 
@@ -29,13 +29,13 @@ class ModelArgs:
     """Configuration for the Llama3 model."""
     dtype: torch.dtype = torch.bfloat16
     dim: int = 1536
-    n_layers: int = 16
+    n_layers: int = 24
     n_heads: int = 12
-    n_kv_heads: int = 3
-    vocab_size: int = 128256
+    n_kv_heads: int = 4
+    vocab_size: int = 81920
     expert_dim: int = 384
-    num_experts: int = 16
-    top_k: int = 2
+    num_experts: int = 256
+    top_k: int = 16
     norm_eps: float = 1e-5
     max_seq_len: int = 1048576
     rope_theta: float = 500000
@@ -103,7 +103,7 @@ class Attention(nn.Module):
         xq = apply_rotary_embeddings(xq, freqs_complex, device=x.device)
         xk = apply_rotary_embeddings(xk, freqs_complex, device=x.device)
         
-        output = flash_attn_func(xq, xk, xv, causal=True)
+        output = flash_attn_interface.flash_attn_func(xq, xk, xv, causal=True)
         
         output = output.view(batch_size, seq_len, -1)
         
@@ -111,94 +111,59 @@ class Attention(nn.Module):
         
         nvtx.range_pop() # NVTX End
         return result
-    
-class ExpertMLP(nn.Module):
-    def __init__(self, args: ModelArgs):
-        super().__init__()
-        self.hidden_size = args.dim
-        self.intermediate_size = args.expert_dim
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = nn.SiLU()
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
 
 class MoEFeedForward(nn.Module):
-    def __init__(self, args: ModelArgs):
+    def __init__(self, args: ModelArgs, layer_id):
         super().__init__()
-        self.num_experts = args.num_experts
+         
+        self.has_saved = False
+        self.layer_id = layer_id
         self.top_k = args.top_k
-        self.norm_topk_prob = True
+        self.router = nn.Linear(args.dim, args.num_experts, bias=False, dtype=args.dtype)
+        self.moe_layer = GLUMLP(input_size=args.dim, hidden_size=args.expert_dim, activation=nn.SiLU(), num_experts=args.num_experts, top_k=args.top_k)
+        
 
-        # gating
-        self.gate = nn.Linear(args.dim, args.num_experts, bias=False)
-        self.experts = nn.ModuleList(
-            [ExpertMLP(args) for _ in range(self.num_experts)]
-        )
+    def forward(self, x: torch.Tensor):
+        nvtx.range_push("MoE") # NVTX Start
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """ """
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-        # router_logits: (batch * sequence_length, n_experts)
-        router_logits = self.gate(hidden_states)
+        batch_size, sequence_length, hidden_dim = x.shape
 
-        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+        x = x.view(-1, hidden_dim)
+        routed_x = self.router(x)
+
+        routing_weights = F.softmax(routed_x, dim=1, dtype=torch.float32)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-        if self.norm_topk_prob:  # only diff with mixtral sparse moe block!
-            routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        # we cast back to the input dtype
-        routing_weights = routing_weights.to(hidden_states.dtype)
 
-        final_hidden_states = torch.zeros(
-            (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
-        )
+        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+        
+        routing_weights = routing_weights.to(x.dtype)
+        
+        final_hidden_states = self.moe_layer(x, routing_weights, selected_experts)
 
-        # One hot encode the selected experts to create an expert mask
-        # this will be used to easily index which expert is going to be sollicitated
-        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
+        final_hidden_states = final_hidden_states.view(batch_size, sequence_length, hidden_dim)
 
-        # Loop over all available experts in the model and perform the computation on each expert
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in expert_hit:
-            expert_layer = self.experts[expert_idx]
-            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
-
-            # Index the correct hidden states and compute the expert hidden state for
-            # the current expert. We need to make sure to multiply the output hidden
-            # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_dim)
-            current_hidden_states = expert_layer(current_state) * routing_weights[top_x, idx, None]
-
-            # However `index_add_` only support torch tensors for indexing so we'll use
-            # the `top_x` tensor here.
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
-        final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return final_hidden_states, router_logits
+        nvtx.range_pop() # NVTX End
+        return final_hidden_states
 
 class DecoderBlock(nn.Module):
-    def __init__(self, args: ModelArgs):
+    def __init__(self, args: ModelArgs, layer_id):
         super().__init__()
         self.dtype = args.dtype
+        self.layer_id = layer_id
         self.attention = Attention(args)
-        self.moe_feed_forward = MoEFeedForward(args)
+        self.moe_feed_forward = MoEFeedForward(args, layer_id)
         self.attention_norm = LigerRMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = LigerRMSNorm(args.dim, eps=args.norm_eps)
 
     def forward(self, x: torch.Tensor, freqs_complex: torch.Tensor):
-        # The main range for this block is pushed in the Llama3Model loop
-        nvtx.range_push("Attention Sub-Block")
-        h = x + self.attention(x, freqs_complex)
-        nvtx.range_pop()
+        # Calculate the attention block output (attention + residual connection)
+        h = x + self.attention(self.attention_norm(x), freqs_complex) # Corrected: Norm before attention
         
-        nvtx.range_push("FeedForward Sub-Block")
+        # Calculate the final output of the block
         out = h + self.moe_feed_forward(self.ffn_norm(h))
-        nvtx.range_pop()
-        
-        return out
+
+        # Return both the final output and the intermediate attention output
+        return out, h
 
 class Llama3Model(nn.Module):
     def __init__(self, params: ModelArgs):
@@ -210,7 +175,7 @@ class Llama3Model(nn.Module):
         self.sin_embeddings, self.cos_embeddings = precompute_rope_embeddings(params.dim // params.n_heads, params.max_seq_len, params.rope_theta)
         
         self.tok_embeddings = nn.Embedding(params.vocab_size, params.dim, dtype=self.dtype)
-        self.layers = nn.ModuleList([DecoderBlock(params) for _ in range(params.n_layers)])
+        self.layers = nn.ModuleList([DecoderBlock(params, i) for i in range(params.n_layers)])
         self.norm = LigerRMSNorm(params.dim, eps=params.norm_eps)
         self.output = nn.Linear(params.dim, params.vocab_size, bias=False, dtype=self.dtype)
 
@@ -220,11 +185,14 @@ class Llama3Model(nn.Module):
 
         self.loss_fn = LigerFusedLinearCrossEntropyLoss()
         
+        # Attribute to store the attention outputs after a forward pass
+        self.attention_outputs = []
        
-
     def forward(self, tokens: torch.Tensor, labels: torch.Tensor):
+        # Clear previous outputs at the start of a new forward pass
+        self.attention_outputs = []
+        
         batch_size, seq_len = tokens.shape
-
         pos_ids = torch.arange(seq_len, dtype=torch.long).unsqueeze(0)
         
         nvtx.range_push("Token Embeddings")
@@ -234,11 +202,15 @@ class Llama3Model(nn.Module):
         self.freqs_complex = self.freqs_complex.to(h.device)
         freqs = self.freqs_complex[:seq_len]
         
-
         nvtx.range_push("Decoder Layers")
         for i, layer in enumerate(self.layers):
-            nvtx.range_push(f"Layer {i}") # Push a specific range for each layer
-            h = checkpoint(layer, h, freqs, use_reentrant=False)
+            nvtx.range_push(f"Layer {i}")
+            # Unpack the two return values from the checkpointed function
+            h, attn_out = checkpoint(layer, h, freqs, use_reentrant=False)
+            
+            # Save the attention output
+            self.attention_outputs.append(attn_out)
+            
             nvtx.range_pop()
         nvtx.range_pop()
             
