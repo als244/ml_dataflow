@@ -3,15 +3,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 import argparse
 
-# Assuming scattermoe is installed. If not, this script will still run
-# with a placeholder class, but performance will not be representative.
+# Assuming scattermoe is installed.
 try:
     from scattermoe.mlp import GLUMLP
 except ImportError:
     print("⚠️ Warning: 'scattermoe' library not found. Using a placeholder for GLUMLP.")
     print("   The script will run, but the benchmark results will NOT be meaningful.")
-    # This is a placeholder to allow the script to be syntactically correct
-    # without the actual scattermoe library. It is not an efficient MoE implementation.
     class GLUMLP(nn.Module):
         def __init__(self, input_size, hidden_size, activation, num_experts, top_k):
             super().__init__()
@@ -38,43 +35,26 @@ except ImportError:
             return output
 
 class MoEFeedForward(nn.Module):
-    """
-    The Mixture of Experts module, simplified to accept a 2D input tensor.
-    """
     def __init__(self, num_experts, model_dim, expert_dim, top_k):
         super().__init__()
-        self.num_experts = num_experts
-        self.top_k = top_k
-        self.model_dim = model_dim
-        self.expert_dim = expert_dim
+        self.num_experts, self.top_k = num_experts, top_k
+        self.model_dim, self.expert_dim = model_dim, expert_dim
         self.router = nn.Linear(model_dim, num_experts, bias=False)
         self.moe_layer = GLUMLP(
-            input_size=model_dim,
-            hidden_size=expert_dim,
-            activation=nn.SiLU(),
-            num_experts=num_experts,
-            top_k=top_k
+            input_size=model_dim, hidden_size=expert_dim,
+            activation=nn.SiLU(), num_experts=num_experts, top_k=top_k
         )
 
     def forward(self, x: torch.Tensor):
-        # The input 'x' is now expected to be 2D: (total_tokens, hidden_dim)
         router_logits = self.router(x)
-
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float32)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-
         routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
         routing_weights = routing_weights.to(x.dtype)
-        
-        # The input and output of the MoE layer are both 2D.
-        final_hidden_states = self.moe_layer(x, routing_weights, selected_experts)
-
-        return final_hidden_states
+        return self.moe_layer(x, routing_weights, selected_experts)
 
 def benchmark(args):
-    """
-    Main function to run the benchmark.
-    """
+    """ Main function to run the benchmark with detailed timing. """
     if not torch.cuda.is_available():
         print("🛑 CUDA is not available. Benchmarking on CPU is not meaningful for TFLOPS.")
         return
@@ -91,22 +71,12 @@ def benchmark(args):
 
     # 1. Initialize Model and Data
     model = MoEFeedForward(
-        num_experts=args.num_experts,
-        model_dim=args.model_dim,
-        expert_dim=args.expert_dim,
-        top_k=args.top_k
+        num_experts=args.num_experts, model_dim=args.model_dim,
+        expert_dim=args.expert_dim, top_k=args.top_k
     ).to(device, dtype=dtype)
     
-    # Create 2D dummy input and target tensors
-    input_tensor = torch.randn(
-        args.chunk_tokens, args.model_dim,
-        device=device, dtype=dtype
-    )
-    target_tensor = torch.randn(
-        args.chunk_tokens, args.model_dim,
-        device=device, dtype=dtype
-    )
-
+    input_tensor = torch.randn(args.chunk_tokens, args.model_dim, device=device, dtype=dtype)
+    target_tensor = torch.randn(args.chunk_tokens, args.model_dim, device=device, dtype=dtype)
     loss_fn = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters())
 
@@ -120,52 +90,79 @@ def benchmark(args):
         optimizer.step()
     torch.cuda.synchronize()
 
-    # 3. Timed Benchmark Phase
+    # 3. Timed Benchmark Phase with Detailed Timing
     print(f"⏱️  Running {args.num_iters} timed iterations...")
-    start_event = torch.cuda.Event(enable_timing=True)
-    end_event = torch.cuda.Event(enable_timing=True)
     
-    start_event.record()
+    # Create CUDA events for precise timing of each section
+    start_event = torch.cuda.Event(enable_timing=True)
+    fwd_end_event = torch.cuda.Event(enable_timing=True)
+    bwd_end_event = torch.cuda.Event(enable_timing=True)
+    iter_end_event = torch.cuda.Event(enable_timing=True)
+
+    total_fwd_time, total_bwd_time, total_iter_time = 0.0, 0.0, 0.0
+
     for _ in range(args.num_iters):
         optimizer.zero_grad(set_to_none=True)
+
+        start_event.record()
+
+        # Forward Pass
         output = model(input_tensor)
         loss = loss_fn(output, target_tensor)
+        fwd_end_event.record()
+
+        # Backward Pass
         loss.backward()
+        bwd_end_event.record()
+
+        # Optimizer Step
         optimizer.step()
-    end_event.record()
-    
-    torch.cuda.synchronize()
+        iter_end_event.record()
+        
+        # Synchronize and accumulate timings
+        torch.cuda.synchronize()
+        total_fwd_time += start_event.elapsed_time(fwd_end_event)
+        total_bwd_time += fwd_end_event.elapsed_time(bwd_end_event)
+        total_iter_time += start_event.elapsed_time(iter_end_event)
 
-    elapsed_time_ms = start_event.elapsed_time(end_event)
-    avg_time_s = (elapsed_time_ms / 1000) / args.num_iters
-    print(f"   Average iteration time: {avg_time_s * 1000:.3f} ms")
+    # Calculate average times in milliseconds
+    avg_fwd_ms = total_fwd_time / args.num_iters
+    avg_bwd_ms = total_bwd_time / args.num_iters
+    avg_iter_ms = total_iter_time / args.num_iters
 
-    # 4. TFLOPS Calculation
+    # 4. TFLOPS Calculation for each phase
     total_tokens = args.chunk_tokens
-    D, E, N, K = (
-        args.model_dim, args.expert_dim, args.num_experts, args.top_k
-    )
+    D, E, N, K = (args.model_dim, args.expert_dim, args.num_experts, args.top_k)
 
+    # Forward FLOPs
     flops_router_fwd = 2 * total_tokens * D * N
-    flops_glu_fwd = (
-        (2 * D * E) +  # Gate projection
-        (2 * D * E) +  # Up projection
-        (2 * E * D)    # Down projection
-    )
+    flops_glu_fwd = (2 * D * E) + (2 * D * E) + (2 * E * D)
     flops_experts_fwd = total_tokens * K * flops_glu_fwd
-    
     total_flops_fwd = flops_router_fwd + flops_experts_fwd
-    total_flops_fwd_bwd = 3 * total_flops_fwd
 
-    tflops = total_flops_fwd_bwd / (avg_time_s * 1e12)
+    # Backward FLOPs are ~2x Forward FLOPs
+    total_flops_bwd = 2 * total_flops_fwd
+    # Overall FLOPs are ~3x Forward FLOPs
+    total_flops_iter = 3 * total_flops_fwd
 
+    # Calculate TFLOPS for each component
+    fwd_tflops = total_flops_fwd / ((avg_fwd_ms / 1000) * 1e12)
+    bwd_tflops = total_flops_bwd / ((avg_bwd_ms / 1000) * 1e12)
+    iter_tflops = total_flops_iter / ((avg_iter_ms / 1000) * 1e12)
+
+    # 5. Print Results
     print("\n--- ⚡ Performance Results ---")
-    print(f"   Achieved TFLOPS: {tflops:.2f}")
-    print("-----------------------------\n")
+    print(f"{'Phase':<15} | {'Time (ms)':>12} | {'TFLOPS':>10}")
+    print(f"-----------------|----------------|-----------")
+    print(f"{'Forward Pass':<15} | {avg_fwd_ms:>12.2f} | {fwd_tflops:>10.2f}")
+    print(f"{'Backward Pass':<15} | {avg_bwd_ms:>12.2f} | {bwd_tflops:>10.2f}")
+    print(f"{'Overall Iter':<15} | {avg_iter_ms:>12.2f} | {iter_tflops:>10.2f}")
+    print("------------------------------------------\n")
 
 def main():
     parser = argparse.ArgumentParser(description="Benchmark MoE Layer FWD+BWD Performance")
-    parser.add_argument('--chunk_tokens', type=int, default=131072, help='Total number of tokens to process per iteration (e.g., batch_size * sequence_length)')
+    # Use hyphens for CLI arguments for consistency
+    parser.add_argument('--chunk_tokens', type=int, default=131072, help='Total number of tokens to process per iteration')
     parser.add_argument('--model_dim', type=int, default=1536, help='Model hidden dimension (D_model)')
     parser.add_argument('--expert_dim', type=int, default=768, help='Expert intermediate dimension (D_expert)')
     parser.add_argument('--num_experts', type=int, default=64, help='Total number of experts')
