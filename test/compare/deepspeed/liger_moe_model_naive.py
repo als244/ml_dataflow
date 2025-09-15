@@ -134,7 +134,8 @@ class MoEFeedForward(nn.Module):
         self.experts = nn.ModuleList(
             [ExpertMLP(args) for _ in range(args.num_experts)]
         )
-        self.norm_topk_prob = True 
+        self.norm_topk_prob = True
+        self.num_experts = args.num_experts
         
 
     def forward(self, hidden_states: torch.Tensor):
