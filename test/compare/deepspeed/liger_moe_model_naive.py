@@ -76,7 +76,7 @@ def apply_rotary_embeddings(x: torch.Tensor, freqs_complex: torch.Tensor, device
     return x_out.type_as(x).to(device)
 
 class Attention(nn.Module):
-    """Multi-Head Attention updated to use FlashAttention."""
+    """Multi-Head Attention updated to use FlashAttention and selective checkpointing."""
     def __init__(self, args: ModelArgs):
         super().__init__()
         self.n_heads = args.n_heads
@@ -88,9 +88,8 @@ class Attention(nn.Module):
         self.wv = nn.Linear(args.dim, args.n_kv_heads * self.head_dim, bias=False, dtype=self.dtype)
         self.wo = nn.Linear(args.n_heads * self.head_dim, args.dim, bias=False, dtype=self.dtype)
 
-    def forward(self, x: torch.Tensor, freqs_complex: torch.Tensor):
-        nvtx.range_push("Attention") # NVTX Start
-        
+    def _prepare_qkv(self, x: torch.Tensor, freqs_complex: torch.Tensor):
+        """Computes and prepares Q, K, V tensors. This is the part we'll recompute."""
         batch_size, seq_len, _ = x.shape
         
         xq, xk, xv = self.wq(x), self.wk(x), self.wv(x)
@@ -98,20 +97,18 @@ class Attention(nn.Module):
         xk = xk.view(batch_size, seq_len, self.n_kv_heads, self.head_dim)
         xv = xv.view(batch_size, seq_len, self.n_kv_heads, self.head_dim)
 
-        #xq, xk = LigerRope(xq, xk, self.cos_vals[:seq_len], self.sin_vals[:seq_len])
-
         xq = apply_rotary_embeddings(xq, freqs_complex, device=x.device)
         xk = apply_rotary_embeddings(xk, freqs_complex, device=x.device)
         
+        return xq, xk, xv
+
+    def forward(self, x: torch.Tensor, freqs_complex: torch.Tensor):
+        """This method is not called directly in the final version but is kept for potential standalone use."""
+        xq, xk, xv = self._prepare_qkv(x, freqs_complex)
         output = flash_attn_interface.flash_attn_func(xq, xk, xv, causal=True)
-        
-        output = output.view(batch_size, seq_len, -1)
-        
-        result = self.wo(output)
-        
-        nvtx.range_pop() # NVTX End
-        return result
-    
+        output = output.view(x.shape[0], x.shape[1], -1)
+        return self.wo(output)
+
 class ExpertMLP(nn.Module):
     def __init__(self, args: ModelArgs):
         super().__init__()
@@ -194,14 +191,40 @@ class DecoderBlock(nn.Module):
         self.ffn_norm = LigerRMSNorm(args.dim, eps=args.norm_eps)
 
     def forward(self, x: torch.Tensor, freqs_complex: torch.Tensor):
-        # Calculate the attention block output (attention + residual connection)
-        h = x + self.attention(self.attention_norm(x), freqs_complex) # Corrected: Norm before attention
         
-        # Calculate the final output of the block
-        out = h + self.moe_feed_forward(self.ffn_norm(h))
+        # --- 1. PRE-ATTENTION (Checkpointed) ---
+        # This part (norm, QKV projections, RoPE) will be recomputed.
+        def _get_qkv(x_inner, freqs_inner):
+            normed_x = self.attention_norm(x_inner)
+            return self.attention._prepare_qkv(normed_x, freqs_inner)
 
-        # Return both the final output and the intermediate attention output
-        return out, h
+        xq, xk, xv = checkpoint(_get_qkv, x, freqs_complex, use_reentrant=False)
+
+        # --- 2. EXPENSIVE ATTENTION (Not Checkpointed) ---
+        # Run FlashAttention normally. Its output is the ONLY activation saved from the attention block.
+        attn_output = flash_attn_interface.flash_attn_func(xq, xk, xv, causal=True)
+        attn_output = attn_output.view(x.shape[0], x.shape[1], -1)
+        
+        # --- 3. POST-ATTENTION (Checkpointed) ---
+        # This part (the 'wo' output projection) will also be recomputed.
+        def _project_output(attn_output_inner):
+            return self.attention.wo(attn_output_inner)
+
+        projected_output = checkpoint(_project_output, attn_output, use_reentrant=False)
+        
+        # Add the residual connection
+        h = x + projected_output
+
+        # --- 4. FFN BLOCK (Fully Checkpointed) ---
+        # The FFN/MoE block is checkpointed in its entirety.
+        def _get_ffn_output(h_inner):
+            return self.moe_feed_forward(self.ffn_norm(h_inner))
+
+        ffn_out = checkpoint(_get_ffn_output, h, use_reentrant=False)
+        
+        out = h + ffn_out
+        
+        return out
 
 class Llama3Model(nn.Module):
     def __init__(self, params: ModelArgs):
@@ -209,8 +232,6 @@ class Llama3Model(nn.Module):
         self.dtype = params.dtype
         self.params = params
         self.vocab_size = params.vocab_size
-
-        self.sin_embeddings, self.cos_embeddings = precompute_rope_embeddings(params.dim // params.n_heads, params.max_seq_len, params.rope_theta)
         
         self.tok_embeddings = nn.Embedding(params.vocab_size, params.dim, dtype=self.dtype)
         self.layers = nn.ModuleList([DecoderBlock(params, i) for i in range(params.n_layers)])
@@ -222,33 +243,20 @@ class Llama3Model(nn.Module):
         )
 
         self.loss_fn = LigerFusedLinearCrossEntropyLoss()
-        
-        # Attribute to store the attention outputs after a forward pass
-        self.attention_outputs = []
        
     def forward(self, tokens: torch.Tensor, labels: torch.Tensor):
-        # Clear previous outputs at the start of a new forward pass
-        self.attention_outputs = []
-        
         batch_size, seq_len = tokens.shape
-        pos_ids = torch.arange(seq_len, dtype=torch.long).unsqueeze(0)
         
         nvtx.range_push("Token Embeddings")
         h = self.tok_embeddings(tokens)
         nvtx.range_pop()
 
-        self.freqs_complex = self.freqs_complex.to(h.device)
-        freqs = self.freqs_complex[:seq_len]
+        freqs = self.freqs_complex[:seq_len].to(h.device)
         
         nvtx.range_push("Decoder Layers")
         for i, layer in enumerate(self.layers):
             nvtx.range_push(f"Layer {i}")
-            # Unpack the two return values from the checkpointed function
-            h, attn_out = checkpoint(layer, h, freqs, use_reentrant=False)
-            
-            # Save the attention output
-            self.attention_outputs.append(attn_out)
-            
+            h = layer(h, freqs) # Call the layer directly
             nvtx.range_pop()
         nvtx.range_pop()
             
