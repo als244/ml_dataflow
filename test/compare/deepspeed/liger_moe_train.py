@@ -106,12 +106,17 @@ def get_dummy_dataset(seq_length=512, total_tokens=2**24):
     return dataset
 
 # --- Initialization ---
-print("Initializing model and DeepSpeed...")
+print("Initializing model...")
+
 model = Llama3Model(model_args)
+
+trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+print(f"Number of trainable parameters: {trainable_params}")
 
 # === CHANGE: Call the new function to get the dataset ===
 dummy_dataset = get_dummy_dataset(seq_length=args.seq_len)
 
+print("Initializing DeepSpeed...")
 # === CHANGE: Pass the dataset to training_data ===
 model_engine, optimizer, training_dataloader, _ = deepspeed.initialize(
     args=args, # Pass the full args object
