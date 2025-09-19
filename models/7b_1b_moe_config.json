@@ -6,6 +6,7 @@
     "head_dtype": "bf16",
     "vocab_size": 50304,
     "model_dim": 2048,
+    "head_dim": 128,
     "n_layers": 16,
     "n_heads": 16,
     "n_kv_heads": 16,
