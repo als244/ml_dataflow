@@ -19,18 +19,18 @@
 	#define TOKEN_IDS_PATH "../data/65536_token_ids_uint32.dat"
 	#define TOKEN_LABELS_PATH "../data/65536_labels_uint32.dat"
 
-	#define DEFAULT_MIN_CHUNK_SIZE 8192
+	#define DEFAULT_MIN_CHUNK_SIZE 32768
 
-	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 1024
+	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 2048
 
-	#define MAX_SEQ_GROUPS_PER_ROUND 100
-	#define MAX_ROUNDS_PER_STEP 100
+	#define MAX_SEQ_GROUPS_PER_ROUND 1024
+	#define MAX_ROUNDS_PER_STEP 1024
 
 	// this (along with num seqs per round) modulates how frequently we will step 
 	// the optimizer...
-	#define TARGET_OPT_OVERHEAD_FRAC 0.02f
+	#define TARGET_OPT_OVERHEAD_FRAC 0.01f
 	// to help determien how many rounds per step
-	#define FLOP_EFFICIENCY_ESTIMATE 0.6f
+	#define FLOP_EFFICIENCY_ESTIMATE 0.5f
 
 	#define PCIE_LINK_EFFICIENCY 0.7f
 
