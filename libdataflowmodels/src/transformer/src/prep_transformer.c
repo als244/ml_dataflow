@@ -43,7 +43,7 @@ static int set_transformer_block_weight_offsets(Transformer_Block_Config * confi
 
 	uint64_t model_dim = (uint64_t) config -> model_dim;
 	uint64_t kv_dim = (uint64_t) config -> kv_dim;
-
+	uint64_t attn_dim = (uint64_t) config -> attn_dim;
 
 	uint64_t w_norm_size;
 
@@ -64,10 +64,10 @@ static int set_transformer_block_weight_offsets(Transformer_Block_Config * confi
 
 	switch (config -> attention_type){
 		case DATAFLOW_EXACT_ATTENTION:
-			w_q_size = model_dim * model_dim * el_size;
+			w_q_size = model_dim * attn_dim * el_size;
 			w_k_size = model_dim * kv_dim * el_size;
 			w_v_size = model_dim * kv_dim * el_size;
-			w_o_size = model_dim * model_dim * el_size;
+			w_o_size = attn_dim * model_dim * el_size;
 			break;
 		default:
 			fprintf(stderr, "Error: cannot set block weight offsets. Attention type of %d is not supported yet...\n", config -> attention_type);
@@ -204,6 +204,7 @@ Transformer_Block * init_transformer_block(int layer_id, DataflowDatatype block_
 	(block -> config).num_q_heads = num_q_heads;
 	(block -> config).num_kv_heads = num_kv_heads;
 	(block -> config).head_dim = head_dim;
+	(block -> config).attn_dim = num_q_heads * head_dim;
 
 	(block -> config).model_dim = num_q_heads * head_dim;
 	(block -> config).kv_dim = num_kv_heads * head_dim;

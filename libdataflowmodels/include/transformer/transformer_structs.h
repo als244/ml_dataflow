@@ -36,14 +36,17 @@ typedef struct transformer_block_config {
 	float eps;
 	int theta;
 
+	int model_dim;
+
 	int num_q_heads;
 	int num_kv_heads;
 	int head_dim;
+	
 
 	// We set these
 	// model_dim = num_q_heads * head_dim
 	// kv_dim = num_kv_heads * head_dim
-	int model_dim;
+	int attn_dim;
 	int kv_dim;
 
 	// if using mlp_type = DATAFLOW_MOE_MLP

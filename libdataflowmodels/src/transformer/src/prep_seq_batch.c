@@ -86,6 +86,7 @@ Transformer_Model_Config * parse_config(char * config_path) {
         "Vocab Size: %d\n"
         "Num Layers: %d\n"
         "Model Dim: %d\n"
+        "Head Dim: %d\n"
         "Num Q Heads: %d\n"
         "Num KV Heads: %d\n"
         "QK Norm Type: %15s\n"
@@ -105,6 +106,7 @@ Transformer_Model_Config * parse_config(char * config_path) {
         &(config->vocab_size),
         &(config->num_layers),
         &(config->model_dim),
+        &(config->head_dim),
         &(config->num_q_heads),
         &(config->num_kv_heads),
         config->qk_norm_type,
@@ -117,10 +119,10 @@ Transformer_Model_Config * parse_config(char * config_path) {
         &(config->rope_theta),
         &(config->rms_norm_epsilon));
 
-    // Check if all 19 items were successfully scanned.
-    if (items_scanned != 19) {
+    // Check if all 20 items were successfully scanned.
+    if (items_scanned != 20) {
         fprintf(stderr, "Error: Configuration string does not match the expected format.\n");
-        fprintf(stderr, "Expected 19 items, but sscanf only matched %d.\n", items_scanned);
+        fprintf(stderr, "Expected 20 items, but sscanf only matched %d.\n", items_scanned);
         free(config_string);
         free(config);
         return NULL; // Return an error code
@@ -184,6 +186,7 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
     size_t dt_size = dataflow_sizeof_element(block_dt);
 
     uint64_t model_dim = (uint64_t) (block_config -> model_dim);
+    uint64_t attn_dim = (uint64_t) (block_config -> attn_dim);
     uint64_t kv_dim = (uint64_t) (block_config -> kv_dim);
     uint64_t ffn_dim = (uint64_t) (block_config -> ffn_dim);
 
@@ -293,7 +296,7 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
     cur_offset = (cur_offset + 255) & ~255UL;
 
     saved_activations_offsets -> x_attn_out = cur_offset;
-    cur_offset += total_tokens * model_dim * dt_size;
+    cur_offset += total_tokens * attn_dim * dt_size;
     
     saved_activations_offsets -> inp_attn_only_cutoff = cur_offset;
 
@@ -304,7 +307,7 @@ void init_seq_batch_saved_activations_offsets(Seq_Batch_Saved_Activations_Offset
     cur_offset = (cur_offset + 255) & ~255UL;
 
     saved_activations_offsets -> x_q = cur_offset;
-    cur_offset += total_tokens * model_dim * dt_size;
+    cur_offset += total_tokens * attn_dim * dt_size;
 
     // Align offset to 256 bytes
     cur_offset = (cur_offset + 255) & ~255UL;
@@ -831,7 +834,7 @@ uint64_t get_seq_batch_activation_workspace_buffer_size(Seq_Batch * seq_batch, T
     uint64_t dtype_size = dataflow_sizeof_element(block_config -> block_dt);
 
     uint64_t activation_workspace_size = 0;
-    activation_workspace_size += total_tokens * (uint64_t) block_config -> model_dim * (uint64_t) dtype_size;
+    activation_workspace_size += total_tokens * (uint64_t) MY_MAX(block_config -> model_dim, block_config -> attn_dim) * (uint64_t) dtype_size;
     activation_workspace_size += total_tokens * (uint64_t) block_config -> ffn_dim * (uint64_t) dtype_size;
 
     MoE_Config * model_moe_config = &(block_config -> moe_config);

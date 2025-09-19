@@ -20,11 +20,11 @@
 	#define TOKEN_LABELS_PATH "../data/65536_labels_uint32.dat"
 
 	#define DEFAULT_MIN_CHUNK_SIZE 8192
-	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 2048
+	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 8192
 
 	// this (along with num seqs per round) modulates how frequently we will step 
 	// the optimizer...
-	#define TARGET_OPT_OVERHEAD_FRAC 0.02f
+	#define TARGET_OPT_OVERHEAD_FRAC 0.01f
 	// to help determien how many rounds per step
 	#define FLOP_EFFICIENCY_ESTIMATE 0.6f
 
@@ -177,7 +177,7 @@
 	}
 	
 
-	uint64_t get_chunk_activations_size(uint64_t chunk_num_tokens, uint64_t model_dim, uint64_t kv_dim, uint64_t num_active_experts, uint64_t expert_dim, DataflowDatatype fwd_dt){
+	uint64_t get_chunk_activations_size(uint64_t chunk_num_tokens, uint64_t model_dim, uint64_t attn_dim, uint64_t kv_dim, uint64_t num_active_experts, uint64_t expert_dim, DataflowDatatype fwd_dt){
 
 		uint64_t chunk_act_els = 0;
 
@@ -185,13 +185,13 @@
 		chunk_act_els += chunk_num_tokens * model_dim;
 
 		// q proj
-		chunk_act_els += chunk_num_tokens * model_dim;
+		chunk_act_els += chunk_num_tokens * attn_dim;
 
 		// k, v projs
 		chunk_act_els += 2 * chunk_num_tokens * kv_dim;
 
 		// attn output
-		chunk_act_els += chunk_num_tokens * model_dim;
+		chunk_act_els += chunk_num_tokens * attn_dim;
 
 		// attn proj
 		chunk_act_els += chunk_num_tokens * model_dim;
@@ -425,9 +425,10 @@
 		int n_layers = model_config -> num_layers;
 		int vocab_size = model_config -> vocab_size;
 		int model_dim = model_config -> model_dim;
+		int head_dim = model_config -> head_dim;
 		int num_q_heads = model_config -> num_q_heads;
-		int head_dim = model_config -> model_dim / num_q_heads;
 		int num_kv_heads = model_config -> num_kv_heads;
+		int attn_dim = num_q_heads * head_dim;
 		int kv_dim = head_dim * num_kv_heads;
 		
 		int expert_dim = model_config -> expert_dim;
@@ -943,7 +944,7 @@
 
 		// DETERMINING DEVICE MEMORY PARTITIONING!
 
-		uint64_t chunk_act_size = get_chunk_activations_size(chunk_size, model_dim, kv_dim, num_total_active_experts, expert_dim, block_dt);
+		uint64_t chunk_act_size = get_chunk_activations_size(chunk_size, model_dim, attn_dim, kv_dim, num_total_active_experts, expert_dim, block_dt);
 
 		//printf("Chunk Act Size: %lu\n", chunk_act_size);
 
@@ -997,7 +998,7 @@
 		
 		
 		uint64_t sticky_dev_recomputed_buffer_size = 2 * chunk_size * (uint64_t) model_dim * block_dt_size;
-		uint64_t sticky_dev_working_grad_act_size = get_chunk_activations_size(chunk_size, model_dim, kv_dim, num_total_active_experts, expert_dim, block_bwd_dt);
+		uint64_t sticky_dev_working_grad_act_size = get_chunk_activations_size(chunk_size, model_dim, attn_dim, kv_dim, num_total_active_experts, expert_dim, block_bwd_dt);
 		
 		uint64_t sticky_act_workspace_size = chunk_size * ((uint64_t) model_dim + (uint64_t) expert_dim) * block_dt_size;
 		// now also incoporate the other sicy buffers...
@@ -1581,7 +1582,7 @@
 				sys_labels[i] = vocab_size - 1;
 			}
 		}
-		
+
 		if (num_tokens_example_seq < seq_len){
 			sys_token_ids = realloc(sys_token_ids, seq_len * sizeof(uint32_t));
 			if (!sys_token_ids){
@@ -1821,6 +1822,7 @@
 				}
 
 				void * cur_host_expert_counts_buffer = cur_host_mem;
+				//void * cur_host_expert_mapping_buffer = cur_host_mem + num_routed_experts * n_layers * sizeof(int);
 
 				ret = populate_seq_batch_metadata_buffer(&dataflow_handle, inbound_stream_id, 
 												seq_batches[chunk_id],
@@ -1839,6 +1841,9 @@
 
 				cur_host_mem += num_routed_experts * n_layers * sizeof(int);
 				used_host_mem += num_routed_experts * n_layers * sizeof(int);
+
+				//cur_host_mem += n_layers * chunk_size * num_active_routed_experts * sizeof(int);
+				//used_host_mem += n_layers * chunk_size * num_active_routed_experts * sizeof(int);
 
 				ret = dataflow_handle.sync_stream(&dataflow_handle, inbound_stream_id);
 				if (ret){
@@ -2257,7 +2262,7 @@
 		int prior_seq_len = 0;
 		int cur_seq_len = 0;
 		for (int i = 0; i < total_dev_acts; i++){
-			min_window_flops += get_chunk_block_flops(chunk_size, prior_seq_len, DEMO_SEQ_LEN, model_dim, kv_dim, is_causal, num_shared_experts, num_routed_experts, num_active_routed_experts, expert_dim);
+			min_window_flops += get_chunk_block_flops(chunk_size, prior_seq_len, DEMO_SEQ_LEN, model_dim, attn_dim, kv_dim, is_causal, num_shared_experts, num_routed_experts, num_active_routed_experts, expert_dim);
 			if (chunk_size + prior_seq_len < DEMO_SEQ_LEN){
 				prior_seq_len += chunk_size;
 			}
@@ -3006,7 +3011,7 @@
 		// seqs per chunk = 1 if seq uses >= 1 chunks, otherwise packing multiple seqs per chunk...
 		int seqs_per_round = num_seq_groups_per_round * num_seqs_per_chunk;
 
-		float per_seq_flops = get_seq_flops(MAX_SEQLEN, vocab_size, model_dim, kv_dim, is_causal, num_shared_experts, num_routed_experts, num_active_routed_experts, expert_dim, n_layers, 
+		float per_seq_flops = get_seq_flops(MAX_SEQLEN, vocab_size, model_dim, attn_dim, kv_dim, is_causal, num_shared_experts, num_routed_experts, num_active_routed_experts, expert_dim, n_layers, 
 											NULL, NULL, NULL, NULL, NULL, NULL);
 
 		float flops_per_round = per_seq_flops * seqs_per_round;
@@ -3061,6 +3066,7 @@
 
 		for (int t = 0; t < num_steps; t++){
 			step_throughput_op_buffers[t].model_dim = model_dim;
+			step_throughput_op_buffers[t].attn_dim = attn_dim;
 			step_throughput_op_buffers[t].kv_dim = kv_dim;
 			step_throughput_op_buffers[t].is_causal = is_causal;
 			step_throughput_op_buffers[t].num_shared_experts = num_shared_experts;

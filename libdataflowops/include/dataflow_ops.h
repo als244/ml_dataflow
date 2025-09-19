@@ -432,6 +432,7 @@ int dataflow_submit_print_round_loss_host(Dataflow_Handle * handle, int stream_i
 typedef struct Step_Throughput_Host_Op_Args{
 	// populated at beginning of training for all steps
 	int model_dim;
+	int attn_dim;
 	int kv_dim;
 	int num_shared_experts;
 	int num_total_routed_experts;

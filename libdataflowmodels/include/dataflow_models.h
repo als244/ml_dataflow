@@ -75,6 +75,7 @@ typedef struct {
     int vocab_size;
     int num_layers;
     int model_dim;
+	int head_dim;
     int num_q_heads;
     int num_kv_heads;
     char qk_norm_type[16];
