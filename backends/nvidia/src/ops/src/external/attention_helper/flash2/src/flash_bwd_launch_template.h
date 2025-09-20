@@ -77,7 +77,7 @@ void run_flash_bwd_seqk_parallel(Flash_bwd_params &params, cudaStream_t stream) 
     const int num_n_block = (params.seqlen_k + Kernel_traits::kBlockN - 1) / Kernel_traits::kBlockN;
     int gridDimx = num_n_block;
     if (params.deterministic) {
-        int num_sm = get_num_sm(get_current_device());
+        int num_sm = params.num_sm;
         gridDimx = (num_sm + params.b * params.h - 1) / (params.b * params.h);
     }
     dim3 grid_n(gridDimx, params.b, params.h);

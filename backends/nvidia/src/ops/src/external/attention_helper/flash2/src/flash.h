@@ -136,6 +136,10 @@ struct Flash_fwd_params : public Qkv_params {
 
     bool unpadded_lse;  // For varlen paths: LSE is in [nheads, total_seqlen_q] format instead of [b, nheads, seqlen_q].
     bool seqlenq_ngroups_swapped;  // q has been transposed from (b, 1, (nheads_kv ngroups), d) to (b, ngroups, nheads_kv, d).
+
+    // MODIFIED! Added this in order to handle green context (using less SMs than device, when deterministic backwards is running
+    // (modified run_flash_bwd_seqk_parallel within flash_bwd_launch_template.h
+    int num_sm;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

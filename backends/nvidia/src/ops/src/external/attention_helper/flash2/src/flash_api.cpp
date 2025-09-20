@@ -395,6 +395,8 @@ extern "C" {
         int model_dim = num_q_heads * head_dim;
         int kv_dim = num_kv_heads * head_dim;
 
+        params.num_sm = num_sm;
+
         params.is_bf16 = false;
 
         DataflowDatatype flash_dt = (DataflowDatatype) flash_dtype_as_int;
