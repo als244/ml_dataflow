@@ -7,7 +7,7 @@ CXX_FLAGS = -std=c++17 -g -fPIC -O3 -Wall
 ## (may be in weird location if python installation of CUDA
 ## within some environment...)
 NVCC = nvcc
-NVCC_FLAGS = -Xcompiler=-fPIC -O3 -std=c++17 --ftemplate-backtrace-limit=0 --use_fast_math --generate-line-info -Xptxas=-v --expt-relaxed-constexpr -DCUTLASS_DEBUG_TRACE_LEVEL=0 -DNDEBUG
+NVCC_FLAGS = -rdc=true -Xcompiler=-fPIC -O3 -std=c++17 --ftemplate-backtrace-limit=0 --use_fast_math --generate-line-info -Xptxas=-v --expt-relaxed-constexpr -DCUTLASS_DEBUG_TRACE_LEVEL=0 -DNDEBUG
 NVCC_FLAGS_SM90 = -DCUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED -DCUTLASS_ENABLE_GDC_FOR_SM90
 NVCC_FLAGS_SM100 = ${NVCC_FLAGS_SM90}
 
@@ -55,6 +55,8 @@ BUILD_CU_KERNEL_OBJS = ${CU_KERNEL_OBJS_SM80} ${CU_KERNEL_OBJS_SM90} ${CU_KERNEL
 FLASH_API_SRC = src/flash_api.cpp
 FLASH_API_OBJ = build/flash_api.o
 
+DEVICE_LINK_OBJ = build/kernels_linked.o
+
 WRAPPER_SHARED_LIB = lib/libflash3.so
 
 
@@ -63,7 +65,14 @@ all: create_dirs ${WRAPPER_SHARED_LIB}
 create_dirs:
 	mkdir -p lib && mkdir -p build && mkdir -p build/instantiations && mkdir -p build/instantiations/sm80 && mkdir -p build/instantiations/sm90 && mkdir -p build/instantiations/sm100
 
-${WRAPPER_SHARED_LIB}: ${BUILD_CU_KERNEL_OBJS} ${FLASH_API_OBJ} 
+
+${DEVICE_LINK_OBJ}: ${BUILD_CU_KERNEL_OBJS}
+	${NVCC} -dlink -Xcompiler=-fPIC $^ -o $@ \
+		-gencode arch=compute_80,code=sm_80 \
+		-gencode arch=compute_90a,code=sm_90a \
+		-gencode arch=compute_100,code=sm_100
+
+${WRAPPER_SHARED_LIB}: ${DEVICE_LINK_OBJ} ${FLASH_API_OBJ} 
 	${CXX} ${CXX_FLAGS} -shared ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
 
 ${FLASH_API_OBJ}: ${FLASH_API_SRC}
@@ -80,7 +89,7 @@ build/instantiations/sm100/%.o: src/instantiations/sm100/%.cu
 
 
 clean:
-	rm -f ${WRAPPER_SHARED_LIB} ${FLASH_API_OBJ}
+	rm -f ${WRAPPER_SHARED_LIB} ${FLASH_API_OBJ} ${DEVICE_LINK_OBJ}
 
 clean_kernels:
 	rm -f ${BUILD_CU_KERNEL_OBJS}
