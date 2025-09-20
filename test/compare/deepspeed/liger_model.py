@@ -183,8 +183,6 @@ class Llama3Model(nn.Module):
         self.dtype = params.dtype
         self.params = params
         self.vocab_size = params.vocab_size
-
-        self.sin_embeddings, self.cos_embeddings = precompute_rope_embeddings(params.dim // params.n_heads, params.max_seq_len, params.rope_theta)
         
         self.tok_embeddings = nn.Embedding(params.vocab_size, params.dim, dtype=self.dtype)
         self.layers = nn.ModuleList([DecoderBlock(params, i) for i in range(params.n_layers)])
@@ -194,26 +192,22 @@ class Llama3Model(nn.Module):
         self.freqs_complex = precompute_theta_pos_frequencies(
             params.dim // params.n_heads, params.max_seq_len, "cpu"
         )
-        
-       
 
+        self.loss_fn = LigerFusedLinearCrossEntropyLoss()
+       
     def forward(self, tokens: torch.Tensor, labels: torch.Tensor):
         batch_size, seq_len = tokens.shape
-
-        pos_ids = torch.arange(seq_len, dtype=torch.long).unsqueeze(0)
         
         nvtx.range_push("Token Embeddings")
         h = self.tok_embeddings(tokens)
         nvtx.range_pop()
 
-        self.freqs_complex = self.freqs_complex.to(h.device)
-        freqs = self.freqs_complex[:seq_len]
+        freqs = self.freqs_complex[:seq_len].to(h.device)
         
-
         nvtx.range_push("Decoder Layers")
         for i, layer in enumerate(self.layers):
-            nvtx.range_push(f"Layer {i}") # Push a specific range for each layer
-            h = layer(h, freqs)
+            nvtx.range_push(f"Layer {i}")
+            h = layer(h, freqs) # Call the layer directly
             nvtx.range_pop()
         nvtx.range_pop()
             
@@ -222,7 +216,7 @@ class Llama3Model(nn.Module):
         nvtx.range_pop()
 
         nvtx.range_push("Output Projection and Cross Entropy Loss")
-        output = LigerFusedLinearCrossEntropyLoss(self.output.weight, h, labels)
+        loss = self.loss_fn(self.output.weight, h.view(-1, self.params.dim), labels.view(-1))
         nvtx.range_pop()
         
-        return output
+        return loss
