@@ -135,9 +135,10 @@ class FeedForward(nn.Module):
         return result
 
 class DecoderBlock(nn.Module):
-    def __init__(self, args: ModelArgs):
+    def __init__(self, args: ModelArgs, layer_id):
         super().__init__()
         self.dtype = args.dtype
+        self.layer_id = layer_id
         self.attention = Attention(args)
         self.feed_forward = FeedForward(args)
         self.attention_norm = LigerRMSNorm(args.dim, eps=args.norm_eps)
