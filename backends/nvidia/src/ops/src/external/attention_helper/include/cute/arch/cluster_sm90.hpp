@@ -31,7 +31,6 @@
 #pragma once
 
 #include <cute/config.hpp>
-#include <cute/numeric/numeric_types.hpp>
 
 // Config
 #if (defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 900) && \

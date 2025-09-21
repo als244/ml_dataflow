@@ -43,7 +43,6 @@
 #include "cutlass/tfloat32.h"
 #include "cutlass/float8.h"
 #include "cutlass/uint128.h"
-#include "cutlass/uint256.h"
 #include "cutlass/exmy_base.h"
 #include "cutlass/float_subbyte.h"
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -87,7 +86,8 @@ template <> struct has_negative_zero<float> : CUTE_STL_NAMESPACE::true_type{};
 template <> struct has_negative_zero<double> : CUTE_STL_NAMESPACE::true_type{};
 template <> struct has_negative_zero<tfloat32_t> : CUTE_STL_NAMESPACE::true_type{};
 
-// Helper variable template 
+
+// Helper variable template
 template <typename T>
 inline constexpr bool has_negative_zero_v = has_negative_zero<T>::value;
 
@@ -109,6 +109,3 @@ struct get_unpacked_element_type {
 }  // namespace cutlass
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-

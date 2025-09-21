@@ -115,7 +115,7 @@ public:
   ///< Policy describing tuning details
   using Policy = Policy_;
 
-  ///< Architecture tag
+  ///< Archtecture tag
   using ArchTag = arch::Sm80;
 
   using SmemIteratorA = SmemIteratorA_;

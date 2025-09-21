@@ -39,10 +39,9 @@
 #include "cutlass/cutlass.h"
 #include "cutlass/trace.h"
 #include <cute/arch/cluster_sm100.hpp> 
-#include "cutlass/arch/synclog.hpp"
 
 #if defined(__CUDACC_RTC__)
-#include CUDA_STD_HEADER(type_traits)
+#include <cuda/std/type_traits>
 #else
 #include <type_traits>
 #include <cstdio>

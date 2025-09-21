@@ -33,15 +33,16 @@
       of boolean predicates.
 */
 #pragma once
-#include "cutlass/cutlass.h"
+
 #if defined(__CUDACC_RTC__)
-#include CUDA_STD_HEADER(cstdint)
+#include <cuda/std/cstdint>
 #else
 #include <cstdint>
 #endif
 
-#include CUDA_STD_HEADER(cassert)
+#include <cuda/std/cassert>
 
+#include "cutlass/cutlass.h"
 #include "cutlass/platform/platform.h"
 
 namespace cutlass {

@@ -74,20 +74,10 @@ struct GroupProblemShape {
 
   CUTLASS_HOST_DEVICE
   bool
-  is_host_problem_shape_available() const {
+  is_host_problem_shape_available() {
     return host_problem_shapes != nullptr;
   }
 };
-
-template <class ProblemShape_, class MaxProblemShape_>
-struct MoEProblemShape {
-  using UnderlyingProblemShape = ProblemShape_;
-  using MaxProblemShape = MaxProblemShape_;
-
-  UnderlyingProblemShape problem_shape;
-  MaxProblemShape max_problem_shape;
-};
-
 
 template <class ProblemShape_>
 class ArrayProblemShape {
@@ -123,21 +113,11 @@ public:
 
   CUTLASS_HOST_DEVICE
   bool
-  is_host_problem_shape_available() const {
+  is_host_problem_shape_available() {
     return true;
   }
 private:
   UnderlyingProblemShape problem_shape_{};
 };
-
-
-namespace detail {
-  
-template<class T>
-struct is_moe_problem_shape : cute::false_type {};
-template<class T, class U>
-struct is_moe_problem_shape<cutlass::gemm::MoEProblemShape<T,U>> : cute::true_type {}; 
-
-}
 
 } // namespace cutlass::gemm 

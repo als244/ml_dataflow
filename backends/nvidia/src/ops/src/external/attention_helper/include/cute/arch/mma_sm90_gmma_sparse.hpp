@@ -34,8 +34,6 @@
 #include <cute/config.hpp>                 // CUTE_HOST_DEVICE
 #include <cute/arch/mma_sm90_gmma.hpp>     // GMMA::Major, etc.
 
-#include "cutlass/arch/synclog.hpp"
-
 namespace cute {
 
 namespace SM90::GMMA::SPARSE {

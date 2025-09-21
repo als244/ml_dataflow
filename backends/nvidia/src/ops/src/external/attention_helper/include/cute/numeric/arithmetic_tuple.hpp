@@ -42,15 +42,22 @@ namespace cute
 {
 
 template <class... T>
-struct ArithmeticTuple : public tuple<T...> {
+struct ArithmeticTuple : tuple<T...>
+{
+  template <class... U>
   CUTE_HOST_DEVICE constexpr
-  ArithmeticTuple() : tuple<T...>() {}
+  ArithmeticTuple(ArithmeticTuple<U...> const& u)
+    : tuple<T...>(static_cast<tuple<U...> const&>(u)) {}
 
+  template <class... U>
   CUTE_HOST_DEVICE constexpr
-  ArithmeticTuple(tuple<T...> const& t) : tuple<T...>(t) {}
+  ArithmeticTuple(tuple<U...> const& u)
+    : tuple<T...>(u) {}
 
+  template <class... U>
   CUTE_HOST_DEVICE constexpr
-  ArithmeticTuple(T const&... t) : tuple<T...>(t...) {}
+  ArithmeticTuple(U const&... u)
+    : tuple<T...>(u...) {}
 };
 
 template <class... T>
@@ -77,8 +84,6 @@ as_arithmetic_tuple(T const& t) {
   } else {
     return t;
   }
-
-  CUTE_GCC_UNREACHABLE;
 }
 
 //
@@ -140,12 +145,12 @@ operator-(ArithmeticTuple<T...> const& t) {
 }
 
 //
-// Special cases for C<0>
+// Special cases
 //
 
 template <auto t, class... U>
 CUTE_HOST_DEVICE constexpr
-ArithmeticTuple<U...>
+ArithmeticTuple<U...> const&
 operator+(C<t>, ArithmeticTuple<U...> const& u) {
   static_assert(t == 0, "Arithmetic tuple op+ error!");
   return u;
@@ -153,7 +158,7 @@ operator+(C<t>, ArithmeticTuple<U...> const& u) {
 
 template <class... T, auto u>
 CUTE_HOST_DEVICE constexpr
-ArithmeticTuple<T...>
+ArithmeticTuple<T...> const&
 operator+(ArithmeticTuple<T...> const& t, C<u>) {
   static_assert(u == 0, "Arithmetic tuple op+ error!");
   return t;
@@ -161,7 +166,7 @@ operator+(ArithmeticTuple<T...> const& t, C<u>) {
 
 template <auto t, class... U>
 CUTE_HOST_DEVICE constexpr
-ArithmeticTuple<U...>
+ArithmeticTuple<U...> const&
 operator-(C<t>, ArithmeticTuple<U...> const& u) {
   static_assert(t == 0, "Arithmetic tuple op- error!");
   return -u;
@@ -169,7 +174,7 @@ operator-(C<t>, ArithmeticTuple<U...> const& u) {
 
 template <class... T, auto u>
 CUTE_HOST_DEVICE constexpr
-ArithmeticTuple<T...>
+ArithmeticTuple<T...> const&
 operator-(ArithmeticTuple<T...> const& t, C<u>) {
   static_assert(u == 0, "Arithmetic tuple op- error!");
   return t;
@@ -205,20 +210,27 @@ struct ArithmeticTupleIterator
   }
 };
 
-template <class... Ts>
+template <class Tuple>
 CUTE_HOST_DEVICE constexpr
 auto
-make_inttuple_iter(Ts const&... ts) {
-  return ArithmeticTupleIterator(as_arithmetic_tuple(ts...));
+make_inttuple_iter(Tuple const& t) {
+  return ArithmeticTupleIterator(as_arithmetic_tuple(t));
+}
+
+template <class T0, class T1, class... Ts>
+CUTE_HOST_DEVICE constexpr
+auto
+make_inttuple_iter(T0 const& t0, T1 const& t1, Ts const&... ts) {
+  return make_inttuple_iter(cute::make_tuple(t0, t1, ts...));
 }
 
 //
 // ArithmeticTuple "basis" elements
-//   A ScaledBasis<T,Ns...> is a (at least) rank-N+1 ArithmeticTuple:
+//   A ScaledBasis<T,N> is a (at least) rank-N+1 ArithmeticTuple:
 //      (_0,_0,...,T,_0,...)
 //   with value T in the Nth mode
 
-template <class T, int... Ns>
+template <class T, int N>
 struct ScaledBasis : private tuple<T>
 {
   CUTE_HOST_DEVICE constexpr
@@ -229,61 +241,40 @@ struct ScaledBasis : private tuple<T>
   CUTE_HOST_DEVICE constexpr
   decltype(auto) value() const { return get<0>(static_cast<tuple<T> const&>(*this)); }
 
-  // Deprecated: Get the first hierarchical mode in this basis.
   CUTE_HOST_DEVICE static constexpr
-  auto mode() { return get<0>(int_sequence<Ns...>{}); }
+  auto mode() { return Int<N>{}; }
 };
-
-// Ensure flat representation
-template <class T, int... Ms, int... Ns>
-struct ScaledBasis<ScaledBasis<T, Ms...>, Ns...> : ScaledBasis<T, Ns..., Ms...> {};
 
 template <class T>
 struct is_scaled_basis : false_type {};
-template <class T, int... Ns>
-struct is_scaled_basis<ScaledBasis<T,Ns...>> : true_type {};
+template <class T, int N>
+struct is_scaled_basis<ScaledBasis<T,N>> : true_type {};
 
-template <class T, int... Ns>
-struct is_integral<ScaledBasis<T,Ns...>> : true_type {};
+template <class T, int N>
+struct is_integral<ScaledBasis<T,N>> : true_type {};
 
-// Shortcuts
-// E<>    := _1
-// E<0>   := (_1,_0,_0,...)
-// E<1>   := (_0,_1,_0,...)
-// E<0,0> := ((_1,_0,_0,...),_0,_0,...)
-// E<0,1> := ((_0,_1,_0,...),_0,_0,...)
-// E<1,0> := (_0,(_1,_0,_0,...),_0,...)
-// E<1,1> := (_0,(_0,_1,_0,...),_0,...)
-template <int... Ns>
-using E = ScaledBasis<Int<1>,Ns...>;
-
-// Apply the Ns... pack to another Tuple
-template <class T, class Tuple>
-CUTE_HOST_DEVICE decltype(auto)
-basis_get(T const&, Tuple&& t)
+// Get the scalar T out of a ScaledBasis
+template <class SB>
+CUTE_HOST_DEVICE constexpr auto
+basis_value(SB const& e)
 {
-  return static_cast<Tuple&&>(t);
-}
-
-template <class T, int... Ns, class Tuple>
-CUTE_HOST_DEVICE decltype(auto)
-basis_get(ScaledBasis<T,Ns...> const&, Tuple&& t)
-{
-  if constexpr (sizeof...(Ns) == 0) {
-    return static_cast<Tuple&&>(t);
+  if constexpr (is_scaled_basis<SB>::value) {
+    return basis_value(e.value());
   } else {
-    return get<Ns...>(static_cast<Tuple&&>(t));
+    return e;
   }
   CUTE_GCC_UNREACHABLE;
 }
 
-template <class T>
+// Apply the N... pack to another Tuple
+template <class SB, class Tuple>
 CUTE_HOST_DEVICE decltype(auto)
-basis_value(T const& e) {
-  if constexpr (is_scaled_basis<T>::value) {
-    return e.value();
+basis_get(SB const& e, Tuple&& t)
+{
+  if constexpr (is_scaled_basis<SB>::value) {
+    return basis_get(e.value(), get<SB::mode()>(static_cast<Tuple&&>(t)));
   } else {
-    return e;
+    return static_cast<Tuple&&>(t);
   }
   CUTE_GCC_UNREACHABLE;
 }
@@ -301,34 +292,65 @@ to_atuple_i(T const& t, seq<I...>) {
 
 // Turn a ScaledBases<T,N> into a rank-N+1 ArithmeticTuple
 //    with N prefix 0s:  (_0,_0,...N...,_0,T)
-template <class T>
+template <class T, int N>
 CUTE_HOST_DEVICE constexpr
 auto
-as_arithmetic_tuple(ScaledBasis<T> const& t) {
-  return t.value();
+as_arithmetic_tuple(ScaledBasis<T,N> const& t) {
+  return detail::to_atuple_i(as_arithmetic_tuple(t.value()), make_seq<N>{});
 }
 
-template <class T, int N, int... Ns>
-CUTE_HOST_DEVICE constexpr
-auto
-as_arithmetic_tuple(ScaledBasis<T,N,Ns...> const& t) {
-  return detail::to_atuple_i(as_arithmetic_tuple(ScaledBasis<T,Ns...>{t.value()}), make_seq<N>{});
-}
+namespace detail {
 
-template <int... Ns, class Shape>
+template <int... Ns>
+struct Basis;
+
+template <>
+struct Basis<> {
+  using type = Int<1>;
+};
+
+template <int N, int... Ns>
+struct Basis<N,Ns...> {
+  using type = ScaledBasis<typename Basis<Ns...>::type, N>;
+};
+
+} // end namespace detail
+
+// Shortcut for writing ScaledBasis<ScaledBasis<ScaledBasis<Int<1>, N0>, N1>, ...>
+// E<>    := _1
+// E<0>   := (_1,_0,_0,...)
+// E<1>   := (_0,_1,_0,...)
+// E<0,0> := ((_1,_0,_0,...),_0,_0,...)
+// E<0,1> := ((_0,_1,_0,...),_0,_0,...)
+// E<1,0> := (_0,(_1,_0,_0,...),_0,...)
+// E<1,1> := (_0,(_0,_1,_0,...),_0,...)
+template <int... N>
+using E = typename detail::Basis<N...>::type;
+
+template <class Shape>
 CUTE_HOST_DEVICE constexpr
 auto
 make_basis_like(Shape const& shape)
 {
-  if constexpr (is_tuple<Shape>::value) {
-    // Generate bases for each mode of shape
-    return transform(tuple_seq<Shape>{}, shape, [](auto I, auto si) {
-      // Generate bases for each si and add an i on end
-      return make_basis_like<Ns...,decltype(I)::value>(si);
-    });
+  if constexpr (is_integral<Shape>::value) {
+    return Int<1>{};
   } else {
-    return E<Ns...>{};
+    // Generate bases for each rank of shape
+    return transform(tuple_seq<Shape>{}, shape, [](auto I, auto si) {
+      // Generate bases for each rank of si and add an i on front
+      using I_type = decltype(I);
+      return transform_leaf(make_basis_like(si), [](auto e) {
+        // MSVC has trouble capturing variables as constexpr,
+        // so that they can be used as template arguments.
+        // This is exactly what the code needs to do with i, unfortunately.
+        // The work-around is to define i inside the inner lambda,
+        // by using just the type from the enclosing scope.
+        constexpr int i = I_type::value;
+        return ScaledBasis<decltype(e), i>{};
+      });
+    });
   }
+
   CUTE_GCC_UNREACHABLE;
 }
 
@@ -336,124 +358,109 @@ make_basis_like(Shape const& shape)
 // Arithmetic
 //
 
-template <class T, int... Ns, class U>
+template <class T, int M, class U>
 CUTE_HOST_DEVICE constexpr
 auto
-safe_div(ScaledBasis<T,Ns...> const& b, U const& u)
+safe_div(ScaledBasis<T,M> const& b, U const& u)
 {
   auto t = safe_div(b.value(), u);
-  return ScaledBasis<decltype(t),Ns...>{t};
+  return ScaledBasis<decltype(t),M>{t};
 }
 
-template <class T, int... Ns, class U>
+template <class T, int M, class U>
 CUTE_HOST_DEVICE constexpr
 auto
-ceil_div(ScaledBasis<T,Ns...> const& b, U const& u)
+ceil_div(ScaledBasis<T,M> const& b, U const& u)
 {
   auto t = ceil_div(b.value(), u);
-  return ScaledBasis<decltype(t),Ns...>{t};
+  return ScaledBasis<decltype(t),M>{t};
 }
 
-template <class T, int... Ns>
+template <class T, int N>
 CUTE_HOST_DEVICE constexpr
 auto
-abs(ScaledBasis<T,Ns...> const& e)
+abs(ScaledBasis<T,N> const& e)
 {
   auto t = abs(e.value());
-  return ScaledBasis<decltype(t),Ns...>{t};
+  return ScaledBasis<decltype(t),N>{t};
 }
 
 // Equality
-template <class T, int... Ns, class U, int... Ms>
+template <class T, int N, class U, int M>
 CUTE_HOST_DEVICE constexpr
 auto
-operator==(ScaledBasis<T,Ns...> const& t, ScaledBasis<U,Ms...> const& u) {
-  if constexpr (sizeof...(Ns) == sizeof...(Ms)) {
-    return bool_constant<((Ns == Ms) && ...)>{} && t.value() == u.value();
-  } else {
-    return false_type{};
-  }
-  CUTE_GCC_UNREACHABLE;
+operator==(ScaledBasis<T,N> const& t, ScaledBasis<U,M> const& u) {
+  return bool_constant<M == N>{} && t.value() == u.value();
 }
 
 // Not equal to anything else
-template <class T, int... Ns, class U>
+template <class T, int N, class U>
 CUTE_HOST_DEVICE constexpr
 false_type
-operator==(ScaledBasis<T,Ns...> const&, U const&) {
+operator==(ScaledBasis<T,N> const&, U const&) {
   return {};
 }
 
-template <class T, class U, int... Ms>
+template <class T, class U, int M>
 CUTE_HOST_DEVICE constexpr
 false_type
-operator==(T const&, ScaledBasis<U,Ms...> const&) {
+operator==(T const&, ScaledBasis<U,M> const&) {
   return {};
 }
 
 // Multiplication
-template <class A, class T, int... Ns>
+template <class A, class T, int N>
 CUTE_HOST_DEVICE constexpr
 auto
-operator*(A const& a, ScaledBasis<T,Ns...> const& e) {
+operator*(A const& a, ScaledBasis<T,N> const& e) {
   auto r = a * e.value();
-  return ScaledBasis<decltype(r),Ns...>{r};
+  return ScaledBasis<decltype(r),N>{r};
 }
 
-template <class T, int... Ns, class B>
+template <class T, int N, class B>
 CUTE_HOST_DEVICE constexpr
 auto
-operator*(ScaledBasis<T,Ns...> const& e, B const& b) {
+operator*(ScaledBasis<T,N> const& e, B const& b) {
   auto r = e.value() * b;
-  return ScaledBasis<decltype(r),Ns...>{r};
+  return ScaledBasis<decltype(r),N>{r};
 }
 
 // Addition
-template <class T, int... Ns, class U, int... Ms>
+template <class T, int N, class U, int M>
 CUTE_HOST_DEVICE constexpr
 auto
-operator+(ScaledBasis<T,Ns...> const& t, ScaledBasis<U,Ms...> const& u) {
+operator+(ScaledBasis<T,N> const& t, ScaledBasis<U,M> const& u) {
   return as_arithmetic_tuple(t) + as_arithmetic_tuple(u);
 }
 
-template <class T, int... Ns, class... U>
+template <class T, int N, class... U>
 CUTE_HOST_DEVICE constexpr
 auto
-operator+(ScaledBasis<T,Ns...> const& t, ArithmeticTuple<U...> const& u) {
+operator+(ScaledBasis<T,N> const& t, ArithmeticTuple<U...> const& u) {
   return as_arithmetic_tuple(t) + u;
 }
 
-template <class... T, class U, int... Ms>
+template <class... T, class U, int M>
 CUTE_HOST_DEVICE constexpr
 auto
-operator+(ArithmeticTuple<T...> const& t, ScaledBasis<U,Ms...> const& u) {
+operator+(ArithmeticTuple<T...> const& t, ScaledBasis<U,M> const& u) {
   return t + as_arithmetic_tuple(u);
 }
 
-template <auto t, class U, int... Ms>
+template <auto t, class U, int M>
 CUTE_HOST_DEVICE constexpr
 auto
-operator+(C<t>, ScaledBasis<U,Ms...> const& u) {
-  if constexpr (sizeof...(Ms) == 0) {
-    return C<t>{} + u.value();
-  } else {
-    static_assert(t == 0, "ScaledBasis op+ error!");
-    return u;
-  }
-  CUTE_GCC_UNREACHABLE;
+operator+(C<t>, ScaledBasis<U,M> const& u) {
+  static_assert(t == 0, "ScaledBasis op+ error!");
+  return u;
 }
 
-template <class T, int... Ns, auto u>
+template <class T, int N, auto u>
 CUTE_HOST_DEVICE constexpr
 auto
-operator+(ScaledBasis<T,Ns...> const& t, C<u>) {
-  if constexpr (sizeof...(Ns) == 0) {
-    return t.value() + C<u>{};
-  } else {
-    static_assert(u == 0, "ScaledBasis op+ error!");
-    return t;
-  }
-  CUTE_GCC_UNREACHABLE;
+operator+(ScaledBasis<T,N> const& t, C<u>) {
+  static_assert(u == 0, "ScaledBasis op+ error!");
+  return t;
 }
 
 //
@@ -466,12 +473,10 @@ CUTE_HOST_DEVICE void print(ArithmeticTupleIterator<ArithTuple> const& iter)
   printf("ArithTuple"); print(iter.coord_);
 }
 
-template <class T, int... Ns>
-CUTE_HOST_DEVICE void print(ScaledBasis<T,Ns...> const& e)
+template <class T, int N>
+CUTE_HOST_DEVICE void print(ScaledBasis<T,N> const& e)
 {
-  print(e.value());
-  // Param pack trick to print in reverse
-  [[maybe_unused]] int dummy; (dummy = ... = (void(printf("@%d", Ns)), 0));
+  print(e.value()); printf("@%d", N);
 }
 
 #if !defined(__CUDACC_RTC__)
@@ -481,13 +486,10 @@ CUTE_HOST std::ostream& operator<<(std::ostream& os, ArithmeticTupleIterator<Ari
   return os << "ArithTuple" << iter.coord_;
 }
 
-template <class T, int... Ns>
-CUTE_HOST std::ostream& operator<<(std::ostream& os, ScaledBasis<T,Ns...> const& e)
+template <class T, int N>
+CUTE_HOST std::ostream& operator<<(std::ostream& os, ScaledBasis<T,N> const& e)
 {
-  os << e.value();
-  // Param pack trick to print in reverse
-  [[maybe_unused]] int dummy; (dummy = ... = (void(os << "@" << Ns),0));
-  return os;
+  return os << e.value() << "@" << N;
 }
 #endif
 

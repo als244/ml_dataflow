@@ -88,7 +88,7 @@ template <
     typename InstructionShape,
     /// Number of stages used in the pipelined mainloop
     int Stages,
-    /// Operation performed by GEMM
+    /// Operation perfomed by GEMM
     typename Operator,
     /// Store the accumulators in row major or column major.  Row major is used
     /// when output layout is interleaved.

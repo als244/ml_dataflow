@@ -70,7 +70,7 @@ namespace detail
       using CDType = typename FragmentCD::value_type;
 
       static_assert(FragmentCD::kElements == FragmentAccumulator::kElements,
-                    "Mismatch in fragment sizes.");
+                    "Mistmatch in fragment sizes.");
 
       for (int i = 0; i < FragmentCD::kElements; ++i)
       {

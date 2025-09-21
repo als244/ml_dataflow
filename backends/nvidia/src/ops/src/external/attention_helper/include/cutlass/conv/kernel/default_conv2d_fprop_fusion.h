@@ -215,7 +215,7 @@ struct DefaultConv2dFpropFusion <
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Defines a kernel for Conv2dFprop specialization for Optimized IteratorAlgorithm and 
+/// Defines a kernel for Conv2dFprop specialization for Optimzed IteratorAlgorithm and 
 /// multistage pipeline.
 template <
   typename ElementA,

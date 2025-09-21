@@ -1083,6 +1083,7 @@ private:
         // output tile. This work will thus be subsumed by the previous stream-K unit.
         --unit_idx;
       }
+
       return unit_idx;
     };
 

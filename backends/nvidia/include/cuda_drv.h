@@ -13,6 +13,7 @@ int cu_initialize_drv();
 int cu_get_device(CUdevice * dev, int device_id);
 	
 int cu_initialize_ctx(CUcontext * ctx, CUdevice dev, unsigned int ctx_flags);
+int cu_initialize_ctx_compute_frac(CUcontext * ctx, CUdevice dev, unsigned int ctx_flags, float compute_frac, int * used_sms, bool to_set_ctx);
 
 // ALL FUNCTIONS BELOW ASSUME APPROPRIATE CONTEXT HAS BEEN SET...
 

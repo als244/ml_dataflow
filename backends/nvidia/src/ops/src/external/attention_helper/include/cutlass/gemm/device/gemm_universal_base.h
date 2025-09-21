@@ -34,13 +34,14 @@
 */
 
 #pragma once
-#include "cutlass/cutlass.h"
+
 #if defined(__CUDACC_RTC__)
-#include CUDA_STD_HEADER(limits)
+#include <cuda/std/limits>
 #else
 #include <limits>
 #endif
 
+#include "cutlass/cutlass.h"
 #include "cutlass/numeric_types.h"
 #include "cutlass/arch/arch.h"
 #include "cutlass/device_kernel.h"

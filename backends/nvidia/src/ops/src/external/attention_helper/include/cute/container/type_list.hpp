@@ -31,7 +31,6 @@
 #pragma once
 
 #include <cute/config.hpp>            // CUTE_HOST_DEVICE, CUTE_STL_NAMESPACE
-#include <cute/util/type_traits.hpp>
 
 namespace cute
 {
@@ -40,35 +39,11 @@ template <class... T>
 struct type_list {};
 
 // get<I> for type_list<T...>
-//   Get an instance of the Ith type in the pack T...
-//   Requires tuple_element_t<I,type_list<T...>> to have std::is_default_constructible
+//   requires tuple_element_t<I,type_list<T...>> to have std::is_default_constructible
 template <size_t I, class... T>
 CUTE_HOST_DEVICE constexpr
 CUTE_STL_NAMESPACE::tuple_element_t<I, type_list<T...>>
-get(type_list<T...> const&) noexcept {
-  return {};
-}
-
-// Find the index of the first true in the pack B...
-template <bool... B>
-struct find_true {
-  CUTE_HOST_DEVICE static constexpr size_t find() {
-    size_t i = 0;
-    (void) ((B ? true : (++i, false)) || ...);
-    return i;
-  }
-  static constexpr size_t value = find();
-};
-
-template <bool... B>
-static constexpr size_t find_true_v = find_true<B...>::value;
-
-// find<X> for type_list<T...>
-//   Finds the first position of type X (as a static integer) in the T... pack
-template <class X, class... T>
-CUTE_HOST_DEVICE constexpr
-CUTE_STL_NAMESPACE::integral_constant<size_t, find_true_v<cute::is_same_v<X,T>...>>
-find(type_list<T...> const&) noexcept {
+get(type_list<T...> const& t) noexcept {
   return {};
 }
 
@@ -77,9 +52,9 @@ find(type_list<T...> const&) noexcept {
 //
 // Specialize tuple-related functionality for cute::type_list
 //
-#include "cutlass/cutlass.h"
+
 #if defined(__CUDACC_RTC__)
-#include CUDA_STD_HEADER(tuple)
+#include <cuda/std/tuple>
 #else
 #include <tuple>
 #endif
@@ -94,8 +69,9 @@ struct tuple_size<cute::type_list<T...>>
 
 template <size_t I, class... T>
 struct tuple_element<I, cute::type_list<T...>>
-    : CUTE_STL_NAMESPACE::tuple_element<I, CUTE_STL_NAMESPACE::tuple<T...>>
-{};
+{
+  using type = typename CUTE_STL_NAMESPACE::tuple_element<I, CUTE_STL_NAMESPACE::tuple<T...>>::type;
+};
 
 } // end namespace std
 
@@ -118,8 +94,9 @@ struct tuple_size<cute::type_list<T...>>
 
 template <size_t I, class... T>
 struct tuple_element<I, cute::type_list<T...>>
-    : CUTE_STL_NAMESPACE::tuple_element<I, CUTE_STL_NAMESPACE::tuple<T...>>
-{};
+{
+  using type = typename CUTE_STL_NAMESPACE::tuple_element<I, CUTE_STL_NAMESPACE::tuple<T...>>::type;
+};
 
 } // end namespace std
 #endif // CUTE_STL_NAMESPACE_IS_CUDA_STD

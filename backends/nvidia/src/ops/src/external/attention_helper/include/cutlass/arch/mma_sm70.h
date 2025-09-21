@@ -32,8 +32,8 @@
     \brief Matrix multiply
 */
 #pragma once
-#include "cutlass/cutlass.h"
-#include CUDA_STD_HEADER(cassert)
+
+#include <cuda/std/cassert>
 
 #include "mma.h"
 #include "cutlass/layout/matrix.h"

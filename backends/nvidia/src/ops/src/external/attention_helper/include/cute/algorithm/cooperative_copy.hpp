@@ -36,6 +36,7 @@
 #include <cute/swizzle.hpp>         // cute::Swizzle
 #include <cute/swizzle_layout.hpp>  // cute::get_nonswizzle_portion
 #include <cute/tensor_impl.hpp>     // cute::Tensor
+#include <cute/tensor_predicate.hpp>
 #include <cute/algorithm/copy.hpp>
 #include <cute/atom/copy_atom.hpp>
 

@@ -436,7 +436,7 @@ public:
   /// Constructs the RankK.
   RankK() { }
 
-  /// Helper to construct a transposed equivalent for the underlying RankK operator
+  /// Helper to construct a transposed equivalent for the underying RankK operator
   static Arguments to_underlying_arguments(Arguments const &args) {
     return args;
   }

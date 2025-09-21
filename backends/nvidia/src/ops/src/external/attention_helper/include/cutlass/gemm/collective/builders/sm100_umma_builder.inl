@@ -184,8 +184,6 @@ struct CollectiveBuilder<
       not cute::is_complex_v<ElementA> && not cute::is_complex_v<ElementB> &&
       // Dense Gemm / PtrArrayDenseGemm
       (
-       (not cute::is_same_v<KernelMixedTmaCpAsyncWarpSpecialized1SmSm100, BuilderScheduleTag>) && 
-       (not cute::is_same_v<KernelWarpSpecialized1SmSm100, BuilderScheduleTag>) && 
        (cute::is_base_of_v<KernelScheduleSm100DenseGemm, BuilderScheduleTag> ||
         cute::is_same_v<KernelScheduleAuto, BuilderScheduleTag>)) &&
       // Alignment check
@@ -266,11 +264,10 @@ struct CollectiveBuilder<
   // Calculate scheduler pipeline stages. Having one more stage than the accumulator allows more latency hiding.
   using StrideA = cutlass::gemm::TagToStrideA_t<GmemLayoutATag>;
   using InternalStrideA  = cute::remove_pointer_t<StrideA>;
+  // Grouped GEMM (where Stride type is Stride*) does not use CLC based scheduler.
+  // SchedulerPipelineStageCount could be set to zero for Grouped GEMM, but we shouldn't define CLC Pipeline's barrier arrays of size zero.
+  static constexpr uint32_t SchedulerPipelineStageCount = 1;
   static constexpr bool IsArrayOfPointersGemm = (cute::is_base_of_v<KernelScheduleSm100PtrArrayDenseGemm, BuilderScheduleTag>);
-  // Grouped GEMM(where Stride type is Stride*) uses specific static tile scheduler.
-  static constexpr bool IsGroupGemm = !cute::is_same_v<StrideA, InternalStrideA>;
-  static constexpr uint32_t SchedulerPipelineStageCount = cute::conditional_return<IsGroupGemm>(8, 2);
-  
   static constexpr uint32_t KernelSmemCarveout = detail::Sm100DenseGemmTmaUmmaCarveout<
       ClusterShape_MNK,
       AccumulatorPipelineStageCount,

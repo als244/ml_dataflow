@@ -95,6 +95,23 @@ public:
   };
 
   struct Arguments {
+
+    Arguments() = default;
+    Arguments(Arguments const&) = default;
+    Arguments(Arguments&&) = default;
+
+    CUTLASS_HOST_DEVICE
+    Arguments&
+    operator=(Arguments const&) {
+      return *this;
+    }
+
+    CUTLASS_HOST_DEVICE
+    Arguments&
+    operator=(Arguments &&) {
+      return *this;
+    }
+
     int max_swizzle_size = 0;
     RasterOrderOptions raster_order = RasterOrderOptions::Heuristic;
   };
@@ -388,7 +405,7 @@ public:
     return make_coord(m_coord, n_coord, _, l_coord);
   }
 
-  CUTLASS_HOST_DEVICE
+  CUTLASS_DEVICE
   static void
   issue_clc_query(PipelineState<Stages> state, uint32_t mbarrier_addr, CLCResponse* clc_response_ptr) {
   #if defined(CUTLASS_ARCH_CLC_ENABLED)
@@ -451,7 +468,7 @@ public:
 
   // Kernel helper function to get next work tile
   template <class TileSchedulerPipeline, class TileSchedulerPipelineState>
-  CUTLASS_HOST_DEVICE
+  CUTLASS_DEVICE
   auto
   fetch_next_work(
     WorkTileInfo work_tile_info,
@@ -610,10 +627,9 @@ public:
     store_query_response(state, make_invalid_response());
   }
 
-  CUTLASS_HOST_DEVICE
+  CUTLASS_DEVICE
   void
   store_query_response(PipelineState<Stages> state, CLCResponse clc_response) {
-    #if defined(__CUDA_ARCH__)
     uint32_t smem_ptr = cute::cast_smem_ptr_to_uint(&clc_response_ptr_[state.index()]);
     asm volatile("st.shared.v4.b32 [%0], {%1, %2, %3, %4};\n"
                   : : "r"(smem_ptr)
@@ -622,7 +638,6 @@ public:
                     , "r"(clc_response.data[2])
                     , "r"(clc_response.data[3]));
     cutlass::arch::fence_view_async_shared();
-    #endif
   }
 
   CUTLASS_DEVICE

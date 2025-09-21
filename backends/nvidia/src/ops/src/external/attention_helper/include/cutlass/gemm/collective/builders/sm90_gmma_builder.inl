@@ -260,9 +260,7 @@ struct CollectiveBuilder<
       GmmaMajorB, ElementBMma, decltype(cute::get<1>(TileShape_MNK{})), decltype(cute::get<2>(TileShape_MNK{}))>());
  
   static constexpr size_t TensorMapStorage = IsArrayOfPointersGemm ? sizeof(cute::TmaDescriptor) * 2 /* for A and B */ : 0;
-  static constexpr size_t SchedulerPipelineStorage = cute::is_pointer_v<TagToStrideA_t<GmemLayoutATag>> ? 
-      sizeof(cutlass::PipelineDetail::PipelineAsyncSharedStorage<8>) : 0;
-  static constexpr int KernelSmemCarveout = static_cast<int>(TensorMapStorage + SchedulerPipelineStorage);
+  static constexpr int KernelSmemCarveout = static_cast<int>(TensorMapStorage);
   static constexpr int Sm90ReducedSmemCapacityBytes = detail::sm90_smem_capacity_bytes - KernelSmemCarveout;
 
   static constexpr int PipelineStages = detail::compute_stage_count_or_override<Sm90ReducedSmemCapacityBytes,
@@ -448,9 +446,7 @@ public:
 
   // Handle mixed dtype array GEMM's size of tensor map storage.
   static constexpr size_t TensorMapStorage = sizeof(cute::TmaDescriptor) * size_t(IsMixedInput) * 4;
-  static constexpr size_t SchedulerPipelineStorage = cute::is_pointer_v<TagToStrideA_t<GmemLayoutATag_>> ? 
-      sizeof(cutlass::PipelineDetail::PipelineAsyncSharedStorage<8>) : 0;
-  static constexpr int KernelSmemCarveout = static_cast<int>(TensorMapStorage + SchedulerPipelineStorage);
+  static constexpr int KernelSmemCarveout = static_cast<int>(TensorMapStorage);
   static constexpr int Sm90ReducedSmemCapacityBytes = detail::sm90_smem_capacity_bytes - KernelSmemCarveout;
 
   static constexpr int PipelineStages = IsMixedInput ?
@@ -574,9 +570,7 @@ struct CollectiveBuilder<
       GmmaMajorB, ElementB, decltype(cute::get<1>(TileShape_MNK{})), decltype(cute::get<2>(TileShape_MNK{}))>());
 
   static constexpr size_t TensorMapStorage = IsArrayOfPointersGemm ? sizeof(cute::TmaDescriptor) * 2 /* for A and B */ : 0;
-  static constexpr size_t SchedulerPipelineStorage = cute::is_pointer_v<TagToStrideA_t<GmemLayoutATag>> ? 
-      sizeof(cutlass::PipelineDetail::PipelineAsyncSharedStorage<8>) : 0;
-  static constexpr int KernelSmemCarveout = static_cast<int>(TensorMapStorage + SchedulerPipelineStorage);
+  static constexpr int KernelSmemCarveout = static_cast<int>(TensorMapStorage);
   static constexpr int Sm90ReducedSmemCapacityBytes = detail::sm90_smem_capacity_bytes - KernelSmemCarveout;
 
   static constexpr int PipelineStages = detail::compute_stage_count_or_override<Sm90ReducedSmemCapacityBytes,
@@ -1043,10 +1037,10 @@ static constexpr bool IsMixedWidthInput = IsDifferentWidth || (IsDifferentWidth 
 // GMMA_TMA_WS_SS (BlockScaled Builders)
 template <
   class ElementA,
-  class GmemLayoutPairA,
+  class GmemLayoutATag,
   int AlignmentA,
   class ElementB,
-  class GmemLayoutPairB,
+  class GmemLayoutBTag,
   int AlignmentB,
   class ElementAccumulator,
   class TileShape_MNK,
@@ -1058,10 +1052,10 @@ struct CollectiveBuilder<
     arch::Sm90,
     arch::OpClassTensorOp,
     ElementA,
-    GmemLayoutPairA,
+    GmemLayoutATag,
     AlignmentA,
     ElementB,
-    GmemLayoutPairB,
+    GmemLayoutBTag,
     AlignmentB,
     ElementAccumulator,
     TileShape_MNK,
@@ -1069,28 +1063,14 @@ struct CollectiveBuilder<
     StageCountType,
     KernelScheduleType,
     cute::enable_if_t<
-      (cute::is_same_v<KernelScheduleType, KernelTmaWarpSpecializedCooperativeFP8Blockwise> or
-       cute::is_same_v<KernelScheduleType, KernelPtrArrayTmaWarpSpecializedCooperativeFP8Blockwise> or
-       cute::is_same_v<KernelScheduleType, KernelTmaWarpSpecializedPingpongFP8Blockwise> or
-       cute::is_same_v<KernelScheduleType, KernelPtrArrayTmaWarpSpecializedPingpongFP8Blockwise>) and
-      not detail::is_use_rmem_A<ElementA, GmemLayoutPairA, ElementB, GmemLayoutPairB>()
+      cute::is_same_v<decltype(KernelScheduleType::ScaleGranularityM), decltype(KernelScheduleType::ScaleGranularityN)> and
+      not detail::is_use_rmem_A<ElementA, GmemLayoutATag, ElementB, GmemLayoutBTag>()
     >
 > {
-  using GmemLayoutATag   = cute::remove_cvref_t<decltype(get<0>(GmemLayoutPairA{}))>;
-  using GmemLayoutSFATag = cute::remove_cvref_t<decltype(get<1>(GmemLayoutPairA{}))>;
-  using GmemLayoutBTag   = cute::remove_cvref_t<decltype(get<0>(GmemLayoutPairB{}))>;
-  using GmemLayoutSFBTag = cute::remove_cvref_t<decltype(get<1>(GmemLayoutPairB{}))>;
 
-  static_assert(cute::depth(cute::remove_pointer_t<GmemLayoutSFATag>{}) == 2 and 
-                cute::depth(cute::remove_pointer_t<GmemLayoutSFBTag>{}) == 2, 
-      "Expect SFA and SFB layout to be depth of two with shape ((SFVecMN, restMN),(SFVecK, restK), L)");
-  static_assert(size<1,0>(cute::remove_pointer_t<GmemLayoutSFATag>{}) == 
-                size<1,0>(cute::remove_pointer_t<GmemLayoutSFBTag>{}), 
-      "SFA and SFB must have equivalent SF vector sizes along K");
-
-  static constexpr auto ScaleGranularityM = size<0,0>(cute::remove_pointer_t<GmemLayoutSFATag>{});
-  static constexpr auto ScaleGranularityN = size<0,0>(cute::remove_pointer_t<GmemLayoutSFBTag>{});
-  static constexpr auto ScaleGranularityK = size<1,0>(cute::remove_pointer_t<GmemLayoutSFATag>{});
+  static constexpr auto ScaleGranularityM_ = KernelScheduleType::ScaleGranularityM;
+  static constexpr auto ScaleGranularityN_ = KernelScheduleType::ScaleGranularityN;
+  static constexpr auto ScalePromotionInterval_ = KernelScheduleType::ScalePromotionInterval;
 
   static_assert(is_static<TileShape_MNK>::value);
   static_assert(is_static<ClusterShape_MNK>::value);
@@ -1105,7 +1085,7 @@ struct CollectiveBuilder<
     cute::is_base_of_v<KernelPtrArrayTmaWarpSpecializedPingpong, KernelScheduleType>);
 
   static constexpr bool IsFP8Input = detail::is_input_fp8<ElementA, ElementB>();
-  static_assert(IsFP8Input, "Warp Specialized gemm with FP8 Blockwise (Software) Scaling is only compatible with FP8 inputs version right now.");
+  static_assert(IsFP8Input, "Warp Specialized gemm with FP8 BlockScaled Accumulator is only compatible with FP8 Blocked Scaled version right now.");
 
   // For fp32 types, map to tf32 MMA value type
   using ElementAMma = cute::conditional_t<cute::is_same_v<ElementA, float>, tfloat32_t, ElementA>;
@@ -1133,11 +1113,10 @@ struct CollectiveBuilder<
       GmmaMajorB, ElementBMma, decltype(cute::get<1>(TileShape_MNK{})), decltype(cute::get<2>(TileShape_MNK{}))>());
 
   static constexpr size_t TensorMapStorage = IsArrayOfPointersGemm ? sizeof(cute::TmaDescriptor) * 2 /* for A and B */ : 0;
-  // Reserve 128B for 8 stages of tile scheduling
-  static constexpr size_t SchedulerPipelineStorage = cute::is_pointer_v<TagToStrideA_t<GmemLayoutATag>> ? 
-      sizeof(cutlass::PipelineDetail::PipelineAsyncSharedStorage<8>) : 0;
-  static constexpr int KernelSmemCarveout = static_cast<int>(TensorMapStorage + SchedulerPipelineStorage);
+  static constexpr int KernelSmemCarveout = static_cast<int>(TensorMapStorage);
 
+  static constexpr int ScaleGranularityM = ScaleGranularityM_ == 0 ? size<0>(TileShape_MNK{}) : ScaleGranularityM_;
+  static constexpr int ScaleGranularityN = ScaleGranularityN_ == 0 ? size<1>(TileShape_MNK{}) : ScaleGranularityN_;
   static constexpr int ScaleMsPerTile = size<0>(TileShape_MNK{}) / ScaleGranularityM;
   static constexpr int ScaleNsPerTile = size<1>(TileShape_MNK{}) / ScaleGranularityN;
   static_assert((size<0>(TileShape_MNK{}) % ScaleGranularityM) == 0, "FP8 scaling granularity must evenly divide tile shape along M.");
@@ -1146,8 +1125,8 @@ struct CollectiveBuilder<
   static constexpr int PipelineStages = detail::compute_stage_count_with_blockwise_scale<detail::sm90_smem_capacity_bytes - KernelSmemCarveout,
       ElementAMma, ElementBMma, ElementBlockScale, TileShape_MNK, ScaleMsPerTile, ScaleNsPerTile>(StageCountType{});
   using DispatchPolicy = cute::conditional_t<IsArrayOfPointersGemm,
-    MainloopSm90ArrayTmaGmmaWarpSpecializedBlockwise<PipelineStages, ClusterShape_MNK, KernelScheduleType>,
-    MainloopSm90TmaGmmaWarpSpecializedBlockwiseFP8<PipelineStages, ClusterShape_MNK, KernelScheduleType>>;
+    MainloopSm90ArrayTmaGmmaWarpSpecializedBlockScaling<PipelineStages, ClusterShape_MNK, KernelScheduleType, ScaleGranularityM_, ScaleGranularityN_, ScalePromotionInterval_>,
+    MainloopSm90TmaGmmaWarpSpecializedBlockScalingFP8<PipelineStages, ClusterShape_MNK, KernelScheduleType, ScaleGranularityM_, ScaleGranularityN_, ScalePromotionInterval_>>;
 
   using SmemCopyAtomA = void;
   using SmemCopyAtomB = void;
@@ -1156,9 +1135,9 @@ struct CollectiveBuilder<
       DispatchPolicy,
       TileShape_MNK,
       ElementA,
-      cute::tuple<TagToStrideA_t<GmemLayoutATag>, TagToStrideA_t<GmemLayoutSFATag>>,
+      TagToStrideA_t<GmemLayoutATag>,
       ElementB,
-      cute::tuple<TagToStrideB_t<GmemLayoutBTag>, TagToStrideB_t<GmemLayoutSFBTag>>,
+      TagToStrideB_t<GmemLayoutBTag>,
       TiledMma,
       GmemTiledCopyA,
       SmemLayoutAtomA,

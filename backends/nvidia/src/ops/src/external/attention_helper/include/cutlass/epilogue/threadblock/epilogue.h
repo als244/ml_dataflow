@@ -38,9 +38,10 @@
 */
 
 #pragma once
-#include "cutlass/cutlass.h"
-#include CUDA_STD_HEADER(cassert)
 
+#include <cuda/std/cassert>
+
+#include "cutlass/cutlass.h"
 #include "cutlass/numeric_types.h"
 #include "cutlass/array.h"
 #include "cutlass/layout/vector.h"

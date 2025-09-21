@@ -28,7 +28,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
+//
 
+//
 
 #pragma once
 
@@ -43,6 +45,7 @@
 #include "cute/arch/cluster_sm90.hpp"
 #include "cute/atom/mma_atom.hpp"
 #include "cute/algorithm/gemm.hpp"
+#include "cute/tensor_predicate.hpp"
 #include "cute/numeric/arithmetic_tuple.hpp"
 #include "cutlass/trace.h"
 
@@ -63,8 +66,6 @@ template <
   conv::Operator ConvOp,
   int Stages,
   int NumSpatialDims,
-  int SchedulerPipelineStageCount,
-  int AccumulatorPipelineStageCount,
   class ClusterShape,    // Static cluster shape or dynamic (int, int, _1)
   class TileShapeMNKL_,  // (MmaAtomShapeM, MmaAtomShapeN, TileK, optional: TileL)
   class ElementA_,
@@ -74,12 +75,7 @@ template <
   class TileTraitsB_>
 struct CollectiveConv<
     MainloopSm100TmaUmmaWarpSpecializedImplicitGemm<
-      ConvOp,
-      Stages,
-      NumSpatialDims,
-      SchedulerPipelineStageCount,
-      AccumulatorPipelineStageCount,
-      ClusterShape>,
+        ConvOp, Stages, NumSpatialDims, ClusterShape>,
     TileShapeMNKL_,
     ElementA_,
     ElementB_,
@@ -91,12 +87,7 @@ struct CollectiveConv<
   // Type Aliases
   //
   using DispatchPolicy = MainloopSm100TmaUmmaWarpSpecializedImplicitGemm<
-                           ConvOp,
-                           Stages,
-                           NumSpatialDims,
-                           SchedulerPipelineStageCount,
-                           AccumulatorPipelineStageCount,
-                           ClusterShape>;
+      ConvOp, Stages, NumSpatialDims, ClusterShape>;
   using TileShape = decltype(cute::take<0,3>(TileShapeMNKL_{})); // (MmaAtomShapeM, MmaAtomShapeN, TileK)
   using ElementA = ElementA_;
   using ElementB = ElementB_;
@@ -357,12 +348,10 @@ public:
   // Constructor
   //
   CUTLASS_DEVICE
-  CollectiveConv(Params const& params, ClusterShape cluster_shape, uint32_t block_rank_in_cluster)
-    : cluster_shape_(cluster_shape)
-    , block_rank_in_cluster_(block_rank_in_cluster) {
+  CollectiveConv(Params const& params) {
     if constexpr (IsDynamicCluster) {
-      const bool is_fallback_cluster = (cute::size<0>(cluster_shape_) == params.cluster_shape_fallback.x &&
-                                        cute::size<1>(cluster_shape_) == params.cluster_shape_fallback.y);
+      dim3 cs = cute::cluster_shape();
+      const bool is_fallback_cluster = (cs.x == params.cluster_shape_fallback.x && cs.y == params.cluster_shape_fallback.y);
       observed_tma_load_a_ = is_fallback_cluster ? &params.tma_load_a_fallback : &params.tma_load_a;
       observed_tma_load_b_ = is_fallback_cluster ? &params.tma_load_b_fallback : &params.tma_load_b;
     }
@@ -659,14 +648,28 @@ public:
   }
 
   /// Issue Tma Descriptor Prefetch -- ideally from a single thread for best performance
-  CUTLASS_DEVICE void
-  prefetch_tma_descriptors() {
-    cute::prefetch_tma_descriptor(observed_tma_load_a_->get_tma_descriptor());
-    cute::prefetch_tma_descriptor(observed_tma_load_b_->get_tma_descriptor());
+  CUTLASS_DEVICE static void
+  prefetch_tma_descriptors(Params const& mainloop_params) {
+    if constexpr (IsDynamicCluster) {
+      dim3 cs = cute::cluster_shape();
+      const bool is_fallback_cluster = (cs.x == mainloop_params.cluster_shape_fallback.x && cs.y == mainloop_params.cluster_shape_fallback.y);
+      if (is_fallback_cluster) {
+        cute::prefetch_tma_descriptor(mainloop_params.tma_load_a_fallback.get_tma_descriptor());
+        cute::prefetch_tma_descriptor(mainloop_params.tma_load_b_fallback.get_tma_descriptor());
+      }
+      else {
+        cute::prefetch_tma_descriptor(mainloop_params.tma_load_a.get_tma_descriptor());
+        cute::prefetch_tma_descriptor(mainloop_params.tma_load_b.get_tma_descriptor());
+      }
+    }
+    else {
+      cute::prefetch_tma_descriptor(mainloop_params.tma_load_a.get_tma_descriptor());
+      cute::prefetch_tma_descriptor(mainloop_params.tma_load_b.get_tma_descriptor());
+    }
   }
 
   /// Construct A Single Stage's Accumulator Shape
-  CUTLASS_DEVICE static auto
+  CUTLASS_DEVICE auto
   partition_accumulator_shape() {
     auto acc_shape = partition_shape_C(TiledMma{}, take<0,2>(TileShape{}));  // ((MMA_TILE_M,MMA_TILE_N),MMA_M,MMA_N)
 
@@ -791,10 +794,11 @@ public:
     Tensor sA = make_tensor(make_smem_ptr(shared_tensors.smem_A.begin()), SmemLayoutA{});  // (MMA,MMA_M,MMA_K,PIPE)
     Tensor sB = make_tensor(make_smem_ptr(shared_tensors.smem_B.begin()), SmemLayoutB{});  // (MMA,MMA_N,MMA_K,PIPE)
 
-    // Define the CTA-in-cluster Layout and Coord
-    Layout cta_layout_mnk  = make_layout(cluster_shape_);
+    auto cluster_shape = cutlass::detail::select_cluster_shape(ClusterShape{}, cute::cluster_shape());
+    Layout cta_layout_mnk  = make_layout(cluster_shape);
     Layout cta_layout_vmnk = tiled_divide(cta_layout_mnk, make_tile(typename TiledMma::AtomThrID{}));
-    auto cta_coord_vmnk  = cta_layout_vmnk.get_flat_coord(block_rank_in_cluster_);
+    int block_rank_in_cluster = cute::block_rank_in_cluster();
+    auto cta_coord_vmnk  = cta_layout_vmnk.get_flat_coord(block_rank_in_cluster);
 
     // Project the cta_layout for tma_a along the n-modes
     auto [tAgA_mk, tAsA] = tma_partition(*observed_tma_load_a_,
@@ -886,7 +890,7 @@ public:
   }
 
   CUTLASS_DEVICE auto
-  mma_init(TensorStorage& shared_tensors) const {
+  mma_init(TensorStorage& shared_tensors) {
     Tensor sA = make_tensor(make_smem_ptr(shared_tensors.smem_A.data()), SmemLayoutA{});          // (BLK_M,BLK_K,PIPE)
     Tensor sB = make_tensor(make_smem_ptr(shared_tensors.smem_B.data()), SmemLayoutB{});          // (BLK_N,BLK_K,PIPE)
 
@@ -905,9 +909,6 @@ private:
 
   typename Params::TMA_A const* observed_tma_load_a_ = nullptr;
   typename Params::TMA_B const* observed_tma_load_b_ = nullptr;
-
-  ClusterShape cluster_shape_;
-  uint32_t block_rank_in_cluster_;
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
