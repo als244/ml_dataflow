@@ -19,18 +19,21 @@
 	#define TOKEN_IDS_PATH "../data/65536_token_ids_uint32.dat"
 	#define TOKEN_LABELS_PATH "../data/65536_labels_uint32.dat"
 
-	#define DEFAULT_MIN_CHUNK_SIZE 8192
-	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 8192
+	#define DEFAULT_MIN_CHUNK_SIZE 1024
+	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 512
+
+	#define MAX_SEQ_GROUPS_PER_ROUND 1
+	#define MAX_ROUNDS_PER_STEP 1
 
 	// this (along with num seqs per round) modulates how frequently we will step 
 	// the optimizer...
 	#define TARGET_OPT_OVERHEAD_FRAC 0.01f
 	// to help determien how many rounds per step
-	#define FLOP_EFFICIENCY_ESTIMATE 0.6f
+	#define FLOP_EFFICIENCY_ESTIMATE 0.75f
 
-	#define PCIE_LINK_EFFICIENCY 0.75f
+	#define PCIE_LINK_EFFICIENCY 0.55f
 
-	#define NUM_STEPS 10
+	#define NUM_STEPS 5
 
 	// num_chunks = num_chunks_per_seq * num_seq_groups_per_round
 	// num_chunks_per_seq = seqlen / chunk_size
@@ -212,8 +215,8 @@
 
 		int ret;
 
-		if (argc != 5){
-			fprintf(stderr, "Error. Usage: ./transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model dir path>\n");
+		if ((argc != 5) && (argc != 6)){
+			fprintf(stderr, "Error. Usage: ./transformer <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model dir path> [compute_frac]\n");
 			return -1;
 		}
 
@@ -225,6 +228,11 @@
 		int MAX_SEQLEN = DEMO_SEQ_LEN;
 
 		char * MODEL_PATH = argv[4];
+
+		float compute_frac = 1.0f;
+		if (argc == 6){
+			compute_frac = atof(argv[5]);
+		}
 
 		struct stat statbuf;
 
@@ -260,7 +268,7 @@
 		// higher level can create multiple instances of dataflow handles...
 		int ctx_id = 0;
 		//unsigned int ctx_flags = CU_CTX_SCHED_BLOCKING_SYNC | CU_CTX_MAP_HOST;
-		unsigned int ctx_flags = CU_CTX_SCHED_BLOCKING_SYNC;
+		unsigned int ctx_flags = CU_CTX_SCHED_BLOCKING_SYNC | CU_CTX_MAP_HOST;
 
 		int num_streams = 7;
 		int opt_stream_prios[7] = {0, 0, 0, 0, 0, 0, 0};
@@ -277,7 +285,7 @@
 
 		ret = dataflow_init_handle(&dataflow_handle, compute_type, device_id, 
 				ctx_id, ctx_flags, 
-				num_streams, opt_stream_prios, opt_stream_names); 
+				num_streams, opt_stream_prios, opt_stream_names, compute_frac); 
 		
 		if (ret){
 			fprintf(stderr, "Error: failed to init cuda dataflow handle...\n");
@@ -961,7 +969,7 @@
 		}
 		*/
 
-		int num_seq_groups_per_round = MY_MAX(1, round(num_chunks_equal_data_weights / num_chunks_per_seq));
+		int num_seq_groups_per_round = MY_MIN(MAX_SEQ_GROUPS_PER_ROUND, MY_MAX(1, round(num_chunks_equal_data_weights / num_chunks_per_seq)));
 
 		// the old #define still laying around even though auto-cofig'ed
 		int NUM_SEQ_GROUPS_PER_ROUND = num_seq_groups_per_round;
@@ -3024,7 +3032,7 @@
 
 		float per_round_duration_s_est = flops_per_round / (flop_efficiency_estimate * PEAK_BF16_FLOPS);
 
-		int num_rounds_per_step = MY_MAX(1, round(target_duration_per_step_s / per_round_duration_s_est));
+		int num_rounds_per_step = MY_MIN(MAX_ROUNDS_PER_STEP, MY_MAX(1, round(target_duration_per_step_s / per_round_duration_s_est)));
 
 		uint64_t loss_tracker_size = num_steps * num_rounds_per_step * num_chunks * sizeof(float);
 		float * sys_loss_tracker = (float *) cur_host_mem;

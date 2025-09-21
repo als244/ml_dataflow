@@ -53,6 +53,164 @@ int cu_initialize_ctx(CUcontext * ctx, CUdevice dev, unsigned int ctx_flags){
 	return 0;
 }
 
+int cu_initialize_ctx_compute_frac(CUcontext * ctx, CUdevice dev, unsigned int ctx_flags, float compute_frac, int * used_sms, bool to_set_ctx) {
+
+	int ret;
+
+	CUresult result;
+	const char * err;
+
+	int sm_count;
+
+	ret = cu_get_dev_attribute(&sm_count, dev, CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT);
+	if (ret){
+		fprintf(stderr, "Error: failed to get total sm count when setting device info...\n");
+		return -1;
+	}
+
+	if ((compute_frac <= 0.0f) || (compute_frac >= 1.0f)) {
+		*used_sms = sm_count;
+		return cu_initialize_ctx(ctx, dev, ctx_flags);
+	}
+
+
+	int major_arch_num;
+
+	ret = cu_get_dev_attribute(&major_arch_num, dev, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR);
+	if (ret){
+		fprintf(stderr, "Error: failed to get major arch num for cuda device...\n");
+		return -1;
+	}
+
+	int min_count = 1;
+	int multiple_factor = 1;
+	int green_avail = true;
+	// if num_sms > 0 then using green context
+	// 6.X min count is 1
+	// 7.X min count is 2 and must be multiple of 2
+	// 8.X min count is 4 and must be multiple of 2
+	// 9.X min count is 8 and must be multiple of 8
+	switch(major_arch_num){
+		case 6:
+			min_count = 1;
+			multiple_factor = 1;
+			break;
+		case 7:
+			min_count = 2;
+			multiple_factor = 2;
+			break;
+		case 8:
+			min_count = 4;
+			multiple_factor = 2;
+		default:
+			min_count = 8;
+			multiple_factor = 8;
+			break;
+	}
+
+	
+
+	int target_sm_count = (int) ((float) sm_count * compute_frac);
+
+
+	// create green context
+	CUdevResource sm_resource;
+	result = cuDeviceGetDevResource(dev, &sm_resource, CU_DEV_RESOURCE_TYPE_SM);
+	if (result != CUDA_SUCCESS){
+		cuGetErrorString(result, &err);
+	    fprintf(stderr, "Error: Could not get available sms: %s\n", err);
+	    return -1;
+	}
+
+	int cur_sm_cnt = sm_resource.sm.smCount;
+
+	// No need for green context at this point, cant obtain more sms than available
+	if (target_sm_count >= cur_sm_cnt){
+		*used_sms = sm_count;
+		result = cuCtxCreate(ctx, NULL, ctx_flags, dev);
+		if (result != CUDA_SUCCESS){
+			cuGetErrorString(result, &err);
+	    	fprintf(stderr, "Error: Could not create context: %s\n", err);
+	    	return -1;
+		}
+		return 0;
+	}
+
+	// Abide by arch specs
+	if (target_sm_count < min_count){
+		target_sm_count = min_count;
+	}
+	else{
+		int remain = target_sm_count % multiple_factor;
+		target_sm_count = target_sm_count - remain;
+	}
+
+	unsigned int num_groups = cur_sm_cnt / target_sm_count;
+
+
+	CUdevResource * result_sm_resources = malloc(num_groups * sizeof(CUdevResource));
+	if (!result_sm_resources){
+		fprintf(stderr, "Error: malloc failed to alloc container for result sm resources...\n");
+		return -1;
+	}
+
+	// Split SM Resources to Generate Result Resource
+	result = cuDevSmResourceSplitByCount(result_sm_resources, &num_groups, &sm_resource, NULL, 0, target_sm_count);
+	if (result != CUDA_SUCCESS){
+		cuGetErrorString(result, &err);
+	    fprintf(stderr, "Error: Could split sm resources: %s\n", err);
+	    return -1;
+	}
+
+	if (num_groups == 0){
+		fprintf(stderr, "Error: no groups available to split sm resources...\n");
+		return -1;
+	}
+
+	// Generate resource desc
+	CUdevResourceDesc sm_resource_desc;
+	unsigned int nbResources = 1;
+
+	*used_sms = result_sm_resources[0].sm.smCount;
+
+	result = cuDevResourceGenerateDesc(&sm_resource_desc, result_sm_resources, nbResources);
+	if (result != CUDA_SUCCESS){
+		cuGetErrorString(result, &err);
+	    fprintf(stderr, "Error: Could not generate resource desc: %s\n", err);
+	    return -1;
+	}
+
+	// Create green context
+	CUgreenCtx green_ctx;
+	unsigned int green_ctx_flags = CU_GREEN_CTX_DEFAULT_STREAM;
+	result = cuGreenCtxCreate(&green_ctx, sm_resource_desc, dev, green_ctx_flags);
+	if (result != CUDA_SUCCESS){
+		cuGetErrorString(result, &err);
+	    fprintf(stderr, "Error: Could not create green ctx: %s\n", err);
+	    return -1;
+	}
+
+	// Convert from green context to primary
+	result = cuCtxFromGreenCtx(ctx, green_ctx);
+	if (result != CUDA_SUCCESS){
+		cuGetErrorString(result, &err);
+	    fprintf(stderr, "Error: Could not convert from green ctx to primary: %s\n", err);
+	    return -1;
+	}
+
+	if (to_set_ctx){
+		result = cuCtxPushCurrent(*ctx);
+		if (result != CUDA_SUCCESS){
+			cuGetErrorString(result, &err);
+		    fprintf(stderr, "Error: Could not push converted green context after creation: %s\n", err);
+		    return -1;
+		}
+	}
+
+
+	return 0;
+}
+
 
 int cu_get_dev_total_mem(size_t * ret_val, CUdevice dev) {
 

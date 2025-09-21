@@ -8,7 +8,7 @@
 #include "dataflow_utils.h"
 
 // For backends to implement...
-int dataflow_init_handle(Dataflow_Handle * dataflow_handle, ComputeType compute_type, int device_id, int ctx_id, unsigned int ctx_flags, int num_streams, int * opt_stream_prios, char ** opt_stream_names);
+int dataflow_init_handle(Dataflow_Handle * dataflow_handle, ComputeType compute_type, int device_id, int ctx_id, unsigned int ctx_flags, int num_streams, int * opt_stream_prios, char ** opt_stream_names, float compute_frac);
 
 // E.g. returns the datatype size corresponding to the elements within the array
 // not the 64-bits corresponding to pointer iteself

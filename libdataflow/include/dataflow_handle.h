@@ -91,6 +91,8 @@ struct dataflow_handle {
 	
 	// Backend Required Functions...
 
+	int (*get_num_procs)(Dataflow_Handle * dataflow_handle);
+
 	// 0.) OPS Functionality
 
 	// returns number of functions added to op table

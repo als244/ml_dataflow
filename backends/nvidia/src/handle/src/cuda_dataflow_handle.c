@@ -862,10 +862,10 @@ int cuda_set_pcie_info(Dataflow_Handle * dataflow_handle){
 }
 
 
-
 int dataflow_init_handle(Dataflow_Handle * dataflow_handle, ComputeType compute_type, int device_id, 
 								int ctx_id, unsigned int ctx_flags, 
-								int num_streams, int * opt_stream_prios, char ** opt_stream_names) {
+								int num_streams, int * opt_stream_prios, char ** opt_stream_names,
+								float compute_frac) {
 
 	int ret;
 
@@ -918,7 +918,15 @@ int dataflow_init_handle(Dataflow_Handle * dataflow_handle, ComputeType compute_
 		return -1;
 	}
 
-	ret = cu_initialize_ctx(dataflow_handle -> ctx, *((CUdevice *) dataflow_handle -> device_handle), ctx_flags);
+	if ((compute_frac > 0) && (compute_frac < 1.0f)){
+		int used_sms;
+		ret = cu_initialize_ctx_compute_frac(dataflow_handle -> ctx, *((CUdevice *) dataflow_handle -> device_handle), ctx_flags, compute_frac, &used_sms, true);
+		((Cuda_Device_Info *) dataflow_handle -> device_info) -> sm_count = used_sms;
+	}
+	else{
+		ret = cu_initialize_ctx(dataflow_handle -> ctx, *((CUdevice *) dataflow_handle -> device_handle), ctx_flags);
+	}
+
 	if (ret){
 		fprintf(stderr, "Error: unable to initialize cuda context for device %d...\n", device_id);
 		return -1;
@@ -1039,6 +1047,7 @@ int dataflow_init_handle(Dataflow_Handle * dataflow_handle, ComputeType compute_
 
 	// Accessible Device Info
 	// Arch ID
+	dataflow_handle -> get_num_procs = cuda_get_num_procs;
 	dataflow_handle -> hardware_arch_type = cuda_get_hardware_arch_type(dataflow_handle);
 
 	// Ops Functionality

@@ -30,7 +30,7 @@ int dataflow_submit_matmul(Dataflow_Handle * handle, int stream_id,
 	// query handle's number of procs!
 	// for now just setting to 0 (all procs)
 
-	int num_procs = 0;
+	int num_procs = (handle -> get_num_procs)(handle);
 	op_args[0] = &num_procs; 
 
 	op_args[1] = &a_dt;

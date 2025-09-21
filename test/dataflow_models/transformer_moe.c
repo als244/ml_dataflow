@@ -254,8 +254,8 @@
 
 		int ret;
 
-		if (argc != 5){
-			fprintf(stderr, "Error. Usage: ./transformerDemo <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model dir path>\n");
+		if ((argc != 5) && (argc != 6)){
+			fprintf(stderr, "Error. Usage: ./transformeMoE <host_mem_gb> <dev_mem_gb> <seqlen: [num tokens]> <model dir path> [compute_frac]\n");
 			return -1;
 		}
 
@@ -267,6 +267,11 @@
 		int MAX_SEQLEN = DEMO_SEQ_LEN;
 
 		char * MODEL_PATH = argv[4];
+
+		float compute_frac = 1.0f;
+		if (argc == 6){
+			compute_frac = atof(argv[5]);
+		}
 
 		struct stat statbuf;
 
@@ -323,7 +328,7 @@
 
 		ret = dataflow_init_handle(&dataflow_handle, compute_type, device_id, 
 				ctx_id, ctx_flags, 
-				num_streams, opt_stream_prios, opt_stream_names); 
+				num_streams, opt_stream_prios, opt_stream_names, compute_frac); 
 		
 		if (ret){
 			fprintf(stderr, "Error: failed to init cuda dataflow handle...\n");
