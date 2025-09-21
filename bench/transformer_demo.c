@@ -22,8 +22,8 @@
 	#define DEFAULT_MIN_CHUNK_SIZE 8192
 	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 1024
 
-	#define MAX_SEQ_GROUPS_PER_ROUND 1
-	#define MAX_ROUNDS_PER_STEP 1
+	#define MAX_SEQ_GROUPS_PER_ROUND 1024
+	#define MAX_ROUNDS_PER_STEP 1024
 
 	// this (along with num seqs per round) modulates how frequently we will step 
 	// the optimizer...
