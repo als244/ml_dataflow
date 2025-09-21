@@ -52,20 +52,20 @@ namespace cutlass::gemm::kernel::detail {
 // Therefore, we don't how many tiles there will be for the scheduler to hand out.
 // Hence, we have a SM90 style static group scheduler that launches the largest grid possible.
 // If we had access to host-side problem shapes, one could to use it to figure out the grid shape
-// and thereafter use CLC query (which can then be linearized and mapped to an approriate tile coord).
+// and thereafter use CLC query (which can then be linearized and mapped to an appropriate tile coord).
 
-template<class GroupProblemShape>
+template<class GroupProblemShape, int SchedulerPipelineStageCount>
 class PersistentTileSchedulerSm100Group {
 
 public:
-  using UnderlyingScheduler = PersistentTileSchedulerSm90Group<GroupProblemShape>;
-  using UnderlyingProblemShape = typename GroupProblemShape::UnderlyingProblemShape;
-  using Params = PersistentTileSchedulerSm100GroupParams<UnderlyingProblemShape>;
+  using UnderlyingScheduler = PersistentTileSchedulerSm90Group<GroupProblemShape, SchedulerPipelineStageCount>;
+  using Params = PersistentTileSchedulerSm100GroupParams<GroupProblemShape>;
   using WorkTileInfo = typename UnderlyingScheduler::WorkTileInfo;
   using Arguments = typename UnderlyingScheduler::Arguments;
   using RasterOrder = typename Params::RasterOrder;
   using RasterOrderOptions = typename Params::RasterOrderOptions;
-  struct CLCResponse { uint32_t data[4]; };
+
+  using CLCResponse = WorkTileInfo;
   
   static constexpr bool IsDynamicPersistent = UnderlyingScheduler::IsDynamicPersistent;
 
@@ -88,12 +88,9 @@ public:
     static_assert(cute::is_static<TileShape>::value);
 
     auto selected_cluster_shape = cutlass::detail::select_cluster_shape(cluster_shape_mnk, hw_info.cluster_shape);
-    auto cta_shape = cute::conditional_return<not cute::is_static_v<ClusterShape>>(
-        shape_div(tile_shape_mnk, atom_thr_shape_mnk),      // Dynamic Cluster: For 2SM kernels, use CTA tile shape for the underlying scheduler
-        shape_div(tile_shape_mnk, selected_cluster_shape)); // Static Cluster: Blackwell builders expects TileShape to be Cluster's Tile Shape, Hopper doesn't
+    auto cta_shape = shape_div(tile_shape_mnk, atom_thr_shape_mnk); // For 2SM kernels, use CTA tile shape for the underlying scheduler
 
     dim3 problem_blocks = get_tiled_cta_shape_mnl(
-      problem_shapes.groups(),
       problem_shapes,
       hw_info,
       cta_shape, selected_cluster_shape);
@@ -101,9 +98,7 @@ public:
     Params params;
     params.initialize(
       problem_blocks,
-      problem_shapes.groups(),
-      problem_shapes.problem_shapes,
-      problem_shapes.host_problem_shapes,
+      problem_shapes,
       to_gemm_coord(cta_shape),
       to_gemm_coord(selected_cluster_shape),
       hw_info,
@@ -123,18 +118,19 @@ public:
   PersistentTileSchedulerSm100Group() { }
 
   CUTLASS_DEVICE
-  PersistentTileSchedulerSm100Group(CLCResponse* /* clc_response_ptr */, Params const& params)
+  PersistentTileSchedulerSm100Group(CLCResponse* clc_response_ptr, Params const& params)
     : scheduler_params(params),
-      scheduler_sm90(params.params_sm90_) { }
+      scheduler_sm90(params.params_sm90_, clc_response_ptr) { }
 
   CUTLASS_DEVICE
-  PersistentTileSchedulerSm100Group(CLCResponse* /* clc_response_ptr */, Params const& params, dim3 /* block_id_in_cluster */)
+  PersistentTileSchedulerSm100Group(CLCResponse* clc_response_ptr, Params const& params, dim3 /* block_id_in_cluster */)
     : scheduler_params(params),
-      scheduler_sm90(params.params_sm90_) { }
+      scheduler_sm90(params.params_sm90_, clc_response_ptr) { }
 
-  template <class ClusterShape>
+  // Returns the initial work tile info that will be computed over
+  template <typename ClusterShape>
   CUTLASS_DEVICE
-  WorkTileInfo
+  auto
   initial_work_tile_info(ClusterShape cluster_shape) {
     return scheduler_sm90.initial_work_tile_info(cluster_shape);
   }
@@ -142,8 +138,8 @@ public:
   template<class BlockShape, class ClusterShape>
   CUTLASS_HOST_DEVICE static
   dim3
-  get_tiled_cta_shape_mnl(int groups, GroupProblemShape problem_shapes, KernelHardwareInfo hw_info, BlockShape cta_shape, ClusterShape cluster_shape) {
-    return UnderlyingScheduler::get_tiled_cta_shape_mnl(groups, problem_shapes, hw_info, cta_shape, cluster_shape);
+  get_tiled_cta_shape_mnl(GroupProblemShape const &problem_shapes, KernelHardwareInfo hw_info, BlockShape cta_shape, ClusterShape cluster_shape) {
+    return UnderlyingScheduler::get_tiled_cta_shape_mnl(problem_shapes, hw_info, cta_shape, cluster_shape);
   }
 
   // Given the inputs, computes the physical grid we should launch.
@@ -152,13 +148,12 @@ public:
   static dim3
   get_grid_shape(
       Params const& params,
-      GroupProblemShape problem_shapes,
+      GroupProblemShape const& problem_shapes,
       BlockShape cta_shape,
       [[maybe_unused]] AtomThrShape atom_thr_shape,
       ClusterShape cluster_shape,
       KernelHardwareInfo hw_info) {
     dim3 problem_blocks = get_tiled_cta_shape_mnl(
-      problem_shapes.groups(),
       problem_shapes,
       hw_info,
       cta_shape,
@@ -192,6 +187,17 @@ public:
       _,
       work_tile_info.L_idx
     );
+  }
+
+  template <typename CLCPipeline, typename CLCPipelineState>
+  CUTLASS_DEVICE
+  auto
+  advance_to_next_work(
+    CLCPipeline& clc_pipeline,
+    CLCPipelineState clc_pipe_producer_state,
+    uint32_t advance_count = 1) {
+
+    return scheduler_sm90.advance_to_next_work(clc_pipeline, clc_pipe_producer_state, advance_count);
   }
 
   //
@@ -233,6 +239,27 @@ public:
   CUTLASS_DEVICE
   void
   fixup(WorkTileInfo const&, FrgTensorC&, uint32_t, uint32_t, uint32_t = 1) const { }
+
+  template <
+    bool IsComplex,
+    class TiledMma,
+    class AccEngine,
+    class AccLayout,
+    class AccumulatorPipeline,
+    class AccumulatorPipelineState,
+    class CopyOpT2R
+  >
+  CUTLASS_DEVICE
+  AccumulatorPipelineState
+  fixup(
+      TiledMma const& ,
+      WorkTileInfo const&,
+      cute::Tensor<AccEngine, AccLayout>&,
+      AccumulatorPipeline,
+      AccumulatorPipelineState acc_pipe_consumer_state,
+      CopyOpT2R) const {
+    return acc_pipe_consumer_state;
+  }
 
   template <class ProblemShape, class ElementAccumulator>
   static size_t
@@ -282,10 +309,10 @@ public:
   auto
   fetch_next_work(
     WorkTileInfo work_tile_info,
-    [[maybe_unused]] CLCPipeline& clc_pipeline,
-    [[maybe_unused]] CLCPipelineState clc_pipe_consumer_state) {
+    CLCPipeline& clc_pipeline,
+    CLCPipelineState clc_pipe_consumer_state) {
 
-    return scheduler_sm90.fetch_next_work(work_tile_info);
+    return scheduler_sm90.fetch_next_work(work_tile_info, clc_pipeline, clc_pipe_consumer_state);
   }
 
 private:
@@ -300,7 +327,6 @@ private:
   //
   // Storage
   //
-  CLCResponse *clc_response_ptr_ = nullptr;
   Params scheduler_params;
 };
 

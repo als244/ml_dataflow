@@ -30,18 +30,17 @@
  **************************************************************************************************/
 
 #pragma once
-
+#include "cutlass/cutlass.h"
 #if defined(__CUDACC_RTC__)
-#include <cuda/std/cstdint>
+#include CUDA_STD_HEADER(cstdint)
 #else
 #include <cstdint>
 #include <cmath>
 #include <type_traits>
 #endif
 #if !defined(__QNX__)
-#include <cuda/std/utility>
+#include CUDA_STD_HEADER(utility)
 #endif
-#include "cutlass/cutlass.h"
 #include "cutlass/array.h"
 #include "cutlass/uint128.h"
 #include "cutlass/coord.h"
@@ -397,6 +396,20 @@ struct FastDivmod {
   CUTLASS_HOST_DEVICE
   int divide(int dividend) const {
     return div(dividend);
+  }
+
+  /// Computes integer division remainder using precomputed values.
+  CUTLASS_HOST_DEVICE
+  int rem(int dividend) const {
+    int quotient, remainder;
+    fast_divmod(quotient, remainder, dividend);
+    return remainder;
+  }
+
+  /// Alias for `rem`
+  CUTLASS_HOST_DEVICE
+  int remainder(int dividend) const {
+    return rem(dividend);
   }
 
   /// Computes integer division and modulus using precomputed values. This is computationally

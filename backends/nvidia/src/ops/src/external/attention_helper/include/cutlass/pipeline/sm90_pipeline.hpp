@@ -309,13 +309,14 @@ public:
     if (is_initializing_warp) {
       // Barrier FULL and EMPTY init
       uint32_t const producer_arv_cnt = params.num_producers;
-      uint32_t const num_consumer_warpgroups_per_cluster = params.num_consumers / NumThreadsPerWarpGroup;
+      uint32_t const num_consumer_warpgroups_per_cluster = cute::ceil_div(params.num_consumers, static_cast<uint32_t>(NumThreadsPerWarpGroup));
       uint32_t multicast_consumer_arrival_count = params.num_consumers; // If cluster_size is 1
       if (cute::size(cluster_shape) > 1) {
         multicast_consumer_arrival_count = (cute::size<0>(cluster_shape) + cute::size<1>(cluster_shape) - 1) *
               num_consumer_warpgroups_per_cluster;
       }
-
+      CUTLASS_ASSERT(multicast_consumer_arrival_count > 0 && "Multicast consumer arrival count must be non-zero");
+      CUTLASS_ASSERT(producer_arv_cnt > 0 && "Producer arrival count must be non-zero");
       cutlass::arch::detail::initialize_barrier_array_pair_aligned<decltype(storage.full_barrier_), decltype(storage.empty_barrier_), Stages>(
           storage.full_barrier_, storage.empty_barrier_, producer_arv_cnt, multicast_consumer_arrival_count);
     }
@@ -421,7 +422,12 @@ public:
   }
 
   CUTLASS_DEVICE
-  void producer_acquire(PipelineState state, ProducerToken barrier_token = {BarrierStatus::WaitAgain}) {
+  void producer_acquire(PipelineState state) {
+    producer_acquire(state.index(), state.phase());
+  }
+
+  CUTLASS_DEVICE
+  void producer_acquire(PipelineState state, ProducerToken barrier_token) {
     producer_acquire(state.index(), state.phase(), barrier_token);
   }
 
@@ -450,6 +456,11 @@ public:
   CUTLASS_DEVICE
   ProducerBarrierType* producer_get_barrier(PipelineState state) {
     return producer_get_barrier(state.index());
+  }
+
+  CUTLASS_DEVICE
+  void producer_expect_transaction(PipelineState state, uint32_t transaction_bytes) {
+    producer_expect_transaction(state.index(), transaction_bytes);
   }
 
   ////////////////////
@@ -498,6 +509,25 @@ private:
   }
 
   CUTLASS_DEVICE
+  void producer_acquire(uint32_t stage, uint32_t phase) {
+    empty_barrier_ptr_[stage].wait(phase);
+
+    if (params_.is_leader) {
+      full_barrier_ptr_[stage].arrive_and_expect_tx(params_.transaction_bytes);
+    }
+    #ifndef NDEBUG
+    if (params_.role == ThreadCategory::Consumer || params_.role == ThreadCategory::NonParticipant) {
+      asm volatile ("brkpt;\n" ::);
+    }
+
+    // Most likely you have elected more than one leader
+    if (params_.is_leader && (threadIdx.x % 32 != 0)) {
+      asm volatile ("brkpt;\n" ::);
+    }
+    #endif
+  }
+
+  CUTLASS_DEVICE
   void producer_acquire(uint32_t stage, uint32_t phase, ProducerToken barrier_token) {
     detail::pipeline_check_is_producer(params_.role);
     if (barrier_token != BarrierStatus::WaitDone) {
@@ -517,6 +547,14 @@ private:
       asm volatile ("brkpt;\n" ::);
     }
     #endif
+  }
+
+  CUTLASS_DEVICE
+  void producer_expect_transaction(uint32_t stage, uint32_t transaction_bytes) {
+    detail::pipeline_check_is_producer(params_.role);
+    if (params_.is_leader) {
+      full_barrier_ptr_[stage].expect_transaction(transaction_bytes);
+    }
   }
 
   // NOP for TMA based mainloop
@@ -767,6 +805,8 @@ public:
 
     if (is_initializing_warp) {
       // Barrier FULL and EMPTY init
+      CUTLASS_ASSERT(params.producer_arv_count > 0 && "Producer arrival count must be non-zero");
+      CUTLASS_ASSERT(params.consumer_arv_count > 0 && "Consumer arrival count must be non-zero");
       cutlass::arch::detail::initialize_barrier_array_pair_aligned<decltype(full_barrier_ptr), decltype(empty_barrier_ptr), Stages>(
           full_barrier_ptr, empty_barrier_ptr, params.producer_arv_count, params.consumer_arv_count);
     }
@@ -1006,6 +1046,8 @@ public:
     is_initializing_warp = (warp_idx == params.initializing_warp); 
     if (is_initializing_warp) {
       // Barrier FULL and EMPTY init
+      CUTLASS_ASSERT(params.producer_arv_count > 0 && "Producer arrival count must be non-zero");
+      CUTLASS_ASSERT(params.consumer_arv_count > 0 && "Consumer arrival count must be non-zero");
       cutlass::arch::detail::initialize_barrier_array_pair_aligned<decltype(storage.full_barrier_), decltype(storage.empty_barrier_), Stages>(
           storage.full_barrier_, storage.empty_barrier_, params.producer_arv_count, params.consumer_arv_count);
     }
@@ -1262,6 +1304,7 @@ public:
     // Barrier FULL, EMPTY init
     if (warp_idx == params.initializing_warp) {
       int arv_cnt = params.group_size;
+      CUTLASS_ASSERT(arv_cnt > 0 && "Arrive count must be non-zero");
       constexpr int Stages = Depth * Length;
       cutlass::arch::detail::initialize_barrier_array_aligned<decltype(barrier_ptr_), Stages>(
           barrier_ptr_, arv_cnt);
@@ -1270,6 +1313,7 @@ public:
 
     int warp_idx = canonical_warp_idx_sync();
     int lane_predicate = cute::elect_one_sync();
+    CUTLASS_ASSERT(params.group_size > 0 && "Group size must be non-zero");
 
     // Barrier FULL, EMPTY init
     // Init is done only by the one elected thread of the block

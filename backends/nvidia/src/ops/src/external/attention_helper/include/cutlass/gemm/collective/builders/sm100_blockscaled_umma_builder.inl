@@ -120,6 +120,7 @@ struct CollectiveBuilder<
     BuilderScheduleTag,
     cute::enable_if_t<
       // Blockscaled Gemm
+      (not cute::is_same_v<KernelMixedTmaCpAsyncWarpSpecialized1SmBlockScaledSm100, BuilderScheduleTag>) &&
       (cute::is_base_of_v<KernelScheduleBlockScaledGemmSm100, BuilderScheduleTag> ||
        cute::is_same_v<KernelScheduleAuto, BuilderScheduleTag>) 
        &&
@@ -235,9 +236,11 @@ struct CollectiveBuilder<
 
   static constexpr int MMA_N = cute::size<1>(TileShape_MNK{});
   static constexpr uint32_t AccumulatorPipelineStageCount = (MMA_N == 256) ? 1 : 2;
-  // Grouped GEMM (where Stride type is Stride*) does not use CLC based scheduler.
-  static constexpr uint32_t SchedulerPipelineStageCount = 1;
   static constexpr bool IsArrayOfPointersGemm = cute::is_base_of_v<KernelSchedulePtrArrayBlockScaledGemmSm100, BuilderScheduleTag>;
+  // Grouped GEMM(where Stride type is Stride*) uses specific static tile scheduler.  
+  static constexpr bool IsGroupGemm = !cute::is_same_v<StrideA, InternalStrideA>;
+  static constexpr uint32_t SchedulerPipelineStageCount = cute::conditional_return<IsGroupGemm>(8, 2);
+
   static constexpr uint32_t KernelSmemCarveout = detail::Sm100DenseGemmTmaUmmaCarveout<
       ClusterShape_MNK,
       AccumulatorPipelineStageCount,

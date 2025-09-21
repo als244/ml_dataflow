@@ -34,9 +34,6 @@
 
 #pragma once
 
-// CUTLASS WMMA does not support clang at present.
-#if !(defined(__clang__) && defined(__CUDA__))
-
 #if (__CUDACC_VER_MAJOR__ >= 9)
 #if (!defined(__CUDA_ARCH__) || (__CUDA_ARCH__ >= 700))
 #define CUTLASS_ARCH_WMMA_ENABLED
@@ -57,8 +54,6 @@
 #define CUTLASS_ARCH_WMMA_SM75_ENABLED
 #endif
 #endif
-
-#endif //!(defined(__clang__) && defined(__CUDA__))
 
 #if defined(CUTLASS_ARCH_WMMA_ENABLED)
 
@@ -182,7 +177,7 @@ struct WmmaToCutlassDataType<__nv_bfloat16> {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 // WMMA template structure defines nvcuda::wmma::fragments and static assertion chaeks
-// for a specific template paramterized data type (Element[A|B|C]), layout (Layout[A|B|C]), 
+// for a specific template parameterized data type (Element[A|B|C]), layout (Layout[A|B|C]), 
 // and native wmma size (Shape)
 /////////////////////////////////////////////////////////////////////////////////////////////////
 template <  

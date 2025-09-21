@@ -834,6 +834,8 @@ coalesce_x(Layout<Shape,Stride> const& layout)
   } else {
     return detail::bw_coalesce<R-2>(flat_shape, flat_stride, get<R-1>(flat_shape), get<R-1>(flat_stride));
   }
+
+  CUTE_GCC_UNREACHABLE;
 }
 
 // Apply coalesce_x at the terminals of trg_profile
@@ -903,6 +905,8 @@ coalesce(Shape const& shape)
     } else {
       return append(init, a);                     // Can't coalesce, so append
     }
+
+    CUTE_GCC_UNREACHABLE;
   });
 }
 
@@ -1026,7 +1030,7 @@ template <class LShape, class LStride,
           class RShape, class RStride>
 CUTE_HOST_DEVICE constexpr
 auto
-composition_impl(LShape const& lhs_shape, LStride const& lhs_stride,
+composition_impl(LShape const& lhs_shape, [[maybe_unused]] LStride const& lhs_stride,
                  RShape const& rhs_shape, RStride const& rhs_stride)
 {
   if constexpr (is_tuple<RShape>::value) {                 // Right-distributivity of Layout composition for RHS tuple
@@ -1063,7 +1067,7 @@ composition_impl(LShape const& lhs_shape, LStride const& lhs_stride,
                    auto rest_stride   = get<3>(init);
 
                    auto curr_shape  = get<curr_i>(lhs_shape);
-                   auto curr_stride = get<curr_i>(lhs_stride);
+                   [[maybe_unused]] auto curr_stride = get<curr_i>(lhs_stride);
 
                    // Strong divisibility condition -- requires composition to be statically verifiable.
                    //CUTE_STATIC_ASSERT_V(((rest_stride % curr_shape) == Int<0>{}) or (rest_stride < curr_shape), "Stride Divisibility Condition");
@@ -1105,6 +1109,8 @@ composition_impl(LShape const& lhs_shape, LStride const& lhs_stride,
                                              rest_shape / new_shape,
                                              next_stride);
                    }
+
+                   CUTE_GCC_UNREACHABLE;
                  });
 
     if constexpr (tuple_size<decltype(result_shape)>::value == 0) {
@@ -1289,6 +1295,8 @@ right_inverse(Layout<Shape,Stride> const& layout)
       } else {
         return init;
       }
+
+      CUTE_GCC_UNREACHABLE;
     });
 
   return coalesce(make_layout(result_shape, result_stride));
@@ -1344,9 +1352,11 @@ left_inverse(Layout<Shape,Stride> const& layout)
         return make_tuple(append(result_shape,  istride / size(result_shape)),
                           append(result_stride, get<i>(preprod_shape)));
       }
+
+      CUTE_GCC_UNREACHABLE;
     });
 
-  return coalesce(make_layout(append(result_shape, get<back(sorted_seq)>(lshape)),
+  return coalesce(make_layout(append(result_shape, get<decltype(back(sorted_seq))::value>(lshape)),
                               result_stride));
 }
 
@@ -1464,49 +1474,33 @@ domain_distribute(ShapeA const& a, ShapeB const& b)
 // Kernel (Nullspace) of a Layout
 //
 
-namespace detail {
-
-template <int NextI, class Stride, int... Is>
-CUTE_HOST_DEVICE constexpr
-auto
-nullspace_seq(Stride const& stride, seq<Is...>)
-{
-  if constexpr (NextI == rank_v<Stride>) {
-    return seq<Is...>{};
-  } else
-  if constexpr (is_constant<0, decltype(get<NextI>(stride))>::value) {
-    return detail::nullspace_seq<NextI+1>(stride, seq<Is..., NextI>{});
-  } else {
-    return detail::nullspace_seq<NextI+1>(stride, seq<Is...>{});
-  }
-
-  CUTE_GCC_UNREACHABLE;
-}
-
-} // end namespace detail
-
-//
-// Build the nullspace of a layout
-// @result A layout @a result such that
-//    size(@a result) == size(@a layout) / size(filter(@a layout))
-//    @a layout(@a result(i)) == 0 for all i < size(@a result)
-//
-
+/** Return a layout that represents the nullspace of @a layout
+ * @post @a layout(@a result(i)) == 0 for all i < size(@a result)
+ * @post nullspace(@a result) == Layout<_1,_0>{}
+ * @post size(@a result) == size(@a layout) / size(filter(@a layout))
+ */
 template <class Shape, class Stride>
 CUTE_HOST_DEVICE constexpr
 auto
 nullspace(Layout<Shape,Stride> const& layout)
 {
-  auto flat_layout = flatten(layout);
+  [[maybe_unused]] auto flat_stride = flatten(layout.stride());
 
-  auto iseq = detail::nullspace_seq<0>(flat_layout.stride(), seq<>{});
+  // Select all indices corresponding to stride-0s
+  auto iseq = cute::fold(make_seq<rank_v<decltype(flat_stride)>>{}, cute::tuple<>{},
+                         [&](auto init, auto i){
+                           if constexpr (is_constant_v<0, decltype(get<i>(flat_stride))>) { return append(init, i); }
+                           else                                                           { return init;            }
+                           CUTE_GCC_UNREACHABLE;
+                         });
 
-  if constexpr (iseq.size() == 0) {
+  if constexpr (tuple_size<decltype(iseq)>::value == 0) {
     return Layout<_1,_0>{};     // Empty case, nothing found
   } else {
     // Generate the corresponding new strides and construct
-    auto rstride = compact_major<LayoutLeft>(flat_layout.shape());
-    return make_layout(unwrap(transform(iseq, [&](auto i) { return shape<i>(flat_layout); })),
+    auto flat_shape = flatten(layout.shape());
+    auto rstride = compact_major<LayoutLeft>(flat_shape);
+    return make_layout(unwrap(transform(iseq, [&](auto i) { return get<i>(flat_shape); })),
                        unwrap(transform(iseq, [&](auto i) { return get<i>(rstride); })));
   }
 
@@ -1933,186 +1927,5 @@ CUTE_HOST std::ostream& operator<<(std::ostream& os, Layout<Shape,Stride> const&
   return os << shape(layout) << ":" << stride(layout);
 }
 #endif
-
-// Generic 2D Layout to console table
-template <class Layout>
-CUTE_HOST_DEVICE
-void
-print_layout(Layout const& layout)  // (m,n) -> idx
-{
-  CUTE_STATIC_ASSERT_V(rank(layout) == Int<2>{});
-
-  int idx_width = num_digits(cosize(layout)) + 2;
-  const char* delim = "+-----------------------";
-
-  print(layout); print("\n");
-
-  // Column indices
-  print("    ");
-  for (int n = 0; n < size<1>(layout); ++n) { printf("  %*d ", idx_width-2, n); }
-  printf("\n");
-
-  // Print out A m-by-n
-  for (int m = 0; m < size<0>(layout); ++m) {
-    // Header
-    print("    ");
-    for (int n = 0; n < size<1>(layout); ++n) { printf("%.*s", idx_width+1, delim); }
-    printf("+\n");
-    // Values
-    printf("%2d  ", m);  // Row indices
-    for (int n = 0; n < size<1>(layout); ++n) { printf("| %*d ", idx_width-2, int(layout(m,n))); }
-    printf("|\n");
-  }
-  // Footer
-  print("    ");
-  for (int n = 0; n < size<1>(layout); ++n) { printf("%.*s", idx_width+1, delim); }
-  printf("+\n");
-}
-
-// Generic ThrVal 2D Layout to console table
-template <class Layout, class ThrID>
-CUTE_HOST_DEVICE
-void
-print_layout(Layout const& layout, ThrID const& thrid)  // (m,n) -> (tid,vid)  and  tid -> thr_idx
-{
-  CUTE_STATIC_ASSERT_V(rank(layout) == Int<2>{});
-
-  print(layout); print("\n");
-  print(thrid);  print("\n");
-
-  // Print out m-by-n
-  for (int m = 0; m < size<0>(layout); ++m) {
-    // Header
-    for (int n = 0; n < size<1>(layout); ++n) printf("+------");
-    printf("+\n");
-    // Values
-    for (int n = 0; n < size<1>(layout); ++n) printf("|%03d-%02d", int(thrid(layout(m,n) % size(thrid))), int(layout(m,n) / size(thrid)));
-    printf("|\n");
-  }
-  // Footer
-  for (int n = 0; n < size<1>(layout); ++n) printf("+------");
-  printf("+\n");
-}
-
-struct TikzColor_White {
-  CUTE_HOST_DEVICE char const*
-  operator()(int idx) const {
-    return "white";
-  }
-};
-
-struct TikzColor_BWx8 {
-  CUTE_HOST_DEVICE char const*
-  operator()(int idx) const {
-    static char const* color_map[8] = {"black!00", "black!40", "black!20", "black!60",
-                                       "black!10", "black!50", "black!30", "black!70"};
-    return color_map[idx % 8];
-  }
-};
-
-struct TikzColor_TV {
-  CUTE_HOST_DEVICE char const*
-  operator()(int tid, int vid) const {
-    static char const* color_map[8] = {"{rgb,255:red,175;green,175;blue,255}",
-                                       "{rgb,255:red,175;green,255;blue,175}",
-                                       "{rgb,255:red,255;green,255;blue,175}",
-                                       "{rgb,255:red,255;green,175;blue,175}",
-                                       "{rgb,255:red,210;green,210;blue,255}",
-                                       "{rgb,255:red,210;green,255;blue,210}",
-                                       "{rgb,255:red,255;green,255;blue,210}",
-                                       "{rgb,255:red,255;green,210;blue,210}"};
-    return color_map[tid % 8];
-  }
-};
-
-// Generic 2D Layout to LaTeX printer
-template <class LayoutA, class TikzColorFn = TikzColor_BWx8>
-CUTE_HOST_DEVICE
-void
-print_latex(LayoutA const& layout_a,   // (m,n) -> idx
-            TikzColorFn color = {})    // lambda(idx) -> tikz color string
-{
-  CUTE_STATIC_ASSERT_V(rank(layout_a) <= Int<2>{});
-  auto layout = append<2>(layout_a, Layout<_1,_0>{});
-
-  // Commented print(layout)
-  printf("%% Layout: "); print(layout); printf("\n");
-  // Header
-  printf("\\documentclass[convert]{standalone}\n"
-         "\\usepackage{tikz}\n\n"
-         "\\begin{document}\n"
-         "\\begin{tikzpicture}[x={(0cm,-1cm)},y={(1cm,0cm)},every node/.style={minimum size=1cm, outer sep=0pt}]\n\n");
-
-  // Layout
-  for (int i = 0; i < size<0>(layout); ++i) {
-    for (int j = 0; j < size<1>(layout); ++j) {
-      int idx = layout(i,j);
-      printf("\\node[fill=%s] at (%d,%d) {%d};\n",
-             color(idx), i, j, idx);
-    }
-  }
-  // Grid
-  printf("\\draw[color=black,thick,shift={(-0.5,-0.5)}] (0,0) grid (%d,%d);\n\n",
-         int(size<0>(layout)), int(size<1>(layout)));
-  // Labels
-  for (int i =  0, j = -1; i < size<0>(layout); ++i) {
-    printf("\\node at (%d,%d) {\\Large{\\texttt{%d}}};\n", i, j, i);
-  }
-  for (int i = -1, j =  0; j < size<1>(layout); ++j) {
-    printf("\\node at (%d,%d) {\\Large{\\texttt{%d}}};\n", i, j, j);
-  }
-
-  // Footer
-  printf("\\end{tikzpicture}\n"
-         "\\end{document}\n");
-}
-
-// Generic ThrVal 2D Layout to LaTeX TikZ
-template <class Layout, class ThrID, class TikzColorFn = TikzColor_TV>
-CUTE_HOST_DEVICE
-void
-print_latex(Layout const& layout,    // (m,n) -> (tid,vid)
-            ThrID  const& thr,       // tid -> thr_idx
-            TikzColorFn color = {})  // lambda(thr_idx,val_idx) -> tikz color string
-{
-  CUTE_STATIC_ASSERT_V(rank(layout) == Int<2>{});
-
-  // Commented prints
-  printf("%% Layout: "); print(layout); printf("\n");
-  printf("%% ThrID : "); print(thr);  printf("\n");
-  // Header
-  printf("\\documentclass[convert]{standalone}\n"
-         "\\usepackage{tikz}\n\n"
-         "\\begin{document}\n"
-         "\\begin{tikzpicture}[x={(0cm,-1cm)},y={(1cm,0cm)},every node/.style={minimum size=1cm, outer sep=0pt}]\n\n");
-
-  // Layout
-  for (int i = 0; i < size<0>(layout); ++i) {
-    for (int j = 0; j < size<1>(layout); ++j) {
-      int thrid   = layout(i,j) % size(thr);
-      int val_idx = layout(i,j) / size(thr);
-      int thr_idx = thr(thrid);
-
-      printf("\\node[fill=%s] at (%d,%d) {\\shortstack{T%d \\\\ V%d}};\n",
-             color(thr_idx, val_idx),
-             i, j,
-             thr_idx, val_idx);
-    }
-  }
-  // Grid
-  printf("\\draw[color=black,thick,shift={(-0.5,-0.5)}] (0,0) grid (%d,%d);\n\n",
-         int(size<0>(layout)), int(size<1>(layout)));
-  // Labels
-  for (int i = 0, j = -1; i < size<0>(layout); ++i) {
-    printf("\\node at (%d,%d) {\\Large{\\texttt{%d}}};\n", i, j, i);
-  }
-  for (int j = 0, i = -1; j < size<1>(layout); ++j) {
-    printf("\\node at (%d,%d) {\\Large{\\texttt{%d}}};\n", i, j, j);
-  }
-
-  // Footer
-  printf("\\end{tikzpicture}\n"
-         "\\end{document}\n");
-}
 
 } // end namespace cute

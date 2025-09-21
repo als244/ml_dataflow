@@ -47,7 +47,6 @@
 #include "cute/arch/cluster_sm90.hpp"
 #include "cute/atom/mma_atom.hpp"
 #include "cute/algorithm/gemm.hpp"
-#include "cute/tensor_predicate.hpp"
 #include "cute/numeric/arithmetic_tuple.hpp"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -667,12 +666,14 @@ struct CollectiveMma<
 
     uint32_t skip_wait = k_tile_count <= 0;
     auto barrier_token = mainloop_pipeline.consumer_try_wait(mainloop_pipe_consumer_state, skip_wait);
-    bool is_first_iter = true;
 
     //
     // PIPELINED MAIN LOOP
     //
     tiled_mma.accumulate_ = UMMA::ScaleOut::Zero;
+    // Wait for tmem accumulator buffer to become empty with a flipped phase
+    accumulator_pipeline.producer_acquire(accumulator_pipe_producer_state);
+
     CUTLASS_PRAGMA_NO_UNROLL
     while (k_tile_count > 0) {
       // WAIT on mainloop_pipe_consumer_state until its data are available
@@ -690,11 +691,6 @@ struct CollectiveMma<
       skip_wait = k_tile_count <= 0;
       // Peek at next iteration
       barrier_token = mainloop_pipeline.consumer_try_wait(mainloop_pipe_consumer_state, skip_wait);
-      // Wait for tmem accumulator buffer to become empty with a flipped phase
-      if (is_first_iter) {
-        accumulator_pipeline.producer_acquire(accumulator_pipe_producer_state);
-        is_first_iter = false;
-      }
 
       // Unroll the K mode manually so we can set scale C to 1
       CUTLASS_PRAGMA_UNROLL

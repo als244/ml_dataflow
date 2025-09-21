@@ -28,10 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
-
-//
-
-//
 #pragma once
 
 #include <cute/arch/config.hpp>
@@ -44,6 +40,51 @@
 namespace cute {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// Global Memory Load and Store PTX definitions
+//
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+struct SM100_LOAD_256bit_CACHE_NOALLOCATION
+{
+  using SRegisters = uint256_t[1];
+  using DRegisters = uint32_t[8];
+
+  CUTE_HOST_DEVICE static void
+  copy(uint256_t const& gmem_addr,
+       uint32_t& dst0, uint32_t& dst1, uint32_t& dst2, uint32_t& dst3,
+       uint32_t& dst4, uint32_t& dst5, uint32_t& dst6, uint32_t& dst7)
+  {
+    #if defined(CUTE_ARCH_LOAD256_SM100A_ENABLED)
+      asm volatile("ld.global.L1::no_allocate.v8.f32 {%0, %1, %2, %3, %4, %5, %6, %7}, [%8];\n"
+              : "=r"(dst0), "=r"(dst1), "=r"(dst2), "=r"(dst3), "=r"(dst4), "=r"(dst5), "=r"(dst6), "=r"(dst7)
+              : "l"(&gmem_addr) );
+    #else
+      CUTE_INVALID_CONTROL_PATH("Trying to use LOAD.256 without CUTE_ARCH_LOAD256_SM100A_ENABLED.");
+    #endif
+  }
+};
+
+struct SM100_STORE_256bit_CACHE_NOALLOCATION
+{
+  using SRegisters = uint32_t[8];
+  using DRegisters = uint256_t[1];
+
+  CUTE_HOST_DEVICE static void
+  copy(uint32_t const& src0, uint32_t const& src1, uint32_t const& src2, uint32_t const& src3,
+       uint32_t const& src4, uint32_t const& src5, uint32_t const& src6, uint32_t const& src7,
+       uint256_t& gmem_addr)
+  {
+    #if defined(CUTE_ARCH_STORE256_SM100A_ENABLED)
+      asm volatile("st.global.L1::no_allocate.v8.f32 [%0], {%1, %2, %3, %4, %5, %6, %7, %8};\n"
+              :: "l"(&gmem_addr), "r"(src0), "r"(src1), "r"(src2), "r"(src3), "r"(src4), "r"(src5), "r"(src6), "r"(src7));
+    #else
+      CUTE_INVALID_CONTROL_PATH("Trying to use stg.256 without CUTE_ARCH_STORE256_SM100A_ENABLED.");
+    #endif
+  }
+};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -317,16 +358,13 @@ struct SM100_U8x16_STSM_T
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
-} // namespace cute
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // UTCCP PTX definitions
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-namespace cute {
+namespace SM100::TMEM::UTCCP {
+
 // 128 data path lanes, 256-bit pattern, 1cta mode
 struct SM100_UTCCP_128dp256bit_1cta
 {
@@ -558,21 +596,19 @@ struct SM100_UTCCP_2x64dp128bitlw0123_2cta
   }
 };
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-} // namespace cute
+} // end namespace SM100::TMEM::UTCCP
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-namespace cute {
+namespace SM100::TMEM::LOAD {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// TMEM_LOAD PTX definitions
+// TMEM LOAD PTX definitions
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -3945,7 +3981,6 @@ struct SM100_TMEM_LOAD_32dp32b128x
   }
 };
 
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // 32 data path lanes, 32-bit pattern, repeated 128 times, packed 16b read
@@ -4066,8 +4101,20 @@ struct SM100_TMEM_LOAD_32dp32b128x_16b
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+} // namespace SM100::TMEM::LOAD
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace SM100::TMEM::STORE {
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// TMEM_STORE PTX definitions
+// TMEM STORE PTX definitions
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -4086,8 +4133,8 @@ struct SM100_TMEM_STORE_16dp256b1x
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.16x256b.x1.b32"
                     "[%0],"
-                    "{%1, %2, %3, %4};\n" 
-    :  
+                    "{%1, %2, %3, %4};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1), "r"(src2), "r"(src3) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -4110,8 +4157,8 @@ struct SM100_TMEM_STORE_16dp256b1x_16b
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.16x256b.x1.unpack::16b.b32"
                     "[%0],"
-                    "{%1, %2, %3, %4};\n" 
-    :  
+                    "{%1, %2, %3, %4};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1), "r"(src2), "r"(src3) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -4136,8 +4183,8 @@ struct SM100_TMEM_STORE_16dp256b2x
     asm volatile ("tcgen05.st.sync.aligned.16x256b.x2.b32"
                     "[%0],"
                     "{%1, %2, %3, %4,"
-                    "%5, %6, %7, %8};\n" 
-    :  
+                    "%5, %6, %7, %8};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1), "r"(src2), "r"(src3),
        "r"(src4), "r"(src5), "r"(src6), "r"(src7) );
 #else
@@ -4163,8 +4210,8 @@ struct SM100_TMEM_STORE_16dp256b2x_16b
     asm volatile ("tcgen05.st.sync.aligned.16x256b.x2.unpack::16b.b32"
                     "[%0],"
                     "{%1, %2, %3, %4,"
-                    "%5, %6, %7, %8};\n" 
-    :  
+                    "%5, %6, %7, %8};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1), "r"(src2), "r"(src3),
        "r"(src4), "r"(src5), "r"(src6), "r"(src7) );
 #else
@@ -4194,8 +4241,8 @@ struct SM100_TMEM_STORE_16dp256b4x
                     "{%1, %2, %3, %4,"
                     "%5, %6, %7, %8,"
                     "%9, %10, %11, %12,"
-                    "%13, %14, %15, %16};\n" 
-    :  
+                    "%13, %14, %15, %16};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -4227,8 +4274,8 @@ struct SM100_TMEM_STORE_16dp256b4x_16b
                     "{%1, %2, %3, %4,"
                     "%5, %6, %7, %8,"
                     "%9, %10, %11, %12,"
-                    "%13, %14, %15, %16};\n" 
-    :  
+                    "%13, %14, %15, %16};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -4268,8 +4315,8 @@ struct SM100_TMEM_STORE_16dp256b8x
                     "%17, %18, %19, %20,"
                     "%21, %22, %23, %24,"
                     "%25, %26, %27, %28,"
-                    "%29, %30, %31, %32};\n" 
-    :  
+                    "%29, %30, %31, %32};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -4313,8 +4360,8 @@ struct SM100_TMEM_STORE_16dp256b8x_16b
                     "%17, %18, %19, %20,"
                     "%21, %22, %23, %24,"
                     "%25, %26, %27, %28,"
-                    "%29, %30, %31, %32};\n" 
-    :  
+                    "%29, %30, %31, %32};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -4374,8 +4421,8 @@ struct SM100_TMEM_STORE_16dp256b16x
                     "%49, %50, %51, %52,"
                     "%53, %54, %55, %56,"
                     "%57, %58, %59, %60,"
-                    "%61, %62, %63, %64};\n" 
-    :  
+                    "%61, %62, %63, %64};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -4443,8 +4490,8 @@ struct SM100_TMEM_STORE_16dp256b16x_16b
                     "%49, %50, %51, %52,"
                     "%53, %54, %55, %56,"
                     "%57, %58, %59, %60,"
-                    "%61, %62, %63, %64};\n" 
-    :  
+                    "%61, %62, %63, %64};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -4544,8 +4591,8 @@ struct SM100_TMEM_STORE_16dp256b32x
                     "%113, %114, %115, %116,"
                     "%117, %118, %119, %120,"
                     "%121, %122, %123, %124,"
-                    "%125, %126, %127, %128};\n" 
-    :  
+                    "%125, %126, %127, %128};\n"
+    :
     :  "r"(dst_addr), "r"(src000), "r"(src001), "r"(src002), "r"(src003),
        "r"(src004), "r"(src005), "r"(src006), "r"(src007),
        "r"(src008), "r"(src009), "r"(src010), "r"(src011),
@@ -4661,8 +4708,8 @@ struct SM100_TMEM_STORE_16dp256b32x_16b
                     "%113, %114, %115, %116,"
                     "%117, %118, %119, %120,"
                     "%121, %122, %123, %124,"
-                    "%125, %126, %127, %128};\n" 
-    :  
+                    "%125, %126, %127, %128};\n"
+    :
     :  "r"(dst_addr), "r"(src000), "r"(src001), "r"(src002), "r"(src003),
        "r"(src004), "r"(src005), "r"(src006), "r"(src007),
        "r"(src008), "r"(src009), "r"(src010), "r"(src011),
@@ -4716,8 +4763,8 @@ struct SM100_TMEM_STORE_16dp128b1x
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.16x128b.x1.b32"
                     "[%0],"
-                    "{%1, %2};\n" 
-    :  
+                    "{%1, %2};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -4740,8 +4787,8 @@ struct SM100_TMEM_STORE_16dp128b1x_16b
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.16x128b.x1.unpack::16b.b32"
                     "[%0],"
-                    "{%1, %2};\n" 
-    :  
+                    "{%1, %2};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -4764,8 +4811,8 @@ struct SM100_TMEM_STORE_16dp128b2x
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.16x128b.x2.b32"
                     "[%0],"
-                    "{%1, %2, %3, %4};\n" 
-    :  
+                    "{%1, %2, %3, %4};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1), "r"(src2), "r"(src3) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -4788,8 +4835,8 @@ struct SM100_TMEM_STORE_16dp128b2x_16b
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.16x128b.x2.unpack::16b.b32"
                     "[%0],"
-                    "{%1, %2, %3, %4};\n" 
-    :  
+                    "{%1, %2, %3, %4};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1), "r"(src2), "r"(src3) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -4814,8 +4861,8 @@ struct SM100_TMEM_STORE_16dp128b4x
     asm volatile ("tcgen05.st.sync.aligned.16x128b.x4.b32"
                     "[%0],"
                     "{%1, %2, %3, %4,"
-                    "%5, %6, %7, %8};\n" 
-    :  
+                    "%5, %6, %7, %8};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1), "r"(src2), "r"(src3),
        "r"(src4), "r"(src5), "r"(src6), "r"(src7) );
 #else
@@ -4841,8 +4888,8 @@ struct SM100_TMEM_STORE_16dp128b4x_16b
     asm volatile ("tcgen05.st.sync.aligned.16x128b.x4.unpack::16b.b32"
                     "[%0],"
                     "{%1, %2, %3, %4,"
-                    "%5, %6, %7, %8};\n" 
-    :  
+                    "%5, %6, %7, %8};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1), "r"(src2), "r"(src3),
        "r"(src4), "r"(src5), "r"(src6), "r"(src7) );
 #else
@@ -4872,8 +4919,8 @@ struct SM100_TMEM_STORE_16dp128b8x
                     "{%1, %2, %3, %4,"
                     "%5, %6, %7, %8,"
                     "%9, %10, %11, %12,"
-                    "%13, %14, %15, %16};\n" 
-    :  
+                    "%13, %14, %15, %16};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -4905,8 +4952,8 @@ struct SM100_TMEM_STORE_16dp128b8x_16b
                     "{%1, %2, %3, %4,"
                     "%5, %6, %7, %8,"
                     "%9, %10, %11, %12,"
-                    "%13, %14, %15, %16};\n" 
-    :  
+                    "%13, %14, %15, %16};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -4946,8 +4993,8 @@ struct SM100_TMEM_STORE_16dp128b16x
                     "%17, %18, %19, %20,"
                     "%21, %22, %23, %24,"
                     "%25, %26, %27, %28,"
-                    "%29, %30, %31, %32};\n" 
-    :  
+                    "%29, %30, %31, %32};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -4991,8 +5038,8 @@ struct SM100_TMEM_STORE_16dp128b16x_16b
                     "%17, %18, %19, %20,"
                     "%21, %22, %23, %24,"
                     "%25, %26, %27, %28,"
-                    "%29, %30, %31, %32};\n" 
-    :  
+                    "%29, %30, %31, %32};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -5052,8 +5099,8 @@ struct SM100_TMEM_STORE_16dp128b32x
                     "%49, %50, %51, %52,"
                     "%53, %54, %55, %56,"
                     "%57, %58, %59, %60,"
-                    "%61, %62, %63, %64};\n" 
-    :  
+                    "%61, %62, %63, %64};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -5121,8 +5168,8 @@ struct SM100_TMEM_STORE_16dp128b32x_16b
                     "%49, %50, %51, %52,"
                     "%53, %54, %55, %56,"
                     "%57, %58, %59, %60,"
-                    "%61, %62, %63, %64};\n" 
-    :  
+                    "%61, %62, %63, %64};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -5222,8 +5269,8 @@ struct SM100_TMEM_STORE_16dp128b64x
                     "%113, %114, %115, %116,"
                     "%117, %118, %119, %120,"
                     "%121, %122, %123, %124,"
-                    "%125, %126, %127, %128};\n" 
-    :  
+                    "%125, %126, %127, %128};\n"
+    :
     :  "r"(dst_addr), "r"(src000), "r"(src001), "r"(src002), "r"(src003),
        "r"(src004), "r"(src005), "r"(src006), "r"(src007),
        "r"(src008), "r"(src009), "r"(src010), "r"(src011),
@@ -5339,8 +5386,8 @@ struct SM100_TMEM_STORE_16dp128b64x_16b
                     "%113, %114, %115, %116,"
                     "%117, %118, %119, %120,"
                     "%121, %122, %123, %124,"
-                    "%125, %126, %127, %128};\n" 
-    :  
+                    "%125, %126, %127, %128};\n"
+    :
     :  "r"(dst_addr), "r"(src000), "r"(src001), "r"(src002), "r"(src003),
        "r"(src004), "r"(src005), "r"(src006), "r"(src007),
        "r"(src008), "r"(src009), "r"(src010), "r"(src011),
@@ -5394,8 +5441,8 @@ struct SM100_TMEM_STORE_16dp64b1x
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.16x64b.x1.b32"
                     "[%0],"
-                    "{%1};\n" 
-    :  
+                    "{%1};\n"
+    :
     :  "r"(dst_addr), "r"(src0) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -5418,8 +5465,8 @@ struct SM100_TMEM_STORE_16dp64b1x_16b
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.16x64b.x1.unpack::16b.b32"
                     "[%0],"
-                    "{%1};\n" 
-    :  
+                    "{%1};\n"
+    :
     :  "r"(dst_addr), "r"(src0) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -5442,8 +5489,8 @@ struct SM100_TMEM_STORE_16dp64b2x
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.16x64b.x2.b32"
                     "[%0],"
-                    "{%1, %2};\n" 
-    :  
+                    "{%1, %2};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -5466,8 +5513,8 @@ struct SM100_TMEM_STORE_16dp64b2x_16b
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.16x64b.x2.unpack::16b.b32"
                     "[%0],"
-                    "{%1, %2};\n" 
-    :  
+                    "{%1, %2};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -5490,8 +5537,8 @@ struct SM100_TMEM_STORE_16dp64b4x
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.16x64b.x4.b32"
                     "[%0],"
-                    "{%1, %2, %3, %4};\n" 
-    :  
+                    "{%1, %2, %3, %4};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1), "r"(src2), "r"(src3) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -5514,8 +5561,8 @@ struct SM100_TMEM_STORE_16dp64b4x_16b
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.16x64b.x4.unpack::16b.b32"
                     "[%0],"
-                    "{%1, %2, %3, %4};\n" 
-    :  
+                    "{%1, %2, %3, %4};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1), "r"(src2), "r"(src3) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -5540,8 +5587,8 @@ struct SM100_TMEM_STORE_16dp64b8x
     asm volatile ("tcgen05.st.sync.aligned.16x64b.x8.b32"
                     "[%0],"
                     "{%1, %2, %3, %4,"
-                    "%5, %6, %7, %8};\n" 
-    :  
+                    "%5, %6, %7, %8};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1), "r"(src2), "r"(src3),
        "r"(src4), "r"(src5), "r"(src6), "r"(src7) );
 #else
@@ -5567,8 +5614,8 @@ struct SM100_TMEM_STORE_16dp64b8x_16b
     asm volatile ("tcgen05.st.sync.aligned.16x64b.x8.unpack::16b.b32"
                     "[%0],"
                     "{%1, %2, %3, %4,"
-                    "%5, %6, %7, %8};\n" 
-    :  
+                    "%5, %6, %7, %8};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1), "r"(src2), "r"(src3),
        "r"(src4), "r"(src5), "r"(src6), "r"(src7) );
 #else
@@ -5598,8 +5645,8 @@ struct SM100_TMEM_STORE_16dp64b16x
                     "{%1, %2, %3, %4,"
                     "%5, %6, %7, %8,"
                     "%9, %10, %11, %12,"
-                    "%13, %14, %15, %16};\n" 
-    :  
+                    "%13, %14, %15, %16};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -5631,8 +5678,8 @@ struct SM100_TMEM_STORE_16dp64b16x_16b
                     "{%1, %2, %3, %4,"
                     "%5, %6, %7, %8,"
                     "%9, %10, %11, %12,"
-                    "%13, %14, %15, %16};\n" 
-    :  
+                    "%13, %14, %15, %16};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -5672,8 +5719,8 @@ struct SM100_TMEM_STORE_16dp64b32x
                     "%17, %18, %19, %20,"
                     "%21, %22, %23, %24,"
                     "%25, %26, %27, %28,"
-                    "%29, %30, %31, %32};\n" 
-    :  
+                    "%29, %30, %31, %32};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -5717,8 +5764,8 @@ struct SM100_TMEM_STORE_16dp64b32x_16b
                     "%17, %18, %19, %20,"
                     "%21, %22, %23, %24,"
                     "%25, %26, %27, %28,"
-                    "%29, %30, %31, %32};\n" 
-    :  
+                    "%29, %30, %31, %32};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -5778,8 +5825,8 @@ struct SM100_TMEM_STORE_16dp64b64x
                     "%49, %50, %51, %52,"
                     "%53, %54, %55, %56,"
                     "%57, %58, %59, %60,"
-                    "%61, %62, %63, %64};\n" 
-    :  
+                    "%61, %62, %63, %64};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -5847,8 +5894,8 @@ struct SM100_TMEM_STORE_16dp64b64x_16b
                     "%49, %50, %51, %52,"
                     "%53, %54, %55, %56,"
                     "%57, %58, %59, %60,"
-                    "%61, %62, %63, %64};\n" 
-    :  
+                    "%61, %62, %63, %64};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -5948,8 +5995,8 @@ struct SM100_TMEM_STORE_16dp64b128x
                     "%113, %114, %115, %116,"
                     "%117, %118, %119, %120,"
                     "%121, %122, %123, %124,"
-                    "%125, %126, %127, %128};\n" 
-    :  
+                    "%125, %126, %127, %128};\n"
+    :
     :  "r"(dst_addr), "r"(src000), "r"(src001), "r"(src002), "r"(src003),
        "r"(src004), "r"(src005), "r"(src006), "r"(src007),
        "r"(src008), "r"(src009), "r"(src010), "r"(src011),
@@ -6065,8 +6112,8 @@ struct SM100_TMEM_STORE_16dp64b128x_16b
                     "%113, %114, %115, %116,"
                     "%117, %118, %119, %120,"
                     "%121, %122, %123, %124,"
-                    "%125, %126, %127, %128};\n" 
-    :  
+                    "%125, %126, %127, %128};\n"
+    :
     :  "r"(dst_addr), "r"(src000), "r"(src001), "r"(src002), "r"(src003),
        "r"(src004), "r"(src005), "r"(src006), "r"(src007),
        "r"(src008), "r"(src009), "r"(src010), "r"(src011),
@@ -6120,8 +6167,8 @@ struct SM100_TMEM_STORE_16dp32b1x
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.16x32bx2.x1.b32"
                     "[%0] , 1,"
-                    "{%1};\n" 
-    :  
+                    "{%1};\n"
+    :
     :  "r"(dst_addr), "r"(src0) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -6144,8 +6191,8 @@ struct SM100_TMEM_STORE_16dp32b1x_16b
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.16x32bx2.x1.unpack::16b.b32"
                     "[%0] , 2,"
-                    "{%1};\n" 
-    :  
+                    "{%1};\n"
+    :
     :  "r"(dst_addr), "r"(src0) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -6168,8 +6215,8 @@ struct SM100_TMEM_STORE_16dp32b2x
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.16x32bx2.x2.b32"
                     "[%0] , 2,"
-                    "{%1, %2};\n" 
-    :  
+                    "{%1, %2};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -6192,8 +6239,8 @@ struct SM100_TMEM_STORE_16dp32b2x_16b
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.16x32bx2.x2.unpack::16b.b32"
                     "[%0] , 4,"
-                    "{%1, %2};\n" 
-    :  
+                    "{%1, %2};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -6216,8 +6263,8 @@ struct SM100_TMEM_STORE_16dp32b4x
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.16x32bx2.x4.b32"
                     "[%0] , 4,"
-                    "{%1, %2, %3, %4};\n" 
-    :  
+                    "{%1, %2, %3, %4};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1), "r"(src2), "r"(src3) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -6240,8 +6287,8 @@ struct SM100_TMEM_STORE_16dp32b4x_16b
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.16x32bx2.x4.unpack::16b.b32"
                     "[%0] , 8,"
-                    "{%1, %2, %3, %4};\n" 
-    :  
+                    "{%1, %2, %3, %4};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1), "r"(src2), "r"(src3) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -6266,8 +6313,8 @@ struct SM100_TMEM_STORE_16dp32b8x
     asm volatile ("tcgen05.st.sync.aligned.16x32bx2.x8.b32"
                     "[%0] , 8,"
                     "{%1, %2, %3, %4,"
-                    "%5, %6, %7, %8};\n" 
-    :  
+                    "%5, %6, %7, %8};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1), "r"(src2), "r"(src3),
        "r"(src4), "r"(src5), "r"(src6), "r"(src7) );
 #else
@@ -6293,8 +6340,8 @@ struct SM100_TMEM_STORE_16dp32b8x_16b
     asm volatile ("tcgen05.st.sync.aligned.16x32bx2.x8.unpack::16b.b32"
                     "[%0] , 16,"
                     "{%1, %2, %3, %4,"
-                    "%5, %6, %7, %8};\n" 
-    :  
+                    "%5, %6, %7, %8};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1), "r"(src2), "r"(src3),
        "r"(src4), "r"(src5), "r"(src6), "r"(src7) );
 #else
@@ -6324,8 +6371,8 @@ struct SM100_TMEM_STORE_16dp32b16x
                     "{%1, %2, %3, %4,"
                     "%5, %6, %7, %8,"
                     "%9, %10, %11, %12,"
-                    "%13, %14, %15, %16};\n" 
-    :  
+                    "%13, %14, %15, %16};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -6357,8 +6404,8 @@ struct SM100_TMEM_STORE_16dp32b16x_16b
                     "{%1, %2, %3, %4,"
                     "%5, %6, %7, %8,"
                     "%9, %10, %11, %12,"
-                    "%13, %14, %15, %16};\n" 
-    :  
+                    "%13, %14, %15, %16};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -6398,8 +6445,8 @@ struct SM100_TMEM_STORE_16dp32b32x
                     "%17, %18, %19, %20,"
                     "%21, %22, %23, %24,"
                     "%25, %26, %27, %28,"
-                    "%29, %30, %31, %32};\n" 
-    :  
+                    "%29, %30, %31, %32};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -6443,8 +6490,8 @@ struct SM100_TMEM_STORE_16dp32b32x_16b
                     "%17, %18, %19, %20,"
                     "%21, %22, %23, %24,"
                     "%25, %26, %27, %28,"
-                    "%29, %30, %31, %32};\n" 
-    :  
+                    "%29, %30, %31, %32};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -6504,8 +6551,8 @@ struct SM100_TMEM_STORE_16dp32b64x
                     "%49, %50, %51, %52,"
                     "%53, %54, %55, %56,"
                     "%57, %58, %59, %60,"
-                    "%61, %62, %63, %64};\n" 
-    :  
+                    "%61, %62, %63, %64};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -6573,8 +6620,8 @@ struct SM100_TMEM_STORE_16dp32b64x_16b
                     "%49, %50, %51, %52,"
                     "%53, %54, %55, %56,"
                     "%57, %58, %59, %60,"
-                    "%61, %62, %63, %64};\n" 
-    :  
+                    "%61, %62, %63, %64};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -6674,8 +6721,8 @@ struct SM100_TMEM_STORE_16dp32b128x
                     "%113, %114, %115, %116,"
                     "%117, %118, %119, %120,"
                     "%121, %122, %123, %124,"
-                    "%125, %126, %127, %128};\n" 
-    :  
+                    "%125, %126, %127, %128};\n"
+    :
     :  "r"(dst_addr), "r"(src000), "r"(src001), "r"(src002), "r"(src003),
        "r"(src004), "r"(src005), "r"(src006), "r"(src007),
        "r"(src008), "r"(src009), "r"(src010), "r"(src011),
@@ -6791,8 +6838,8 @@ struct SM100_TMEM_STORE_16dp32b128x_16b
                     "%113, %114, %115, %116,"
                     "%117, %118, %119, %120,"
                     "%121, %122, %123, %124,"
-                    "%125, %126, %127, %128};\n" 
-    :  
+                    "%125, %126, %127, %128};\n"
+    :
     :  "r"(dst_addr), "r"(src000), "r"(src001), "r"(src002), "r"(src003),
        "r"(src004), "r"(src005), "r"(src006), "r"(src007),
        "r"(src008), "r"(src009), "r"(src010), "r"(src011),
@@ -6846,8 +6893,8 @@ struct SM100_TMEM_STORE_32dp32b1x
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.32x32b.x1.b32"
                     "[%0],"
-                    "{%1};\n" 
-    :  
+                    "{%1};\n"
+    :
     :  "r"(dst_addr), "r"(src0) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -6870,8 +6917,8 @@ struct SM100_TMEM_STORE_32dp32b1x_16b
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.32x32b.x1.unpack::16b.b32"
                     "[%0],"
-                    "{%1};\n" 
-    :  
+                    "{%1};\n"
+    :
     :  "r"(dst_addr), "r"(src0) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -6894,8 +6941,8 @@ struct SM100_TMEM_STORE_32dp32b2x
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.32x32b.x2.b32"
                     "[%0],"
-                    "{%1, %2};\n" 
-    :  
+                    "{%1, %2};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -6918,8 +6965,8 @@ struct SM100_TMEM_STORE_32dp32b2x_16b
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.32x32b.x2.unpack::16b.b32"
                     "[%0],"
-                    "{%1, %2};\n" 
-    :  
+                    "{%1, %2};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -6942,8 +6989,8 @@ struct SM100_TMEM_STORE_32dp32b4x
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.32x32b.x4.b32"
                     "[%0],"
-                    "{%1, %2, %3, %4};\n" 
-    :  
+                    "{%1, %2, %3, %4};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1), "r"(src2), "r"(src3) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -6966,8 +7013,8 @@ struct SM100_TMEM_STORE_32dp32b4x_16b
 #if defined(CUTE_ARCH_TCGEN05_TMEM_ENABLED)
     asm volatile ("tcgen05.st.sync.aligned.32x32b.x4.unpack::16b.b32"
                     "[%0],"
-                    "{%1, %2, %3, %4};\n" 
-    :  
+                    "{%1, %2, %3, %4};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1), "r"(src2), "r"(src3) );
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use TMEM_STORE without CUTE_ARCH_TCGEN05_TMEM_ENABLED.");
@@ -6992,8 +7039,8 @@ struct SM100_TMEM_STORE_32dp32b8x
     asm volatile ("tcgen05.st.sync.aligned.32x32b.x8.b32"
                     "[%0],"
                     "{%1, %2, %3, %4,"
-                    "%5, %6, %7, %8};\n" 
-    :  
+                    "%5, %6, %7, %8};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1), "r"(src2), "r"(src3),
        "r"(src4), "r"(src5), "r"(src6), "r"(src7) );
 #else
@@ -7019,8 +7066,8 @@ struct SM100_TMEM_STORE_32dp32b8x_16b
     asm volatile ("tcgen05.st.sync.aligned.32x32b.x8.unpack::16b.b32"
                     "[%0],"
                     "{%1, %2, %3, %4,"
-                    "%5, %6, %7, %8};\n" 
-    :  
+                    "%5, %6, %7, %8};\n"
+    :
     :  "r"(dst_addr), "r"(src0), "r"(src1), "r"(src2), "r"(src3),
        "r"(src4), "r"(src5), "r"(src6), "r"(src7) );
 #else
@@ -7050,8 +7097,8 @@ struct SM100_TMEM_STORE_32dp32b16x
                     "{%1, %2, %3, %4,"
                     "%5, %6, %7, %8,"
                     "%9, %10, %11, %12,"
-                    "%13, %14, %15, %16};\n" 
-    :  
+                    "%13, %14, %15, %16};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -7083,8 +7130,8 @@ struct SM100_TMEM_STORE_32dp32b16x_16b
                     "{%1, %2, %3, %4,"
                     "%5, %6, %7, %8,"
                     "%9, %10, %11, %12,"
-                    "%13, %14, %15, %16};\n" 
-    :  
+                    "%13, %14, %15, %16};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -7124,8 +7171,8 @@ struct SM100_TMEM_STORE_32dp32b32x
                     "%17, %18, %19, %20,"
                     "%21, %22, %23, %24,"
                     "%25, %26, %27, %28,"
-                    "%29, %30, %31, %32};\n" 
-    :  
+                    "%29, %30, %31, %32};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -7169,8 +7216,8 @@ struct SM100_TMEM_STORE_32dp32b32x_16b
                     "%17, %18, %19, %20,"
                     "%21, %22, %23, %24,"
                     "%25, %26, %27, %28,"
-                    "%29, %30, %31, %32};\n" 
-    :  
+                    "%29, %30, %31, %32};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -7230,8 +7277,8 @@ struct SM100_TMEM_STORE_32dp32b64x
                     "%49, %50, %51, %52,"
                     "%53, %54, %55, %56,"
                     "%57, %58, %59, %60,"
-                    "%61, %62, %63, %64};\n" 
-    :  
+                    "%61, %62, %63, %64};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -7299,8 +7346,8 @@ struct SM100_TMEM_STORE_32dp32b64x_16b
                     "%49, %50, %51, %52,"
                     "%53, %54, %55, %56,"
                     "%57, %58, %59, %60,"
-                    "%61, %62, %63, %64};\n" 
-    :  
+                    "%61, %62, %63, %64};\n"
+    :
     :  "r"(dst_addr), "r"(src00), "r"(src01), "r"(src02), "r"(src03),
        "r"(src04), "r"(src05), "r"(src06), "r"(src07),
        "r"(src08), "r"(src09), "r"(src10), "r"(src11),
@@ -7400,8 +7447,8 @@ struct SM100_TMEM_STORE_32dp32b128x
                     "%113, %114, %115, %116,"
                     "%117, %118, %119, %120,"
                     "%121, %122, %123, %124,"
-                    "%125, %126, %127, %128};\n" 
-    :  
+                    "%125, %126, %127, %128};\n"
+    :
     :  "r"(dst_addr), "r"(src000), "r"(src001), "r"(src002), "r"(src003),
        "r"(src004), "r"(src005), "r"(src006), "r"(src007),
        "r"(src008), "r"(src009), "r"(src010), "r"(src011),
@@ -7517,8 +7564,8 @@ struct SM100_TMEM_STORE_32dp32b128x_16b
                     "%113, %114, %115, %116,"
                     "%117, %118, %119, %120,"
                     "%121, %122, %123, %124,"
-                    "%125, %126, %127, %128};\n" 
-    :  
+                    "%125, %126, %127, %128};\n"
+    :
     :  "r"(dst_addr), "r"(src000), "r"(src001), "r"(src002), "r"(src003),
        "r"(src004), "r"(src005), "r"(src006), "r"(src007),
        "r"(src008), "r"(src009), "r"(src010), "r"(src011),
@@ -7561,7 +7608,8 @@ struct SM100_TMEM_STORE_32dp32b128x_16b
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-} // namespace cute
+} // namespace SM100::TMEM::STORE
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+} // end namespace cute
