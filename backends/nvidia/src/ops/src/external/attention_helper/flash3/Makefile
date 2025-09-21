@@ -70,13 +70,13 @@ ${FLASH_API_OBJ}: ${FLASH_API_SRC}
 	${CXX} ${CXX_FLAGS} ${ALL_INCLUDES} -c -o $@ $<
 
 build/instantiations/sm80/%.o: src/instantiations/sm80/%.cu
-	${NVCC} ${NVCC_FLAGS} ${ALL_INCLUDES} -arch=compute_80 -code=sm_80 $< -c -o $@
+	${NVCC} ${NVCC_FLAGS} ${ALL_INCLUDES} -arch=compute_80 -code=compute_80,sm_80 $< -c -o $@
 
 build/instantiations/sm90/%.o: src/instantiations/sm90/%.cu
-	${NVCC} ${NVCC_FLAGS} ${NVCC_FLAGS_SM90} ${ALL_INCLUDES} -arch=compute_90a -code=sm_90a $< -c -o $@
+	${NVCC} ${NVCC_FLAGS} ${NVCC_FLAGS_SM90} ${ALL_INCLUDES} -arch=compute_90a -code=compute_90a,sm_90a $< -c -o $@
 
 build/instantiations/sm100/%.o: src/instantiations/sm100/%.cu
-	${NVCC} ${NVCC_FLAGS} ${NVCC_FLAGS_SM100} ${ALL_INCLUDES} -arch=compute_100 -code=sm_100 $< -c -o $@
+	${NVCC} ${NVCC_FLAGS} ${NVCC_FLAGS_SM100} ${ALL_INCLUDES} -arch=compute_100 -code=compute_100,sm_100 $< -c -o $@
 
 
 clean:

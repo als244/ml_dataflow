@@ -7,7 +7,7 @@ CXX_FLAGS = -std=c++17 -g -fPIC -O3 -Wall
 ## (may be in weird location if python installation of CUDA
 ## within some environment...)
 NVCC = nvcc
-NVCC_FLAGS = -rdc=true -Xcompiler=-fPIC -O3 -std=c++17 -U__CUDA_NO_HALF_OPERATORS__  -U__CUDA_NO_HALF_CONVERSIONS__ -U__CUDA_NO_HALF2_OPERATORS__ -U__CUDA_NO_BFLOAT16_CONVERSIONS__ --expt-relaxed-constexpr --expt-extended-lambda --use_fast_math --generate-line-info -Xptxas=-v 
+NVCC_FLAGS = -Xcompiler=-fPIC -O3 -std=c++17 -static-global-template-stub=false -U__CUDA_NO_HALF_OPERATORS__  -U__CUDA_NO_HALF_CONVERSIONS__ -U__CUDA_NO_HALF2_OPERATORS__ -U__CUDA_NO_BFLOAT16_CONVERSIONS__ --expt-relaxed-constexpr --expt-extended-lambda --use_fast_math --generate-line-info -Xptxas=-v 
 
 ## Flags for shared library
 WRAPPER_LIB_DEPENDS = -pthread -lm -ldl
@@ -56,8 +56,6 @@ BUILD_CU_KERNEL_OBJS = ${CU_KERNEL_OBJS_SM80} ${CU_KERNEL_OBJS_SM90} ${CU_KERNEL
 FLASH_API_SRC = src/flash_api.cpp
 FLASH_API_OBJ = build/flash_api.o
 
-DEVICE_LINK_OBJ = build/kernels_linked.o
-
 WRAPPER_SHARED_LIB = lib/libflash2.so
 
 
@@ -66,37 +64,26 @@ all: create_dirs ${WRAPPER_SHARED_LIB}
 create_dirs:
 	mkdir -p lib && mkdir -p build && mkdir -p build/instantiations && mkdir -p build/instantiations/sm80 && mkdir -p build/instantiations/sm90 && mkdir -p build/instantiations/sm100 && mkdir -p build/instantiations/sm120
 
-
-${DEVICE_LINK_OBJ}: ${BUILD_CU_KERNEL_OBJS}
-	${NVCC} -dlink -Xcompiler=-fPIC $^ -o $@ \
-		-gencode arch=compute_80,code=sm_80 \
-		-gencode arch=compute_90a,code=sm_90a \
-		-gencode arch=compute_100a,code=sm_100a \
-		-gencode arch=compute_120,code=sm_120
-
-${WRAPPER_SHARED_LIB}: ${DEVICE_LINK_OBJ} ${FLASH_API_OBJ} 
+${WRAPPER_SHARED_LIB}: ${BUILD_CU_KERNEL_OBJS} ${FLASH_API_OBJ} 
 	${CXX} ${CXX_FLAGS} -shared ${ALL_INCLUDES} $^ -o $@ ${ALL_LIBS}
 
 ${FLASH_API_OBJ}: ${FLASH_API_SRC}
 	${CXX} ${CXX_FLAGS} ${ALL_INCLUDES} -c -o $@ $<
 
-
-
-
 build/instantiations/sm80/%.o: src/instantiations/sm80/%.cu
-	${NVCC} ${NVCC_FLAGS} ${ALL_INCLUDES} -arch=compute_80 -code=sm_80 $< -c -o $@
+	${NVCC} ${NVCC_FLAGS} ${ALL_INCLUDES} -arch=compute_80 -code=compute_80,sm_80 $< -c -o $@
 
 build/instantiations/sm90/%.o: src/instantiations/sm90/%.cu
-	${NVCC} ${NVCC_FLAGS} ${ALL_INCLUDES} -arch=compute_90a -code=sm_90a $< -c -o $@
+	${NVCC} ${NVCC_FLAGS} ${ALL_INCLUDES} -arch=compute_90a -code=compute_90a,sm_90a $< -c -o $@
 
 build/instantiations/sm100/%.o: src/instantiations/sm100/%.cu
-	${NVCC} ${NVCC_FLAGS} ${ALL_INCLUDES} -arch=compute_100a -code=sm_100a $< -c -o $@
+	${NVCC} ${NVCC_FLAGS} ${ALL_INCLUDES} -arch=compute_100a -code=compute_100a,sm_100a $< -c -o $@
 
 build/instantiations/sm120/%.o: src/instantiations/sm120/%.cu
-	${NVCC} ${NVCC_FLAGS} ${ALL_INCLUDES} -arch=compute_120 -code=sm_120 $< -c -o $@
+	${NVCC} ${NVCC_FLAGS} ${ALL_INCLUDES} -arch=compute_120 -code=compute_120,sm_120 $< -c -o $@
 
 clean:
-	rm -f ${WRAPPER_SHARED_LIB} ${FLASH_API_OBJ} ${DEVICE_LINK_OBJ}
+	rm -f ${WRAPPER_SHARED_LIB} ${FLASH_API_OBJ}
 
 clean_kernels:
 	rm -f ${BUILD_CU_KERNEL_OBJS}
