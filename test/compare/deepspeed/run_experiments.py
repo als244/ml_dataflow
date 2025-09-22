@@ -90,11 +90,11 @@ def run_experiment(log_dir, experiment_config):
 
 
 #model_configs = {"dense8B": "model_configs/8b_config.json", "dense15B": "model_configs/15b_config.json", "dense32B": "model_configs/32b_config.json"}
-model_configs = {"dense8B": "model_configs/8b_config.json"}
-seq_lens = {"dense8B": {"H100": [8192], "RTX5090": [8192]}}
-seqs_per_step = {"dense8B": {"H100": [72], "RTX5090": [24]}}
-zero_stages = [0, 1, 2, 3]
-save_act_layer_fracs = [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1]
+model_config_options = {"dense8B": "model_configs/8b_config.json"}
+seq_lens_options = {"dense8B": {"H100": [8192], "RTX5090": [8192]}}
+seqs_per_step_options = {"dense8B": {"H100": [72], "RTX5090": [24]}}
+zero_stages_options = [0, 1, 2, 3]
+save_act_layer_fracs_options = [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1]
 max_micro_tokens = 65536
 num_steps = 3
 
@@ -106,16 +106,16 @@ def generate_experiment_configs(device_name):
     experiment_configs = {}
 
 
-    for model_name, config_path in model_configs.items():
-        for seq_len in seq_lens[model_name][device_name]:
-            for seqs_per_step in seqs_per_step[model_name][device_name]:
+    for model_name, config_path in model_config_options.items():
+        for seq_len in seq_lens_options[model_name][device_name]:
+            for seqs_per_step in seqs_per_step_options[model_name][device_name]:
                 step_batching_combinations = sweep_step_batching_combinations(seqs_per_step, seq_len, max_micro_tokens)
 
                 for seqs_per_batch, grad_accum_steps in step_batching_combinations:
 
-                    for zero_stage in zero_stages:
+                    for zero_stage in zero_stages_options:
 
-                        for save_act_layer_frac in save_act_layer_fracs:
+                        for save_act_layer_frac in save_act_layer_fracs_options:
 
                             expertiment_name = f"{model_name}_{seq_len}_{seqs_per_step}_{seqs_per_batch}_{grad_accum_steps}_{zero_stage}_{save_act_layer_frac}"
 
