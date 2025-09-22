@@ -96,7 +96,7 @@ model_config_options = {"dense8B": "model_configs/8b_config.json"}
 seq_lens_options = {"dense8B": {"H100": [8192], "RTX5090": [8192]}}
 seqs_per_step_options = {"dense8B": {"H100": [72], "RTX5090": [24]}}
 zero_stages_options = [0, 1, 2, 3]
-save_act_layer_fracs_options = [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1]
+save_act_layer_fracs_options = [0, 0.25, 0.5, 0.75, 1]
 max_micro_tokens = 65536
 num_steps = 3
 
