@@ -71,19 +71,19 @@ def run_experiment(log_dir, experiment_config):
     err_file = os.path.join(model_log_dir, f"{experiment_name}.err")
     cmd += f" > {log_file} 2> {err_file}"
     
-    print(f"Running experiment: {experiment_name}")
-    print(f"Command: {cmd}")
-    print(f"Stdout logging to: {log_file}")
-    print(f"Stderr logging to: {err_file}")
+    print(f"Running experiment: {experiment_name}", flush=True)
+    print(f"Command: {cmd}", flush=True)
+    print(f"Stdout logging to: {log_file}", flush=True)
+    print(f"Stderr logging to: {err_file}", flush=True)
     
     # Run the command using os.system
     exit_code = os.system(cmd)
     
     if exit_code == 0:
-        print("Experiment completed successfully")
+        print("Experiment completed successfully", flush=True)
         return True
     else:
-        print(f"Experiment failed with exit code: {exit_code}")
+        print(f"Experiment failed with exit code: {exit_code}", flush=True)
         return False
 
 
@@ -141,15 +141,15 @@ def generate_experiment_configs(device_name):
 def run_all_experiments(log_dir, experiment_configs):
     """Run all generated experiments"""
     total_experiments = len(experiment_configs)
-    print(f"Generated {total_experiments} experiment configurations")
-    print(f"Logs will be saved to: {log_dir}")
+    print(f"Generated {total_experiments} experiment configurations", flush=True)
+    print(f"Logs will be saved to: {log_dir}", flush=True)
     
     successful = 0
     failed = 0
     
     for i, (experiment_name, experiment_config) in enumerate(experiment_configs.items(), 1):
         print(f"\n{'='*60}")
-        print(f"Running experiment {i + 1}/{total_experiments}: {experiment_name}")
+        print(f"Running experiment {i + 1}/{total_experiments}: {experiment_name}", flush=True)
         print(f"{'='*60}")
         
         success = run_experiment(log_dir, experiment_config)
@@ -157,14 +157,14 @@ def run_all_experiments(log_dir, experiment_configs):
             successful += 1
         else:
             failed += 1
-            print(f"Experiment {experiment_name} failed!")
+            print(f"Experiment {experiment_name} failed!", flush=True)
     
-    print(f"\n{'='*60}")
-    print(f"Experiment Summary:")
-    print(f"Total: {total_experiments}")
-    print(f"Successful: {successful}")
-    print(f"Failed: {failed}")
-    print(f"Logs saved to: {log_dir}")
+    print(f"\n{'='*60}", flush=True)
+    print(f"Experiment Summary:", flush=True)
+    print(f"Total: {total_experiments}", flush=True)
+    print(f"Successful: {successful}", flush=True)
+    print(f"Failed: {failed}", flush=True)
+    print(f"Logs saved to: {log_dir}", flush=True)
     
 
 if __name__ == "__main__":
