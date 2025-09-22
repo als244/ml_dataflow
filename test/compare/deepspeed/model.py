@@ -204,6 +204,7 @@ class Model(nn.Module):
         self.max_seq_len = 2 ** 20
         self.freqs_complex = precompute_theta_pos_frequencies(self.head_dim, self.max_seq_len, self.rope_theta)
         
+        self.checkpoint_layers = set()
         
         self.loss_fn = LigerFusedLinearCrossEntropyLoss()
        
@@ -219,7 +220,10 @@ class Model(nn.Module):
         nvtx.range_push("Decoder Layers")
         for i, layer in enumerate(self.layers):
             nvtx.range_push(f"Layer {i}")
-            h = checkpoint(layer, h, freqs, use_reentrant=False) # Call the layer directly
+            if i in self.checkpoint_layers:
+                h = checkpoint(layer, h, freqs, use_reentrant=False) # Call the layer directly
+            else:
+                h = layer(h, freqs)
             nvtx.range_pop()
         nvtx.range_pop()
             
