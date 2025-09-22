@@ -1,5 +1,5 @@
 import os
-
+import time
 
 def sweep_step_batching_combinations(seqs_per_step, seq_len, max_micro_tokens, min_batch_size=1, max_batch_size=None):
     """
@@ -152,12 +152,18 @@ def run_all_experiments(log_dir, experiment_configs):
         print(f"Running experiment {i + 1}/{total_experiments}: {experiment_name}", flush=True)
         print(f"{'='*60}")
         
+        start_time = time.time()
         success = run_experiment(log_dir, experiment_config)
         if success:
             successful += 1
         else:
             failed += 1
             print(f"Experiment {experiment_name} failed!", flush=True)
+        end_time = time.time()
+
+        print(f"\tStart Time: {start_time}", flush=True)
+        print(f"\tEnd Time: {end_time}", flush=True)
+        print(f"\tTotal time: {end_time - start_time} seconds", flush=True)
     
     print(f"\n{'='*60}", flush=True)
     print(f"Experiment Summary:", flush=True)
@@ -165,6 +171,8 @@ def run_all_experiments(log_dir, experiment_configs):
     print(f"Successful: {successful}", flush=True)
     print(f"Failed: {failed}", flush=True)
     print(f"Logs saved to: {log_dir}", flush=True)
+   
+    
     
 
 if __name__ == "__main__":
