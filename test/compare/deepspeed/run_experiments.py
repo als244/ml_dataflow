@@ -54,7 +54,7 @@ def run_experiment(log_dir, experiment_config):
     os.makedirs(model_log_dir, exist_ok=True)
     
     # Build the command string
-    cmd = "./launcher.sh"
+    cmd = "./launch_train.sh"
     
     # Add optional arguments
     if zero_stage is not None:
