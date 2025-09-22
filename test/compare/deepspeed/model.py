@@ -6,10 +6,6 @@ import torch.nn.functional as F
 from dataclasses import dataclass
 import torch.cuda.nvtx as nvtx # Import NVTX
 
-# Import FlashAttention
-import flash_attn_interface
-#from flash_attn import flash_attn_func
-
 from torch.utils.checkpoint import checkpoint
 
 from liger_kernel.transformers.rms_norm import LigerRMSNorm
