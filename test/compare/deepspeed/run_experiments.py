@@ -117,7 +117,7 @@ def generate_experiment_configs(device_name):
 
                         for save_act_layer_frac in save_act_layer_fracs_options:
 
-                            expertiment_name = f"{model_name}_{seq_len}_{seqs_per_step}_{seqs_per_batch}_{grad_accum_steps}_{zero_stage}_{save_act_layer_frac}"
+                            experiment_name = f"{model_name}_{seq_len}_{seqs_per_step}_{seqs_per_batch}_{grad_accum_steps}_{zero_stage}_{save_act_layer_frac}"
 
                             experiment_configs[experiment_name] = {}
 
