@@ -119,8 +119,6 @@ def generate_experiment_configs(device_name):
 
                             experiment_name = f"{model_name}_{seq_len}_{seqs_per_step}_{seqs_per_batch}_{grad_accum_steps}_{zero_stage}_{save_act_layer_frac}"
 
-                            experiment_configs[experiment_name] = {}
-
                             experiment_config = {}
                             experiment_config["experiment_name"] = experiment_name
                             experiment_config["model_name"] = model_name
@@ -132,6 +130,8 @@ def generate_experiment_configs(device_name):
                             experiment_config["num_steps"] = num_steps
                             experiment_config["zero_stage"] = zero_stage
                             experiment_config["save_act_layer_frac"] = save_act_layer_frac
+
+                            experiment_configs[experiment_name] = experiment_config
 
 
     return experiment_configs
