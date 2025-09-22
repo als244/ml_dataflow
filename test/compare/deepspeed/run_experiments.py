@@ -134,7 +134,7 @@ def generate_experiment_configs(device_name):
                             experiment_config["save_act_layer_frac"] = save_act_layer_frac
 
 
-LOG_DIR = "results"
+    return experiment_configs
 
 def run_all_experiments(log_dir, experiment_configs):
     """Run all generated experiments"""
