@@ -1,3 +1,5 @@
+import os
+
 
 def sweep_step_batching_combinations(seqs_per_step, seq_len, max_micro_tokens, min_batch_size=1, max_batch_size=None):
     """
