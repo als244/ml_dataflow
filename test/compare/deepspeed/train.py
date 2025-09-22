@@ -16,7 +16,9 @@ from model import Model, ModelArgs
 _cudart = ctypes.CDLL('libcudart.so')
 
 # --- Argument Parsing ---
-parser = argparse.ArgumentParser(description="DeepSpeed Llama3 Training with Full Logging")
+parser = argparse.ArgumentParser(description="DeepSpeed Training")
+parser.add_argument('--zero_stage', type=int, default=None)
+parser.add_argument('--save_act_layer_frac', type=float, default=0, help="Fraction of layer activatons to leave on device, deafult is 0 (full layer-wise checkpointing)")
 parser.add_argument('--model_config', type=str, required=True)
 parser.add_argument('--zero_stage', type=int, default=None)
 parser.add_argument('--seq_len', type=int, default=512, help='Sequence length for training')
@@ -33,6 +35,7 @@ grad_accum_steps = args.grad_accum_steps
 seqs_per_batch = args.seqs_per_batch
 num_steps = args.num_steps
 zero_stage = args.zero_stage
+save_act_layer_frac = args.save_act_layer_frac
 
 
 global_steps = grad_accum_steps * num_steps
@@ -148,7 +151,7 @@ for epoch in range(epochs):
         inputs = inputs.to(model_engine.device)
         labels = labels.to(model_engine.device)
         
-        loss = model_engine(inputs, labels)
+        loss = model_engine(inputs, labels, save_act_layer_frac=save_act_layer_frac)
         #loss = criterion(outputs.view(-1, model_args.vocab_size), labels.view(-1))
 
         model_engine.backward(loss)

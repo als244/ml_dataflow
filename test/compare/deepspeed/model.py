@@ -24,6 +24,8 @@ from scattermoe.mlp import MLP, GLUMLP
 
 from attention import do_attention
 
+from select_bins import select_bins
+
 @dataclass
 class ModelArgs:
     """Configuration for the model."""
@@ -204,13 +206,13 @@ class Model(nn.Module):
         self.max_seq_len = 2 ** 20
         self.freqs_complex = precompute_theta_pos_frequencies(self.head_dim, self.max_seq_len, self.rope_theta)
         
-        self.checkpoint_layers = set()
-        
         self.loss_fn = LigerFusedLinearCrossEntropyLoss()
        
-    def forward(self, tokens: torch.Tensor, labels: torch.Tensor):
+    def forward(self, tokens: torch.Tensor, labels: torch.Tensor, save_act_layer_frac = 0.0):
         batch_size, seq_len = tokens.shape
         
+        act_layers_saved = select_bins(self.n_layers, save_act_layer_frac)
+
         nvtx.range_push("Token Embeddings")
         h = self.tok_embeddings(tokens)
         nvtx.range_pop()
@@ -220,10 +222,10 @@ class Model(nn.Module):
         nvtx.range_push("Decoder Layers")
         for i, layer in enumerate(self.layers):
             nvtx.range_push(f"Layer {i}")
-            if i in self.checkpoint_layers:
-                h = checkpoint(layer, h, freqs, use_reentrant=False) # Call the layer directly
-            else:
+            if i in act_layers_saved:
                 h = layer(h, freqs)
+            else:
+                h = checkpoint(layer, h, freqs, use_reentrant=False) # Call the layer directly
             nvtx.range_pop()
         nvtx.range_pop()
             

@@ -2,21 +2,24 @@
 
 # Function to display usage
 usage() {
-    echo "Usage: $0 [--zero_stage <value>] <model_config> <seq_len> <seqs_per_batch> <grad_accum_steps> <num_steps>"
+    echo "Usage: $0 [--zero_stage <value>] [--save_act_layer_frac <value>] <model_config> <seq_len> <seqs_per_batch> <grad_accum_steps> <num_steps>"
     echo ""
     echo "Arguments:"
-    echo "  --zero_stage <value>    Optional: Zero stage value for DeepSpeed"
-    echo "  <model_config>          Model configuration"
-    echo "  <seq_len>              Sequence length"
-    echo "  <seqs_per_batch>       Sequences per batch"
-    echo "  <grad_accum_steps>     Gradient accumulation steps"
-    echo "  <num_steps>            Number of training steps"
+    echo "  --zero_stage <value>           Optional: Zero stage value for DeepSpeed"
+    echo "  --save_act_layer_frac <value>  Optional: Fraction of layer activations to leave on device (default: 0)"
+    echo "  <model_config>                 Model configuration"
+    echo "  <seq_len>                     Sequence length"
+    echo "  <seqs_per_batch>              Sequences per batch"
+    echo "  <grad_accum_steps>            Gradient accumulation steps"
+    echo "  <num_steps>                   Number of training steps"
     exit 1
 }
 
 # Initialize variables
 ZERO_STAGE=""
 ZERO_STAGE_ARG=""
+SAVE_ACT_LAYER_FRAC=""
+SAVE_ACT_LAYER_FRAC_ARG=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -28,6 +31,16 @@ while [[ $# -gt 0 ]]; do
                 shift 2
             else
                 echo "Error: --zero_stage requires a value"
+                usage
+            fi
+            ;;
+        --save_act_layer_frac)
+            if [[ -n $2 && $2 != --* ]]; then
+                SAVE_ACT_LAYER_FRAC="$2"
+                SAVE_ACT_LAYER_FRAC_ARG="--save_act_layer_frac $SAVE_ACT_LAYER_FRAC"
+                shift 2
+            else
+                echo "Error: --save_act_layer_frac requires a value"
                 usage
             fi
             ;;
@@ -67,6 +80,7 @@ MASTER_PORT=$((29500 + RANDOM % 36035))
 DEEPSPEED_CMD="deepspeed --num_gpus=1 --master_port=$MASTER_PORT train.py \
     --model_config $MODEL_CONFIG \
     $ZERO_STAGE_ARG \
+    $SAVE_ACT_LAYER_FRAC_ARG \
     --seq_len $SEQ_LEN \
     --seqs_per_batch $SEQS_PER_BATCH \
     --grad_accum_steps $GRAD_ACCUM_STEPS \
