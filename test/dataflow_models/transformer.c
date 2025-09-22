@@ -19,11 +19,11 @@
 	#define TOKEN_IDS_PATH "../data/65536_token_ids_uint32.dat"
 	#define TOKEN_LABELS_PATH "../data/65536_labels_uint32.dat"
 
-	#define DEFAULT_MIN_CHUNK_SIZE 1024
-	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 512
+	#define DEFAULT_MIN_CHUNK_SIZE 16384
+	#define DEFAULT_MIN_HEAD_CHUNK_SIZE 1024
 
-	#define MAX_SEQ_GROUPS_PER_ROUND 1
-	#define MAX_ROUNDS_PER_STEP 1
+	#define MAX_SEQ_GROUPS_PER_ROUND 1024
+	#define MAX_ROUNDS_PER_STEP 1024
 
 	// this (along with num seqs per round) modulates how frequently we will step 
 	// the optimizer...
@@ -31,7 +31,7 @@
 	// to help determien how many rounds per step
 	#define FLOP_EFFICIENCY_ESTIMATE 0.75f
 
-	#define PCIE_LINK_EFFICIENCY 0.55f
+	#define PCIE_LINK_EFFICIENCY 0.65f
 
 	#define NUM_STEPS 5
 
@@ -2281,7 +2281,7 @@
 
 		
 
-		float runtime_dev_window_sec = min_window_flops / (FLOP_EFFICIENCY_ESTIMATE * PEAK_BF16_FLOPS);
+		float runtime_dev_window_sec = min_window_flops / (compute_frac * FLOP_EFFICIENCY_ESTIMATE * PEAK_BF16_FLOPS);
 
 		float theo_link_speed_bytes_per_sec = get_home_link_speed_bytes_per_sec(dataflow_handle.pcie_link_width, dataflow_handle.pcie_link_gen);
 
@@ -3028,7 +3028,7 @@
 		
 		float target_duration_per_step_s = opt_state_inbound_time / TARGET_OPT_OVERHEAD_FRAC;
 
-		float flop_efficiency_estimate = FLOP_EFFICIENCY_ESTIMATE;
+		float flop_efficiency_estimate = compute_frac * FLOP_EFFICIENCY_ESTIMATE;
 
 		float per_round_duration_s_est = flops_per_round / (flop_efficiency_estimate * PEAK_BF16_FLOPS);
 
