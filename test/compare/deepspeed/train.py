@@ -7,6 +7,9 @@ import deepspeed
 import argparse
 import time
 
+import psutil
+import os
+
 import ctypes
 
 import json
@@ -14,6 +17,10 @@ import json
 from model import Model, ModelArgs
 
 _cudart = ctypes.CDLL('libcudart.so')
+
+process = psutil.Process(os.getpid())
+# Initialize peak host memory usage tracker
+peak_host_mem_gb = 0.0
 
 # --- Argument Parsing ---
 parser = argparse.ArgumentParser(description="DeepSpeed Training")
@@ -88,7 +95,7 @@ ds_config = {
     #"activation_checkpointing": { "cpu_checkpointing": True, "partition_activations": True },
 }
 
-if zero_stage:
+if zero_stage and zero_stage != 0:
     ds_config['optimizer']['fp32_optimizer_states'] = False
     if zero_stage == 1:
         ds_config['zero_optimization'] = {"stage": 1, "offload_optimizer": {"device": "cpu", "pin_memory": True}}
@@ -130,6 +137,11 @@ model_engine, optimizer, training_dataloader, _ = deepspeed.initialize(
     training_data=dummy_dataset # Pass the Dataset here
 )
 
+current_host_mem_gb = process.memory_info().rss / (1024 ** 3)
+# Update peak if current is higher
+peak_host_mem_gb = max(peak_host_mem_gb, current_host_mem_gb)
+
+
 
 torch.cuda.empty_cache()
 
@@ -154,8 +166,21 @@ for epoch in range(epochs):
         loss = model_engine(inputs, labels, save_act_layer_frac=save_act_layer_frac)
         #loss = criterion(outputs.view(-1, model_args.vocab_size), labels.view(-1))
 
+        current_host_mem_gb = process.memory_info().rss / (1024 ** 3)
+        # Update peak if current is higher
+        peak_host_mem_gb = max(peak_host_mem_gb, current_host_mem_gb)
+
         model_engine.backward(loss)
+
+        current_host_mem_gb = process.memory_info().rss / (1024 ** 3)
+        # Update peak if current is higher
+        peak_host_mem_gb = max(peak_host_mem_gb, current_host_mem_gb)
+
         model_engine.step()
+
+        current_host_mem_gb = process.memory_info().rss / (1024 ** 3)
+        # Update peak if current is higher
+        peak_host_mem_gb = max(peak_host_mem_gb, current_host_mem_gb)
 
         num_steps += 1
 
@@ -169,8 +194,8 @@ for epoch in range(epochs):
                 tokens_per_sec = total_tokens / elapsed_time
                 step_throughputs.append(tokens_per_sec)
                 print(
-                    f"Epoch: {epoch+1}, Step: {i+1}, BS: {actual_bs}, Loss: {loss.item():.4f} | "
-                    f"Step total_tokens: {total_tokens}, Step total_time = {elapsed_time}, Tok/sec: {tokens_per_sec:.2f}"
+                    f"\n\nEpoch: {epoch+1}, Step: {i+1}, BS: {actual_bs}, Loss: {loss.item():.4f} | "
+                    f"Step total_tokens: {total_tokens}, Step total_time = {elapsed_time}, Tok/sec: {tokens_per_sec:.2f}\n\n"
                 )
                 start_time = time.time()
                 total_tokens = 0
@@ -183,4 +208,4 @@ ret = _cudart.cudaProfilerStop()
 
 peak_mem_reserved_gb = torch.cuda.max_memory_reserved() / 1024**3
 
-print(f"\nTraining complete! ✅\n\tThroughput: {step_throughputs[-1]} Tok/sec\n\tPeak Memory Reserved: {peak_mem_reserved_gb:.2f} GB")
+print(f"\n\n\nTraining complete! ✅\n\tThroughput: {step_throughputs[-1]} Tok/sec\n\tPeak Host Memory Reserved: {peak_host_mem_gb:.2f} GB\n\tPeak Device Memory Reserved: {peak_mem_reserved_gb:.2f} GB\n\n\n")
