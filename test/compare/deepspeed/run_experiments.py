@@ -87,7 +87,7 @@ def run_experiment(log_dir, experiment_config):
 
 
 
-DEVICE_NAME = "H100"
+
 
 #model_configs = {"dense8B": "model_configs/8b_config.json", "dense15B": "model_configs/15b_config.json", "dense32B": "model_configs/32b_config.json"}
 model_configs = {"dense8B": "model_configs/8b_config.json"}
@@ -99,35 +99,39 @@ max_micro_tokens = 65536
 num_steps = 3
 
 
-experiment_configs = {}
+
+def generate_experiment_configs(device_name):
 
 
-for model_name, config_path in model_configs.items():
-    for seq_len in seq_lens[model_name][DEVICE_NAME]:
-        for seqs_per_step in seqs_per_step[model_name][DEVICE_NAME]:
-            step_batching_combinations = sweep_step_batching_combinations(seqs_per_step, seq_len, max_micro_tokens)
+    experiment_configs = {}
 
-            for seqs_per_batch, grad_accum_steps in step_batching_combinations:
 
-                for zero_stage in zero_stages:
+    for model_name, config_path in model_configs.items():
+        for seq_len in seq_lens[model_name][device_name]:
+            for seqs_per_step in seqs_per_step[model_name][device_name]:
+                step_batching_combinations = sweep_step_batching_combinations(seqs_per_step, seq_len, max_micro_tokens)
 
-                    for save_act_layer_frac in save_act_layer_fracs:
+                for seqs_per_batch, grad_accum_steps in step_batching_combinations:
 
-                        expertiment_name = f"{model_name}_{seq_len}_{seqs_per_step}_{seqs_per_batch}_{grad_accum_steps}_{zero_stage}_{save_act_layer_frac}"
+                    for zero_stage in zero_stages:
 
-                        experiment_configs[experiment_name] = {}
+                        for save_act_layer_frac in save_act_layer_fracs:
 
-                        experiment_config = {}
-                        experiment_config["experiment_name"] = experiment_name
-                        experiment_config["model_name"] = model_name
-                        experiment_config["model_config"] = config_path
-                        experiment_config["seq_len"] = seq_len
-                        experiment_config["seqs_per_step"] = seqs_per_step
-                        experiment_config["seqs_per_batch"] = seqs_per_batch
-                        experiment_config["grad_accum_steps"] = grad_accum_steps
-                        experiment_config["num_steps"] = num_steps
-                        experiment_config["zero_stage"] = zero_stage
-                        experiment_config["save_act_layer_frac"] = save_act_layer_frac
+                            expertiment_name = f"{model_name}_{seq_len}_{seqs_per_step}_{seqs_per_batch}_{grad_accum_steps}_{zero_stage}_{save_act_layer_frac}"
+
+                            experiment_configs[experiment_name] = {}
+
+                            experiment_config = {}
+                            experiment_config["experiment_name"] = experiment_name
+                            experiment_config["model_name"] = model_name
+                            experiment_config["model_config"] = config_path
+                            experiment_config["seq_len"] = seq_len
+                            experiment_config["seqs_per_step"] = seqs_per_step
+                            experiment_config["seqs_per_batch"] = seqs_per_batch
+                            experiment_config["grad_accum_steps"] = grad_accum_steps
+                            experiment_config["num_steps"] = num_steps
+                            experiment_config["zero_stage"] = zero_stage
+                            experiment_config["save_act_layer_frac"] = save_act_layer_frac
 
 
 LOG_DIR = "results"
@@ -162,6 +166,11 @@ def run_all_experiments(log_dir, experiment_configs):
     
 
 if __name__ == "__main__":
+
+    LOG_DIR = "results"
+    DEVICE_NAME = "H100"
+
+    experiment_configs = generate_experiment_configs(DEVICE_NAME)
 
     run_all_experiments(LOG_DIR, experiment_configs)
 
