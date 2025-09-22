@@ -147,7 +147,7 @@ def run_all_experiments(log_dir, experiment_configs):
     
     for i, (experiment_name, experiment_config) in enumerate(experiment_configs.items(), 1):
         print(f"\n{'='*60}")
-        print(f"Running experiment {i}/{total_experiments}: {experiment_name}")
+        print(f"Running experiment {i + 1}/{total_experiments}: {experiment_name}")
         print(f"{'='*60}")
         
         success = run_experiment(log_dir, experiment_config)
