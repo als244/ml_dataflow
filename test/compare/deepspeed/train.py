@@ -72,7 +72,7 @@ torch.manual_seed(SEED)
 # --- Model & Training Configuration ---
 
 epochs = 1
-learning_rate = 1e-5
+learning_rate = 2e-5
 
 # --- DeepSpeed Configuration with Logging ---
 # The ds_config can be loaded from a JSON file specified by --deepspeed_config
@@ -81,7 +81,7 @@ ds_config = {
     "train_micro_batch_size_per_gpu": seqs_per_batch,
     "gradient_accumulation_steps": grad_accum_steps,
     "wall_clock_breakdown": True,
-    "optimizer": { "type": "AdamW", "params": { "lr": learning_rate, "betas": [0.9, 0.95], "fp32_optimizer_states": False} },
+    "optimizer": { "type": "AdamW", "params": { "lr": learning_rate, "betas": [0.9, 0.999]}},
     "bf16": { "enabled": True},
     "steps_per_print": 1,
     ## doesnt do anything for single-GPU...
@@ -89,6 +89,7 @@ ds_config = {
 }
 
 if zero_stage:
+    ds_config['optimizer']['fp32_optimizer_states'] = False
     if zero_stage == 1:
         ds_config['zero_optimization'] = {"stage": 1, "offload_optimizer": {"device": "cpu", "pin_memory": True}}
     elif zero_stage == 2:
