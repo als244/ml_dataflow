@@ -81,7 +81,7 @@ ds_config = {
     "train_micro_batch_size_per_gpu": seqs_per_batch,
     "gradient_accumulation_steps": grad_accum_steps,
     "wall_clock_breakdown": True,
-    "optimizer": { "type": "AdamW", "params": { "lr": learning_rate, "betas": [0.9, 0.999]}},
+    "optimizer": { "type": "AdamW", "params": { "lr": learning_rate, "betas": [0.9, 0.999], "weight_decay": 1e-4, "eps": 1e-8}},
     "bf16": { "enabled": True},
     "steps_per_print": 1,
     ## doesnt do anything for single-GPU...
