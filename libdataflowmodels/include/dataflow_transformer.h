@@ -16,7 +16,7 @@ Transformer_Block * init_transformer_block(int layer_id, DataflowDatatype block_
 						   DataflowMLPType mlp_type,
 						   DataflowActivationType activation_type,
 						   float eps, int theta,
-						   int num_q_heads, int num_kv_heads, int head_dim,
+						   int model_dim, int num_q_heads, int num_kv_heads, int head_dim,
 						   int ffn_dim,
 						   MoE_Config * moe_config,
 						   int pointer_alignment);
