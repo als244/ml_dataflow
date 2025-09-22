@@ -5,7 +5,7 @@ class FlashAttentionNotAvailableError(Exception):
     pass
 
 try:
-    import flash_attn_interface
+    import flash_attn_interface as flash3
 
     def is_hopper_gpu():
         if not torch.cuda.is_available():
@@ -17,17 +17,11 @@ except ModuleNotFoundError:
     FLASH_ATTN_3_AVAILABLE = False
 
 try:
-    import flash_attn
+    import flash_attn as flash2
     FLASH_ATTN_2_AVAILABLE = True
 except ModuleNotFoundError:
     FLASH_ATTN_2_AVAILABLE = False
 
-
-def flash3_attention(q, k, v, causal=True, deterministic=True, rope_cos=None, rope_sin=None, rope_interleaved=False):
-    return flash_attn_interface.flash_attn_func(q, k, v, causal=causal, deterministic=deterministic, rotary_cos=rope_cos, rotary_sin=rope_sin, rotary_interleaved=rope_interleaved)
-
-def flash2_attention(q, k, v, causal=True, deterministic=True, rope_cos=None, rope_sin=None, rope_interleaved=False):
-    return flash_attn_func(q, k, v, causal=causal, deterministic=deterministic)
 
 def create_rope_embeddings(seq_len, head_dim, rope_theta=10000.0, device='cuda'):
     """
@@ -119,14 +113,14 @@ def flash3_attention(q, k, v, causal=True, deterministic=True, rope_cos=None, ro
         q = apply_rope(q, rope_cos, rope_sin, rope_interleaved)
         k = apply_rope(k, rope_cos, rope_sin, rope_interleaved)
     
-    return flash_attn_interface.flash_attn_func(q, k, v, causal=causal, deterministic=deterministic)
+    return flash3.flash_attn_func(q, k, v, causal=causal, deterministic=deterministic)
 
 def flash2_attention(q, k, v, causal=True, deterministic=True, rope_cos=None, rope_sin=None, rope_interleaved=False):
     if (rope_cos is not None) and (rope_sin is not None):
         q = apply_rope(q, rope_cos, rope_sin, rope_interleaved)
         k = apply_rope(k, rope_cos, rope_sin, rope_interleaved)
 
-    return flash_attn_func(q, k, v, causal=causal, deterministic=deterministic)
+    return flash2.flash_attn_func(q, k, v, causal=causal, deterministic=deterministic)
 
 def do_attention(q, k, v, causal=True, deterministic=True, rope_cos=None, rope_sin=None, rope_interleaved=False):
     if FLASH_ATTN_3_AVAILABLE:

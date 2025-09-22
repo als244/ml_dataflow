@@ -5,7 +5,7 @@ usage() {
     echo "Usage: $0 [--zero_stage <value>] [--save_act_layer_frac <value>] <model_config> <seq_len> <seqs_per_batch> <grad_accum_steps> <num_steps>"
     echo ""
     echo "Arguments:"
-    echo "  --zero_stage <value>           Optional: Zero stage value for DeepSpeed"
+    echo "  --zero_stage <value>           Optional: Zero stage value for DeepSpeed (default: None)"
     echo "  --save_act_layer_frac <value>  Optional: Fraction of layer activations to leave on device (default: 0)"
     echo "  <model_config>                 Model configuration"
     echo "  <seq_len>                     Sequence length"
