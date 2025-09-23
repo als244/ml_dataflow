@@ -60,7 +60,7 @@ def load_model_args_from_json(json_path: str) -> ModelArgs:
         config = json.load(f)
 
     # Convert dtype strings to torch.dtype
-    for key in ['embed_dtype', 'attn_dtype', 'expert_dtype', 'head_dtype']:
+    for key in ['embed_dtype', 'attn_dtype', 'router_dtype', 'expert_dtype', 'head_dtype']:
         if key in config and config[key] in DTYPE_MAP:
             dtype_value = DTYPE_MAP[config[key]]
             if dtype_value != "none":
