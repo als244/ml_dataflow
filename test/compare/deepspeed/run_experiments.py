@@ -92,23 +92,29 @@ def run_experiment(log_dir, experiment_config):
 
 
 #model_configs = {"dense8B": "model_configs/8b_config.json", "dense15B": "model_configs/15b_config.json", "dense32B": "model_configs/32b_config.json"}
-model_config_options = {"dense8B": "model_configs/8b_config.json"}
-seq_lens_options = {"dense8B": {"H100": [8192], "RTX5090": [8192]}}
-seqs_per_step_options = {"dense8B": {"H100": [72], "RTX5090": [24]}}
+model_config_options = {"dense8B": "model_configs/8b_config.json", "dense15B": "model_configs/15b_config.json", "sparse7Ba1B": "model_configs/7b_1b_moe_config.json", "sparse16Ba3B": "model_configs/16b_3b_moe_config.json"}
+seq_lens_options = {"dense8B": {"H100": [8192], "RTX5090": [8192]}, "dense15B": {"H100": [8192], "RTX5090": [8192]}, "sparse7Ba1B": {"H100": [8192], "RTX5090": [8192]}, "sparse16Ba3B": {"H100": [8192], "RTX5090": [8192]}}
+seqs_per_step_options = {"dense8B": {"H100": [72], "RTX5090": [24]}, "dense15B": {"H100": [36], "RTX5090": [12]}, "sparse7Ba1B": {"H100": [360], "RTX5090": [120]}, "sparse16Ba3B": {"H100": [360], "RTX5090": [120]}}
 zero_stages_options = [0, 1, 2, 3]
 save_act_layer_fracs_options = [0, 0.25, 0.5, 0.75, 1]
-max_micro_tokens = 65536
-num_steps = 3
+max_micro_tokens = 131072
+num_steps = 2
 
 
 
-def generate_experiment_configs(device_name):
+def generate_experiment_configs(device_name, run_models):
 
 
     experiment_configs = {}
 
+    print(f"run_models: {run_models}")
 
     for model_name, config_path in model_config_options.items():
+        
+
+        if model_name not in run_models:
+            continue
+
         for seq_len in seq_lens_options[model_name][device_name]:
             for seqs_per_step in seqs_per_step_options[model_name][device_name]:
                 step_batching_combinations = sweep_step_batching_combinations(seqs_per_step, seq_len, max_micro_tokens)
@@ -119,14 +125,13 @@ def generate_experiment_configs(device_name):
 
                         for save_act_layer_frac in save_act_layer_fracs_options:
 
-                            experiment_name = f"{model_name}_{seq_len}_{seqs_per_step}_{seqs_per_batch}_{grad_accum_steps}_{zero_stage}_{save_act_layer_frac}"
+                            experiment_name = f"{model_name}_{seq_len}_{seqs_per_batch}_{grad_accum_steps}_{zero_stage}_{save_act_layer_frac}"
 
                             experiment_config = {}
                             experiment_config["experiment_name"] = experiment_name
                             experiment_config["model_name"] = model_name
                             experiment_config["model_config"] = config_path
                             experiment_config["seq_len"] = seq_len
-                            experiment_config["seqs_per_step"] = seqs_per_step
                             experiment_config["seqs_per_batch"] = seqs_per_batch
                             experiment_config["grad_accum_steps"] = grad_accum_steps
                             experiment_config["num_steps"] = num_steps
@@ -138,16 +143,22 @@ def generate_experiment_configs(device_name):
 
     return experiment_configs
 
-def run_all_experiments(log_dir, experiment_configs):
+def run_all_experiments(log_dir, experiment_configs, start_exp_num=1):
     """Run all generated experiments"""
     total_experiments = len(experiment_configs)
     print(f"Generated {total_experiments} experiment configurations", flush=True)
     print(f"Logs will be saved to: {log_dir}", flush=True)
     
+    skipped = 0
     successful = 0
     failed = 0
-    
+   
     for i, (experiment_name, experiment_config) in enumerate(experiment_configs.items(), 1):
+        
+        if (i < start_exp_num):
+            skipped += 1
+            continue
+
         print(f"\n{'='*60}")
         print(f"Running experiment {i}/{total_experiments}: {experiment_name}", flush=True)
         print(f"{'='*60}")
@@ -167,7 +178,7 @@ def run_all_experiments(log_dir, experiment_configs):
     
     print(f"\n{'='*60}", flush=True)
     print(f"Experiment Summary:", flush=True)
-    print(f"Total: {total_experiments}", flush=True)
+    print(f"Total: {total_experiments - skipped}", flush=True)
     print(f"Successful: {successful}", flush=True)
     print(f"Failed: {failed}", flush=True)
     print(f"Logs saved to: {log_dir}", flush=True)
@@ -180,9 +191,13 @@ if __name__ == "__main__":
     LOG_DIR = "results"
     DEVICE_NAME = "H100"
 
-    experiment_configs = generate_experiment_configs(DEVICE_NAME)
+    #run_models = ["dense8B", "dense15B", "sparse7Ba1B", "sparse16Ba3B"]
+    run_models = ["sparse7Ba1B"]
+    
+    
+    experiment_configs = generate_experiment_configs(DEVICE_NAME, run_models)
 
-    run_all_experiments(LOG_DIR, experiment_configs)
+    run_all_experiments(LOG_DIR, experiment_configs, start_exp_num=122)
 
 
     
