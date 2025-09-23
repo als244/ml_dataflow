@@ -29,9 +29,53 @@ def create_latex_plot(csv_file_path, seq_train_csv_path=None):
     seq_len = int(df_valid['seqlen'].iloc[0])
     gbs = int(df_valid['seqs_per_batch'].iloc[0] * df_valid['grad_accum_steps'].iloc[0])
 
-    min_y = math.floor(df_valid['throughput_tok_per_sec'].min() / 500) * 500
-    max_y = math.ceil(df_valid['throughput_tok_per_sec'].max() / 500) * 500
-    y_ticks = ", ".join(map(str, range(min_y, max_y + 1, 500)))
+    data_min_y = df_valid['throughput_tok_per_sec'].min()
+    data_max_y = df_valid['throughput_tok_per_sec'].max()
+
+    # Handle edge case where all y-values are the same
+    if data_min_y == data_max_y:
+        offset = abs(data_min_y * 0.1) if data_min_y != 0 else 50
+        data_min_y -= offset
+        data_max_y += offset
+
+    # Target approximately 10 ticks
+    num_ticks_target = 10
+    data_range = data_max_y - data_min_y
+    
+    # Calculate a preliminary step size; handle non-positive range
+    preliminary_step = data_range / (num_ticks_target - 1) if data_range > 0 else 1
+
+    # Calculate a "nice" step size (a power of 10 times 1, 2, or 5)
+    power = 10**math.floor(math.log10(preliminary_step))
+    magnitude = preliminary_step / power
+    if magnitude > 5:
+        nice_step = 10 * power
+    elif magnitude > 2:
+        nice_step = 5 * power
+    elif magnitude > 1:
+        nice_step = 2 * power
+    else:
+        nice_step = 1 * power
+
+    # Calculate plot limits that are multiples of the nice_step
+    min_y = math.floor(data_min_y / nice_step) * nice_step
+    max_y = math.ceil(data_max_y / nice_step) * nice_step
+    
+    # Ensure the bounds are strictly outside the data range
+    if min_y >= data_min_y and min_y != data_max_y: # Add check to avoid pushing min below max
+        min_y -= nice_step
+    if max_y <= data_max_y:
+        max_y += nice_step
+    
+    # Generate tick values
+    ticks = []
+    current_tick = min_y
+    # Use a small tolerance for floating point arithmetic
+    while current_tick <= max_y + (nice_step * 0.001):
+        ticks.append(int(round(current_tick)))
+        current_tick += nice_step
+    
+    y_ticks = ", ".join(map(str, ticks))
 
     x_max = math.ceil(df_valid['peak_device_memory_gb'].max() / 10) * 10
     
@@ -152,7 +196,7 @@ def create_latex_plot(csv_file_path, seq_train_csv_path=None):
           at ([xshift=0.3cm,]current axis.north east) {{
         \\begin{{tabular}}{{@{{}}c@{{}}}}
         {legend_seq_train_entry}%
-        \\begin{{tabular}}{{@{{,}}l@{{\\quad}}c@{{;}}c@{{;}}c@{{,}}}}
+        \\begin{{tabular}}{{@{{\,}}l@{{\\quad}}c@{{\;}}c@{{\;}}c@{{\,}}}}
             & \\textbf{{Z1}} & \\textbf{{Z2}} & \\textbf{{Z3}} \\\\[0.05cm]
             \\textbf{{Full Recompute}} & \\raisebox{{-0.1ex}}{{\\begin{{tikzpicture}}\\path[legend_z1_100] plot coordinates {{(0,0)}};\\end{{tikzpicture}}}} & \\raisebox{{-0.1ex}}{{\\begin{{tikzpicture}}\\path[legend_z2_100] plot coordinates {{(0,0)}};\\end{{tikzpicture}}}} & \\raisebox{{-0.1ex}}{{\\begin{{tikzpicture}}\\path[legend_z3_100] plot coordinates {{(0,0)}};\\end{{tikzpicture}}}} \\\\
             \\textbf{{75\\% Recompute}} & \\raisebox{{-0.1ex}}{{\\begin{{tikzpicture}}\\path[legend_z1_75] plot coordinates {{(0,0)}};\\end{{tikzpicture}}}} & \\raisebox{{-0.1ex}}{{\\begin{{tikzpicture}}\\path[legend_z2_75] plot coordinates {{(0,0)}};\\end{{tikzpicture}}}} & \\raisebox{{-0.1ex}}{{\\begin{{tikzpicture}}\\path[legend_z3_75] plot coordinates {{(0,0)}};\\end{{tikzpicture}}}} \\\\[0.05cm]
